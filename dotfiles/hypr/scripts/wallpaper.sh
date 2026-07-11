@@ -1,26 +1,30 @@
 #!/usr/bin/env bash
-# wallpaper.sh — set the desktop background (idempotent; per-monitor aware).
+# wallpaper.sh — set the desktop background (idempotent; per-monitor aware;
+# static images, animated GIFs and videos).
 #
 # Reads ~/.config/hypr/generated/wallpapers.conf, written atomically by
 # Settings → Wallpaper:
 #     mode=fill|fit|stretch|tile|center
-#     backend=swaybg|swww|hyprpaper    # optional; default prefers the shipped swaybg
-#     *=/path/to/default.jpg           # every output without its own line
-#     DP-1=/path/to/that-monitor.jpg   # per-output override
+#     backend=swww|swaybg              # optional IMAGE backend override
+#     mute=1|0                         # video audio (default 1 = muted)
+#     *=/path/to/default.{png,gif,mp4,…}   # outputs without their own line
+#     DP-1=/path/to/that-monitor.…         # per-output override
 #
+# Backend by file type — chosen automatically:
+#     video (mp4/webm/mkv/mov/avi/m4v) → mpvpaper          (required for video)
+#     image / animated GIF             → swww (or its Arch rename `awww`);
+#                                        falls back to swaybg = static only
 # Flags:
-#     --reapply   re-assert the config (Settings after a change, HyprMon on
-#                 monitor hotplug) so a newly plugged display gets its wallpaper
-#     --backend   print the backend this script would use, and exit
+#     --reapply   re-assert everything (Settings after a change, HyprMon on
+#                 monitor hotplug) so a newly plugged display gets covered
+#     --backend   print "img=<swww|awww|swaybg|none> video=<mpvpaper|none>"
 #
-# hypr-shell ships swaybg, so swaybg is the default; a user who installs swww or
-# hyprpaper opts in via backend= (Settings shows the picker when several exist).
-# Legacy fallback (no conf): $DE_WALLPAPER, then ~/.config/hypr/wallpaper.{jpg,…}.
+# Problems are printed with an "error:"/"note:" prefix and a non-zero exit for
+# errors — Settings runs this through a Process and shows the output inline.
 
 set -u
 
-REAPPLY=0
-QUERY=0
+REAPPLY=0; QUERY=0
 case "${1:-}" in
     --reapply) REAPPLY=1 ;;
     --backend) QUERY=1 ;;
@@ -29,6 +33,7 @@ esac
 CONF="$HOME/.config/hypr/generated/wallpapers.conf"
 MODE=fill
 BACKEND=""
+MUTE=1
 DEFAULT=""
 declare -A PER=()
 
@@ -38,14 +43,14 @@ if [ -r "$CONF" ]; then
             ''|\#*) ;;
             mode) MODE="$v" ;;
             backend) BACKEND="$v" ;;
+            mute) MUTE="$v" ;;
             \*) DEFAULT="$v" ;;
             *) [ -n "$v" ] && PER["$k"]="$v" ;;
         esac
     done < "$CONF"
 fi
 
-# drop images that no longer exist (deleted/moved since they were picked) so a
-# dead path can't black out the desktop or mask the legacy fallback
+# drop images that no longer exist so a dead path can't black out the desktop
 [ -n "$DEFAULT" ] && [ ! -r "$DEFAULT" ] && DEFAULT=""
 for o in "${!PER[@]}"; do [ -r "${PER[$o]}" ] || unset 'PER[$o]'; done
 
@@ -61,98 +66,127 @@ if [ -z "$DEFAULT" ] && [ "${#PER[@]}" -eq 0 ]; then
     done
 fi
 
-# ── backend choice: explicit backend= wins; otherwise prefer the shipped swaybg
 have() { command -v "$1" >/dev/null 2>&1; }
-if [ -n "$BACKEND" ] && ! have "$BACKEND"; then BACKEND=""; fi
-if [ -z "$BACKEND" ]; then
-    for b in swaybg swww hyprpaper; do have "$b" && { BACKEND="$b"; break; }; done
-fi
-if [ "$QUERY" -eq 1 ]; then echo "$BACKEND"; exit 0; fi
-[ -n "$BACKEND" ] || exit 0
+SWWW="$(command -v swww || command -v awww || true)"
+SWWWD="$(command -v swww-daemon || command -v awww-daemon || true)"
 
-# on an explicit reapply, stop the backends we are NOT using so switching in
-# Settings never leaves two daemons fighting over the background layer
-if [ "$REAPPLY" -eq 1 ]; then
-    [ "$BACKEND" != swaybg ] && pkill -x swaybg 2>/dev/null
-    [ "$BACKEND" != swww ] && pkill -x swww-daemon 2>/dev/null
-    [ "$BACKEND" != hyprpaper ] && pkill -x hyprpaper 2>/dev/null
+IMGBACK=""
+if [ "$BACKEND" = "swaybg" ] && have swaybg; then IMGBACK=swaybg
+elif [ -n "$SWWW" ]; then IMGBACK="$(basename "$SWWW")"
+elif have swaybg; then IMGBACK=swaybg
+fi
+VIDBACK=""
+have mpvpaper && VIDBACK=mpvpaper
+
+if [ "$QUERY" -eq 1 ]; then echo "img=${IMGBACK:-none} video=${VIDBACK:-none}"; exit 0; fi
+
+is_video() { case "${1##*.}" in mp4|webm|mkv|mov|avi|m4v|MP4|WEBM|MKV|MOV|AVI|M4V) return 0 ;; *) return 1 ;; esac }
+is_gif()   { case "${1##*.}" in gif|GIF) return 0 ;; *) return 1 ;; esac }
+
+# ── resolve what each connected output should show ────────────────────────────
+# (grep keeps this jq-free; if the query fails we fall back to '*'-style groups)
+OUTPUTS=()
+while IFS= read -r n; do [ -n "$n" ] && OUTPUTS+=("$n"); done \
+    < <(hyprctl monitors -j 2>/dev/null | grep -oP '"name": *"\K[^"]+')
+
+declare -A SHOW=()   # output → file
+if [ "${#OUTPUTS[@]}" -gt 0 ]; then
+    for o in "${OUTPUTS[@]}"; do
+        f="${PER[$o]:-$DEFAULT}"
+        [ -n "$f" ] && SHOW["$o"]="$f"
+    done
+else
+    # no output list available: explicit entries only, plus '*' default
+    for o in "${!PER[@]}"; do SHOW["$o"]="${PER[$o]}"; done
+    [ -n "$DEFAULT" ] && SHOW['*']="$DEFAULT"
 fi
 
-# nothing at all to show → paint a solid Gruvbox background so the root is
-# never garbage, whatever the preferred backend is
-if [ -z "$DEFAULT" ] && [ "${#PER[@]}" -eq 0 ]; then
+declare -A VID=() IMG=()
+for o in "${!SHOW[@]}"; do
+    if is_video "${SHOW[$o]}"; then VID["$o"]="${SHOW[$o]}"; else IMG["$o"]="${SHOW[$o]}"; fi
+done
+
+st=0
+if [ "${#VID[@]}" -gt 0 ] && [ -z "$VIDBACK" ]; then
+    echo "error: a video wallpaper is set but mpvpaper is not installed — sudo pacman -S mpvpaper"
+    st=1
+    VID=()
+fi
+if [ "$IMGBACK" = "swaybg" ]; then
+    for f in "${IMG[@]}"; do
+        if is_gif "$f"; then echo "note: GIFs are static with swaybg — install swww (packaged as 'awww': sudo pacman -S awww) for animation"; break; fi
+    done
+fi
+
+# nothing to show → solid Gruvbox background so the root is never garbage
+if [ "${#IMG[@]}" -eq 0 ] && [ "${#VID[@]}" -eq 0 ]; then
     if have swaybg; then
-        [ "$REAPPLY" -eq 0 ] && pgrep -x swaybg >/dev/null 2>&1 && exit 0
-        pkill -x swaybg 2>/dev/null
-        exec swaybg -c "#282828" >/dev/null 2>&1
+        if [ "$REAPPLY" -eq 1 ] || ! pgrep -x swaybg >/dev/null 2>&1; then
+            pkill -x swaybg 2>/dev/null
+            swaybg -c "#282828" >/dev/null 2>&1 &
+        fi
     fi
-    exit 0
+    exit "$st"
 fi
 
-case "$BACKEND" in
+# at plain login with everything already up, do nothing (idempotent autostart)
+if [ "$REAPPLY" -eq 0 ]; then
+    ok=1
+    [ "${#VID[@]}" -gt 0 ] && ! pgrep -x mpvpaper >/dev/null 2>&1 && ok=0
+    if [ "${#IMG[@]}" -gt 0 ]; then
+        case "$IMGBACK" in
+            swaybg) pgrep -x swaybg >/dev/null 2>&1 || ok=0 ;;
+            *) pgrep -f "$(basename "${SWWWD:-swww-daemon}")" >/dev/null 2>&1 || ok=0 ;;
+        esac
+    fi
+    [ "$ok" -eq 1 ] && exit "$st"
+fi
 
-swww)
-    pgrep -x swww-daemon >/dev/null 2>&1 || { swww-daemon >/dev/null 2>&1 & sleep 0.4; }
+# ── videos → mpvpaper (one instance per output; never '*' to avoid overlap) ──
+pkill -x mpvpaper 2>/dev/null
+if [ "${#VID[@]}" -gt 0 ]; then
+    MPVOPTS="loop"
+    [ "$MUTE" = "1" ] && MPVOPTS="$MPVOPTS no-audio"
     case "$MODE" in
-        fit) RS=fit ;;
-        stretch) RS=stretch ;;
-        tile|center) RS=no ;;   # swww has no tile/centre; 'no' keeps the image unscaled
-        *) RS=crop ;;
+        fill) MPVOPTS="$MPVOPTS panscan=1.0" ;;
+        stretch) MPVOPTS="$MPVOPTS keepaspect=no" ;;
+        center) MPVOPTS="$MPVOPTS video-unscaled=yes" ;;
     esac
-    if [ -n "$DEFAULT" ]; then
-        if [ "${#PER[@]}" -eq 0 ]; then
-            swww img "$DEFAULT" --resize "$RS" >/dev/null 2>&1
-        else
-            # only paint outputs that have no override — avoids the double
-            # transition (default first, override on top) on every reapply
-            while IFS=: read -r out _; do
-                [ -n "$out" ] || continue
-                [ -n "${PER[$out]:-}" ] || swww img "$DEFAULT" -o "$out" --resize "$RS" >/dev/null 2>&1
-            done < <(swww query 2>/dev/null)
-        fi
-    fi
-    for o in "${!PER[@]}"; do swww img "${PER[$o]}" -o "$o" --resize "$RS" >/dev/null 2>&1; done
-    ;;
+    for o in "${!VID[@]}"; do
+        out=$(mpvpaper -f -o "$MPVOPTS" "$o" "${VID[$o]}" 2>&1) || { echo "error: mpvpaper $o: ${out:-failed}"; st=1; }
+    done
+fi
 
-hyprpaper)
-    # only regenerate hyprpaper.conf if it's ours (or absent) — never clobber a
-    # hand-written config the user maintains for their own hyprpaper setup
-    HPC="$HOME/.config/hypr/hyprpaper.conf"
-    OURS=1
-    [ -e "$HPC" ] && ! head -1 "$HPC" 2>/dev/null | grep -q "AUTO-GENERATED" && OURS=0
-    if [ "$OURS" -eq 1 ]; then
-        {
-            echo "# AUTO-GENERATED by wallpaper.sh — edit wallpapers.conf instead"
-            [ -n "$DEFAULT" ] && { echo "preload = $DEFAULT"; echo "wallpaper = ,$DEFAULT"; }
-            for o in "${!PER[@]}"; do echo "preload = ${PER[$o]}"; echo "wallpaper = $o,${PER[$o]}"; done
-            echo "splash = false"
-        } > "$HPC.tmp" && mv "$HPC.tmp" "$HPC"
-    fi
-    if pgrep -x hyprpaper >/dev/null 2>&1; then
-        # drive the live daemon over IPC instead of restarting it (no flash)
-        if [ "$REAPPLY" -eq 1 ] && [ "$OURS" -eq 1 ]; then
-            if [ -n "$DEFAULT" ]; then
-                hyprctl hyprpaper preload "$DEFAULT" >/dev/null 2>&1
-                hyprctl hyprpaper wallpaper ",$DEFAULT" >/dev/null 2>&1
-            fi
-            for o in "${!PER[@]}"; do
-                hyprctl hyprpaper preload "${PER[$o]}" >/dev/null 2>&1
-                hyprctl hyprpaper wallpaper "$o,${PER[$o]}" >/dev/null 2>&1
-            done
+# ── images/GIFs → swww (animated) or swaybg (static) ─────────────────────────
+if [ "${#IMG[@]}" -gt 0 ]; then
+    if [ "$IMGBACK" != "swaybg" ] && [ -n "$SWWW" ]; then
+        if ! pgrep -f "$(basename "${SWWWD:-swww-daemon}")" >/dev/null 2>&1; then
+            [ -n "$SWWWD" ] && "$SWWWD" >/dev/null 2>&1 &
+            sleep 0.4
         fi
+        pkill -x swaybg 2>/dev/null   # static backend no longer owns any output
+        case "$MODE" in
+            fit) RS=fit ;;
+            stretch) RS=stretch ;;
+            tile|center) RS=no ;;
+            *) RS=crop ;;
+        esac
+        for o in "${!IMG[@]}"; do
+            if [ "$o" = "*" ]; then args=(); else args=(-o "$o"); fi
+            out=$("$SWWW" img "${IMG[$o]}" "${args[@]}" --resize "$RS" 2>&1) || { echo "error: ${IMGBACK} $o: ${out:-failed}"; st=1; }
+        done
+    elif have swaybg; then
+        args=()
+        for o in "${!IMG[@]}"; do
+            if [ "$o" = "*" ]; then args+=(-i "${IMG[$o]}" -m "$MODE")
+            else args+=(-o "$o" -i "${IMG[$o]}" -m "$MODE"); fi
+        done
+        pkill -x swaybg 2>/dev/null
+        swaybg "${args[@]}" >/dev/null 2>&1 &
     else
-        hyprpaper >/dev/null 2>&1 &
+        echo "error: no image wallpaper backend — install swww (sudo pacman -S awww) or swaybg"
+        st=1
     fi
-    ;;
+fi
 
-swaybg)
-    if [ "$REAPPLY" -eq 0 ] && pgrep -x swaybg >/dev/null 2>&1; then exit 0; fi
-    args=()
-    [ -n "$DEFAULT" ] && args+=(-i "$DEFAULT" -m "$MODE")
-    for o in "${!PER[@]}"; do args+=(-o "$o" -i "${PER[$o]}" -m "$MODE"); done
-    pkill -x swaybg 2>/dev/null
-    exec swaybg "${args[@]}" >/dev/null 2>&1
-    ;;
-
-esac
-exit 0
+exit "$st"

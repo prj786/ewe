@@ -688,24 +688,35 @@ Scope {
 
     // ── Wallpaper — per-output assignments in generated/wallpapers.conf, applied
     //    by scripts/wallpaper.sh (backend: swww → hyprpaper → swaybg) ───────────
-    property string wpBackend: ""      // effective backend (what wallpaper.sh will use; "" = none)
-    property var wpBackends: []        // every installed backend (user can pick when >1)
-    property string wpBackendChoice: ""// explicit backend= override from the conf ("" = auto)
-    property var wpMap: ({})           // "*" or output name → image path
+    property string wpImgBackend: ""   // what wallpaper.sh will drive images with (swww/awww/swaybg; "" = none)
+    property string wpVideoBackend: "" // "mpvpaper" or "" (videos impossible without it)
+    property bool wpMute: true         // video wallpapers muted (conf mute=)
+    property var wpMap: ({})           // "*" or output name → file path
     property string wpMode: "fill"
     property string wpDir: ""          // folder shown in the thumbnail grid
     property var wpFiles: []
     property string wpTarget: "*"      // "*" = all displays
-    // effective backend comes from wallpaper.sh itself (the single authority for
-    // the preference order); available backends probed alongside
+    readonly property string wpBackendLabel: wpImgBackend === "" && wpVideoBackend === "" ? "none"
+        : wpImgBackend + (wpVideoBackend !== "" ? " + " + wpVideoBackend : "")
+    function wpIsVideo(p) { return /\.(mp4|webm|mkv|mov|avi|m4v)$/i.test(p) }
+    function wpIsGif(p) { return /\.gif$/i.test(p) }
+    readonly property bool wpAnyAnimated: {
+        for (var k in wpMap) if (wpIsVideo(wpMap[k]) || wpIsGif(wpMap[k])) return true
+        return false
+    }
+    readonly property bool wpAnyVideo: {
+        for (var k in wpMap) if (wpIsVideo(wpMap[k])) return true
+        return false
+    }
+    // the backend mapping is wallpaper.sh's call (single authority) — ask it
     Process {
         id: wpBackendProbe
-        command: ["sh", "-c", 'eff=$("$HOME/.config/hypr/scripts/wallpaper.sh" --backend 2>/dev/null); avail=""; for b in swaybg swww hyprpaper; do command -v "$b" >/dev/null 2>&1 && avail="$avail$b "; done; echo "$eff|$avail"']
+        command: ["sh", "-c", '"$HOME/.config/hypr/scripts/wallpaper.sh" --backend 2>/dev/null']
         stdout: StdioCollector {
             onStreamFinished: {
-                var p = this.text.trim().split("|")
-                root.wpBackend = (p[0] || "").trim()
-                root.wpBackends = (p[1] || "").trim().split(" ").filter(function (x) { return x !== "" })
+                var m = this.text.match(/img=(\S+)\s+video=(\S+)/)
+                root.wpImgBackend = m && m[1] !== "none" ? m[1] : ""
+                root.wpVideoBackend = m && m[2] !== "none" ? m[2] : ""
             }
         }
     }
@@ -713,40 +724,59 @@ Scope {
         id: wpConfLoad; command: ["sh", "-c", 'cat "$HOME/.config/hypr/generated/wallpapers.conf" 2>/dev/null']
         stdout: StdioCollector {
             onStreamFinished: {
-                var m = {}, mode = "fill", backend = "", ls = this.text.split("\n")
+                var m = {}, mode = "fill", mute = true, ls = this.text.split("\n")
                 for (var i = 0; i < ls.length; i++) {
                     var l = ls[i]
                     if (l === "" || l[0] === "#") continue
                     var k = l.indexOf("="); if (k <= 0) continue
                     var key = l.slice(0, k), val = l.slice(k + 1)
                     if (key === "mode") mode = val
-                    else if (key === "backend") backend = val
+                    else if (key === "mute") mute = val === "1"
+                    else if (key === "backend") continue   // power-user override, script-side only
                     else if (val !== "") m[key] = val
                 }
-                root.wpMap = m; root.wpMode = mode; root.wpBackendChoice = backend
+                root.wpMap = m; root.wpMode = mode; root.wpMute = mute
             }
         }
     }
     Process { id: wpDirProbe; command: ["sh", "-c", 'for d in "$HOME/Pictures/Wallpapers" "$HOME/Pictures" "$HOME"; do [ -d "$d" ] && { echo "$d"; exit; }; done']; stdout: StdioCollector { onStreamFinished: { var d = this.text.trim(); if (d !== "") root.wpList(d) } } }
     Process { id: wpLs; stdout: StdioCollector { onStreamFinished: root.wpFiles = this.text.split("\n").filter(function (x) { return x !== "" }) } }
     Process { id: wpWriter }
-    Timer { id: wpApply; interval: 250; onTriggered: Quickshell.execDetached(["sh", "-c", '"$HOME/.config/hypr/scripts/wallpaper.sh" --reapply']) }
-    Timer { id: wpBackendReprobe; interval: 900; onTriggered: wpBackendProbe.running = true }
+    // apply runs through a collecting Process so wallpaper.sh's error:/note:
+    // lines land in the banner instead of vanishing into execDetached
+    Timer { id: wpApply; interval: 250; onTriggered: { wpApplyProc.running = false; wpApplyProc.running = true } }
+    Process {
+        id: wpApplyProc
+        command: ["sh", "-c", '"$HOME/.config/hypr/scripts/wallpaper.sh" --reapply 2>&1']
+        stdout: StdioCollector {
+            onStreamFinished: {
+                var out = this.text.trim()
+                if (out.indexOf("error:") >= 0) root.errorMsg = out.split("\n").filter(function (l) { return l.indexOf("error:") >= 0 })[0].replace(/^error:\s*/, "")
+                else if (out !== "") root.flashApplied(out.split("\n")[0].replace(/^note:\s*/, ""))
+                else root.flashApplied("Wallpaper applied")
+            }
+        }
+    }
     function wpList(dir) {
         root.wpDir = dir
-        wpLs.command = ["sh", "-c", 'find "$1" -maxdepth 1 -type f \\( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.webp" \\) 2>/dev/null | sort', "qs-settings", dir]
+        wpLs.command = ["sh", "-c", 'find "$1" -maxdepth 1 -type f \\( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.webp" -o -iname "*.gif" -o -iname "*.mp4" -o -iname "*.webm" -o -iname "*.mkv" -o -iname "*.mov" -o -iname "*.m4v" \\) 2>/dev/null | sort', "qs-settings", dir]
         wpLs.running = false; wpLs.running = true
     }
     function wpWrite() {
         if (HyprMon.virtualSession) return   // test session: don't touch conf or the real backend
-        var s = "# AUTO-GENERATED by Settings → Wallpaper. Do not edit by hand.\nmode=" + root.wpMode + "\n"
-        if (root.wpBackendChoice !== "") s += "backend=" + root.wpBackendChoice + "\n"
+        var s = "# AUTO-GENERATED by Settings → Wallpaper. Do not edit by hand.\nmode=" + root.wpMode + "\nmute=" + (root.wpMute ? "1" : "0") + "\n"
         var keys = Object.keys(root.wpMap).sort()
         for (var i = 0; i < keys.length; i++) s += keys[i] + "=" + root.wpMap[keys[i]] + "\n"
         root.atomicWrite(wpWriter, root.home + "/.config/hypr/generated/wallpapers.conf", s)
         wpApply.restart()
     }
     function wpAssign(path) {
+        if (root.wpIsVideo(path) && root.wpVideoBackend === "") {
+            root.errorMsg = "Video wallpapers need mpvpaper — install it with: sudo pacman -S mpvpaper"
+            return
+        }
+        if (root.wpIsGif(path) && root.wpImgBackend === "swaybg")
+            root.errorMsg = "GIFs will be static with swaybg — install swww (sudo pacman -S awww) for animation"
         var m
         if (root.wpTarget === "*") m = { "*": path }   // "all displays" replaces per-monitor picks
         else { m = {}; for (var k in root.wpMap) m[k] = root.wpMap[k]; m[root.wpTarget] = path }
@@ -1794,12 +1824,12 @@ Scope {
                 Column {
                     spacing: 14
                     Card {
-                        visible: root.wpBackend === ""
-                        Text { width: parent.width; text: "No wallpaper backend found. Install swaybg (the one hypr-shell ships), or swww / hyprpaper for animated transitions — this page drives whichever is present."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; wrapMode: Text.Wrap }
+                        visible: root.wpBackendLabel === "none"
+                        Text { width: parent.width; text: "No wallpaper backend found. Install swww (packaged as “awww”) for images and animated GIFs, mpvpaper for video wallpapers — or swaybg for static images only."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; wrapMode: Text.Wrap }
                     }
-                    SectionTitle { visible: root.wpBackend !== ""; text: "WALLPAPER  ·  backend: " + root.wpBackend }
+                    SectionTitle { visible: root.wpBackendLabel !== "none"; text: "WALLPAPER  ·  backend: " + root.wpBackendLabel }
                     Card {
-                        visible: root.wpBackend !== ""
+                        visible: root.wpBackendLabel !== "none"
                         Item {
                             width: parent.width; height: 30
                             Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Apply to"; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
@@ -1825,12 +1855,11 @@ Scope {
                             value: root.wpMode
                             onPicked: function (v) { root.wpMode = v; if (Object.keys(root.wpMap).length) { root.wpWrite(); root.flashApplied() } }
                         }
-                        DropRow {
-                            visible: root.wpBackends.length > 1
-                            label: "Backend"; ddId: "wp-backend"; buttonWidth: 110
-                            options: root.wpBackends.map(function (b) { return { label: b, value: b } })
-                            value: root.wpBackend
-                            onPicked: function (v) { root.wpBackendChoice = v; root.wpWrite(); root.flashApplied(); wpBackendReprobe.restart() }
+                        ToggleRow {
+                            visible: root.wpAnyVideo
+                            title: "Mute video wallpaper"; sub: "mpvpaper plays the file's audio track otherwise."
+                            on: root.wpMute
+                            onToggled: { root.wpMute = !root.wpMute; root.wpWrite(); root.flashApplied() }
                         }
                         Text { width: parent.width; visible: Object.keys(root.wpMap).length === 0; text: "No wallpaper set yet — pick one below."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11 }
                         Repeater {
@@ -1838,9 +1867,9 @@ Scope {
                             delegate: KV { required property var modelData; k: modelData === "*" ? "All displays" : modelData; v: String(root.wpMap[modelData]).replace(/^.*\//, "") }
                         }
                     }
-                    SectionTitle { visible: root.wpBackend !== ""; text: "CHOOSE  ·  " + root.wpDir }
+                    SectionTitle { visible: root.wpBackendLabel !== "none"; text: "CHOOSE  ·  " + root.wpDir }
                     Card {
-                        visible: root.wpBackend !== ""
+                        visible: root.wpBackendLabel !== "none"
                         FileDropTarget {
                             id: wpPicker
                             width: parent.width
@@ -1864,17 +1893,34 @@ Scope {
                                 delegate: Rectangle {
                                     required property var modelData
                                     readonly property bool cur: root.wpMap[root.wpTarget] === modelData
+                                    readonly property bool isVid: root.wpIsVideo(modelData)
+                                    readonly property bool isGif: root.wpIsGif(modelData)
                                     width: 122; height: 76; radius: 7; clip: true
                                     color: Theme.bg
                                     border.color: cur ? Theme.accent : (wtMa.containsMouse ? Theme.fgDim : Theme.stroke); border.width: cur ? 2 : 1
-                                    Image { anchors.fill: parent; anchors.margins: 1; source: "file://" + modelData; fillMode: Image.PreserveAspectCrop; asynchronous: true; sourceSize.width: 244; sourceSize.height: 152 }
+                                    Image { visible: !parent.isVid; anchors.fill: parent; anchors.margins: 1; source: parent.isVid ? "" : "file://" + modelData; fillMode: Image.PreserveAspectCrop; asynchronous: true; sourceSize.width: 244; sourceSize.height: 152 }
+                                    // videos get a film tile — no thumbnail without a decode pass
+                                    Column {
+                                        visible: parent.isVid
+                                        anchors.centerIn: parent; spacing: 3; width: parent.width - 14
+                                        Text { anchors.horizontalCenter: parent.horizontalCenter; text: root.g(0xF0567); font.family: Theme.fontMono; font.pixelSize: 20; color: Theme.fgDim }
+                                        Text { width: parent.width; horizontalAlignment: Text.AlignHCenter; text: String(modelData).replace(/^.*\//, ""); color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 9; elide: Text.ElideMiddle }
+                                    }
+                                    Rectangle {
+                                        visible: parent.isVid || parent.isGif
+                                        anchors.left: parent.left; anchors.bottom: parent.bottom; anchors.margins: 4
+                                        width: badgeT.implicitWidth + 10; height: 16; radius: 5
+                                        color: Qt.rgba(0, 0, 0, 0.62)
+                                        Text { id: badgeT; anchors.centerIn: parent; text: parent.parent.isVid ? "▶ video" : "GIF"; color: "white"; font.family: Theme.fontText; font.pixelSize: 9; font.weight: Font.DemiBold }
+                                    }
                                     Text { anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 4; visible: cur; text: Theme.icCheck; font.family: Theme.fontMono; font.pixelSize: 12; color: Theme.accent; style: Text.Outline; styleColor: "black" }
                                     MouseArea { id: wtMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.wpAssign(modelData) }
                                 }
                             }
                         }
                     }
-                    Text { width: parent.width; text: "Applied live and restored at every login by wallpaper.sh; when a monitor is plugged in, its wallpaper is re-applied automatically."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
+                    Text { width: parent.width; text: "Applied live and restored at every login by wallpaper.sh; when a monitor is plugged in, its wallpaper is re-applied automatically. Static images → " + (root.wpImgBackend || "no backend") + ", GIFs animate via swww, video plays via mpvpaper (always looped)."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
+                    Text { visible: root.wpAnyAnimated; width: parent.width; text: "Animated wallpapers keep the GPU decoding continuously — expect measurable battery drain on the laptop."; color: Theme.warning; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
                     Item { width: 1; height: 8 }
                 }
             }

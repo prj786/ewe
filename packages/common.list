@@ -89,6 +89,8 @@ firefox
 
 # ── desktop utilities ────────────────────────────────────────────────────────
 swaybg
+awww       # swww's Arch package name — animated GIF wallpapers + transitions
+mpvpaper   # video wallpapers (Settings → Wallpaper maps file type → backend)
 grim
 slurp
 satty
