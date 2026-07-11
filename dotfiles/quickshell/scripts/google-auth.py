@@ -60,6 +60,11 @@ def read_client():
         try:
             with open(CONFIG) as f:
                 j = json.load(f)
+            # accept both the flat form ({client_id, client_secret}) and the
+            # credentials JSON downloaded from the Google Cloud console, which
+            # wraps a Desktop-app client in {"installed": {...}}
+            if isinstance(j.get("installed"), dict):
+                j = j["installed"]
             cid = j.get("client_id", "")
             csec = j.get("client_secret", csec)
         except (OSError, ValueError):
