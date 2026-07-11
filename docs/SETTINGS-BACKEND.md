@@ -25,7 +25,7 @@ configuration is restored automatically.
 |---|---|---|
 | `~/.config/hypr/generated/monitors.lua` | Displays | per-monitor-set profiles, `desc:`-matched `hl.monitor{}` rules + boot-time profile matching |
 | `~/.config/hypr/generated/input.lua` | Keyboard & Mouse | the full `input { … }` block + per-device `hl.device{}` overrides |
-| `~/.config/hypr/generated/wallpapers.conf` | Wallpaper | `mode=…`, optional `backend=…`, `*=<default image>`, `<output>=<image>` lines read by `scripts/wallpaper.sh` |
+| `~/.config/hypr/generated/wallpapers.conf` | Wallpaper | `mode=…`, `mute=…`, optional `backend=…`, `*=<default file>`, `<output>=<file>` lines read by `scripts/wallpaper.sh` (files may be images, GIFs or videos) |
 | `~/.config/hypr/generated/user.lua` | Layout / Theme | gaps, border, corner radius, accent border, animation overrides |
 | `~/.config/hypr/generated/kb-per-window.disabled` | Keyboard & Mouse | flag file: presence tells `autostart.sh` not to start the per-window-layout daemon |
 | `~/.config/quickshell/display-profiles.json` | Displays | source of truth for the display profiles (below) |
@@ -35,10 +35,57 @@ configuration is restored automatically.
 (missing files are a no-op), so the dedicated files win over any stale lines an
 older `user.lua` may still carry. All of these are gitignored user state.
 
-Wallpaper backend: `wallpaper.sh` prefers the **shipped** swaybg; installing
-swww or hyprpaper does not silently take over — the user opts in via the
-Backend picker (→ `backend=` in wallpapers.conf). A hand-written
-`hyprpaper.conf` (no AUTO-GENERATED header) is never overwritten.
+## Wallpaper backends (per file type)
+
+`wallpaper.sh` picks the backend automatically from the file:
+
+| Content | Backend | Notes |
+|---|---|---|
+| video (mp4/webm/mkv/mov/avi/m4v) | **mpvpaper** | one instance per output, looped, muted by default (`mute=` / UI toggle) |
+| image / animated GIF | **swww** (Arch packages it as **`awww`**) | GIFs animate; transitions |
+| image, no swww installed | **swaybg** | static only — GIFs show a warning |
+
+Each connected output resolves its own file (per-output line or the `*`
+default), so a video on one monitor and an image on the other coexist.
+`backend=swaybg` in wallpapers.conf force-picks the static image backend.
+The script prints `error:`/`note:` lines and exits non-zero on failure;
+Settings surfaces them in the inline banner. Restore-on-login (autostart)
+and hotplug re-apply (HyprMon) call `wallpaper.sh --reapply`.
+(hyprpaper support was dropped in 0.3 in favour of this mapping.)
+
+## Settings window
+
+The Settings app is a real **xdg-toplevel** (`FloatingWindow`), not a layer
+surface — required for the XDG portal file chooser to have a valid parent and
+for file drag-and-drop to route to it. A `hyprland.lua` windowrule floats and
+centres it (match: title `hypr-shell settings`). All image/video input goes
+through the shared `FileDropTarget` component (portal chooser + drop zone).
+
+## Online Accounts (User tab)
+
+GNOME's daemons do the heavy lifting; the shell only talks D-Bus:
+
+- **GOA** (`gnome-online-accounts`, `org.gnome.OnlineAccounts`) owns accounts
+  and OAuth tokens. The `Accounts` singleton lists them via the ObjectManager
+  (`busctl -j`), flips the per-service `…Disabled` properties, and removes
+  accounts. **Adding** an account launches `gnome-control-center
+  online-accounts` (with `XDG_CURRENT_DESKTOP=GNOME`) — reusing GNOME's
+  working OAuth webflow. A native QtWebEngine flow driving `AddAccount`
+  directly is a planned later phase, deliberately not part of 0.3.
+- **EDS** (`evolution-data-server`) is the data layer GOA accounts register
+  into. `scripts/eds-query.py` (python-gobject) dumps upcoming events and
+  contacts as JSON; the Quick Settings calendar and the User tab's contacts
+  list bind to `Accounts.events` / `Accounts.contacts`.
+
+All of it is **optional**: with the daemons missing, the User tab shows what
+to install and everything else keeps working.
+
+## Runtime dependencies added in 0.3
+
+Installed by `packages/common.list`: `awww` (swww), `mpvpaper`.
+Optional (Online Accounts): `gnome-online-accounts`,
+`evolution-data-server`, `python-gobject` (usually present), and
+`gnome-control-center` for the add-account flow.
 
 ## Display profiles
 
