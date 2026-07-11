@@ -1772,6 +1772,8 @@ Scope {
                             onMoved: function (v) { root.rounding = Math.round(v); root.applyGaps() } }
                     }
                     Pill { label: "Reset to defaults"; onGo: { root.gapsIn = 6; root.gapsOut = 14; root.borderSize = 1; root.rounding = 12; root.applyGaps() } }
+                    Text { width: parent.width; text: "Sliders preview while dragging and apply on release — live via hyprctl, persisted to generated/user.lua so they survive reloads and relogin."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
+                    Item { width: 1; height: 8 }
                 }
             }
 
@@ -1829,13 +1831,11 @@ Scope {
                     }
                     SectionTitle { text: "WINDOW BORDERS" }
                     Card {
-                        Item {
-                            width: parent.width; height: 30
-                            Column { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; spacing: 1
-                                Text { text: "Tint window borders with accent"; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
-                                Text { text: "Replaces the default border colour with your accent."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 10 }
-                            }
-                            Toggle { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; on: Globals.tintBorders; onToggled: { Globals.tintBorders = !Globals.tintBorders; root.applyBorder(); root.setAccent(String(Globals.accentColor)) } }
+                        ToggleRow {
+                            title: "Tint window borders with accent"
+                            sub: "Replaces the default border colour with your accent."
+                            on: Globals.tintBorders
+                            onToggled: { Globals.tintBorders = !Globals.tintBorders; root.applyBorder(); root.setAccent(String(Globals.accentColor)) }
                         }
                     }
                     SectionTitle { text: "ANIMATIONS" }
