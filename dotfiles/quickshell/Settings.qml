@@ -1,5 +1,4 @@
 import QtQuick
-import QtQuick.Dialogs
 import Quickshell
 import Quickshell.Io
 import Quickshell.Services.Pipewire
@@ -353,7 +352,14 @@ Scope {
         function hide(): void { Globals.settingsOpen = false }
         // deep-link straight to a pane: qs ipc call settings pane 1 (Displays)
         function pane(n: int): void { root.pane = Math.max(0, Math.min(root.navItems.length - 1, n)); Globals.settingsOpen = true }
+        // jump to Wallpaper and open the file chooser (bindable to a key)
+        function pickWallpaper(): void {
+            for (var i = 0; i < root.navItems.length; i++) if (root.navItems[i].key === "wallpaper") root.pane = i
+            Globals.settingsOpen = true
+            root.wallpaperBrowseRequested()
+        }
     }
+    signal wallpaperBrowseRequested()
 
     // diagnostics (generic, app-agnostic)
     property var diag: ({})
@@ -748,17 +754,8 @@ Scope {
         root.wpWrite()
         root.flashApplied("Wallpaper set")
     }
-    // FileDialog URLs are percent-encoded — decode before the path touches the
-    // filesystem (conf files, find, the backends)
-    function urlToPath(u) { return decodeURIComponent(String(u).replace(/^file:\/\//, "")) }
-    FileDialog {
-        id: wpDlg; title: "Choose wallpaper"; nameFilters: ["Images (*.png *.jpg *.jpeg *.webp)"]
-        onAccepted: {
-            var p = root.urlToPath(selectedFile)
-            root.wpAssign(p)
-            root.wpList(p.replace(/\/[^/]*$/, ""))
-        }
-    }
+    // file picking + drag-and-drop live in the shared FileDropTarget component
+    // (instantiated by the Wallpaper and User panes)
 
     // accent presets
     readonly property var accents: [
@@ -770,10 +767,6 @@ Scope {
 
     // ── avatar: pick → crop (pan/zoom) → 512² PNG to ~/.face + AccountsService ──
     property string avatarCropSrc: ""      // image being cropped ("" = dialog closed)
-    FileDialog {
-        id: avatarDlg; title: "Choose avatar image"; nameFilters: ["Images (*.png *.jpg *.jpeg *.webp *.bmp)"]
-        onAccepted: root.avatarCropSrc = root.urlToPath(selectedFile)
-    }
     function saveAvatar() {
         cropCanvas.grabToImage(function (res) {
             var tmp = root.home + "/.cache/hypr-shell-avatar.png"
@@ -1848,9 +1841,18 @@ Scope {
                     SectionTitle { visible: root.wpBackend !== ""; text: "CHOOSE  ·  " + root.wpDir }
                     Card {
                         visible: root.wpBackend !== ""
+                        FileDropTarget {
+                            id: wpPicker
+                            width: parent.width
+                            acceptVideo: true
+                            label: "Drop an image, GIF or video here — or click to browse"
+                            dialogTitle: "Choose wallpaper"
+                            onPicked: function (p) { root.wpAssign(p); root.wpList(p.replace(/\/[^/]*$/, "")) }
+                            Connections { target: root; function onWallpaperBrowseRequested() { wpPicker.browse() } }
+                        }
                         Row {
                             spacing: 8
-                            Pill { label: "Browse files…"; onGo: wpDlg.open() }
+                            Pill { label: "Browse files…"; onGo: wpPicker.browse() }
                             Pill { label: "Wallpapers folder"; onGo: root.wpList(root.home + "/Pictures/Wallpapers") }
                             Pill { label: "Pictures"; onGo: root.wpList(root.home + "/Pictures") }
                         }
@@ -1925,8 +1927,15 @@ Scope {
                             Column {
                                 anchors.verticalCenter: parent.verticalCenter; spacing: 6
                                 Text { text: Quickshell.env("USER") || "user"; color: Theme.fg; font.family: Theme.fontDisplay; font.pixelSize: Theme.fsLarge; font.weight: Font.Bold }
-                                Pill { label: "Change avatar…"; onGo: avatarDlg.open() }
+                                Pill { label: "Change avatar…"; onGo: avPicker.browse() }
                             }
+                        }
+                        FileDropTarget {
+                            id: avPicker
+                            width: parent.width; implicitHeight: 44
+                            label: "Drop an image here to change your avatar"
+                            dialogTitle: "Choose avatar image"
+                            onPicked: function (p) { root.avatarCropSrc = p }
                         }
                     }
                     Text { width: parent.width; text: "Avatar is saved to ~/.face (used by login/greeters); we also try to update the system account icon."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
