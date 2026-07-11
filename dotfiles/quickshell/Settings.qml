@@ -35,7 +35,10 @@ Scope {
         { key: "user",      ic: 0xF0004, label: "User" }
     ]
     readonly property string paneKey: navItems[pane].key
-    onPaneChanged: {
+    // Run the active pane's probes. Called on pane change AND on window open —
+    // reopening onto a remembered pane must re-probe too, or that pane shows
+    // stale/never-loaded data forever ("Checking…", "—" session facts).
+    function paneProbes() {
         var k = root.paneKey
         if (k === "displays") HyprMon.refresh()
         else if (k === "network") { wifiDevProbe.running = true; wifiState.running = true; wifiScan.running = true; vpnScan.running = true; netProc.running = true; sshProc.running = true }
@@ -43,8 +46,9 @@ Scope {
         else if (k === "shortcuts") scProc.running = true
         else if (k === "layout") layoutProc.running = true
         else if (k === "wallpaper") { wpBackendProbe.running = true; wpConfLoad.running = true; HyprMon.refresh(); if (root.wpDir === "") wpDirProbe.running = true; else root.wpList(root.wpDir) }
-        else if (k === "user") { Globals.recheckFace(); userInfoProbe.running = true; Accounts.refresh() }
+        else if (k === "user") { Globals.recheckFace(); userInfoProbe.running = false; userInfoProbe.running = true; Accounts.refresh() }
     }
+    onPaneChanged: root.paneProbes()
 
     // ── persisted override state ───────────────────────────────────────────────
     property int  gapsIn: 6
@@ -342,7 +346,7 @@ Scope {
     }
 
     // ── refresh probes ────────────────────────────────────────────────────────
-    function refresh() { diagProc.running = true; layoutProc.running = true; HyprMon.refresh(); defProc.running = true; choicesProc.running = true }
+    function refresh() { diagProc.running = true; layoutProc.running = true; HyprMon.refresh(); defProc.running = true; choicesProc.running = true; root.paneProbes() }
     Connections { target: Globals; function onSettingsOpenChanged() { if (Globals.settingsOpen) root.refresh() } }
     IpcHandler {
         target: "settings"
