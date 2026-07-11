@@ -1,16 +1,14 @@
 import QtQuick
-import QtQuick.Effects
 import QtQuick.Dialogs
 import Quickshell
-import Quickshell.Wayland
-import Quickshell.Hyprland
 import Quickshell.Io
 import Quickshell.Services.Pipewire
 
 // Settings — a universal, themed settings window (Super+, · Quick Settings gear ·
-// Launcher "Settings"). Sidebar nav + content. Panes: System/Diagnostics,
-// Displays, Networking, Default Apps, Keyboard, Shortcuts, Theme & Accent, User.
-// Mirrors QuickSettings.qml's structure; all colours from Theme.qml.
+// Launcher "Settings"). A real toplevel window (movable/resizable/closable);
+// sidebar nav + content. Panes: System/Diagnostics, Displays, Networking,
+// Default Apps, Keyboard & Mouse, Shortcuts, Layout, Theme, Wallpaper, Dock,
+// User. All colours from Theme.qml.
 //
 // Hyprland is Lua-configured, so live changes go through `hyprctl eval 'hl…'`
 // (plain `hyprctl keyword` is rejected). Persistent changes are written to
@@ -800,50 +798,33 @@ Scope {
     }
 
     // ══════════════════════════════════════════════════════════════════════════
-    PanelWindow {
+    // A real xdg-toplevel (FloatingWindow), NOT a layer surface. Layer surfaces
+    // have no toplevel semantics, so the XDG portal file chooser had no valid
+    // parent (dialogs never opened) and file drag-and-drop never routed here.
+    // As a toplevel it is movable/closable like any app window; hyprland.lua has
+    // a windowrule (match: title) that floats + centers it at 880×620, so it
+    // still opens centered like the old overlay. Window animations come from
+    // Hyprland's own popin animation — no hand-rolled fade needed.
+    FloatingWindow {
         id: win
-        // visible is ASSIGNED, never bound: a `settingsOpen || closeTimer.running`
-        // binding can re-evaluate before the Connections handler below restarts
-        // the timer — unmapping and instantly remapping the layer, which flashed
-        // a frame of blur-only scrim on every close. Explicit hand-off instead:
-        // map on open, stay mapped through the fade-out, unmap once at its end.
         visible: false
-        screen: { var s = Quickshell.screens, fm = Hyprland.focusedMonitor; if (fm) for (var i = 0; i < s.length; i++) if (s[i].name === fm.name) return s[i]; return s.length > 0 ? s[0] : null }
-        color: "transparent"
-        exclusionMode: ExclusionMode.Ignore
-        WlrLayershell.namespace: "quickshell:settings"
-        WlrLayershell.layer: WlrLayer.Overlay
-        WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
-        anchors { top: true; bottom: true; left: true; right: true }
-
-        Timer { id: closeTimer; interval: Theme.durBase + 80; onTriggered: win.visible = false }
+        title: "hypr-shell settings"
+        implicitWidth: 880
+        implicitHeight: 620
+        minimumSize: Qt.size(720, 480)
+        color: Theme.panel
         Connections {
             target: Globals
-            function onSettingsOpenChanged() {
-                if (Globals.settingsOpen) { closeTimer.stop(); win.visible = true }
-                else closeTimer.restart()
-            }
+            function onSettingsOpenChanged() { if (win.visible !== Globals.settingsOpen) win.visible = Globals.settingsOpen }
         }
+        // compositor-side close (Super+Q, taskbar) must sync the shell state back
+        onVisibleChanged: if (Globals.settingsOpen !== visible) Globals.settingsOpen = visible
 
-        // translucent scrim (Hyprland blurs the desktop behind it via a layer rule)
-        Rectangle { anchors.fill: parent; color: Qt.rgba(0, 0, 0, 0.28); opacity: Globals.settingsOpen ? 1 : 0; Behavior on opacity { NumberAnimation { duration: Theme.durBase } } }
-        MouseArea { anchors.fill: parent; onClicked: Globals.settingsOpen = false }
-
-        Rectangle {
+        Item {
             id: card
-            anchors.centerIn: parent
-            width: 860; height: 600
-            radius: Theme.radius; color: Theme.panel
-            border.color: Theme.stroke; border.width: 1
+            anchors.fill: parent
             clip: true
-            opacity: Globals.settingsOpen ? 1 : 0
-            scale: Globals.settingsOpen ? 1 : 0.96
-            Behavior on opacity { NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutCubic } }
-            Behavior on scale { NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutCubic } }
-            layer.enabled: true
-            layer.effect: MultiEffect { shadowEnabled: true; shadowColor: Theme.shadow; shadowOpacity: 0.5; shadowBlur: 1.0; shadowVerticalOffset: 10; blurMax: 48 }
 
-            MouseArea { anchors.fill: parent }
             Item {
                 id: keyGrab
                 anchors.fill: parent; focus: true

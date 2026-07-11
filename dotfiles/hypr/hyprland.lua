@@ -362,6 +362,16 @@ hl.window_rule({
     pin   = true,
 })
 
+-- The shell's Settings app is a real toplevel (so portals/DnD work) — float and
+-- centre it so it still opens like the old overlay.
+hl.window_rule({
+    name   = "settings-window",
+    match  = { title = "^hypr-shell settings$" },
+    float  = true,
+    center = true,
+    size   = { 880, 620 },
+})
+
 -- Fix XWayland drag ghosts (from the upstream example).
 hl.window_rule({
     name     = "fix-xwayland-drags",
