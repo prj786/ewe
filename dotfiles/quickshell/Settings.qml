@@ -42,7 +42,7 @@ Scope {
         else if (pane === 5) scProc.running = true
         else if (pane === 6) layoutProc.running = true
         else if (pane === 8) { wpBackendProbe.running = true; wpConfLoad.running = true; HyprMon.refresh(); if (root.wpDir === "") wpDirProbe.running = true; else root.wpList(root.wpDir) }
-        else if (pane === 10) faceProc.running = true
+        else if (pane === 10) Globals.recheckFace()
     }
 
     // ── persisted override state ───────────────────────────────────────────────
@@ -742,17 +742,32 @@ Scope {
         { name: "Graphite", hex: "#8e8e93" }
     ]
 
-    // avatar
-    property int avatarTick: 0
-    property bool hasFace: false
-    Process { id: faceProc; command: ["sh", "-c", "[ -f \"$HOME/.face\" ] && echo yes || echo no"]; stdout: StdioCollector { onStreamFinished: root.hasFace = this.text.trim() === "yes" } }
-    Timer { id: faceRecheck; interval: 400; onTriggered: faceProc.running = true }
+    // ── avatar: pick → crop (pan/zoom) → 512² PNG to ~/.face + AccountsService ──
+    property string avatarCropSrc: ""      // image being cropped ("" = dialog closed)
     FileDialog {
         id: avatarDlg; title: "Choose avatar image"; nameFilters: ["Images (*.png *.jpg *.jpeg *.webp *.bmp)"]
-        onAccepted: {
-            var p = String(selectedFile).replace(/^file:\/\//, "")
-            Quickshell.execDetached(["sh", "-c", "cp \"" + p + "\" \"$HOME/.face\" && busctl call org.freedesktop.Accounts /org/freedesktop/Accounts/User$(id -u) org.freedesktop.Accounts.User SetIconFile s \"$HOME/.face\" 2>/dev/null || true"])
-            root.avatarTick++; faceRecheck.restart()
+        onAccepted: root.avatarCropSrc = String(selectedFile).replace(/^file:\/\//, "")
+    }
+    function saveAvatar() {
+        cropCanvas.grabToImage(function (res) {
+            var tmp = root.home + "/.cache/hypr-shell-avatar.png"
+            if (!res.saveToFile(tmp)) { root.errorMsg = "Could not write the cropped image."; root.avatarCropSrc = ""; return }
+            avatarSave.command = ["sh", "-c",
+                'if cp "$1" "$HOME/.face"; then busctl call org.freedesktop.Accounts /org/freedesktop/Accounts/User$(id -u) org.freedesktop.Accounts.User SetIconFile s "$HOME/.face" >/dev/null 2>&1 || echo ACCOUNTS-FAIL; else echo CP-FAIL; fi',
+                "qs-settings", tmp]
+            avatarSave.running = false; avatarSave.running = true
+            root.avatarCropSrc = ""
+        }, Qt.size(512, 512))
+    }
+    Process {
+        id: avatarSave
+        stdout: StdioCollector {
+            onStreamFinished: {
+                var out = this.text.trim()
+                if (out.indexOf("CP-FAIL") >= 0) root.errorMsg = "Could not save ~/.face (check permissions)."
+                else if (out.indexOf("ACCOUNTS-FAIL") >= 0) { root.errorMsg = "Avatar saved to ~/.face, but AccountsService rejected the update — the login screen may keep the old icon."; Globals.recheckFace() }
+                else { root.flashApplied("Avatar updated"); Globals.recheckFace() }
+            }
         }
     }
 
@@ -1882,7 +1897,7 @@ Scope {
                             width: parent.width; spacing: 16
                             Rectangle {
                                 width: 72; height: 72; radius: 36; color: Theme.elevated; border.color: Theme.stroke; border.width: 1; clip: true
-                                Image { id: avatarImg; anchors.fill: parent; fillMode: Image.PreserveAspectCrop; cache: false; source: root.hasFace ? ("file://" + root.home + "/.face?v=" + root.avatarTick) : ""; visible: root.hasFace && status === Image.Ready }
+                                Image { id: avatarImg; anchors.fill: parent; fillMode: Image.PreserveAspectCrop; cache: false; source: Globals.hasFace ? ("file://" + root.home + "/.face?v=" + Globals.avatarVersion) : ""; visible: Globals.hasFace && status === Image.Ready }
                                 Text { anchors.centerIn: parent; visible: !avatarImg.visible; text: root.g(0xF0004); font.family: Theme.fontMono; font.pixelSize: 34; color: Theme.fgDim }
                             }
                             Column {
@@ -1915,6 +1930,66 @@ Scope {
                 color: Theme.elevated; border.color: Theme.stroke; border.width: 1
                 Text { anchors.left: parent.left; anchors.leftMargin: 11; anchors.verticalCenter: parent.verticalCenter; text: Theme.icCheck; font.family: Theme.fontMono; font.pixelSize: 12; color: Theme.success }
                 Text { id: apText; anchors.right: parent.right; anchors.rightMargin: 11; anchors.verticalCenter: parent.verticalCenter; text: root.appliedMsg; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: 11; font.weight: Font.DemiBold }
+            }
+            Rectangle {
+                // avatar crop: pan (drag) + zoom (slider) inside a square viewport;
+                // Save grabs the viewport at 512×512 and writes it to ~/.face.
+                anchors.fill: parent; color: Qt.rgba(0, 0, 0, 0.45); z: 65
+                visible: root.avatarCropSrc !== ""
+                MouseArea { anchors.fill: parent }   // swallow clicks
+                Rectangle {
+                    anchors.centerIn: parent; width: 340; height: cropCol.implicitHeight + 40
+                    radius: Theme.radius; color: Theme.panel; border.color: Theme.stroke; border.width: 1
+                    Column {
+                        id: cropCol
+                        anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 20; spacing: 12
+                        Text { text: "Crop avatar"; color: Theme.fg; font.family: Theme.fontDisplay; font.pixelSize: Theme.fsLarge; font.weight: Font.Bold }
+                        Item {
+                            id: cropView
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            width: 256; height: 256
+                            property real zoom: 1
+                            onVisibleChanged: if (visible) zoom = 1
+                            Item {
+                                id: cropCanvas
+                                anchors.fill: parent; clip: true
+                                Image {
+                                    id: cropImg
+                                    source: root.avatarCropSrc === "" ? "" : "file://" + root.avatarCropSrc
+                                    readonly property real baseScale: status === Image.Ready && implicitWidth > 0 && implicitHeight > 0 ? Math.max(256 / implicitWidth, 256 / implicitHeight) : 1
+                                    width: implicitWidth * baseScale * cropView.zoom
+                                    height: implicitHeight * baseScale * cropView.zoom
+                                    onStatusChanged: if (status === Image.Ready) { x = (256 - width) / 2; y = (256 - height) / 2 }
+                                }
+                            }
+                            // overlay chrome lives OUTSIDE cropCanvas so the grab stays clean
+                            Rectangle { anchors.fill: parent; color: "transparent"; border.color: Theme.stroke; border.width: 1 }
+                            Rectangle { anchors.fill: parent; radius: 128; color: "transparent"; border.color: Qt.rgba(1, 1, 1, 0.4); border.width: 1 }
+                            MouseArea {
+                                anchors.fill: parent
+                                drag.target: cropImg
+                                drag.minimumX: 256 - cropImg.width; drag.maximumX: 0
+                                drag.minimumY: 256 - cropImg.height; drag.maximumY: 0
+                                cursorShape: Qt.SizeAllCursor
+                            }
+                        }
+                        FSlider {
+                            label: "Zoom"; value: cropView.zoom; from: 1; to: 3; step: 0.05
+                            onMoved: function (v) {
+                                var cx = cropImg.width > 0 ? (128 - cropImg.x) / cropImg.width : 0.5
+                                var cy = cropImg.height > 0 ? (128 - cropImg.y) / cropImg.height : 0.5
+                                cropView.zoom = v
+                                cropImg.x = Math.min(0, Math.max(256 - cropImg.width, 128 - cx * cropImg.width))
+                                cropImg.y = Math.min(0, Math.max(256 - cropImg.height, 128 - cy * cropImg.height))
+                            }
+                        }
+                        Row {
+                            anchors.right: parent.right; spacing: 8
+                            Pill { label: "Cancel"; onGo: root.avatarCropSrc = "" }
+                            Pill { label: "Save avatar"; primary: true; onGo: root.saveAvatar() }
+                        }
+                    }
+                }
             }
             Rectangle {
                 // confirm-or-revert: a change that can black out a display was just

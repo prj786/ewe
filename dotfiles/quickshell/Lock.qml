@@ -17,14 +17,12 @@ Scope {
 
     readonly property string userName: Quickshell.env("USER") || "user"
     readonly property string userInitial: userName.length > 0 ? userName.charAt(0).toUpperCase() : "?"
+    // avatar state lives in Globals (shared with Settings, which can replace
+    // ~/.face at runtime); the ?v= suffix cache-busts after a change
     readonly property string facePath: {
         var h = Quickshell.env("HOME") || ""
-        return h !== "" ? "file://" + h + "/.face" : ""
+        return h !== "" ? "file://" + h + "/.face?v=" + Globals.avatarVersion : ""
     }
-    // only point the avatar Image at ~/.face if it actually exists (else: show initial)
-    property bool hasFace: false
-    Component.onCompleted: faceChk.running = true
-    Process { id: faceChk; command: ["sh", "-c", "test -f \"$HOME/.face\""]; onExited: function (code) { root.hasFace = (code === 0) } }
 
     property string clock: ""
     property string dateStr: ""
@@ -116,9 +114,10 @@ Scope {
                         Image {
                             id: face
                             anchors.fill: parent
-                            source: root.hasFace ? root.facePath : ""
+                            source: Globals.hasFace ? root.facePath : ""
                             visible: status === Image.Ready
                             fillMode: Image.PreserveAspectCrop
+                            cache: false
                             sourceSize.width: 172; sourceSize.height: 172
                         }
                         Text {

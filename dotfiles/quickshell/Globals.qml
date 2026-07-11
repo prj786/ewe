@@ -98,6 +98,13 @@ QtObject {
         stdout: StdioCollector { onStreamFinished: { try { var j = JSON.parse(this.text); if (Array.isArray(j)) g.pinnedPlaces = j } catch (e) {} } }
     }
 
+    // ── Avatar (~/.face) — shared by Settings (account card) and the lock screen.
+    // avatarVersion cache-busts the Image URL after Settings saves a new one.
+    property bool hasFace: false
+    property int avatarVersion: 0
+    property Process _faceChk: Process { running: true; command: ["sh", "-c", 'test -f "$HOME/.face"']; onExited: function (code) { g.hasFace = (code === 0) } }
+    function recheckFace() { g.avatarVersion++; g._faceChk.running = false; g._faceChk.running = true }
+
     // ── CPU / memory sampling (shared by the RunCat in the bar + Quick Settings) ─
     property real cpuUsage: 0      // 0..1
     property real memUsage: 0      // 0..1
