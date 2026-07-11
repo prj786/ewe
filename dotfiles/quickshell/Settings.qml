@@ -914,6 +914,30 @@ Scope {
             }
         }
     }
+    // Google profile photo → shell avatar: download at 512px (Google URLs end
+    // in a =s<N>-c size suffix), then reuse the exact ~/.face + AccountsService
+    // pipeline the crop flow uses. Google avatars are already square — no crop.
+    function useGooglePhoto() {
+        if (!Google.profile || !Google.profile.picture) return
+        var url = String(Google.profile.picture)
+        url = /=s\d+(-c)?$/.test(url) ? url.replace(/=s\d+(-c)?$/, "=s512-c") : url
+        gPhotoFetch.command = ["sh", "-c",
+            'tmp="$HOME/.cache/hypr-shell-avatar.png"; if curl -fsSL --max-time 20 -o "$tmp" "$1"; then echo DL-OK; else echo DL-FAIL; fi',
+            "qs-settings", url]
+        gPhotoFetch.running = false; gPhotoFetch.running = true
+    }
+    Process {
+        id: gPhotoFetch
+        stdout: StdioCollector {
+            onStreamFinished: {
+                if (this.text.indexOf("DL-OK") < 0) { root.errorMsg = "Could not download the Google profile photo."; return }
+                avatarSave.command = ["sh", "-c",
+                    'if cp "$1" "$HOME/.face"; then busctl call org.freedesktop.Accounts /org/freedesktop/Accounts/User$(id -u) org.freedesktop.Accounts.User SetIconFile s "$HOME/.face" >/dev/null 2>&1 || echo ACCOUNTS-FAIL; else echo CP-FAIL; fi',
+                    "qs-settings", root.home + "/.cache/hypr-shell-avatar.png"]
+                avatarSave.running = false; avatarSave.running = true
+            }
+        }
+    }
 
     // ══════════════════════════════════════════════════════════════════════════
     // A real xdg-toplevel (FloatingWindow), NOT a layer surface. Layer surfaces
@@ -2183,6 +2207,7 @@ Scope {
                         }
                         KV { k: "Calendar"; v: "connected · read-only"; dot: "ok" }
                         KV { k: "Settings sync (Drive app data)"; v: "connected"; dot: "ok" }
+                        KV { visible: Google.profile && Google.profile.picture; k: "Google profile photo"; action: true; actionLabel: "Use as avatar"; onAct: root.useGooglePhoto() }
                     }
                     Text {
                         visible: Google.error !== ""

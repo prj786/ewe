@@ -1034,8 +1034,10 @@ Scope {
                                         width: calCol.width / 7; height: 32
                                         Rectangle { anchors.centerIn: parent; width: 26; height: 26; radius: 13; visible: parent.isToday; color: Theme.accent }
                                         Text { anchors.centerIn: parent; text: parent.valid ? parent.dayNum : ""; color: parent.isToday ? Theme.accentText : Theme.fg; font.family: Theme.fontText; font.pixelSize: 12; font.weight: parent.isToday ? Font.Bold : Font.Normal }
-                                        // event dot — tinted to the calendar's own colour when known
-                                        Rectangle { anchors.horizontalCenter: parent.horizontalCenter; anchors.bottom: parent.bottom; anchors.bottomMargin: 1; width: 4; height: 4; radius: 2; visible: parent.hasEvent; color: parent.isToday ? Theme.accentText : (root.eventDays[parent.dayNum] || Theme.accent) }
+                                        // event dot — tinted to the calendar's own colour. Skipped on
+                                        // today: the filled circle already marks it, and a dot would
+                                        // half-overlap the circle's bottom edge (32px cell, 26px circle).
+                                        Rectangle { anchors.horizontalCenter: parent.horizontalCenter; anchors.bottom: parent.bottom; anchors.bottomMargin: 1; width: 4; height: 4; radius: 2; visible: parent.hasEvent && !parent.isToday; color: root.eventDays[parent.dayNum] || Theme.accent }
                                     }
                                 }
                             }

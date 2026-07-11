@@ -237,7 +237,7 @@ QtObject {
                 goo.cloudInfo = { device: bundle.device, updatedAt: bundle.updatedAt }
                 goo._cloudBundle = bundle
                 goo.syncState = "idle"
-            } else goo._syncFail(err === "offline" ? "offline — will keep the local copy" : ("Drive upload failed (HTTP " + st + ")"))
+            } else goo._syncFail(err === "offline" ? "offline — will keep the local copy" : goo._httpErrMsg("Drive upload", st, j))
         }
         if (goo._cloudFileId !== "") {
             goo.api("PATCH", "https://www.googleapis.com/upload/drive/v3/files/" + goo._cloudFileId + "?uploadType=media",
@@ -252,6 +252,18 @@ QtObject {
         }
     }
     function _syncFail(msg) { goo.syncState = "error"; goo.syncError = "Sync failed: " + msg }
+    // surface Google's own error reason, not a bare HTTP code — first sentence
+    // of the API message ("Google Drive API has not been used in project … or
+    // it is disabled.") tells the user exactly what to fix
+    function _httpErrMsg(what, st, j) {
+        var m = (j && j.error && j.error.message) ? String(j.error.message) : ""
+        if (m !== "") {
+            var s = m.split(". ")[0]
+            return what + ": " + s + (s.indexOf("disabled") >= 0 || s.indexOf("has not been used") >= 0
+                ? ". Enable the API in the Google Cloud console, wait a minute, then retry." : " (HTTP " + st + ")")
+        }
+        return what + " failed (HTTP " + st + ")"
+    }
 
     // auto-sync: debounce-push after Settings closes, only when content changed
     property Connections _autoHook: Connections {
