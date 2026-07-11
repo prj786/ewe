@@ -884,8 +884,14 @@ Scope {
             target: Globals
             function onSettingsOpenChanged() { if (win.visible !== Globals.settingsOpen) win.visible = Globals.settingsOpen }
         }
-        // compositor-side close (Super+Q, taskbar) must sync the shell state back
         onVisibleChanged: if (Globals.settingsOpen !== visible) Globals.settingsOpen = visible
+        // Compositor-side close (Super+Q, the close button) does NOT flip the
+        // proxy's `visible` — it fires `closed` and quietly unmaps the backing
+        // window. Without this, Globals.settingsOpen stays true and the gear
+        // (which sets it true again) is a no-change no-op: the window can never
+        // be reopened. Drop visible to false ourselves so state resyncs and the
+        // next open remaps a fresh backing window.
+        onClosed: { win.visible = false; Globals.settingsOpen = false }
 
         Item {
             id: card
