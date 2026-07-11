@@ -25,14 +25,17 @@ Hyprland straight from the official repos (installed by phase 20).
 ├── colors.lua            # window-border / decoration palette (required by hyprland.lua)
 ├── hypridle.conf         # idle: locks (and suspends on battery); NO dpms-off (xe resume-bug guard)
 ├── start-hyprland.sh     # "Hyprland (DE)" session wrapper — exports toolkit theming env, then exec Hyprland
-├── generated/
-│   └── user.lua          # your overrides, sourced LAST (seeded from user.lua.default; gitignored)
+├── generated/            # all gitignored user state; see ../../docs/SETTINGS-BACKEND.md
+│   ├── user.lua          # your overrides (seeded from user.lua.default)
+│   ├── input.lua         # written by Settings → Keyboard & Mouse
+│   ├── monitors.lua      # written by Settings → Displays (per-monitor-set profiles)
+│   └── wallpapers.conf   # written by Settings → Wallpaper (read by scripts/wallpaper.sh)
 ├── scripts/
 │   ├── autostart.sh      # one-shot session bring-up (run by the hyprland start hook)
 │   ├── lock.sh           # lock the session (prefers hyprlock)
 │   ├── power.sh          # Quick Settings power actions (lock/logout/suspend/reboot/poweroff)
 │   ├── screenshot.sh     # grim/slurp → ~/Pictures/Screenshots + clipboard
-│   ├── wallpaper.sh      # swaybg wallpaper
+│   ├── wallpaper.sh      # per-monitor wallpaper (swww/hyprpaper/swaybg)
 │   ├── calendar.sh       # Super+C calendar popup
 │   ├── idle-suspend.sh   # battery-only idle suspend helper
 │   ├── lid.sh            # laptop lid handling

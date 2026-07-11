@@ -105,6 +105,11 @@ registered in `qmldir`. Two singletons tie everything together:
   In-shell toggles flip a `Globals` bool directly (no IPC round-trip).
 - **`Theme.qml`** — the palette/metrics; `accent` binds to `Globals.accentColor`
   so changing the accent recolours the whole shell live.
+- **`HyprMon.qml`** — display manager: per-monitor-set profiles
+  (`display-profiles.json` → `hypr/generated/monitors.lua`), live apply via
+  `hyprctl eval 'hl.monitor{…}'`, re-assert on hotplug/AC events. The Settings
+  app also generates `hypr/generated/input.lua` and `wallpapers.conf`. See
+  `docs/SETTINGS-BACKEND.md` for the full write-through contract.
 
 External control (keybinds, scripts) uses **`qs ipc call <target> <fn>`** against an
 `IpcHandler { target: "<name>" }` in a component — targets: `bar clipboard quicksettings

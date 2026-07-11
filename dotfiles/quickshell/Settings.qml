@@ -884,6 +884,10 @@ Scope {
                 property bool on: false
                 signal toggled()
                 width: 40; height: 24; radius: 12; color: on ? Theme.accent : Theme.hover; Behavior on color { ColorAnimation { duration: 150 } }
+                activeFocusOnTab: true
+                border.color: activeFocus ? Theme.fg : "transparent"; border.width: activeFocus ? 1 : 0
+                Keys.onSpacePressed: toggled()
+                Keys.onReturnPressed: toggled()
                 Rectangle { width: 18; height: 18; radius: 9; color: "white"; anchors.verticalCenter: parent.verticalCenter; x: parent.on ? parent.width - width - 3 : 3; Behavior on x { NumberAnimation { duration: 150 } } }
                 MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: toggled() }
             }
@@ -893,6 +897,10 @@ Scope {
                 width: pl.implicitWidth + 22; height: 28; radius: 8
                 color: plMa.containsMouse ? Theme.accent : (primary ? Theme.accent : Theme.elevated)
                 Behavior on color { ColorAnimation { duration: 120 } }
+                activeFocusOnTab: true
+                border.color: activeFocus ? Theme.fg : "transparent"; border.width: activeFocus ? 1 : 0
+                Keys.onSpacePressed: go()
+                Keys.onReturnPressed: go()
                 Text { id: pl; anchors.centerIn: parent; text: label; color: (plMa.containsMouse || primary) ? Theme.accentText : Theme.fg; font.family: Theme.fontText; font.pixelSize: 11; font.weight: Font.DemiBold }
                 MouseArea { id: plMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: go() }
             }
