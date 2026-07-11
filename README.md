@@ -178,6 +178,36 @@ you drive the sudo/build steps.
   are gitignored; committed `*.default` templates seed them only when missing, so a
   fresh clone has working defaults while your edits are never committed or clobbered.
 
+## Google account (optional)
+
+Settings → User can connect a Google account **natively** (OAuth 2.0
+installed-app flow with PKCE + loopback redirect — no GNOME Online Accounts
+needed). It powers two things: **calendar events** in the Quick Settings
+calendar (dots + agenda + reminder notifications) and **settings sync** — one
+versioned bundle (theme, keyboard, dock, wallpaper, shortcuts, screensaver,
+avatar shape, display profiles, plus your package *list*) stored in Google
+Drive's hidden per-app `appDataFolder`. After a reinstall, sign in and hit
+"Restore from cloud" to get your setup back; reinstalling packages from the
+captured list is always a separate, opt-in command.
+
+One-time setup (Google requires your own OAuth client for native apps):
+
+1. [console.cloud.google.com](https://console.cloud.google.com) → new project →
+   enable the **Google Calendar API** and **Google Drive API**.
+2. *OAuth consent screen*: External, add your own address as a test user.
+3. *Credentials* → **Create OAuth client ID** → type **Desktop app**.
+4. Save the id/secret as `~/.config/quickshell/google-oauth.json`:
+   `{ "client_id": "…apps.googleusercontent.com", "client_secret": "…" }`
+
+That file is **gitignored**; a Desktop-app client secret is explicitly
+non-confidential. The **refresh token** never touches a file — it lives in the
+Secret Service keyring (`gnome-keyring`, via `secret-tool`; both installed by
+phase 20). Scopes requested: `openid email profile`, `calendar.readonly`,
+`drive.appdata` (the shell can read your calendar and its own hidden app
+folder — nothing else). Sign out revokes the token at Google and clears the
+keyring. Helper: `dotfiles/quickshell/scripts/google-auth.py` (stdlib-only
+Python). Everything degrades cleanly when signed out or offline.
+
 ## Repo layout
 
 ```

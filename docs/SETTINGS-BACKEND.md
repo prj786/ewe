@@ -27,9 +27,11 @@ configuration is restored automatically.
 | `~/.config/hypr/generated/input.lua` | Keyboard & Mouse | the full `input { … }` block + per-device `hl.device{}` overrides |
 | `~/.config/hypr/generated/wallpapers.conf` | Wallpaper | `mode=…`, `mute=…`, optional `backend=…`, `*=<default file>`, `<output>=<file>` lines read by `scripts/wallpaper.sh` (files may be images, GIFs or videos) |
 | `~/.config/hypr/generated/user.lua` | Layout / Theme | gaps, border, corner radius, accent border, animation overrides |
+| `~/.config/hypr/generated/hypridle.conf` | Screensaver | full hypridle config: saver/lock listeners + battery idle-suspend; `autostart.sh` prefers it over the shipped default and Settings restarts hypridle on change |
 | `~/.config/hypr/generated/kb-per-window.disabled` | Keyboard & Mouse | flag file: presence tells `autostart.sh` not to start the per-window-layout daemon |
 | `~/.config/quickshell/display-profiles.json` | Displays | source of truth for the display profiles (below) |
 | `~/.config/quickshell/input-devices.json` | Keyboard & Mouse | per-device pointer overrides (mirrors the `hl.device{}` lines) |
+| `~/.config/quickshell/google-*` | User (Google) | OAuth client config + non-secret caches (profile, events, sync meta, restore bundle/package lists) — all gitignored; the refresh token is in the keyring only |
 
 `hyprland.lua` sources `user.lua`, then `input.lua`, then `monitors.lua`
 (missing files are a no-op), so the dedicated files win over any stale lines an
@@ -61,31 +63,61 @@ for file drag-and-drop to route to it. A `hyprland.lua` windowrule floats and
 centres it (match: title `hypr-shell settings`). All image/video input goes
 through the shared `FileDropTarget` component (portal chooser + drop zone).
 
-## Online Accounts (User tab)
+## Google account (User tab) — native OAuth
 
-GNOME's daemons do the heavy lifting; the shell only talks D-Bus:
+`Google.qml` is THE account service; sync and calendar are consumers:
 
-- **GOA** (`gnome-online-accounts`, `org.gnome.OnlineAccounts`) owns accounts
-  and OAuth tokens. The `Accounts` singleton lists them via the ObjectManager
-  (`busctl -j`), flips the per-service `…Disabled` properties, and removes
-  accounts. **Adding** an account launches `gnome-control-center
-  online-accounts` (with `XDG_CURRENT_DESKTOP=GNOME`) — reusing GNOME's
-  working OAuth webflow. A native QtWebEngine flow driving `AddAccount`
-  directly is a planned later phase, deliberately not part of 0.3.
-- **EDS** (`evolution-data-server`) is the data layer GOA accounts register
-  into. `scripts/eds-query.py` (python-gobject) dumps upcoming events and
-  contacts as JSON; the Quick Settings calendar and the User tab's contacts
-  list bind to `Accounts.events` / `Accounts.contacts`.
+- **Auth**: `scripts/google-auth.py` (stdlib Python) runs the OAuth 2.0
+  installed-app flow — PKCE + a random-port `127.0.0.1` loopback redirect,
+  browser via `xdg-open`. The **refresh token goes into the Secret Service
+  keyring** (`secret-tool`, gnome-keyring); the client id/secret sit in the
+  gitignored `google-oauth.json`; `google-profile.json` caches only
+  name/email/avatar-URL. Access tokens live in shell memory, single-flight
+  refreshed with queued waiters; `api()` injects the Bearer header and
+  retries exactly once on 401. Sign-out revokes at Google and clears
+  everything. Scopes: `openid email profile calendar.readonly drive.appdata`.
+- **Settings sync**: `scripts/settings-bundle.py collect|apply` serializes /
+  re-applies the files in the table above plus `pacman -Qqe`/`-Qqm` package
+  lists; Google.qml stores the bundle as `hypr-shell-settings.json` in
+  Drive's hidden `appDataFolder`. Restore is explicit (confirmation card,
+  last-write-wins by `updatedAt`); after apply the shell re-reads its JSON
+  state and reloads Hyprland/wallpaper/hypridle live. Auto-sync (off by
+  default) pushes ~20 s after Settings closes when the content hash changed.
+  Package reinstall is opt-in via the written
+  `google-restore-packages.txt` / `-aur.txt` — never automatic.
+- **Calendar**: 14-day window over every selected calendar
+  (`calendarList` → `events.list`, `singleEvents`, per-calendar colours),
+  polled every 15 min + on sign-in + when Quick Settings opens stale;
+  cached to `google-events.json` so offline shows the last sync. Reminders
+  honour per-event/calendar popup overrides (else 10 min lead), fire through
+  the shell's own notification server via `notify-send`, and are de-duped
+  across restarts in `google-notified.json`.
+- **EDS** (`evolution-data-server`) remains an optional secondary source:
+  `scripts/eds-query.py` still feeds the contacts list, and the Quick
+  Settings calendar falls back to `Accounts.events` when no Google account
+  is signed in. A native QtWebEngine OAuth webview (no browser round-trip)
+  stays a later phase.
 
-All of it is **optional**: with the daemons missing, the User tab shows what
-to install and everything else keeps working.
+Everything degrades cleanly: not configured → actionable message (no
+spinners), signed out/offline → cached or empty states, keyring missing →
+explicit install hint.
+
+## Screensaver (hypridle-driven)
+
+Quickshell 0.3.0 has no `IdleMonitor`, so idle timing stays with **hypridle**:
+the Screensaver pane writes `generated/hypridle.conf` (saver listener →
+`qs ipc call saver show`/`hide`, optional straight-to-lock, delayed auto-lock,
+battery idle-suspend always kept) and restarts hypridle. `Screensaver.qml`
+renders a per-output overlay (clock/blank, pluggable), dismissed by any
+key/click/motion — hypridle's `on-resume` is the backstop. Playing media or a
+fullscreen focused window hold a wayland `IdleInhibitor` (same mechanism as
+the bar's Insomnia toggle), which keeps saver, lock *and* suspend away.
 
 ## Runtime dependencies added in 0.3
 
-Installed by `packages/common.list`: `awww` (swww), `mpvpaper`.
-Optional (Online Accounts): `gnome-online-accounts`,
-`evolution-data-server`, `python-gobject` (usually present), and
-`gnome-control-center` for the add-account flow.
+Installed by `packages/common.list`: `awww` (swww), `mpvpaper`, `libsecret`
+(secret-tool; gnome-keyring was already shipped). Optional (contacts/EDS
+fallback): `evolution-data-server`, `python-gobject`.
 
 ## Display profiles
 
