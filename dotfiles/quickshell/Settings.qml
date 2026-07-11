@@ -871,12 +871,19 @@ Scope {
                 var installed = {}, ls = this.text.split("\n")
                 for (var i = 0; i < ls.length; i++) if (ls[i] !== "") installed[ls[i]] = true
                 var b = Google.getCloudBundle()
-                var mk = function (arr) {
+                var explicit = (b && b.apps && b.apps.explicit) || []
+                var foreign = (b && b.apps && b.apps.foreign) || []
+                // older bundles were captured with -Qqe, which includes AUR
+                // packages — never route those to pacman, and never list twice
+                var isAur = {}
+                for (var f = 0; f < foreign.length; f++) isAur[foreign[f]] = true
+                var mk = function (arr, skipAur) {
                     var out = []
-                    for (var j = 0; j < (arr || []).length; j++) if (!installed[arr[j]]) out.push({ name: arr[j], on: true })
+                    for (var j = 0; j < (arr || []).length; j++)
+                        if (!installed[arr[j]] && !(skipAur && isAur[arr[j]])) out.push({ name: arr[j], on: true })
                     return out
                 }
-                root.pkgReview = { repo: mk(b && b.apps ? b.apps.explicit : []), aur: mk(b && b.apps ? b.apps.foreign : []) }
+                root.pkgReview = { repo: mk(explicit, true), aur: mk(foreign, false) }
             }
         }
     }

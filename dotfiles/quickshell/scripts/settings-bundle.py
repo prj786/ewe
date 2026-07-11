@@ -128,8 +128,12 @@ def cmd_collect():
         settings["vpnConnections"] = vpns
 
     apps = {
-        "explicit": pacman_list(["-Qqe"]),
-        "foreign": pacman_list(["-Qqm"]),
+        # -Qqen: explicit NATIVE only — plain -Qqe also lists AUR packages,
+        # which then duplicate into both lists and break the pacman install
+        # ("target not found"). -Qqem: explicit foreign (AUR) — their deps get
+        # rebuilt by the AUR helper anyway.
+        "explicit": pacman_list(["-Qqen"]),
+        "foreign": pacman_list(["-Qqem"]),
     }
     # stable content hash (settings + apps only — not updatedAt/device) so the
     # shell can skip pushes when nothing actually changed
