@@ -85,7 +85,7 @@ Scope {
             id: toastColumn
             anchors.top: parent.top
             anchors.right: parent.right
-            anchors.topMargin: 38
+            anchors.topMargin: 5   // hugs the bar: the layer already sits below its exclusive zone
             anchors.rightMargin: 10
             spacing: 8
 

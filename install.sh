@@ -11,6 +11,9 @@
 # ║    bash install.sh --check-only    run only the verification checklist     ║
 # ║    bash install.sh --gaming        also install the gaming stack           ║
 # ║    bash install.sh --dev           also install the dev toolchain          ║
+# ║    bash install.sh --coexist       install beside an existing WM/DM:       ║
+# ║                                    keep your login manager, skip boot/GPU, ║
+# ║                                    reuse the AUR helper, back up GTK theme ║
 # ║                                                                            ║
 # ║  Idempotent: re-running re-links (no-op), skips installed packages, and    ║
 # ║  never clobbers an existing config without a timestamped .bak backup.      ║
@@ -21,7 +24,7 @@ DOTREPO="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 export DOTREPO
 
 # --- flags ---
-DRY_RUN=0; ASSUME_YES=0; NO_PACKAGES=0; CHECK_ONLY=0; GAMING=0; DEV=0
+DRY_RUN=0; ASSUME_YES=0; NO_PACKAGES=0; CHECK_ONLY=0; GAMING=0; DEV=0; COEXIST=0
 for a in "$@"; do
     case "$a" in
         --dry-run)     DRY_RUN=1 ;;
@@ -30,11 +33,12 @@ for a in "$@"; do
         --check-only)  CHECK_ONLY=1 ;;
         --gaming)      GAMING=1 ;;
         --dev)         DEV=1 ;;
-        -h|--help)     sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        --coexist)     COEXIST=1 ;;
+        -h|--help)     sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) echo "unknown flag: $a (see --help)"; exit 2 ;;
     esac
 done
-export DRY_RUN ASSUME_YES NO_PACKAGES GAMING DEV
+export DRY_RUN ASSUME_YES NO_PACKAGES GAMING DEV COEXIST
 
 # A fixed per-run timestamp for backups (passed without Date.now-style drift).
 RUN_STAMP="$(date -u +%Y%m%d-%H%M%S 2>/dev/null || echo manual)"
@@ -59,10 +63,22 @@ fi
 
 [ "$DRY_RUN" = "1" ] && info "DRY RUN — no changes will be made."
 
+# Coexist mode: install the DE beside an existing WM/DM (e.g. Sway on CachyOS)
+# without hijacking the system. Keeps your login manager, skips the boot/driver
+# phases the host distro already owns, reuses your AUR helper, and backs up the
+# GTK theme before the DE recolours it. Gaming is force-off (it flips multilib).
+if [ "$COEXIST" = "1" ]; then
+    [ "$GAMING" = "1" ] && warn "--gaming is ignored with --coexist (it flips [multilib] + lib32 drivers system-wide)."
+    GAMING=0; export GAMING
+    info "coexist mode: keeping your login manager, skipping bootsplash/microcode/gpu, reusing your AUR helper."
+fi
+
 # The gaming stack (Steam, gamescope, gamemode, mangohud + 32-bit libs) is OPT-IN.
 # It pulls in [multilib] (phase 10) and the lib32 GPU drivers (phase 40), so the
 # choice must be settled BEFORE those phases run. Default: not installed.
-if [ "$GAMING" = "1" ]; then
+if [ "$COEXIST" = "1" ]; then
+    : # settled above: coexist never touches [multilib], so don't offer gaming here
+elif [ "$GAMING" = "1" ]; then
     info "gaming stack: enabled (--gaming) — [multilib] + Steam, gamescope, gamemode, mangohud."
 elif [ "$ASSUME_YES" = "1" ] || [ "$DRY_RUN" = "1" ] || [ "$NO_PACKAGES" = "1" ]; then
     info "gaming stack: not selected (opt-in) — pass --gaming for Steam, gamescope, gamemode, mangohud."
@@ -89,14 +105,32 @@ phase_preflight
 phase_repos
 phase_packages
 phase_services
-phase_bootsplash
-phase_microcode
-phase_gpu
+if [ "$COEXIST" = "1" ]; then
+    info "coexist: skipping bootsplash/microcode/gpu — your host distro already manages boot + drivers."
+else
+    phase_bootsplash
+    phase_microcode
+    phase_gpu
+fi
 phase_dotfiles
 phase_userconfig
 phase_postcheck
 
 step "done"
+if [ "$COEXIST" = "1" ]; then
+cat <<EOF
+  Next (coexist — your existing WM/DM is untouched):
+    1. Log OUT of your current session (no reboot needed).
+    2. In your login manager, pick the 'Hyprland (DE)' session (listed next to
+       your existing one).
+    3. First keys:  Super+Return (terminal) · Super+D (apps) · Super+, (Settings)
+       Full list in ~/.config/hypr/SHORTCUTS.md
+    4. Re-run the checklist any time:  bash install.sh --check-only
+  Nothing was removed and your login manager was not changed.
+  GTK theme backup (revert your other session's look): ~/.local/state/hypr-shell/theme-backup.*/restore.sh
+  Config backups (if any) are at ~/.config/<name>.bak.$RUN_STAMP
+EOF
+else
 cat <<EOF
   Next:
     1. Reboot (or restart your display manager) so the greeter picks up the
@@ -107,4 +141,5 @@ cat <<EOF
     4. Re-run the checklist any time:  bash install.sh --check-only
   Backups (if any) are at ~/.config/<name>.bak.$RUN_STAMP
 EOF
+fi
 ok "install complete"

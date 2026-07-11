@@ -56,6 +56,21 @@ phase_packages() {
     mapfile -t game < <(read_list gaming.list)
     mapfile -t dev < <(read_list dev.list)
 
+    # Coexist: don't install the login-manager stack (greetd/regreet/cage) — that
+    # would let phase 30 enable greetd.service and replace the user's existing
+    # display manager. And drop pipewire-jack, which conflicts with a jack2 the
+    # host may already depend on (we also skip the jack2 removal below).
+    if [ "${COEXIST:-0}" = "1" ]; then
+        local -a keep=(); local p
+        for p in "${off[@]}"; do
+            case "$p" in
+                greetd|greetd-regreet|cage|pipewire-jack) info "coexist: skipping '$p' (would alter your login/audio stack)"; continue ;;
+                *) keep+=("$p") ;;
+            esac
+        done
+        off=("${keep[@]}")
+    fi
+
     info "${#off[@]} official packages + ${#aur[@]} AUR packages + 2 source themes (Reversal, Mocu)"
     [ "${DEV:-0}" = "1" ] && info "+ ${#dev[@]} optional dev packages (--dev)"
     [ "${GAMING:-0}" = "1" ] && info "+ ${#game[@]} optional gaming packages (--gaming)"
@@ -74,7 +89,9 @@ phase_packages() {
     # the "Remove jack2? [y/N]" prompt (--noconfirm answers N → whole batch
     # fails). Force-remove jack2 (keeping its dependents — `jack` is immediately
     # re-satisfied by pipewire-jack in the batch below).
-    if pkg_present jack2; then
+    if [ "${COEXIST:-0}" = "1" ]; then
+        info "coexist: leaving jack2 in place (host packages like ffmpeg/vlc/waybar may depend on it; we skip pipewire-jack instead)"
+    elif pkg_present jack2; then
         info "removing jack2 (conflicts with pipewire-jack; PipeWire provides JACK)"
         sudo_run pacman -Rdd --noconfirm jack2 || warn "could not remove jack2 — pipewire-jack may be skipped"
     fi

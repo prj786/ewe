@@ -15,10 +15,15 @@ phase_postcheck() {
     echo "  (✗ on session items is expected until you log into the Hyprland session)"
 
     _check "binaries: Hyprland + qs present"      sh -c 'command -v Hyprland && command -v qs'
-    _check "AUR helper present (paru)"            sh -c 'command -v paru'
-    _check "multilib repo enabled"                sh -c 'pacman-conf --repo-list | grep -qx multilib'
-    _check "greeter: greetd + regreet + cage"     sh -c 'pacman -Qq greetd && pacman -Qq greetd-regreet && pacman -Qq cage'
-    _check "greeter: Quickshell config installed"  test -r /etc/xdg/quickshell/hyprshell-greeter/shell.qml
+    _check "AUR helper present (paru or yay)"     sh -c 'command -v paru || command -v yay'
+    # greetd is skipped on purpose by --coexist (your own login manager stays in
+    # charge), so only verify the greeter stack when greetd was actually installed.
+    if pkg_present greetd; then
+        _check "greeter: greetd + regreet + cage"     sh -c 'pacman -Qq greetd && pacman -Qq greetd-regreet && pacman -Qq cage'
+        _check "greeter: Quickshell config installed"  test -r /etc/xdg/quickshell/hyprshell-greeter/shell.qml
+    else
+        _note "greeter: not installed (coexist — your login manager lists 'Hyprland (DE)')"
+    fi
     _check "fully Wayland: no xorg-server"         sh -c '! pacman -Qq xorg-server 2>/dev/null'
     _check "apps: file manager (nemo)"             sh -c 'command -v nemo'
     _check "apps: viewers (imv + zathura)"         sh -c 'command -v imv && command -v zathura'
@@ -70,6 +75,7 @@ phase_postcheck() {
     # so a normal install never shows a red ✗ for packages it deliberately skipped.
     if pkg_present steam; then
         _check "gaming: gamemode + steam installed"   sh -c 'pacman -Qq gamemode && pacman -Qq steam'
+        _check "gaming: multilib repo enabled"        sh -c 'pacman-conf --repo-list | grep -qx multilib'
     else
         _note "gaming: not installed (opt-in — re-run with --gaming)"
     fi

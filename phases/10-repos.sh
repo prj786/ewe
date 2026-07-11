@@ -20,6 +20,14 @@ _sync_system() {
     # AUR helpers (paru-bin links libalpm.so.N) or new packages onto it triggers
     # "libalpm.so.NN: cannot open shared object file" and other partial-upgrade
     # breakage. -Syu brings the whole system to a consistent state first.
+    # Coexist: this is someone's live daily driver (a rolling Arch/CachyOS box),
+    # not a fresh archinstall — don't upgrade their whole system behind their
+    # back. They keep it current themselves; if a `pacman -S` later fails on a
+    # soname mismatch, the advice is to run `sudo pacman -Syu` and re-run.
+    if [ "${COEXIST:-0}" = "1" ]; then
+        info "coexist: skipping the full 'pacman -Syu' (your system stays as-is). Run it yourself if a package fails to install."
+        return
+    fi
     if [ "${DRY_RUN:-0}" = "1" ]; then info "would run pacman -Syu (full system upgrade)"; return; fi
     info "full system upgrade (pacman -Syu) — avoids partial-upgrade / soname mismatches"
     sudo_run pacman -Syu --noconfirm || warn "pacman -Syu reported errors — review before continuing."
@@ -32,6 +40,9 @@ _helper_works() { command -v "$1" >/dev/null 2>&1 && "$1" --version >/dev/null 2
 
 _bootstrap_aur() {
     if _helper_works paru; then AUR_HELPER=paru; export AUR_HELPER; ok "AUR helper present (paru)"; return; fi
+    # Reuse an existing helper rather than duplicating it — many Arch derivatives
+    # (CachyOS ships yay) already have one. Avoids building paru beside it.
+    if _helper_works yay; then AUR_HELPER=yay; export AUR_HELPER; ok "AUR helper present (yay)"; return; fi
 
     info "bootstrapping paru (AUR helper, built from source)…"
     install_official base-devel git rust

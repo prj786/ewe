@@ -3,4 +3,12 @@ dotfiles/hypr/generated/user.lua
 dotfiles/quickshell/user-theme.json
 dotfiles/quickshell/pinned-apps.json
 dotfiles/quickshell/places.json
+dotfiles/quickshell/ssh-browse/
 *.bak.*
+
+# the Fresh editor regenerates these inside its (symlinked) config dir at
+# runtime; init.ts is the user's own plugin file (seed a .default if we ever
+# ship one — see the *.default convention above)
+dotfiles/fresh/tsconfig.json
+dotfiles/fresh/types/
+dotfiles/fresh/init.ts

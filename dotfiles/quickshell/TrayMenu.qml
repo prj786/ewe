@@ -107,7 +107,7 @@ Scope {
         WlrLayershell.namespace: "quickshell:traymenu"
         anchors { top: true; bottom: true; left: true; right: true }
 
-        Timer { id: closeTimer; interval: 200 }
+        Timer { id: closeTimer; interval: Math.max(1, Theme.durBase) }
         Connections { target: Globals; function onTrayMenuOpenChanged() {
             if (Globals.trayMenuOpen) { root.openScreen = root.focusedScreen(); root.subEntry = null }
             else closeTimer.restart()

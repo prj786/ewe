@@ -46,6 +46,7 @@ Scope {
     property int  gapsIn: 6
     property int  gapsOut: 14
     property int  borderSize: 1
+    property int  rounding: 12      // decoration.rounding (window corner radius)
     property bool displaysDirty: false
     property var  monList: []
     property string kbLayout: "us,ge"
@@ -62,6 +63,7 @@ Scope {
             gen += ", col = { active_border = \"rgba(" + root.hex6(Globals.accentColor) + "ff)\" }"
         gen += " } })\n"
         s += gen
+        s += "hl.config({ decoration = { rounding = " + root.rounding + " } })\n"
         s += root.animBlockPersist()
         if (root.kbDirty) s += "hl.config({ input = { kb_layout = \"" + root.kbLayout + "\" } })\n"
         if (root.displaysDirty)
@@ -116,11 +118,15 @@ Scope {
     }
     function setAnim(m) { Globals.animationSpeed = m; root.writePrefs(); root.applyAnimations() }
 
-    // ── Layout (gaps/border) ────────────────────────────────────────────────────
+    // ── Layout (gaps/border/corner radius) — one hyprctl eval per statement
+    //    (the known-good form; multi-statement evals don't apply) ────────────────
     function applyGaps() {
-        Quickshell.execDetached(["hyprctl", "eval",
+        var L = [
             "hl.config({ general = { gaps_in = " + root.gapsIn + ", gaps_out = " + root.gapsOut
-            + ", border_size = " + root.borderSize + " } })"])
+                + ", border_size = " + root.borderSize + " } })",
+            "hl.config({ decoration = { rounding = " + root.rounding + " } })"
+        ]
+        Quickshell.execDetached(["sh", "-c", L.map(function (c) { return "hyprctl eval '" + c + "'" }).join("; ")])
         root.writeOverrides()
     }
 
@@ -272,11 +278,12 @@ Scope {
     Process {
         id: layoutProc
         command: ["sh", "-c",
-            'gi=$(hyprctl getoption general:gaps_in -j); go=$(hyprctl getoption general:gaps_out -j); bs=$(hyprctl getoption general:border_size -j);' +
+            'gi=$(hyprctl getoption general:gaps_in -j); go=$(hyprctl getoption general:gaps_out -j); bs=$(hyprctl getoption general:border_size -j); rd=$(hyprctl getoption decoration:rounding -j);' +
             'echo "in=$(echo \"$gi\" | grep -oE \"[0-9]+\" | head -1)";' +
             'echo "out=$(echo \"$go\" | grep -oE \"[0-9]+\" | head -1)";' +
-            'echo "border=$(echo \"$bs\" | grep -oE \"\\\"int\\\": *[0-9]+\" | grep -oE \"[0-9]+\")"' ]
-        stdout: StdioCollector { onStreamFinished: { var ls = this.text.split("\n"); for (var i = 0; i < ls.length; i++) { var p = ls[i].split("="); if (p[0] === "in" && p[1] !== "") root.gapsIn = parseInt(p[1]); else if (p[0] === "out" && p[1] !== "") root.gapsOut = parseInt(p[1]); else if (p[0] === "border" && p[1] !== "") root.borderSize = parseInt(p[1]) } } }
+            'echo "border=$(echo \"$bs\" | grep -oE \"\\\"int\\\": *[0-9]+\" | grep -oE \"[0-9]+\")";' +
+            'echo "round=$(echo \"$rd\" | grep -oE \"\\\"int\\\": *[0-9]+\" | grep -oE \"[0-9]+\")"' ]
+        stdout: StdioCollector { onStreamFinished: { var ls = this.text.split("\n"); for (var i = 0; i < ls.length; i++) { var p = ls[i].split("="); if (p[0] === "in" && p[1] !== "") root.gapsIn = parseInt(p[1]); else if (p[0] === "out" && p[1] !== "") root.gapsOut = parseInt(p[1]); else if (p[0] === "border" && p[1] !== "") root.borderSize = parseInt(p[1]); else if (p[0] === "round" && p[1] !== "") root.rounding = parseInt(p[1]) } } }
     }
     Process { id: monProc; command: ["hyprctl", "monitors", "-j"]; stdout: StdioCollector { onStreamFinished: { try { root.monitors = JSON.parse(this.text) } catch (e) { root.monitors = [] } } } }
     Timer { id: monRefresh; interval: 350; onTriggered: monProc.running = true }
@@ -391,7 +398,12 @@ Scope {
     // ══════════════════════════════════════════════════════════════════════════
     PanelWindow {
         id: win
-        visible: Globals.settingsOpen || closeTimer.running
+        // visible is ASSIGNED, never bound: a `settingsOpen || closeTimer.running`
+        // binding can re-evaluate before the Connections handler below restarts
+        // the timer — unmapping and instantly remapping the layer, which flashed
+        // a frame of blur-only scrim on every close. Explicit hand-off instead:
+        // map on open, stay mapped through the fade-out, unmap once at its end.
+        visible: false
         screen: { var s = Quickshell.screens, fm = Hyprland.focusedMonitor; if (fm) for (var i = 0; i < s.length; i++) if (s[i].name === fm.name) return s[i]; return s.length > 0 ? s[0] : null }
         color: "transparent"
         exclusionMode: ExclusionMode.Ignore
@@ -400,8 +412,14 @@ Scope {
         WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
         anchors { top: true; bottom: true; left: true; right: true }
 
-        Timer { id: closeTimer; interval: 260 }
-        Connections { target: Globals; function onSettingsOpenChanged() { if (!Globals.settingsOpen) closeTimer.restart() } }
+        Timer { id: closeTimer; interval: Theme.durBase + 80; onTriggered: win.visible = false }
+        Connections {
+            target: Globals
+            function onSettingsOpenChanged() {
+                if (Globals.settingsOpen) { closeTimer.stop(); win.visible = true }
+                else closeTimer.restart()
+            }
+        }
 
         // translucent scrim (Hyprland blurs the desktop behind it via a layer rule)
         Rectangle { anchors.fill: parent; color: Qt.rgba(0, 0, 0, 0.28); opacity: Globals.settingsOpen ? 1 : 0; Behavior on opacity { NumberAnimation { duration: Theme.durBase } } }
@@ -515,7 +533,7 @@ Scope {
                     Rectangle {
                         anchors.left: parent.left; anchors.bottom: parent.bottom; anchors.margins: 14
                         width: 30; height: 30; radius: 15; color: xMa.containsMouse ? Theme.hover : Theme.elevated
-                        Text { anchors.centerIn: parent; text: root.g(0xF0156); font.family: Theme.fontMono; font.pixelSize: 14; color: Theme.fg }
+                        Text { anchors.centerIn: parent; text: Theme.icClose; font.family: Theme.fontMono; font.pixelSize: 14; color: Theme.fg }
                         MouseArea { id: xMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: Globals.settingsOpen = false }
                     }
                     // version badge (bottom-right of the sidebar)
@@ -666,7 +684,7 @@ Scope {
                                         readonly property bool isCur: String(modelData).indexOf(monCard.curRes) === 0
                                         width: parent.width; height: 26; radius: 6; color: mMa.containsMouse ? Theme.hover : "transparent"
                                         Text { anchors.left: parent.left; anchors.leftMargin: 8; anchors.verticalCenter: parent.verticalCenter; text: modelData; color: isCur ? Theme.accent : Theme.fg; font.family: Theme.fontText; font.pixelSize: 11; font.weight: isCur ? Font.DemiBold : Font.Normal }
-                                        Text { anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter; visible: isCur; text: root.g(0xF012C); font.family: Theme.fontMono; font.pixelSize: 11; color: Theme.accent }
+                                        Text { anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter; visible: isCur; text: Theme.icCheck; font.family: Theme.fontMono; font.pixelSize: 11; color: Theme.accent }
                                         MouseArea { id: mMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: { root.applyChange({ name: monCard.modelData.name, mode: String(modelData) }); monCard.resOpen = false } }
                                     }
                                 }
@@ -692,7 +710,7 @@ Scope {
                             delegate: Item {
                                 required property var modelData
                                 width: parent.width; height: 30
-                                Text { anchors.left: parent.left; anchors.leftMargin: 4; anchors.verticalCenter: parent.verticalCenter; text: root.g(0xF0200); font.family: Theme.fontMono; font.pixelSize: 13; color: modelData.state === "activated" ? Theme.accent : Theme.fgDim }
+                                Text { anchors.left: parent.left; anchors.leftMargin: 4; anchors.verticalCenter: parent.verticalCenter; text: Theme.icEthernet; font.family: Theme.fontMono; font.pixelSize: 13; color: modelData.state === "activated" ? Theme.accent : Theme.fgDim }
                                 Text { anchors.left: parent.left; anchors.leftMargin: 28; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; text: modelData.name + "  ·  " + modelData.dev + (modelData.state === "activated" ? "  ·  connected" : ""); color: modelData.state === "activated" ? Theme.accent : Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: modelData.state === "activated" ? Font.DemiBold : Font.Normal; elide: Text.ElideRight }
                             }
                         }
@@ -706,7 +724,7 @@ Scope {
                     }
                     Card {
                         visible: !root.hasWifi
-                        Text { width: parent.width; text: root.g(0xF092F) + "  No Wi-Fi adapter detected — this machine has no wireless device (common in VMs). Use the wired connection above, or plug in a USB Wi-Fi dongle."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; wrapMode: Text.Wrap }
+                        Text { width: parent.width; text: Theme.icWifiOff + "  No Wi-Fi adapter detected — this machine has no wireless device (common in VMs). Use the wired connection above, or plug in a USB Wi-Fi dongle."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; wrapMode: Text.Wrap }
                     }
                     Card {
                         visible: root.hasWifi && root.wifiOn
@@ -720,7 +738,7 @@ Scope {
                                     Rectangle { anchors.fill: parent; radius: 7; color: wMa.containsMouse ? Theme.hover : "transparent" }
                                     Text { anchors.left: parent.left; anchors.leftMargin: 4; anchors.verticalCenter: parent.verticalCenter; text: modelData.signal >= 66 ? root.g(0xF0925) : (modelData.signal >= 33 ? root.g(0xF0922) : root.g(0xF091F)); font.family: Theme.fontMono; font.pixelSize: 13; color: modelData.active ? Theme.accent : Theme.fgDim }
                                     Text { anchors.left: parent.left; anchors.leftMargin: 28; anchors.right: parent.right; anchors.rightMargin: 22; anchors.verticalCenter: parent.verticalCenter; text: modelData.ssid; color: modelData.active ? Theme.accent : Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: modelData.active ? Font.DemiBold : Font.Normal; elide: Text.ElideRight }
-                                    Text { anchors.right: parent.right; anchors.rightMargin: 4; anchors.verticalCenter: parent.verticalCenter; visible: modelData.sec !== ""; text: root.g(0xF033E); font.family: Theme.fontMono; font.pixelSize: 10; color: Theme.fgDim }
+                                    Text { anchors.right: parent.right; anchors.rightMargin: 4; anchors.verticalCenter: parent.verticalCenter; visible: modelData.sec !== ""; text: Theme.icLock; font.family: Theme.fontMono; font.pixelSize: 10; color: Theme.fgDim }
                                     MouseArea { id: wMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.connectWifi(modelData.ssid, modelData.sec) }
                                 }
                                 Item {
@@ -748,7 +766,7 @@ Scope {
                                 required property var modelData
                                 width: parent.width; height: 30
                                 Rectangle { anchors.fill: parent; radius: 7; color: vMa.containsMouse ? Theme.hover : "transparent" }
-                                Text { anchors.left: parent.left; anchors.leftMargin: 4; anchors.verticalCenter: parent.verticalCenter; text: root.g(0xF0582); font.family: Theme.fontMono; font.pixelSize: 12; color: modelData.active ? Theme.accent : Theme.fgDim }
+                                Text { anchors.left: parent.left; anchors.leftMargin: 4; anchors.verticalCenter: parent.verticalCenter; text: Theme.icVpn; font.family: Theme.fontMono; font.pixelSize: 12; color: modelData.active ? Theme.accent : Theme.fgDim }
                                 Text { anchors.left: parent.left; anchors.leftMargin: 26; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; text: modelData.name + (modelData.active ? "  ·  connected" : ""); color: modelData.active ? Theme.accent : Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: modelData.active ? Font.DemiBold : Font.Normal; elide: Text.ElideRight }
                                 MouseArea { id: vMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: { Quickshell.execDetached(["nmcli", "connection", modelData.active ? "down" : "up", modelData.name]); vpnRescan.restart() } }
                             }
@@ -813,7 +831,7 @@ Scope {
                                     anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
                                     width: 210; height: 26; radius: 7; color: cMa.containsMouse ? Theme.hover : Theme.panel; border.color: Theme.stroke; border.width: 1
                                     Text { anchors.left: parent.left; anchors.leftMargin: 9; anchors.right: chev.left; anchors.verticalCenter: parent.verticalCenter; text: root.appNameForId(appCard.curId); color: Theme.fg; font.family: Theme.fontText; font.pixelSize: 11; elide: Text.ElideRight }
-                                    Text { id: chev; anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter; text: root.g(0xF078); font.family: Theme.fontMono; font.pixelSize: 9; color: Theme.fgDim }
+                                    Text { id: chev; anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter; text: Theme.icChevronDown; font.family: Theme.fontMono; font.pixelSize: 9; color: Theme.fgDim }
                                     MouseArea { id: cMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: defCol.openCat = (defCol.openCat === appCard.modelData.key ? "" : appCard.modelData.key) }
                                 }
                             }
@@ -832,7 +850,7 @@ Scope {
                                             Image { anchors.verticalCenter: parent.verticalCenter; width: 18; height: 18; sourceSize.width: 36; sourceSize.height: 36; source: parent.parent.entry && parent.parent.entry.icon ? Quickshell.iconPath(parent.parent.entry.icon, "application-x-executable") : Quickshell.iconPath("application-x-executable") }
                                             Text { anchors.verticalCenter: parent.verticalCenter; text: parent.parent.entry ? (parent.parent.entry.name || modelData) : modelData; color: parent.parent.isCur ? Theme.accent : Theme.fg; font.family: Theme.fontText; font.pixelSize: 11; font.weight: parent.parent.isCur ? Font.DemiBold : Font.Normal }
                                         }
-                                        Text { anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter; visible: parent.isCur; text: root.g(0xF012C); font.family: Theme.fontMono; font.pixelSize: 11; color: Theme.accent }
+                                        Text { anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter; visible: parent.isCur; text: Theme.icCheck; font.family: Theme.fontMono; font.pixelSize: 11; color: Theme.accent }
                                         MouseArea { id: eMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: { root.setDefaultApp(appCard.modelData.key, modelData); defCol.openCat = "" } }
                                     }
                                 }
@@ -881,7 +899,7 @@ Scope {
                                     height: 30; width: chipRow.implicitWidth + 18; radius: 8; color: Theme.accent
                                     Row { id: chipRow; anchors.centerIn: parent; spacing: 7
                                         Text { anchors.verticalCenter: parent.verticalCenter; text: kbPane.nameOf(modelData) + " (" + modelData + ")"; color: Theme.accentText; font.family: Theme.fontText; font.pixelSize: 11; font.weight: Font.DemiBold }
-                                        Text { anchors.verticalCenter: parent.verticalCenter; visible: kbPane.active.length > 1; text: root.g(0xF0156); font.family: Theme.fontMono; font.pixelSize: 11; color: Theme.accentText
+                                        Text { anchors.verticalCenter: parent.verticalCenter; visible: kbPane.active.length > 1; text: Theme.icClose; font.family: Theme.fontMono; font.pixelSize: 11; color: Theme.accentText
                                             MouseArea { anchors.fill: parent; anchors.margins: -5; cursorShape: Qt.PointingHandCursor; onClicked: { var a = root.kbLayout.split(",").filter(function (x) { return x.trim() !== "" }); a.splice(index, 1); if (a.length) root.applyKb(a.join(",")) } } }
                                     }
                                 }
@@ -896,7 +914,7 @@ Scope {
                             Rectangle {
                                 width: parent.width; height: 34; radius: Theme.radiusInner
                                 color: Theme.bg; border.color: kbSearch.activeFocus ? Theme.accent : Theme.stroke; border.width: 1
-                                Text { anchors.left: parent.left; anchors.leftMargin: 11; anchors.verticalCenter: parent.verticalCenter; text: root.g(0xF0349); font.family: Theme.fontMono; font.pixelSize: 13; color: Theme.fgDim }
+                                Text { anchors.left: parent.left; anchors.leftMargin: 11; anchors.verticalCenter: parent.verticalCenter; text: Theme.icSearch; font.family: Theme.fontMono; font.pixelSize: 13; color: Theme.fgDim }
                                 TextInput {
                                     id: kbSearch
                                     anchors.fill: parent; anchors.leftMargin: 34; anchors.rightMargin: 12; verticalAlignment: TextInput.AlignVCenter; clip: true
@@ -956,7 +974,7 @@ Scope {
                 id: cLayout
                 Column {
                     spacing: 14
-                    SectionTitle { text: "WINDOW GAPS & BORDER  ·  applied live, persisted to generated/user.lua" }
+                    SectionTitle { text: "WINDOW GAPS, BORDER & CORNERS  ·  applied live, persisted to generated/user.lua" }
                     Card {
                         Slider { label: "Inner gap"; value: root.gapsIn; from: 0; to: 30
                             onMoved: function (v) { root.gapsIn = v; root.applyGaps() } }
@@ -964,8 +982,10 @@ Scope {
                             onMoved: function (v) { root.gapsOut = v; root.applyGaps() } }
                         Slider { label: "Border width"; value: root.borderSize; from: 0; to: 6
                             onMoved: function (v) { root.borderSize = v; root.applyGaps() } }
+                        Slider { label: "Corner radius"; value: root.rounding; from: 0; to: 24
+                            onMoved: function (v) { root.rounding = v; root.applyGaps() } }
                     }
-                    Pill { label: "Reset to defaults"; onGo: { root.gapsIn = 6; root.gapsOut = 14; root.borderSize = 1; root.applyGaps() } }
+                    Pill { label: "Reset to defaults"; onGo: { root.gapsIn = 6; root.gapsOut = 14; root.borderSize = 1; root.rounding = 12; root.applyGaps() } }
                 }
             }
 
@@ -1008,7 +1028,7 @@ Scope {
                                     width: 46; height: 46; radius: 23; color: modelData.hex
                                     readonly property bool sel: root.hex6(Globals.accentColor).toLowerCase() === root.hex6(modelData.hex).toLowerCase()
                                     border.color: sel ? Theme.fg : Qt.rgba(1, 1, 1, 0.15); border.width: sel ? 3 : 1
-                                    Text { anchors.centerIn: parent; visible: parent.sel; text: root.g(0xF012C); font.family: Theme.fontMono; font.pixelSize: 18; color: "white" }
+                                    Text { anchors.centerIn: parent; visible: parent.sel; text: Theme.icCheck; font.family: Theme.fontMono; font.pixelSize: 18; color: "white" }
                                     MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.setAccent(modelData.hex) }
                                 }
                             }

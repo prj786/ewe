@@ -66,7 +66,7 @@ Scope {
         WlrLayershell.namespace: "quickshell:launcher"
         anchors { top: true; bottom: true; left: true; right: true }
 
-        Timer { id: closeTimer; interval: 220 }
+        Timer { id: closeTimer; interval: Math.max(1, Theme.durSlow) }
         Connections { target: Globals; function onLauncherOpenChanged() {
             if (Globals.launcherOpen) { root.openScreen = root.focusedScreen(); root.query = ""; searchIn.text = ""; searchIn.forceActiveFocus() }
             else closeTimer.restart()
@@ -100,7 +100,7 @@ Scope {
                 Rectangle {
                     width: parent.width; height: 36; radius: Theme.radiusInner
                     color: Theme.bg; border.color: searchIn.activeFocus ? Theme.accent : Theme.stroke; border.width: 1
-                    Text { anchors.left: parent.left; anchors.leftMargin: 11; anchors.verticalCenter: parent.verticalCenter; text: root.g(0xF0349); font.family: Theme.fontMono; font.pixelSize: 14; color: Theme.fgDim }
+                    Text { anchors.left: parent.left; anchors.leftMargin: 11; anchors.verticalCenter: parent.verticalCenter; text: Theme.icSearch; font.family: Theme.fontMono; font.pixelSize: 14; color: Theme.fgDim }
                     TextInput {
                         id: searchIn
                         anchors.fill: parent; anchors.leftMargin: 34; anchors.rightMargin: 12; verticalAlignment: TextInput.AlignVCenter

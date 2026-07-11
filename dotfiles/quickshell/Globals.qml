@@ -16,13 +16,14 @@ QtObject {
     property bool dnd: false               // Do Not Disturb (suppresses toasts)
     property var server: null              // set by Notifications.qml (the live NotificationServer)
     property bool vpnActive: false         // any VPN connection up (bar shows a VPN glyph)
+    property bool sshTunnelUp: false       // any background ssh -f -N tunnel from Quick Settings is up (bar shows a console glyph)
     property bool caffeine: false          // keep-awake: holds a wayland idle inhibitor (no lock/blank/sleep)
     property bool overviewOpen: false      // GNOME-style window overview (Super tapped alone)
     property bool clipboardOpen: false     // the clipboard-history / emoji popup (scissors icon)
-    property bool appMenuOpen: false       // the app menu (bold app name in the bar)
+    property bool appMenuOpen: false       // the move-to-workspace dropdown (→ button in the bar's window actions)
     property bool settingsOpen: false      // the Quickshell Settings window (Super+, or the CC gear)
     property real clipAnchorX: 40           // screen-local x of the scissors icon (clipboard opens under it)
-    property real appAnchorX: 40            // screen-local x of the app-name (app menu opens under it)
+    property real appAnchorX: 40            // screen-local x of the move-to button (its dropdown opens under it)
 
     // ── User-chosen accent colour ─────────────────────────────────────────────
     // Single mutable source the Settings → Theme pane writes; Theme.accent binds to

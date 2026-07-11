@@ -90,7 +90,7 @@ Scope {
         WlrLayershell.keyboardFocus: Globals.clipboardOpen ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
         anchors { top: true; bottom: true; left: true; right: true }
 
-        Timer { id: closeTimer; interval: 300 }
+        Timer { id: closeTimer; interval: Math.max(1, Theme.durSlow) }
         Connections {
             target: Globals
             function onClipboardOpenChanged() {
@@ -117,7 +117,7 @@ Scope {
                 width: parent.width
                 height: parent.height
                 y: Globals.clipboardOpen ? 0 : -height
-                Behavior on y { NumberAnimation { duration: 280; easing.type: Easing.OutCubic } }
+                Behavior on y { NumberAnimation { duration: Theme.durSlow; easing.type: Easing.OutCubic } }
                 // square top (flush with the bar), rounded bottom — drops out of the bar
                 topLeftRadius: 0
                 topRightRadius: 0
@@ -162,7 +162,7 @@ Scope {
                         anchors.left: parent.left; anchors.right: clearBtn.left; anchors.rightMargin: 8
                         height: parent.height; radius: Theme.radiusInner
                         color: Theme.bg; border.color: searchField.activeFocus ? Theme.accent : Theme.stroke; border.width: 1
-                        Text { anchors.left: parent.left; anchors.leftMargin: 10; anchors.verticalCenter: parent.verticalCenter; text: root.g(0xF002); font.family: Theme.fontMono; font.pixelSize: 12; color: Theme.fgDim }
+                        Text { anchors.left: parent.left; anchors.leftMargin: 10; anchors.verticalCenter: parent.verticalCenter; text: Theme.icSearch; font.family: Theme.fontMono; font.pixelSize: 12; color: Theme.fgDim }
                         TextInput {
                             id: searchField
                             anchors.fill: parent; anchors.leftMargin: 30; anchors.rightMargin: 10; verticalAlignment: TextInput.AlignVCenter
@@ -177,7 +177,7 @@ Scope {
                         anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
                         width: 34; height: 34; radius: Theme.radiusInner
                         color: clearMa.containsMouse ? Qt.rgba(Theme.danger.r, Theme.danger.g, Theme.danger.b, 0.2) : Theme.elevated
-                        Text { anchors.centerIn: parent; text: root.g(0xF1F8); font.family: Theme.fontMono; font.pixelSize: 13; color: clearMa.containsMouse ? Theme.danger : Theme.fgDim }
+                        Text { anchors.centerIn: parent; text: Theme.icTrash; font.family: Theme.fontMono; font.pixelSize: 13; color: clearMa.containsMouse ? Theme.danger : Theme.fgDim }
                         MouseArea { id: clearMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.clearClips() }
                     }
                 }

@@ -73,7 +73,10 @@ Scope {
     function refreshPinTypes() {
         var p = Globals.pinnedPlaces || []
         if (!p.length) { root.pinTypes = ({}); return }
-        pinTyper.command = ["sh", "-c", 'for p in "$@"; do [ -d "$p" ] && echo "d\\t$p" || echo "f\\t$p"; done', "sh"].concat(p)
+        // printf, not echo: bash's echo doesn't expand \t, so the parser above
+        // (which splits on a real tab) never matched — every pin looked like a
+        // file, which is why pinned FOLDERS showed the file icon.
+        pinTyper.command = ["sh", "-c", 'for p in "$@"; do if [ -d "$p" ]; then printf "d\\t%s\\n" "$p"; else printf "f\\t%s\\n" "$p"; fi; done', "sh"].concat(p)
         pinTyper.running = false; pinTyper.running = true
     }
     Connections { target: Globals; function onPinnedPlacesChanged() { root.refreshPinTypes() } }
@@ -109,7 +112,7 @@ Scope {
         // a folder/file drag can land on Slack/etc. (see header). No outside-click close.
         mask: Region { item: box }
 
-        Timer { id: closeTimer; interval: 220 }
+        Timer { id: closeTimer; interval: Math.max(1, Theme.durSlow) }
         Connections { target: Globals; function onPlacesOpenChanged() {
             if (Globals.placesOpen) { root.openScreen = root.focusedScreen(); if (root.home && !root.cwd) root.cwd = root.home; lister.running = true; root.refreshPinTypes(); box.forceActiveFocus() }
             else closeTimer.restart()
@@ -195,11 +198,11 @@ Scope {
                     id: rightBtns
                     anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter; spacing: 4
                     // folder hint chevron (browse entries)
-                    Text { visible: fr.rIsDir && !fr.rPinned; anchors.verticalCenter: parent.verticalCenter; text: root.g(0xF0142); font.family: Theme.fontMono; font.pixelSize: 13; color: Theme.fgDim }
+                    Text { visible: fr.rIsDir && !fr.rPinned; anchors.verticalCenter: parent.verticalCenter; text: Theme.icChevronRight; font.family: Theme.fontMono; font.pixelSize: 13; color: Theme.fgDim }
                     // unpin ✕ (pinned items)
                     Rectangle { visible: fr.rPinned; width: 20; height: 20; radius: 10; anchors.verticalCenter: parent.verticalCenter
                         color: upMa.containsMouse ? Theme.danger : Qt.rgba(0, 0, 0, 0.35)
-                        Text { anchors.centerIn: parent; text: root.g(0xF0156); font.family: Theme.fontMono; font.pixelSize: 12; color: Theme.fg }
+                        Text { anchors.centerIn: parent; text: Theme.icClose; font.family: Theme.fontMono; font.pixelSize: 12; color: Theme.fg }
                         MouseArea { id: upMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: Globals.togglePinPlace(fr.rPath) }
                     }
                 }

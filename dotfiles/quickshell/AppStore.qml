@@ -20,7 +20,7 @@ Scope {
     property string query: ""
     property var results: []
     property var installed: ({})       // pkg name → true (from `pacman -Qq`)
-    property string helper: ""          // "paru" or "" (= official repos only via pacman)
+    property string helper: ""          // "paru" | "yay" | "" (= official repos only via pacman)
     property bool searching: false
     property bool searched: false       // a search has actually completed
 
@@ -52,9 +52,11 @@ Scope {
     // `--sudoflags -A` makes every sudo paru runs use our askpass too, so the
     // whole AUR build+install authenticates non-interactively, no terminal.
     function opBody(kind, id) {
+        // --skipreview is paru-only (yay has no PKGBUILD-review step to skip);
+        // --sudoflags -A works for both helpers.
         if (kind === "install")
             return root.helper
-                ? root.helper + " -S --noconfirm --skipreview --needed --sudoflags '-A' -- " + root.sq(id)
+                ? root.helper + " -S --noconfirm --needed" + (root.helper === "paru" ? " --skipreview" : "") + " --sudoflags '-A' -- " + root.sq(id)
                 : "sudo -A pacman -S --noconfirm --needed -- " + root.sq(id)
         // kind === "remove"
         return "sudo -A pacman -Rns --noconfirm -- " + root.sq(id)
@@ -119,10 +121,11 @@ Scope {
         function hide(): void { Globals.storeOpen = false }
     }
 
-    // which AUR helper is available?
+    // which AUR helper is available? paru preferred, but many Arch derivatives
+    // (CachyOS) ship yay — the installer reuses it (phase 10), so honour it too.
     Process {
         id: helperProc
-        command: ["sh", "-c", "command -v paru || true"]
+        command: ["sh", "-c", "command -v paru || command -v yay || true"]
         stdout: StdioCollector { onStreamFinished: { var p = this.text.trim(); root.helper = p ? p.split("/").pop() : "" } }
     }
     // installed-package set (so badges/buttons reflect reality after actions)
@@ -200,7 +203,7 @@ Scope {
         WlrLayershell.namespace: "quickshell:store"
         anchors { top: true; bottom: true; left: true; right: true }
 
-        Timer { id: closeTimer; interval: 220 }
+        Timer { id: closeTimer; interval: Math.max(1, Theme.durSlow) }
         Connections { target: Globals; function onStoreOpenChanged() {
             if (Globals.storeOpen) { root.openScreen = root.focusedScreen(); root.query = ""; root.results = []; root.searched = false; root.cancelAsk(); storeIn.text = ""; storeIn.forceActiveFocus(); helperProc.running = true; qProc.running = true }
             else closeTimer.restart()
@@ -322,7 +325,7 @@ Scope {
                 Rectangle {
                     width: parent.width; height: 36; radius: Theme.radiusInner
                     color: Theme.bg; border.color: storeIn.activeFocus ? Theme.accent : Theme.stroke; border.width: 1
-                    Text { anchors.left: parent.left; anchors.leftMargin: 11; anchors.verticalCenter: parent.verticalCenter; text: root.g(0xF0349); font.family: Theme.fontMono; font.pixelSize: 14; color: Theme.fgDim }
+                    Text { anchors.left: parent.left; anchors.leftMargin: 11; anchors.verticalCenter: parent.verticalCenter; text: Theme.icSearch; font.family: Theme.fontMono; font.pixelSize: 14; color: Theme.fgDim }
                     TextInput {
                         id: storeIn
                         anchors.fill: parent; anchors.leftMargin: 34; anchors.rightMargin: 12; verticalAlignment: TextInput.AlignVCenter

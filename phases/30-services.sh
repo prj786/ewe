@@ -31,6 +31,19 @@ phase_services() {
     _enable_system bluetooth.service
     _enable_system power-profiles-daemon.service
 
+    # ── persistent journal ──
+    # journald's Storage=auto keeps logs across reboots only if /var/log/journal
+    # exists. Without it a hard freeze + forced power-off leaves NOTHING to
+    # diagnose (the log of the frozen boot lived in tmpfs). With it:
+    #   journalctl -b -1 -p err        ← the previous (frozen) boot's errors
+    # See docs/TROUBLESHOOTING.md for the full freeze playbook.
+    if [ ! -d /var/log/journal ]; then
+        sudo_run install -d /var/log/journal
+        # let systemd fix up ownership/ACLs so unprivileged `journalctl -b -1` works
+        sudo_run systemd-tmpfiles --create --prefix /var/log/journal 2>/dev/null || true
+        ok "persistent journal enabled (/var/log/journal) — post-freeze logs survive reboots"
+    fi
+
     # ── Wayland session entry — installed to BOTH standard dirs so ReGreet finds
     #    it regardless of its scan paths. ──
     local tmpl="$DOTREPO/templates/hyprland-de.desktop.in"
@@ -45,7 +58,9 @@ phase_services() {
     fi
 
     # ── greetd greeter (Quickshell/QML, themed) via cage; zero Xorg ──
-    if command -v greetd >/dev/null 2>&1 || pkg_present greetd; then
+    if [ "${COEXIST:-0}" = "1" ]; then
+        info "coexist: leaving your existing login manager in charge — the 'Hyprland (DE)' session entry above is all that's needed to pick this DE at login."
+    elif command -v greetd >/dev/null 2>&1 || pkg_present greetd; then
         sudo_run install -d /etc/greetd
         sudo_run install -m 644 "$DOTREPO/system/greetd/config.toml"  /etc/greetd/config.toml  && ok "installed greetd config"
 

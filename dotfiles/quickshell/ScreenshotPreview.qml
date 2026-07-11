@@ -56,7 +56,7 @@ Scope {
             anchors.bottom: parent.bottom
             anchors.bottomMargin: 16
             x: root.shown ? (win.width - width - 16) : (win.width + 16)
-            Behavior on x { NumberAnimation { duration: 340; easing.type: Easing.OutCubic } }
+            Behavior on x { NumberAnimation { duration: Theme.durSlow; easing.type: Easing.OutCubic } }
 
             // back peek cards (drawn first → behind), offset down-right
             Repeater {

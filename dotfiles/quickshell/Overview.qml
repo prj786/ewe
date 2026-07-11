@@ -5,18 +5,23 @@ import Quickshell.Hyprland
 import Quickshell.Widgets
 import Quickshell.Io
 
-// Overview — a Mission-Control-style window switcher, opened by tapping Super alone.
-// Each workspace is a scaled-down "mini-desktop" CARD; cards sit in a horizontal
-// strip you scroll through (mouse wheel or trackpad, either axis). You can:
-//   · search (top field) to filter windows by title/app,
-//   · click a thumbnail (or Enter) to jump to that window,
-//   · DRAG a thumbnail onto another desktop card to move it to that workspace
-//     (the trailing empty card moves it to a fresh desktop),
-//   · click the ✕ on a thumbnail to close that window.
-// Keyboard ←/→ walks the windows and the strip auto-scrolls to keep the
-// selection in view. The desktop behind is blurred + dimmed; covers the top bar.
+// Overview — GNOME-style activities view (redesigned per the user's mockup).
 //
-// Trigger: `qs ipc call overview toggle` (Super tap, release bind in hyprland.lua).
+// Opened-apps state:
+//   · search pill top-centre (the workspace id lives in the topbar),
+//   · a row of workspace PILLS under the search (every active desktop + one
+//     empty trailing one; the current desktop is accented). Click a pill to
+//     switch desktop; DRAG a window card onto a pill to move it there.
+//   · the CURRENT desktop's windows as large cards (live preview, app-icon
+//     badge top-right, ✕ to close, click to focus).
+// Search state (anything typed):
+//   · "Apps" — launcher-style rows, click/Enter launches,
+//   · "Windows" — same rows for every matching open window on any desktop;
+//     click navigates to it, ✕ closes it.
+// Animation: GNOME-like zoom — the whole stage zooms out into view on open
+// and zooms back in on close (scale + fade only, driven by Theme.dur*).
+//
+// Trigger: `qs ipc call overview toggle` (Super tap / 3-finger swipe up).
 Scope {
     id: root
 
@@ -26,15 +31,18 @@ Scope {
     function g(c) { return String.fromCodePoint(c) }
 
     readonly property var allWins: Hyprland.toplevels ? Hyprland.toplevels.values : []
-    readonly property int focusedWs: Hyprland.focusedWorkspace ? Hyprland.focusedWorkspace.id : -1
+    readonly property int focusedWs: Hyprland.focusedWorkspace ? Hyprland.focusedWorkspace.id : 1
+    readonly property bool searching: root.query.trim() !== ""
 
     function classOf(tl) {
         var o = tl && tl.lastIpcObject ? tl.lastIpcObject : null
-        return o ? (o.class || o.initialClass || "") : ""
+        var c = o ? (o.class || o.initialClass || "") : ""
+        // lastIpcObject can lag behind the IPC — the Wayland appId is always there
+        if (!c && tl && tl.wayland && tl.wayland.appId) c = tl.wayland.appId
+        return c
     }
     function titleOf(tl) { return (tl && tl.title) ? tl.title : (root.classOf(tl) || "Window") }
     function wsOf(tl) { return (tl && tl.workspace) ? tl.workspace.id : -1 }
-
     function iconFor(tl) {
         var cls = root.classOf(tl)
         if (cls === "") return Quickshell.iconPath("application-x-executable")
@@ -42,49 +50,38 @@ Scope {
         return Quickshell.iconPath(e && e.icon ? e.icon : cls, "application-x-executable")
     }
 
-    function matches(tl, q) {
-        if (q === "") return true
-        return (root.titleOf(tl) + " " + root.classOf(tl)).toLowerCase().indexOf(q) >= 0
-    }
-
-    // group windows into rows by workspace id; when not searching, also show a trailing
-    // empty workspace as a drop-target for moving a window to a fresh desktop.
-    readonly property var wsRows: buildRows()
-    readonly property var flat: flatten(wsRows)
-
-    function buildRows() {
-        var q = root.query.trim().toLowerCase()
+    // ── workspace pills: 1 … max(used, focused), + one trailing empty, cap 10 ──
+    readonly property var wsPills: buildPills()
+    function buildPills() {
         var byWs = {}, maxWs = 1
         for (var i = 0; i < root.allWins.length; i++) {
-            var tl = root.allWins[i], w = root.wsOf(tl)
+            var w = root.wsOf(root.allWins[i])
             if (w < 1) continue
             if (w > maxWs) maxWs = w
-            if (!byWs[w]) byWs[w] = []
-            byWs[w].push(tl)
+            byWs[w] = (byWs[w] || 0) + 1
         }
         if (root.focusedWs > maxWs) maxWs = root.focusedWs
-        var top = Math.min(Math.max(maxWs + (q === "" ? 1 : 0), 1), 10)
-        var rows = []
-        for (var ws = 1; ws <= top; ws++) {
-            var list = (byWs[ws] || []).filter(function (t) { return root.matches(t, q) })
-            if (q !== "" && list.length === 0) continue          // hide empty rows while searching
-            rows.push({ ws: ws, wins: list })
-        }
-        return rows
-    }
-    function flatten(rows) {
+        // one "not active" trailing desktop — but never stack empties
+        var top = Math.min((byWs[maxWs] || 0) > 0 || maxWs === root.focusedWs ? maxWs + 1 : maxWs, 10)
         var out = []
-        for (var i = 0; i < rows.length; i++)
-            for (var j = 0; j < rows[i].wins.length; j++) out.push(rows[i].wins[j])
+        for (var ws = 1; ws <= top; ws++) out.push({ ws: ws, count: byWs[ws] || 0 })
         return out
     }
 
-    // ── app suggestions ── when a search matches no OPEN window, offer apps from
-    // the desktop database (launchers, not files) whose name/id contains the query.
-    readonly property var appSuggest: suggestApps()
+    // ── current desktop's windows (opened-apps state) ──
+    readonly property var curWins: currentWins()
+    function currentWins() {
+        var out = []
+        for (var i = 0; i < root.allWins.length; i++)
+            if (root.wsOf(root.allWins[i]) === root.focusedWs) out.push(root.allWins[i])
+        return out
+    }
+
+    // ── search: apps (like the launcher) + open windows on any desktop ──
+    readonly property var appResults: suggestApps()
     function suggestApps() {
         var q = root.query.trim().toLowerCase()
-        if (q.length < 2) return []
+        if (q === "") return []
         var all = DesktopEntries.applications ? DesktopEntries.applications.values : []
         var pre = [], mid = []
         for (var i = 0; i < all.length; i++) {
@@ -95,12 +92,35 @@ Scope {
             if (hay.indexOf(q) < 0) continue
             if (name.indexOf(q) === 0) pre.push(a); else mid.push(a)   // name-prefix first
         }
-        return pre.concat(mid).slice(0, 8)
+        return pre.concat(mid).slice(0, 6)
+    }
+    readonly property var winResults: matchWins()
+    function matchWins() {
+        var q = root.query.trim().toLowerCase()
+        if (q === "") return []
+        var out = []
+        for (var i = 0; i < root.allWins.length; i++) {
+            var tl = root.allWins[i]
+            if (root.wsOf(tl) < 1) continue
+            if ((root.titleOf(tl) + " " + root.classOf(tl)).toLowerCase().indexOf(q) >= 0) out.push(tl)
+        }
+        return out
     }
     function appIcon(a) { return Quickshell.iconPath(a && a.icon ? a.icon : "", "application-x-executable") }
-    function launchApp(a) { if (a) a.execute(); root.close() }
+
+    // keyboard-nav list: search → apps then windows; otherwise the current desktop's cards
+    readonly property int navCount: root.searching ? root.appResults.length + root.winResults.length : root.curWins.length
+    function activateSel() {
+        if (root.searching) {
+            if (root.sel < root.appResults.length) root.launchApp(root.appResults[root.sel])
+            else if (root.winResults.length) root.jump(root.winResults[Math.min(root.sel - root.appResults.length, root.winResults.length - 1)])
+        } else if (root.curWins.length) {
+            root.jump(root.curWins[Math.min(root.sel, root.curWins.length - 1)])
+        }
+    }
 
     // ── actions ──
+    function launchApp(a) { if (a) a.execute(); root.close() }
     function jump(tl) {
         if (tl && tl.wayland) tl.wayland.activate()
         else if (tl && tl.address) Hyprland.dispatch("focuswindow address:" + tl.address)
@@ -120,10 +140,11 @@ Scope {
         var a = root.addrOf(tl)
         if (a !== "") Hyprland.dispatch('hl.dsp.window.close({window="address:' + a + '"})')
     }
+    function gotoWs(ws) { if (ws !== root.focusedWs) Hyprland.dispatch("hl.dsp.focus({workspace=" + ws + "})") }
     function close() { Globals.overviewOpen = false }
 
     onQueryChanged: root.sel = 0
-    onFlatChanged: if (root.sel >= flat.length) root.sel = Math.max(0, flat.length - 1)
+    onNavCountChanged: if (root.sel >= navCount) root.sel = Math.max(0, navCount - 1)
 
     IpcHandler {
         target: "overview"
@@ -132,7 +153,7 @@ Scope {
         function hide(): void { Globals.overviewOpen = false }
     }
 
-    Timer { id: closeTimer; interval: 240 }
+    Timer { id: closeTimer; interval: Math.max(1, Theme.durSlow) }
     Connections { target: Globals; function onOverviewOpenChanged() { if (!Globals.overviewOpen) closeTimer.restart() } }
 
     PanelWindow {
@@ -150,54 +171,37 @@ Scope {
         exclusionMode: ExclusionMode.Ignore                 // span the whole screen, OVER the top bar
         WlrLayershell.layer: WlrLayer.Overlay                // above the bar (Top layer)
         WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
-        WlrLayershell.namespace: "quickshell:overview"       // hyprland.lua blurs this namespace
+        WlrLayershell.namespace: "quickshell:overview"
         anchors { top: true; bottom: true; left: true; right: true }
 
-        onVisibleChanged: if (visible) Qt.callLater(function () { search.forceActiveFocus() })
+        onVisibleChanged: if (visible) Qt.callLater(function () { search.text = ""; search.forceActiveFocus() })
         Connections {
             target: Globals
             function onOverviewOpenChanged() { if (Globals.overviewOpen) search.forceActiveFocus() }
         }
 
-        // dim + (compositor-)blurred scrim; click empty space to dismiss
+        // dim scrim; click empty space to dismiss
         Rectangle {
             anchors.fill: parent
-            color: Qt.rgba(Theme.bg.r, Theme.bg.g, Theme.bg.b, 0.6)
+            color: Qt.rgba(Theme.bg.r, Theme.bg.g, Theme.bg.b, 0.88)
             opacity: Globals.overviewOpen ? 1 : 0
-            Behavior on opacity { NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutCubic } }
+            Behavior on opacity { NumberAnimation { duration: Theme.durSlow; easing.type: Easing.OutCubic } }
             MouseArea { anchors.fill: parent; onClicked: root.close() }
         }
 
+        // ── the stage: GNOME-like zoom out on open, zoom back in on close ──
         Item {
             id: stage
             anchors.fill: parent
             opacity: Globals.overviewOpen ? 1 : 0
-            scale: Globals.overviewOpen ? 1 : 0.98
-            Behavior on opacity { NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutCubic } }
-            Behavior on scale   { NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutCubic } }
+            scale: Globals.overviewOpen ? 1 : 1.10
+            transformOrigin: Item.Center
+            Behavior on opacity { NumberAnimation { duration: Theme.durSlow; easing.type: Easing.OutCubic } }
+            Behavior on scale   { NumberAnimation { duration: Theme.durSlow; easing.type: Easing.OutCubic } }
 
-            // each desktop is a scaled-down monitor: keep the real screen aspect so
-            // it reads as a mini-desktop. Sized off the overlay height.
             readonly property real monAR: (win.screen && win.screen.height > 0) ? (win.screen.width / win.screen.height) : 1.6
-            readonly property int deskCardH: Math.round(height * 0.46)
-            readonly property int deskCardW: Math.round(deskCardH * monAR)
-            readonly property int deskGap: 30
 
-            // scroll so the selected window's desktop is on-screen ("intelligent scroll")
-            function ensureSelVisible() {
-                if (root.flat.length === 0) return
-                var ws = root.wsOf(root.flat[root.sel]), idx = -1
-                for (var i = 0; i < root.wsRows.length; i++) if (root.wsRows[i].ws === ws) { idx = i; break }
-                if (idx < 0) return
-                var left = deskRow.x + idx * (deskCardW + deskGap)
-                var right = left + deskCardW
-                var maxX = Math.max(0, flick.contentWidth - flick.width)
-                if (left < flick.contentX + 24) flick.contentX = Math.max(0, left - 24)
-                else if (right > flick.contentX + flick.width - 24) flick.contentX = Math.min(maxX, right - flick.width + 24)
-            }
-            Connections { target: root; function onSelChanged() { stage.ensureSelVisible() } }
-
-            // ── search field (top-centre, pill) ──
+            // ── search pill (top-centre) ──
             Rectangle {
                 id: searchBox
                 anchors.horizontalCenter: parent.horizontalCenter
@@ -210,7 +214,7 @@ Scope {
                     anchors.fill: parent
                     anchors.leftMargin: 20; anchors.rightMargin: 20
                     spacing: 12
-                    Text { anchors.verticalCenter: parent.verticalCenter; text: root.g(0xF002); font.family: Theme.fontMono; font.pixelSize: 17; color: Theme.fgDim }
+                    Text { anchors.verticalCenter: parent.verticalCenter; text: Theme.icSearch; font.family: Theme.fontMono; font.pixelSize: 17; color: Theme.fgDim }
                     TextInput {
                         id: search
                         width: parent.width - 40
@@ -218,280 +222,315 @@ Scope {
                         color: Theme.fg; font.family: Theme.fontDisplay; font.pixelSize: Theme.fsLarge
                         selectionColor: Theme.accent; selectByMouse: true; clip: true
                         onTextChanged: root.query = text
-                        Text { visible: search.text.length === 0; anchors.verticalCenter: parent.verticalCenter; text: "Search open windows — or type an app to launch…"; color: Theme.fgDim; font: search.font }
+                        Text { visible: search.text.length === 0; anchors.verticalCenter: parent.verticalCenter; text: "Search apps and open windows…"; color: Theme.fgDim; font: search.font }
                         Keys.onPressed: function (ev) {
                             if (ev.key === Qt.Key_Escape) { root.close(); ev.accepted = true }
-                            else if (ev.key === Qt.Key_Return || ev.key === Qt.Key_Enter) { if (root.flat.length) root.jump(root.flat[root.sel]); else if (root.appSuggest.length) root.launchApp(root.appSuggest[0]); ev.accepted = true }
+                            else if (ev.key === Qt.Key_Return || ev.key === Qt.Key_Enter) { root.activateSel(); ev.accepted = true }
                             else if (ev.key === Qt.Key_Left || ev.key === Qt.Key_Up) { root.sel = Math.max(0, root.sel - 1); ev.accepted = true }
-                            else if (ev.key === Qt.Key_Right || ev.key === Qt.Key_Down) { root.sel = Math.min(root.flat.length - 1, root.sel + 1); ev.accepted = true }
+                            else if (ev.key === Qt.Key_Right || ev.key === Qt.Key_Down) { root.sel = Math.min(root.navCount - 1, root.sel + 1); ev.accepted = true }
                         }
                     }
                 }
             }
 
-            // ── empty state ── (on top, so a no-match search shows it immediately)
-            // When a search matches no OPEN window but DOES match installed apps,
-            // offer them as launchers instead of a dead end.
-            Column {
-                anchors.centerIn: parent
-                z: 50
-                width: Math.min(stage.width - 120, 760)
-                visible: root.flat.length === 0
-                spacing: 16
-
-                // app-suggestion path
-                Text {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    visible: root.appSuggest.length > 0
-                    text: "No open window — launch an app"
-                    color: Theme.fgSecondary; font.family: Theme.fontDisplay; font.pixelSize: Theme.fsBody; font.weight: Font.DemiBold
+            // ══ OPENED-APPS STATE ══════════════════════════════════════════════
+            // workspace pills — active desktops + one empty; current is accented
+            Row {
+                id: pillRow
+                visible: !root.searching
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.top: searchBox.bottom; anchors.topMargin: 26
+                spacing: 14
+                Repeater {
+                    model: root.wsPills
+                    delegate: Rectangle {
+                        id: pill
+                        required property var modelData
+                        readonly property int wsId: modelData.ws
+                        readonly property bool current: wsId === root.focusedWs
+                        width: 84; height: 52
+                        radius: 12
+                        color: pillDrop.containsDrag ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.25)
+                             : current ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.16)
+                             : Theme.elevated
+                        border.color: (current || pillDrop.containsDrag) ? Theme.accent : Theme.stroke
+                        border.width: current || pillDrop.containsDrag ? 2 : 1
+                        Behavior on color { ColorAnimation { duration: Theme.durFast } }
+                        DropArea { id: pillDrop; anchors.fill: parent; keys: ["overview-window"] }
+                        Text {
+                            anchors.centerIn: parent
+                            text: pill.wsId
+                            color: pill.current ? Theme.accent : Theme.fgSecondary
+                            font.family: Theme.fontDisplay; font.pixelSize: Theme.fsBody; font.weight: Font.DemiBold
+                        }
+                        // tiny window-count dots along the pill's bottom
+                        Row {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            anchors.bottom: parent.bottom; anchors.bottomMargin: 7
+                            spacing: 3
+                            Repeater {
+                                model: Math.min(pill.modelData.count, 5)
+                                delegate: Rectangle { width: 4; height: 4; radius: 2; color: pill.current ? Theme.accent : Theme.fgDim }
+                            }
+                        }
+                        MouseArea {
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.gotoWs(pill.wsId)
+                        }
+                    }
                 }
+            }
+
+            // the current desktop's windows as large cards
+            Flickable {
+                id: cardArea
+                visible: !root.searching
+                anchors.left: parent.left; anchors.right: parent.right
+                anchors.top: pillRow.bottom; anchors.topMargin: 30
+                anchors.bottom: parent.bottom; anchors.bottomMargin: 32
+                clip: true
+                contentWidth: width
+                contentHeight: Math.max(height, cardFlow.implicitHeight)
+                boundsBehavior: Flickable.StopAtBounds
+                // card size scales down as the desktop gets busier
+                readonly property real cardH: Math.round(height * (root.curWins.length <= 2 ? 0.52 : root.curWins.length <= 6 ? 0.40 : 0.30))
+                readonly property real cardW: Math.round(cardH * stage.monAR)
+
                 Flow {
-                    width: parent.width
-                    visible: root.appSuggest.length > 0
-                    spacing: 12
-                    // centre the wrapped rows
+                    id: cardFlow
+                    width: Math.min(cardArea.width - 80, (cardArea.cardW + 26) * Math.min(root.curWins.length, 3))
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    y: Math.max(0, (cardArea.height - implicitHeight) / 2)
+                    spacing: 26
+
                     Repeater {
-                        model: root.appSuggest
-                        delegate: Rectangle {
+                        model: root.curWins
+                        delegate: MouseArea {
+                            id: dragArea
                             required property var modelData
                             required property int index
-                            width: 184; height: 56; radius: Theme.radiusInner
-                            color: saMa.containsMouse ? Theme.accent : Theme.elevated
-                            // first match is the Enter target — hint it with an accent outline
-                            border.color: index === 0 ? Theme.accent : Theme.stroke; border.width: 1
-                            Behavior on color { ColorAnimation { duration: 120 } }
-                            Row {
-                                anchors.fill: parent; anchors.leftMargin: 12; anchors.rightMargin: 12; spacing: 11
-                                Image {
-                                    anchors.verticalCenter: parent.verticalCenter; width: 34; height: 34
-                                    sourceSize.width: 68; sourceSize.height: 68; source: root.appIcon(modelData)
-                                }
-                                Column {
-                                    anchors.verticalCenter: parent.verticalCenter; width: parent.width - 45; spacing: 1
-                                    Text { width: parent.width; text: modelData.name || ""; elide: Text.ElideRight
-                                        color: saMa.containsMouse ? Theme.accentText : Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold }
-                                    Text { width: parent.width; visible: !!modelData.genericName; text: modelData.genericName || ""; elide: Text.ElideRight
-                                        color: saMa.containsMouse ? Theme.accentText : Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 10 }
-                                }
+                            readonly property bool seld: index === root.sel
+                            width: cardArea.cardW; height: cardArea.cardH
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            drag.target: cardContent
+                            drag.smoothed: false
+                            property bool didDrag: false
+                            onPressed: didDrag = false
+                            onPositionChanged: { if (drag.active) didDrag = true; else root.sel = index }
+                            onClicked: root.jump(modelData)
+                            // Resolve the drop by hit-testing the pill row (ParentChange
+                            // snaps the clone back the instant the drag ends, racing the
+                            // DropArea's drop event).
+                            onReleased: function (mouse) {
+                                if (!didDrag) return
+                                var p = dragArea.mapToItem(pillRow, mouse.x, mouse.y)
+                                var pi = pillRow.childAt(p.x, p.y)
+                                if (pi && pi.wsId !== undefined) root.moveWin(modelData, pi.wsId)
                             }
-                            MouseArea { id: saMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.launchApp(modelData) }
-                        }
-                    }
-                }
-                Text {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    visible: root.appSuggest.length > 0
-                    text: "Enter to launch the first match"
-                    color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
-                }
 
-                // no-suggestion fallback
-                Text {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    visible: root.appSuggest.length === 0
-                    text: root.g(root.query.length ? 0xF0349 : 0xF03A1)   // magnify-close : monitor-off
-                    font.family: Theme.fontMono; font.pixelSize: 40; color: Theme.fgDim
-                }
-                Text {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    visible: root.appSuggest.length === 0
-                    text: root.query.length ? ("No windows or apps match “" + root.query + "”") : "No open windows"
-                    color: Theme.fgDim; font.family: Theme.fontDisplay; font.pixelSize: Theme.fsTitle
-                }
-            }
-
-            // ── horizontal strip of desktop cards ──
-            Flickable {
-                id: flick
-                anchors.left: parent.left; anchors.right: parent.right
-                anchors.top: searchBox.bottom; anchors.topMargin: 24
-                anchors.bottom: parent.bottom; anchors.bottomMargin: 24
-                clip: true
-                flickableDirection: Flickable.HorizontalFlick
-                boundsBehavior: Flickable.StopAtBounds
-                contentWidth: Math.max(width, deskRow.width + 80)
-                contentHeight: height
-                // smooth, "intelligent" scroll: vertical OR horizontal wheel both pan the
-                // strip; programmatic jumps (keyboard nav) glide via the Behavior below.
-                Behavior on contentX { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
-                WheelHandler {
-                    acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
-                    onWheel: function (ev) {
-                        var d = Math.abs(ev.angleDelta.y) > Math.abs(ev.angleDelta.x) ? ev.angleDelta.y : ev.angleDelta.x
-                        var maxX = Math.max(0, flick.contentWidth - flick.width)
-                        flick.contentX = Math.max(0, Math.min(maxX, flick.contentX - d))
-                    }
-                }
-
-                Row {
-                    id: deskRow
-                    height: flick.height
-                    // centre the strip when it fits; otherwise pin a left margin and scroll
-                    x: Math.max(40, (flick.contentWidth - width) / 2)
-                    spacing: stage.deskGap
-
-                    Repeater {
-                        model: root.wsRows
-                        delegate: Column {
-                            id: deskCol
-                            required property var modelData
-                            readonly property int ws: modelData.ws
-                            readonly property bool isFocused: ws === root.focusedWs
-                            // thumbnail grid metrics (2 columns inside the mini-desktop)
-                            readonly property int pad: 16
-                            readonly property int thumbGap: 14
-                            readonly property int thumbW: Math.floor((stage.deskCardW - 2 * pad - thumbGap) / 2)
-                            readonly property int thumbH: Math.round(thumbW / stage.monAR)
-                            anchors.verticalCenter: parent.verticalCenter   // vertical anchor is safe inside a Row
-                            spacing: 12
-
-                            // the mini-desktop card
-                            Rectangle {
-                                id: card
-                                width: stage.deskCardW; height: stage.deskCardH
+                            // ClippingRectangle: children (preview, chip) clip to the rounded border
+                            ClippingRectangle {
+                                id: cardContent
+                                width: dragArea.width
+                                height: dragArea.height
                                 radius: Theme.radius
-                                color: dropZone.containsDrag ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.16)
-                                     : deskCol.isFocused ? Theme.elevated : Qt.rgba(Theme.elevated.r, Theme.elevated.g, Theme.elevated.b, 0.5)
-                                border.color: dropZone.containsDrag ? Theme.accent : (deskCol.isFocused ? Theme.accent : Theme.stroke)
-                                border.width: deskCol.isFocused || dropZone.containsDrag ? 2 : 1
-                                Behavior on color { ColorAnimation { duration: Theme.durFast } }
-                                clip: true
+                                color: Theme.panel
+                                border.color: dragArea.seld ? Theme.accent : Theme.stroke
+                                border.width: dragArea.seld ? 2 : 1
 
-                                // drag-over highlight only; the move is resolved in the thumb's onReleased
-                                DropArea { id: dropZone; anchors.fill: parent; keys: ["overview-window"] }
+                                Drag.active: dragArea.drag.active
+                                Drag.source: dragArea
+                                Drag.hotSpot.x: width / 2
+                                Drag.hotSpot.y: height / 2
+                                Drag.keys: ["overview-window"]
 
-                                // empty-desktop hint (also a drop target for a fresh desktop)
-                                Text {
-                                    anchors.centerIn: parent
-                                    width: parent.width - 32; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap
-                                    visible: deskCol.modelData.wins.length === 0
-                                    text: "Drop a window here\n→ Desktop " + deskCol.ws
-                                    color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
+                                // float above everything while dragging; ParentChange
+                                // saves & restores x/y, snapping back on release
+                                states: State {
+                                    name: "dragging"; when: dragArea.drag.active
+                                    ParentChange { target: cardContent; parent: dragLayer }
+                                    PropertyChanges { target: cardContent; opacity: 0.92; z: 3000; scale: 0.5 }
                                 }
 
-                                // window thumbnails
-                                Flow {
-                                    id: deskFlow
-                                    anchors.fill: parent; anchors.margins: deskCol.pad
-                                    spacing: deskCol.thumbGap
+                                // live window preview, icon fallback
+                                ScreencopyView {
+                                    id: sc
+                                    visible: hasContent && dragArea.modelData.wayland
+                                    captureSource: dragArea.modelData.wayland || null
+                                    live: Globals.overviewOpen && !cardContent.Drag.active
+                                    anchors.fill: parent
+                                }
+                                Image {
+                                    anchors.centerIn: parent; visible: !sc.visible
+                                    width: 56; height: 56; sourceSize.width: 112; sourceSize.height: 112
+                                    source: root.iconFor(dragArea.modelData)
+                                }
 
-                                    Repeater {
-                                        model: deskCol.modelData.wins
-                                        delegate: MouseArea {
-                                            id: dragArea
-                                            required property var modelData
-                                            readonly property int flatIdx: root.flat.indexOf(modelData)
-                                            readonly property bool seld: flatIdx === root.sel
-                                            width: deskCol.thumbW; height: deskCol.thumbH
-                                            hoverEnabled: true
-                                            cursorShape: Qt.PointingHandCursor
-                                            drag.target: cardContent
-                                            drag.smoothed: false
-                                            property bool didDrag: false
-                                            onPressed: didDrag = false
-                                            onPositionChanged: { if (drag.active) didDrag = true; else root.sel = flatIdx }
-                                            onClicked: root.jump(modelData)
-                                            // Resolve the drop here (not DropArea.onDropped): the ParentChange
-                                            // snaps the clone back the instant the drag ends, racing the drop
-                                            // event — so hit-test the cursor against the desktop strip.
-                                            onReleased: function (mouse) {
-                                                if (!didDrag) return
-                                                var p = dragArea.mapToItem(deskRow, mouse.x, mouse.y)
-                                                var col = deskRow.childAt(p.x, p.y)
-                                                if (col && col.ws !== undefined && col.ws >= 1) root.moveWin(modelData, col.ws)
-                                            }
+                                // title chip (bottom)
+                                Rectangle {
+                                    anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
+                                    height: 28
+                                    color: Qt.rgba(0, 0, 0, 0.55)
+                                    Text {
+                                        anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10
+                                        verticalAlignment: Text.AlignVCenter
+                                        text: root.titleOf(dragArea.modelData)
+                                        color: dragArea.seld ? Theme.fg : Theme.fgSecondary
+                                        font.family: Theme.fontText; font.pixelSize: 12
+                                        font.weight: dragArea.seld ? Font.DemiBold : Font.Normal
+                                        elide: Text.ElideRight
+                                    }
+                                }
 
-                                            // ClippingRectangle (not Rectangle): QML `clip` only clips to a
-                                            // rectangle, so a square preview/title-chip pokes its corners out
-                                            // past the rounded card. ClippingRectangle clips children to the
-                                            // rounded border, so the preview AND the title chip are properly
-                                            // rounded (no sharp corners bleeding out).
-                                            ClippingRectangle {
-                                                id: cardContent
-                                                width: dragArea.width
-                                                height: dragArea.height
-                                                radius: Theme.radiusInner
-                                                color: Theme.panel
-                                                border.color: dragArea.seld ? Theme.accent : Theme.stroke
-                                                border.width: dragArea.seld ? 2 : 1
-
-                                                Drag.active: dragArea.drag.active
-                                                Drag.source: dragArea
-                                                Drag.hotSpot.x: width / 2
-                                                Drag.hotSpot.y: height / 2
-                                                Drag.keys: ["overview-window"]
-
-                                                // float above the clipping card/flickable while dragging;
-                                                // ParentChange saves & restores x/y, snapping back on release
-                                                states: State {
-                                                    name: "dragging"; when: dragArea.drag.active
-                                                    ParentChange { target: cardContent; parent: dragLayer }
-                                                    PropertyChanges { target: cardContent; opacity: 0.92; z: 3000 }
-                                                }
-
-                                                // live window preview, icon fallback
-                                                ScreencopyView {
-                                                    id: sc
-                                                    visible: hasContent && dragArea.modelData.wayland
-                                                    captureSource: dragArea.modelData.wayland || null
-                                                    live: Globals.overviewOpen && !cardContent.Drag.active
-                                                    anchors.fill: parent
-                                                }
-                                                Image {
-                                                    anchors.centerIn: parent; visible: !sc.visible
-                                                    width: 40; height: 40; sourceSize.width: 80; sourceSize.height: 80
-                                                    source: root.iconFor(dragArea.modelData)
-                                                }
-
-                                                // title chip (bottom), with app icon
-                                                Rectangle {
-                                                    anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
-                                                    height: 24
-                                                    color: Qt.rgba(0, 0, 0, 0.55)
-                                                    Row {
-                                                        anchors.fill: parent; anchors.leftMargin: 6; anchors.rightMargin: 6; spacing: 6
-                                                        Image { anchors.verticalCenter: parent.verticalCenter; width: 14; height: 14; sourceSize.width: 28; sourceSize.height: 28; source: root.iconFor(dragArea.modelData) }
-                                                        Text {
-                                                            anchors.verticalCenter: parent.verticalCenter; width: parent.width - 22
-                                                            text: root.titleOf(dragArea.modelData)
-                                                            color: dragArea.seld ? Theme.fg : Theme.fgSecondary
-                                                            font.family: Theme.fontText; font.pixelSize: 11
-                                                            font.weight: dragArea.seld ? Font.DemiBold : Font.Normal
-                                                            elide: Text.ElideRight
-                                                        }
-                                                    }
-                                                }
-                                            }
-
-                                            // close (✕) — sibling of the clone so it stays on top + unaffected by drag
-                                            Rectangle {
-                                                anchors.top: parent.top; anchors.right: parent.right; anchors.margins: 6
-                                                z: 50
-                                                width: 20; height: 20; radius: 10
-                                                visible: !dragArea.drag.active && (dragArea.containsMouse || closeMa.containsMouse)
-                                                color: closeMa.containsMouse ? Theme.danger : Qt.rgba(0, 0, 0, 0.6)
-                                                Text { anchors.centerIn: parent; text: root.g(0xF0156); font.family: Theme.fontMono; font.pixelSize: 12; color: Theme.accentText }
-                                                MouseArea { id: closeMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.killWin(dragArea.modelData) }
-                                            }
-                                        }
+                                // app-icon badge — top-right, as in the mockup
+                                Rectangle {
+                                    anchors.top: parent.top; anchors.right: parent.right; anchors.margins: 10
+                                    width: 34; height: 34; radius: 17
+                                    color: Qt.rgba(0, 0, 0, 0.55)
+                                    Image {
+                                        anchors.centerIn: parent
+                                        width: 22; height: 22; sourceSize.width: 44; sourceSize.height: 44
+                                        source: root.iconFor(dragArea.modelData)
                                     }
                                 }
                             }
 
-                            // desktop label (below the card)
-                            Row {
-                                anchors.horizontalCenter: parent.horizontalCenter
-                                spacing: 7
-                                Text { text: "Desktop " + deskCol.ws; color: deskCol.isFocused ? Theme.accent : Theme.fgSecondary; font.family: Theme.fontDisplay; font.pixelSize: Theme.fsBody; font.weight: Font.DemiBold }
-                                Text { visible: deskCol.isFocused; anchors.verticalCenter: parent.verticalCenter; text: "· current"; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
+                            // close (✕) — top-left on hover (badge owns the top-right corner).
+                            // Accent glyph on the dark chip (black-on-black was invisible) and
+                            // box-centred via alignment (centerIn drifts on glyph metrics).
+                            Rectangle {
+                                anchors.top: parent.top; anchors.left: parent.left; anchors.margins: 10
+                                z: 50
+                                width: 24; height: 24; radius: 12
+                                visible: !dragArea.drag.active && (dragArea.containsMouse || closeMa.containsMouse)
+                                color: closeMa.containsMouse ? Theme.danger : Qt.rgba(0, 0, 0, 0.6)
+                                border.color: closeMa.containsMouse ? Theme.danger : Theme.accent; border.width: 1
+                                Text {
+                                    anchors.fill: parent
+                                    horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
+                                    text: Theme.icClose; font.family: Theme.fontMono; font.pixelSize: 14
+                                    color: closeMa.containsMouse ? Theme.accentText : Theme.accent
+                                }
+                                MouseArea { id: closeMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.killWin(dragArea.modelData) }
                             }
                         }
                     }
                 }
+
+                // empty-desktop hint
+                Column {
+                    anchors.centerIn: parent
+                    visible: root.curWins.length === 0
+                    spacing: 12
+                    Text { anchors.horizontalCenter: parent.horizontalCenter; text: Theme.icMonitorOff; font.family: Theme.fontMono; font.pixelSize: 40; color: Theme.fgDim }
+                    Text { anchors.horizontalCenter: parent.horizontalCenter; text: "No windows on this desktop"; color: Theme.fgDim; font.family: Theme.fontDisplay; font.pixelSize: Theme.fsTitle }
+                }
             }
 
-            // floating layer the dragged thumbnail reparents into (so it isn't clipped)
+            // ══ SEARCH STATE — Apps + Windows, launcher-style rows ═══════════════
+            Flickable {
+                visible: root.searching
+                anchors.left: parent.left; anchors.right: parent.right
+                anchors.top: searchBox.bottom; anchors.topMargin: 28
+                anchors.bottom: parent.bottom; anchors.bottomMargin: 32
+                clip: true
+                contentWidth: width
+                contentHeight: resCol.implicitHeight
+                boundsBehavior: Flickable.StopAtBounds
+
+                Column {
+                    id: resCol
+                    width: Math.min(parent.width - 120, 640)
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    spacing: 6
+
+                    Text {
+                        visible: root.appResults.length > 0
+                        text: "Apps"
+                        color: Theme.fgSecondary; font.family: Theme.fontDisplay; font.pixelSize: Theme.fsBody; font.weight: Font.DemiBold
+                        topPadding: 4; bottomPadding: 2
+                    }
+                    Repeater {
+                        model: root.appResults
+                        delegate: Item {
+                            id: appRow
+                            required property var modelData
+                            required property int index
+                            readonly property bool seld: index === root.sel
+                            width: resCol.width; height: 54
+                            Rectangle { anchors.fill: parent; radius: Theme.radiusInner; color: appRow.seld ? Theme.accent : (arMa.containsMouse ? Theme.hover : "transparent") }
+                            Row {
+                                anchors.fill: parent; anchors.leftMargin: 14; anchors.rightMargin: 14; spacing: 14
+                                Image { anchors.verticalCenter: parent.verticalCenter; width: 34; height: 34; sourceSize.width: 68; sourceSize.height: 68; source: root.appIcon(appRow.modelData) }
+                                Column {
+                                    anchors.verticalCenter: parent.verticalCenter; spacing: 1
+                                    Text { text: appRow.modelData.name || ""; color: appRow.seld ? Theme.accentText : Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsBody; font.weight: Font.Medium }
+                                    Text { visible: !!appRow.modelData.genericName; text: appRow.modelData.genericName || ""; color: appRow.seld ? Theme.accentText : Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
+                                }
+                            }
+                            MouseArea { id: arMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onPositionChanged: root.sel = appRow.index; onClicked: root.launchApp(appRow.modelData) }
+                        }
+                    }
+
+                    Text {
+                        visible: root.winResults.length > 0
+                        text: "Windows"
+                        color: Theme.fgSecondary; font.family: Theme.fontDisplay; font.pixelSize: Theme.fsBody; font.weight: Font.DemiBold
+                        topPadding: 12; bottomPadding: 2
+                    }
+                    Repeater {
+                        model: root.winResults
+                        delegate: Item {
+                            id: winRow
+                            required property var modelData
+                            required property int index
+                            readonly property int navIdx: root.appResults.length + index
+                            readonly property bool seld: navIdx === root.sel
+                            width: resCol.width; height: 54
+                            Rectangle { anchors.fill: parent; radius: Theme.radiusInner; color: winRow.seld ? Theme.accent : (wrMa.containsMouse ? Theme.hover : "transparent") }
+                            Row {
+                                anchors.fill: parent; anchors.leftMargin: 14; anchors.rightMargin: 48; spacing: 14
+                                Image { anchors.verticalCenter: parent.verticalCenter; width: 34; height: 34; sourceSize.width: 68; sourceSize.height: 68; source: root.iconFor(winRow.modelData) }
+                                Column {
+                                    anchors.verticalCenter: parent.verticalCenter; spacing: 1
+                                    Text { width: resCol.width - 130; text: root.titleOf(winRow.modelData); elide: Text.ElideRight; color: winRow.seld ? Theme.accentText : Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsBody; font.weight: Font.Medium }
+                                    Text { text: "Desktop " + root.wsOf(winRow.modelData); color: winRow.seld ? Theme.accentText : Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
+                                }
+                            }
+                            MouseArea { id: wrMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onPositionChanged: root.sel = winRow.navIdx; onClicked: root.jump(winRow.modelData) }
+                            // close this window right from the results — accent ✕, box-centred
+                            Rectangle {
+                                anchors.right: parent.right; anchors.rightMargin: 12; anchors.verticalCenter: parent.verticalCenter
+                                width: 24; height: 24; radius: 12
+                                visible: wrMa.containsMouse || wxMa.containsMouse || winRow.seld
+                                color: wxMa.containsMouse ? Theme.danger : Qt.rgba(0, 0, 0, 0.35)
+                                border.color: wxMa.containsMouse ? Theme.danger : Theme.accent; border.width: 1
+                                Text {
+                                    anchors.fill: parent
+                                    horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
+                                    text: Theme.icClose; font.family: Theme.fontMono; font.pixelSize: 14
+                                    color: (winRow.seld || wxMa.containsMouse) ? Theme.accentText : Theme.accent
+                                }
+                                MouseArea { id: wxMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.killWin(winRow.modelData) }
+                            }
+                        }
+                    }
+
+                    // dead-end state
+                    Column {
+                        width: parent.width
+                        visible: root.appResults.length === 0 && root.winResults.length === 0
+                        spacing: 10
+                        Text { anchors.horizontalCenter: parent.horizontalCenter; topPadding: 40; text: Theme.icSearch; font.family: Theme.fontMono; font.pixelSize: 36; color: Theme.fgDim }
+                        Text { anchors.horizontalCenter: parent.horizontalCenter; text: "Nothing matches “" + root.query + "”"; color: Theme.fgDim; font.family: Theme.fontDisplay; font.pixelSize: Theme.fsTitle }
+                    }
+                }
+            }
+
+            // floating layer the dragged card reparents into (so it isn't clipped)
             Item { id: dragLayer; anchors.fill: parent; z: 2000 }
         }
     }

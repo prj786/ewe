@@ -114,9 +114,9 @@ Scope {
                     anchors.verticalCenter: parent.verticalCenter
                     width: 24
                     horizontalAlignment: Text.AlignHCenter
-                    text: root.mode === "brightness" ? root.g(0xF185)
-                        : root.muted ? root.g(0xF026)
-                        : root.g(0xF028)
+                    text: root.mode === "brightness" ? Theme.icSun
+                        : root.muted ? Theme.icVolLow
+                        : Theme.icVolHigh
                     font.family: Theme.fontMono; font.pixelSize: 19
                     color: root.muted ? Theme.fgDim : Theme.fg
                 }

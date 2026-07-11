@@ -17,22 +17,33 @@ Scope {
 
     // Colours & fonts come entirely from Theme.qml (single source of truth).
     function g(code) { return String.fromCodePoint(code) }   // Nerd Font glyph (handles MDI > U+FFFF)
-    // This Hyprland uses a Lua config: the /dispatch IPC evaluates its argument as Lua
-    // (`return hl.dispatch(<arg>)`), so a plain "workspace 3" is invalid. Use the typed
-    // hl.dsp.* dispatchers. (exec_raw("workspace N") parses but silently no-ops; and
-    // move's silent toggle is follow=false, not silent=true.)
-    function goWorkspace(n) { Hyprland.dispatch("hl.dsp.focus({workspace=" + n + "})") }
-    function sendToWorkspace(n) { Hyprland.dispatch("hl.dsp.window.move({workspace=" + n + ", follow=false})") }
-    function appName() {
+    function appClass() {
         var t = Hyprland.activeToplevel
         // lastIpcObject.class is the richest source but can lag a focus change /
         // be momentarily empty — fall back to the Wayland appId so the label
         // doesn't blank out. Empty only on the true bare desktop.
         var c = (t && t.lastIpcObject && t.lastIpcObject.class) ? t.lastIpcObject.class : ""
         if (!c && t && t.wayland && t.wayland.appId) c = t.wayland.appId
+        return c
+    }
+    function appName() {
+        var c = bar.appClass()
         if (!c) return ""
         var s = c.split('.').pop().split('-')[0]
         return s.charAt(0).toUpperCase() + s.slice(1)
+    }
+    // Icon of the focused app's desktop entry — "" when there is none, so the
+    // bar can fall back to the bold name text (icon-instead-of-name design).
+    function appIcon() {
+        var e = DesktopEntries.heuristicLookup(bar.appClass())
+        return (e && e.icon) ? Quickshell.iconPath(e.icon, true) : ""
+    }
+    // Lua config: /dispatch evaluates its arg as Lua, so we pass typed
+    // hl.dsp.* dispatcher expressions (a plain "fullscreen 0" would be invalid Lua).
+    function act(expr) { Hyprland.dispatch(expr) }
+    function newWindow() {
+        var e = DesktopEntries.heuristicLookup(bar.appClass())
+        if (e) e.execute()
     }
 
     // ── IPC: Super+Shift+B → qs ipc call bar toggle ───────────────────────
@@ -103,20 +114,6 @@ Scope {
         }
     }
 
-    function wsOccupied(id) {
-        var ws = Hyprland.workspaces.values
-        for (var i = 0; i < ws.length; i++) if (ws[i].id === id) return true
-        return false
-    }
-
-    // Dynamic workspace count: 1 … (highest used or focused) + 1, capped at 10.
-    property int wsCount: {
-        var mx = (Hyprland.focusedWorkspace && Hyprland.focusedWorkspace.id > 0) ? Hyprland.focusedWorkspace.id : 1
-        var ws = Hyprland.workspaces.values
-        for (var i = 0; i < ws.length; i++) { var id = ws[i].id; if (id > 0 && id < 100 && id > mx) mx = id }
-        return Math.min(10, mx + 1)
-    }
-
     // ── a status glyph button: no hover box, just a pointer cursor and a
     //    full-bar-height click target (only the control-centre group highlights). ──
     component StatusItem: Item {
@@ -157,6 +154,36 @@ Scope {
         }
     }
 
+    // ── an inline window-action button (left cluster): a short WORD, not a
+    //    glyph (only Close stays an icon — see the row in the bar). ──
+    component ActionBtn: Item {
+        id: ab
+        property string label: ""
+        signal triggered()
+        width: abLbl.implicitWidth + 16
+        height: parent ? parent.height : 30
+        Rectangle {
+            anchors.centerIn: parent; width: parent.width; height: 22; radius: 6
+            color: abMa.containsMouse ? Theme.hover : "transparent"
+        }
+        Text {
+            id: abLbl
+            anchors.centerIn: parent
+            text: ab.label
+            color: abMa.containsMouse ? Theme.fg : Theme.fgSecondary
+            font.family: Theme.fontText
+            font.pixelSize: 12
+            font.weight: Font.DemiBold
+        }
+        MouseArea {
+            id: abMa
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: ab.triggered()
+        }
+    }
+
     // ── one bar per monitor ───────────────────────────────────────────────
     Variants {
         model: Quickshell.screens
@@ -183,52 +210,62 @@ Scope {
                     color: Theme.stroke
                 }
 
-                // ── LEFT: "Search…" affordance + focused window title ──
+                // ── LEFT: workspace chip, then the focused app: icon (falls back
+                //    to the bold name when the desktop entry has no icon) + window
+                //    title + the inline window actions New · Float · Move⌄ · ✕
+                //    (move-to is the one dropdown left — AppMenu.qml). ──
                 Row {
                     anchors.left: parent.left
                     anchors.leftMargin: 10
                     anchors.verticalCenter: parent.verticalCenter
-                    spacing: 10
-                    Item {
+                    spacing: 8
+
+                    // current workspace id — always shown; click opens the overview
+                    Rectangle {
                         anchors.verticalCenter: parent.verticalCenter
-                        width: 30
-                        height: parent.height
+                        width: 22; height: 22; radius: 6
+                        color: wsMa.containsMouse ? Theme.hover : "transparent"
+                        border.color: Theme.stroke; border.width: 1
                         Text {
-                            id: searchLbl
                             anchors.centerIn: parent
-                            text: bar.g(0xF002)        //
-                            color: Theme.fgSecondary
-                            font.family: Theme.fontMono
-                            font.pixelSize: 14
+                            text: Hyprland.focusedWorkspace ? Hyprland.focusedWorkspace.id : 1
+                            color: Theme.accent
+                            font.family: Theme.fontText; font.pixelSize: 12; font.weight: Font.Bold
                         }
                         MouseArea {
-                            id: searchMa
-                            anchors.fill: parent
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: Quickshell.execDetached(["qs", "ipc", "call", "spotlight", "toggle"])
-                        }
-                    }
-                    // bold app name → app menu
-                    Item {
-                        id: appNameItem
-                        anchors.verticalCenter: parent.verticalCenter
-                        visible: bar.appName() !== ""
-                        width: appRow.implicitWidth + 14
-                        height: parent.height
-                        Rectangle { anchors.centerIn: parent; width: parent.width; height: 22; radius: 7; color: Globals.appMenuOpen ? Theme.hover : "transparent" }
-                        Row {
-                            id: appRow
-                            anchors.centerIn: parent
-                            spacing: 5
-                            Text { anchors.verticalCenter: parent.verticalCenter; text: bar.appName(); color: Theme.fg; font.family: Theme.fontText; font.pixelSize: 13; font.weight: Font.Bold }
-                            Text { anchors.verticalCenter: parent.verticalCenter; text: bar.g(0xF078); font.family: Theme.fontMono; font.pixelSize: 8; color: Theme.fgSecondary }
-                        }
-                        MouseArea {
-                            id: appMa
+                            id: wsMa
                             anchors.fill: parent
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: { Globals.appAnchorX = appNameItem.mapToItem(null, 0, 0).x; Globals.appMenuOpen = !Globals.appMenuOpen }
+                            onClicked: Globals.overviewOpen = !Globals.overviewOpen
+                        }
+                    }
+
+                    // everything window-related hides on a bare desktop
+                    Row {
+                    spacing: 8
+                    height: parent.height
+                    visible: bar.appName() !== ""
+
+                    // app icon — or the bold name when no icon exists
+                    Item {
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: bar.appIcon() !== "" ? 20 : nameLbl.implicitWidth
+                        height: parent.height
+                        Image {
+                            anchors.centerIn: parent
+                            visible: bar.appIcon() !== ""
+                            width: 18; height: 18
+                            source: bar.appIcon()
+                            sourceSize.width: 36; sourceSize.height: 36
+                        }
+                        Text {
+                            id: nameLbl
+                            anchors.verticalCenter: parent.verticalCenter
+                            visible: bar.appIcon() === ""
+                            text: bar.appName()
+                            color: Theme.fg
+                            font.family: Theme.fontText; font.pixelSize: 13; font.weight: Font.Bold
                         }
                     }
                     // window title (dim, secondary)
@@ -240,6 +277,57 @@ Scope {
                         font.pixelSize: 12
                         elide: Text.ElideRight
                         width: Math.min(implicitWidth, 420)
+                    }
+                    // thin separator before the actions
+                    Rectangle { anchors.verticalCenter: parent.verticalCenter; width: 1; height: 13; color: Theme.fgSecondary; opacity: 0.25 }
+
+                    ActionBtn { label: "New";   onTriggered: bar.newWindow() }
+                    ActionBtn { label: "Float"; onTriggered: bar.act('hl.dsp.window.float({action="toggle"})') }
+                    // move to workspace — opens the workspace dropdown under itself
+                    Item {
+                        id: moveToBtn
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: mvRow.implicitWidth + 16
+                        height: parent.height
+                        Rectangle { anchors.centerIn: parent; width: parent.width; height: 22; radius: 6; color: (mvMa.containsMouse || Globals.appMenuOpen) ? Theme.hover : "transparent" }
+                        Row {
+                            id: mvRow
+                            anchors.centerIn: parent
+                            spacing: 4
+                            Text { anchors.verticalCenter: parent.verticalCenter; text: "Move"; color: (mvMa.containsMouse || Globals.appMenuOpen) ? Theme.fg : Theme.fgSecondary; font.family: Theme.fontText; font.pixelSize: 12; font.weight: Font.DemiBold }
+                            Text { anchors.verticalCenter: parent.verticalCenter; text: Theme.icChevronDown; font.family: Theme.fontMono; font.pixelSize: 7; color: Theme.fgSecondary }
+                        }
+                        MouseArea {
+                            id: mvMa
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: { Globals.appAnchorX = moveToBtn.mapToItem(null, 0, 0).x; Globals.appMenuOpen = !Globals.appMenuOpen }
+                        }
+                    }
+                    // close — the one icon in the group, at its right end
+                    Item {
+                        width: 26
+                        height: parent.height
+                        Rectangle {
+                            anchors.centerIn: parent; width: 24; height: 22; radius: 6
+                            color: clMa.containsMouse ? Theme.danger : "transparent"
+                        }
+                        Text {
+                            anchors.centerIn: parent
+                            text: Theme.icClose
+                            color: clMa.containsMouse ? Theme.accentText : Theme.fgSecondary
+                            font.family: Theme.fontMono
+                            font.pixelSize: 13
+                        }
+                        MouseArea {
+                            id: clMa
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: bar.act("hl.dsp.window.close()")
+                        }
+                    }
                     }
                 }
 
@@ -298,22 +386,29 @@ Scope {
                         }
                     }
 
-                    // clipboard history + emoji picker (scissors) — opens its popup
-                    StatusItem {
-                        id: scissorsItem
-                        glyph: bar.g(0xF0C4)        // scissors
-                        fg: Globals.clipboardOpen ? Theme.fg : Theme.fgSecondary
-                        fontPx: 14
-                        onActivated: { Globals.clipAnchorX = scissorsItem.mapToItem(null, scissorsItem.width / 2, 0).x; Globals.clipboardOpen = !Globals.clipboardOpen }
+                    // thin separator between the tray and the action buttons
+                    Rectangle {
+                        visible: SystemTray.items.values.length > 0
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 1; height: 13; color: Theme.fgSecondary; opacity: 0.25
                     }
 
                     // screenshot (camera) — Left: region · Right: whole screen · Middle: a window
                     StatusItem {
-                        glyph: bar.g(0xF030)        // camera
+                        glyph: Theme.icCamera        // camera
                         fontPx: 14
                         onActivated: Quickshell.execDetached(["sh", "-c", "\"$HOME/.config/hypr/scripts/screenshot.sh\" region"])
                         onSecondary: Quickshell.execDetached(["sh", "-c", "\"$HOME/.config/hypr/scripts/screenshot.sh\" full"])
                         onTertiary:  Quickshell.execDetached(["sh", "-c", "\"$HOME/.config/hypr/scripts/screenshot.sh\" activewindow"])
+                    }
+
+                    // clipboard history + emoji picker (scissors) — opens its popup
+                    StatusItem {
+                        id: scissorsItem
+                        glyph: Theme.icClipboard        // scissors
+                        fg: Globals.clipboardOpen ? Theme.fg : Theme.fgSecondary
+                        fontPx: 14
+                        onActivated: { Globals.clipAnchorX = scissorsItem.mapToItem(null, scissorsItem.width / 2, 0).x; Globals.clipboardOpen = !Globals.clipboardOpen }
                     }
 
                     // keyboard layout — plain text (US / GE); click cycles the layout
@@ -337,6 +432,9 @@ Scope {
                         }
                     }
 
+                    // thin separator between the action buttons and the control centre
+                    Rectangle { anchors.verticalCenter: parent.verticalCenter; width: 1; height: 13; color: Theme.fgSecondary; opacity: 0.25 }
+
                     // ── ONE wide Control-Centre button: active services + battery.
                     // Hovering highlights the whole group; click opens the sidebar.
                     Rectangle {
@@ -357,7 +455,7 @@ Scope {
                             Text {
                                 visible: bar.wiredUp && !bar.wifiUp
                                 anchors.verticalCenter: parent.verticalCenter
-                                text: bar.g(0xF0200)        // mdi-ethernet
+                                text: Theme.icEthernet        // mdi-ethernet
                                 font.family: Theme.fontMono; font.pixelSize: 13
                                 color: Theme.fgSecondary
                             }
@@ -365,7 +463,7 @@ Scope {
                             Text {
                                 visible: bar.wifiUp
                                 anchors.verticalCenter: parent.verticalCenter
-                                text: bar.g(0xF1EB)
+                                text: Theme.icWifi
                                 font.family: Theme.fontMono; font.pixelSize: 13
                                 color: Theme.fgSecondary
                             }
@@ -380,7 +478,7 @@ Scope {
                                 }
                                 visible: adapter && adapter.enabled
                                 anchors.verticalCenter: parent.verticalCenter
-                                text: conn > 0 ? bar.g(0xF294) : bar.g(0xF293)
+                                text: conn > 0 ? Theme.icBluetoothOn : Theme.icBluetooth
                                 font.family: Theme.fontMono; font.pixelSize: 13
                                 color: conn > 0 ? Theme.accent : Theme.fgSecondary
                             }
@@ -388,8 +486,17 @@ Scope {
                             Text {
                                 visible: Globals.vpnActive
                                 anchors.verticalCenter: parent.verticalCenter
-                                text: bar.g(0xF0306)
+                                text: Theme.icVpn
                                 font.family: Theme.fontMono; font.pixelSize: 14
+                                color: Theme.accent
+                            }
+                            // SSH tunnel (only when one of the Quick Settings
+                            // port-forward tunnels is up) — console glyph, accent
+                            Text {
+                                visible: Globals.sshTunnelUp
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: Theme.icSsh
+                                font.family: Theme.fontMono; font.pixelSize: 13
                                 color: Theme.accent
                             }
                             // Insomnia / keep-awake (only when on) — eye glyph, matches
@@ -397,16 +504,16 @@ Scope {
                             Text {
                                 visible: Globals.caffeine
                                 anchors.verticalCenter: parent.verticalCenter
-                                text: bar.g(0xF0208)
+                                text: Theme.icEye
                                 font.family: Theme.fontMono; font.pixelSize: 13
                                 color: Theme.accent
                             }
                             // Power profile (leaf · balance · speedometer) — reflects tuned profile
                             Text {
                                 anchors.verticalCenter: parent.verticalCenter
-                                text: PowerProfiles.profile === PowerProfile.PowerSaver ? bar.g(0xF032A)
-                                    : PowerProfiles.profile === PowerProfile.Performance ? bar.g(0xF04C5)
-                                    : bar.g(0xF05D1)
+                                text: PowerProfiles.profile === PowerProfile.PowerSaver ? Theme.icLeaf
+                                    : PowerProfiles.profile === PowerProfile.Performance ? Theme.icSpeed
+                                    : Theme.icBalance
                                 font.family: Theme.fontMono; font.pixelSize: 13
                                 color: PowerProfiles.profile === PowerProfile.Performance ? Theme.warning
                                      : PowerProfiles.profile === PowerProfile.PowerSaver ? Theme.success
@@ -422,12 +529,12 @@ Scope {
                                 visible: dev && dev.isLaptopBattery
                                 Text {
                                     anchors.verticalCenter: parent.verticalCenter
-                                    text: parent.charging ? bar.g(0xF0E7)
-                                        : parent.pct >= 80 ? bar.g(0xF240)
-                                        : parent.pct >= 60 ? bar.g(0xF241)
-                                        : parent.pct >= 40 ? bar.g(0xF242)
-                                        : parent.pct >= 20 ? bar.g(0xF243)
-                                        : bar.g(0xF244)
+                                    text: parent.charging ? Theme.icBolt
+                                        : parent.pct >= 80 ? Theme.icBattFull
+                                        : parent.pct >= 60 ? Theme.icBatt80
+                                        : parent.pct >= 40 ? Theme.icBatt50
+                                        : parent.pct >= 20 ? Theme.icBatt20
+                                        : Theme.icBattEmpty
                                     font.family: Theme.fontMono; font.pixelSize: 13
                                     color: parent.charging ? Theme.success : (parent.pct <= 10 ? Theme.danger : (parent.pct <= 20 ? Theme.warning : Theme.fgSecondary))
                                 }

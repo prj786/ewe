@@ -91,13 +91,11 @@ hl.config({
             color        = 0x40000000,  -- 0xAARRGGBB: ~25% black, soft
         },
 
-        -- Frosted-glass blur behind translucent surfaces (the Quickshell bar,
-        -- the Launcher, swaync).
+        -- Blur is OFF everywhere: every shell surface is solid, and the frosted
+        -- scrims (Overview/Settings) read fine as plain translucent dims. Blur
+        -- was also a constant multi-pass GPU cost on the whole desktop.
         blur = {
-            enabled  = true,
-            size     = 6,
-            passes   = 3,
-            vibrancy = 0.1696,
+            enabled = false,
         },
     },
 
@@ -194,6 +192,29 @@ hl.gesture({
     fingers   = 3,
     direction = "horizontal",
     action    = "workspace",
+})
+
+-- Three-finger swipe up → Overview (GNOME muscle memory).
+hl.gesture({
+    fingers   = 3,
+    direction = "up",
+    action    = function() hl.dispatch(hl.dsp.exec_cmd("qs ipc call overview toggle")) end,
+})
+
+-- Three-finger swipe down → new desktop. Never stacks empties: if the highest
+-- desktop is already empty, just go there instead of minting another one.
+hl.gesture({
+    fingers   = 3,
+    direction = "down",
+    action    = function()
+        local last = nil
+        for _, ws in ipairs(hl.get_workspaces()) do
+            if ws.id >= 1 and ws.id < 100 and (not last or ws.id > last.id) then last = ws end
+        end
+        local maxid  = last and last.id or 1
+        local target = (last and last.is_empty) and maxid or math.min(maxid + 1, 10)
+        hl.dispatch(hl.dsp.focus({ workspace = target }))
+    end,
 })
 
 
@@ -350,19 +371,11 @@ hl.window_rule({
 
 
 -- ╭───────────────────────────────────────────────────────────────╮
--- │ LAYER RULES — real frosted glass on the shell surfaces          │
+-- │ LAYER RULES                                                     │
 -- ╰───────────────────────────────────────────────────────────────╯
--- ignore_alpha = 0.1 means only the actually-painted (translucent) panel gets
--- blurred behind; the fully-transparent full-screen overlay around the
--- Launcher panel is left clear (no whole-screen frost).
--- Launcher is solid now (Theme.panel) — no blur/glass.
--- Bar is solid now (Theme.bg) — no blur/glass.
--- All Quickshell surfaces are solid now (colours from Theme.qml) — no blur/glass.
-
--- EXCEPT the Overview: its scrim is translucent on purpose, so blur the desktop behind it.
-hl.layer_rule({ match = { namespace = "quickshell:overview" }, blur = true })
--- Settings window: same treatment — blur the desktop behind its translucent scrim.
-hl.layer_rule({ match = { namespace = "quickshell:settings" }, blur = true })
+-- No blur rules: decoration.blur is disabled (see above). Every Quickshell
+-- surface is solid (colours from Theme.qml); the Overview/Settings scrims are
+-- plain translucent dims with nothing frosted behind them.
 
 
 -- ╭───────────────────────────────────────────────────────────────╮

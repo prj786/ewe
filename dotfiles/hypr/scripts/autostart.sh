@@ -68,6 +68,20 @@ fi
 # window and restores it on focus. Self-contained Python daemon (no extra deps).
 run_once "kb-per-window.py" python3 "$HOME/.config/hypr/scripts/kb-per-window.py"
 
+# ── Nemo: bare-window seed (one-time; same keys as phase 60) — no sidebar/  ───
+# menubar/toolbar/statusbar, pure folder view. Stamp-guarded so the user's own
+# View toggles (F9 sidebar, Alt menubar) stick afterwards instead of being
+# reverted at every login.
+NEMO_STAMP="${XDG_STATE_HOME:-$HOME/.local/state}/hypr-shell/nemo-chrome.seeded"
+if command -v gsettings >/dev/null 2>&1 && command -v nemo >/dev/null 2>&1 && [ ! -e "$NEMO_STAMP" ]; then
+    if gsettings set org.nemo.window-state start-with-sidebar false 2>/dev/null; then
+        gsettings set org.nemo.window-state start-with-menu-bar false 2>/dev/null || true
+        gsettings set org.nemo.window-state start-with-toolbar false 2>/dev/null || true
+        gsettings set org.nemo.window-state start-with-status-bar false 2>/dev/null || true
+        mkdir -p "${NEMO_STAMP%/*}" && touch "$NEMO_STAMP"
+    fi
+fi
+
 # ── Idle / lock: prefer hypridle if you later add a config, else swayidle ─────
 LOCK="$HOME/.config/hypr/scripts/lock.sh"
 if command -v hypridle >/dev/null 2>&1 && [ -r "$HOME/.config/hypr/hypridle.conf" ]; then

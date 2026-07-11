@@ -69,11 +69,70 @@ phase_userconfig() {
         run sh -c "cp -f '$DOTREPO/system/nemo-actions/'*.nemo_action '$HOME/.local/share/nemo/actions/' 2>/dev/null || true"
     fi
 
+    # Nemo: bare window — no sidebar, menubar, toolbar, or status bar; just the
+    # folder contents (the window is already titlebar-less under Hyprland).
+    # Seeded ONCE (stamp): these are the very keys Nemo rewrites when the user
+    # toggles the UI back on (F9 = sidebar, Alt = menubar), so re-applying every
+    # run would keep reverting the user's own choice. gsettings needs a session
+    # DBus — best-effort here; autostart.sh runs the identical seed at login to
+    # cover an install done from a bare TTY.
+    local nemo_stamp="${XDG_STATE_HOME:-$HOME/.local/state}/hypr-shell/nemo-chrome.seeded"
+    if command -v gsettings >/dev/null 2>&1 && command -v nemo >/dev/null 2>&1 && [ ! -e "$nemo_stamp" ]; then
+        if run gsettings set org.nemo.window-state start-with-sidebar false 2>/dev/null; then
+            run gsettings set org.nemo.window-state start-with-menu-bar false 2>/dev/null || true
+            run gsettings set org.nemo.window-state start-with-toolbar false 2>/dev/null || true
+            run gsettings set org.nemo.window-state start-with-status-bar false 2>/dev/null || true
+            if [ "${DRY_RUN:-0}" != "1" ]; then mkdir -p "${nemo_stamp%/*}"; touch "$nemo_stamp"; fi
+            ok "nemo set to bare-window mode (pure folder view; F9 brings the sidebar back)"
+        else
+            info "gsettings has no session bus here — nemo bare-window seed will run at first login instead."
+        fi
+    fi
+
     # (Reversal icon theme + Mocu cursor are installed system-wide in phase 20.)
 
     # default app appearance: dark across GTK + Qt + KDE, tinted with the default
     # accent. Writes the toolkit config files now (gsettings is best-effort from a
     # TTY; Quickshell re-applies it live at first login, then honours user-theme.json).
+    # Coexist: colorscheme.sh writes GLOBAL GTK/gsettings theming (and the shell
+    # re-applies it at every startup), so your OTHER session (e.g. Sway) picks up
+    # the DE's dark + accent look too. Snapshot the current theme first so a single
+    # `theme-backup.<stamp>/restore.sh` reverts it. (Run install.sh as your normal
+    # user — under sudo, gsettings would read root's empty theme, not yours.)
+    # The snapshot lives in the XDG state dir — NOT under ~/.config/hypr, which is
+    # a symlink into the git checkout (link_tree), where it would dirty the repo.
+    # Only the FIRST run snapshots: a re-run would capture the already-recoloured
+    # theme — restoring that is exactly what this backup exists to undo.
+    if [ "${COEXIST:-0}" = "1" ]; then
+        local tbroot="${XDG_STATE_HOME:-$HOME/.local/state}/hypr-shell"
+        local tb="$tbroot/theme-backup.$RUN_STAMP"
+        if compgen -G "$tbroot/theme-backup.*" >/dev/null 2>&1; then
+            info "pre-hypr-shell theme snapshot already exists under $tbroot — keeping it."
+        elif [ "${DRY_RUN:-0}" = "1" ]; then
+            info "would back up current GTK/gsettings theme to $tb/ (with restore.sh)"
+        else
+            mkdir -p "$tb"
+            [ -r "$HOME/.config/gtk-3.0/settings.ini" ] && cp -f "$HOME/.config/gtk-3.0/settings.ini" "$tb/gtk-3.0-settings.ini"
+            [ -r "$HOME/.config/gtk-4.0/settings.ini" ] && cp -f "$HOME/.config/gtk-4.0/settings.ini" "$tb/gtk-4.0-settings.ini"
+            {
+                printf '#!/usr/bin/env bash\n# Restore the GTK/gsettings theme that was active before hypr-shell (coexist mode).\nset -u\n'
+                if command -v gsettings >/dev/null 2>&1; then
+                    local k v
+                    for k in gtk-theme icon-theme cursor-theme color-scheme font-name; do
+                        v="$(gsettings get org.gnome.desktop.interface "$k" 2>/dev/null)"
+                        [ -n "$v" ] && printf 'gsettings set org.gnome.desktop.interface %s %s\n' "$k" "$v"
+                    done
+                fi
+                # $(dirname)-relative so the snapshot keeps working if the dir moves
+                [ -f "$tb/gtk-3.0-settings.ini" ] && printf 'cp -f "$(dirname "$0")/gtk-3.0-settings.ini" "$HOME/.config/gtk-3.0/settings.ini"\n'
+                [ -f "$tb/gtk-4.0-settings.ini" ] && printf 'cp -f "$(dirname "$0")/gtk-4.0-settings.ini" "$HOME/.config/gtk-4.0/settings.ini"\n'
+                printf 'echo "Restored the pre-hypr-shell GTK theme."\n'
+            } > "$tb/restore.sh"
+            chmod +x "$tb/restore.sh"
+            ok "backed up current GTK theme -> $tb/restore.sh"
+        fi
+    fi
+
     local cs="$HOME/.config/quickshell/scripts/colorscheme.sh"
     if [ -r "$cs" ]; then
         run sh "$cs" dark 0a84ff && ok "default appearance set to dark (GTK + Qt fallback)"
