@@ -190,10 +190,11 @@ QtObject {
 
     property Connections _sessionHooks: Connections {
         target: goo
-        function onSessionReady() { goo.checkCloud() }
+        function onSessionReady() { goo.checkCloud(); goo.fetchCalendar() }
         function onSessionClosed() {
             goo.cloudInfo = null; goo._cloudBundle = null; goo._cloudFileId = ""
             goo.pendingRestore = null; goo.syncState = "idle"; goo.syncError = ""; goo.restoreSummary = ""
+            goo.events = []; goo.calState = ""; goo._writeEventsCache()
         }
     }
 
@@ -304,6 +305,147 @@ QtObject {
     property Timer _applyTimer: Timer {
         interval: 700
         onTriggered: { goo._applyProc.command = ["python3", goo.bundleHelper, "apply", goo.restorePath]; goo._applyProc.running = false; goo._applyProc.running = true }
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // Calendar — poll events.list across every selected calendar (14-day window,
+    // per-calendar colours), cache the last good fetch for offline, and fire
+    // de-duped reminder notifications through the shell's own notification
+    // server (notify-send → we ARE org.freedesktop.Notifications).
+    // ══════════════════════════════════════════════════════════════════════════
+    property var events: []              // [{id, summary, start, end, allDay, location, video, color, calendar, reminders:[min]}]
+    property string calState: ""         // "" | "offline" (fetch failed, cache shown)
+    property double lastFetch: 0
+    property int _calPending: 0
+    property var _calAccum: []
+    readonly property string eventsCachePath: Quickshell.env("HOME") + "/.config/quickshell/google-events.json"
+    readonly property string notifiedPath: Quickshell.env("HOME") + "/.config/quickshell/google-notified.json"
+
+    function fetchCalendar() {
+        if (!goo.signedIn || goo._calPending > 0) return
+        var now = new Date()
+        var t0 = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+        var timeMin = encodeURIComponent(t0.toISOString())
+        var timeMax = encodeURIComponent(new Date(t0.getTime() + 14 * 86400000).toISOString())
+        goo.api("GET", "https://www.googleapis.com/calendar/v3/users/me/calendarList", null, function (st, j, err) {
+            if (st !== 200 || !j || !j.items) { if (goo.events.length > 0) goo.calState = "offline"; return }
+            var cals = j.items.filter(function (c) { return c.selected !== false })
+            if (cals.length === 0) { goo.events = []; goo.calState = ""; goo._writeEventsCache(); return }
+            goo._calAccum = []
+            goo._calPending = cals.length
+            for (var i = 0; i < cals.length; i++) goo._fetchCalEvents(cals[i], timeMin, timeMax)
+        })
+    }
+    function _fetchCalEvents(cal, timeMin, timeMax) {
+        var url = "https://www.googleapis.com/calendar/v3/calendars/" + encodeURIComponent(cal.id)
+                + "/events?singleEvents=true&orderBy=startTime&maxResults=100&timeMin=" + timeMin + "&timeMax=" + timeMax
+        goo.api("GET", url, null, function (st, j, err) {
+            if (st === 200 && j && j.items) {
+                var defRem = (cal.defaultReminders || []).filter(function (r) { return r.method === "popup" }).map(function (r) { return r.minutes })
+                for (var i = 0; i < j.items.length; i++) {
+                    var ev = j.items[i]
+                    if (ev.status === "cancelled" || !ev.start) continue
+                    var allDay = !!ev.start.date
+                    var explicit = !!(ev.reminders && !ev.reminders.useDefault)
+                    var rem = explicit
+                        ? (ev.reminders.overrides || []).filter(function (r) { return r.method === "popup" }).map(function (r) { return r.minutes })
+                        : defRem.slice()
+                    if (allDay && !explicit) rem = []          // no surprise 23:50 pings for all-day events
+                    else if (!allDay && rem.length === 0) rem = [10]   // shell default lead
+                    goo._calAccum.push({
+                        id: ev.id, summary: ev.summary || "(untitled)",
+                        start: ev.start.dateTime || ev.start.date, end: ev.end ? (ev.end.dateTime || ev.end.date) : "",
+                        allDay: allDay, location: ev.location || "", video: ev.hangoutLink || "",
+                        color: cal.backgroundColor || "", calendar: cal.summary || "", reminders: rem
+                    })
+                }
+            }
+            goo._calPending--
+            if (goo._calPending === 0) {
+                goo._calAccum.sort(function (a, b) { return a.start < b.start ? -1 : (a.start > b.start ? 1 : 0) })
+                goo.events = goo._calAccum
+                goo.calState = ""
+                goo.lastFetch = Date.now()
+                goo._writeEventsCache()
+            }
+        })
+    }
+    property Process _evWriter: Process {}
+    function _writeEventsCache() {
+        HyprMon.atomicWrite(goo._evWriter, goo.eventsCachePath, JSON.stringify({ events: goo.events }))
+    }
+    property Process _evLoad: Process {
+        running: true
+        command: ["sh", "-c", "cat \"$HOME/.config/quickshell/google-events.json\" 2>/dev/null"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                if (goo.lastFetch > 0) return   // a live fetch already won
+                try { var j = JSON.parse(this.text); if (j && Array.isArray(j.events)) goo.events = j.events } catch (e) {}
+            }
+        }
+    }
+    // poll every 15 min while signed in; QS opening refreshes when >5 min stale
+    property Timer _calPoll: Timer {
+        interval: 15 * 60 * 1000; running: goo.signedIn; repeat: true
+        onTriggered: goo.fetchCalendar()
+    }
+    property Connections _qsHook: Connections {
+        target: Globals
+        function onQuickSettingsOpenChanged() {
+            if (Globals.quickSettingsOpen && goo.signedIn && Date.now() - goo.lastFetch > 5 * 60 * 1000) goo.fetchCalendar()
+        }
+    }
+
+    // ── reminders — once per (event, reminder-time), surviving restarts ────────
+    property var _notified: ({})
+    property bool _notifiedLoaded: false
+    property Process _notifLoad: Process {
+        running: true
+        command: ["sh", "-c", "cat \"$HOME/.config/quickshell/google-notified.json\" 2>/dev/null"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                try { var j = JSON.parse(this.text); if (j && typeof j === "object") goo._notified = j } catch (e) {}
+                goo._notifiedLoaded = true
+            }
+        }
+    }
+    property Process _notifWriter: Process {}
+    property Timer _remTimer: Timer {
+        interval: 60000; repeat: true
+        running: goo.signedIn && goo.events.length > 0 && goo._notifiedLoaded
+        onTriggered: goo._checkReminders()
+    }
+    function _evStartMs(e) {
+        if (e.allDay && /^\d{4}-\d{2}-\d{2}$/.test(String(e.start))) {
+            var p = String(e.start).split("-")
+            return new Date(+p[0], +p[1] - 1, +p[2]).getTime()   // local midnight, not UTC
+        }
+        var d = new Date(e.start)
+        return isNaN(d.getTime()) ? 0 : d.getTime()
+    }
+    function _checkReminders() {
+        var now = Date.now(), dirty = false
+        for (var i = 0; i < goo.events.length; i++) {
+            var ev = goo.events[i]
+            var start = goo._evStartMs(ev)
+            if (start === 0 || start < now - 60000) continue     // started already — too late to remind
+            for (var r = 0; r < (ev.reminders || []).length; r++) {
+                var t = start - ev.reminders[r] * 60000
+                var key = ev.id + "@" + t
+                if (now < t || now >= t + 120000 || goo._notified[key]) continue
+                goo._notified[key] = start
+                dirty = true
+                var when = new Date(start)
+                var lead = ev.reminders[r]
+                var body = (lead <= 0 ? "now" : "in " + lead + " min") + " · " + when.toLocaleTimeString(Qt.locale(), "h:mm AP")
+                         + (ev.location !== "" ? "\n" + ev.location : "")
+                         + (ev.video !== "" ? "\n" + ev.video : "")
+                Quickshell.execDetached(["notify-send", "-a", "Calendar", "-i", "x-office-calendar", ev.summary, body])
+            }
+        }
+        // prune keys whose event start is over a week gone
+        for (var k in goo._notified) if (goo._notified[k] < now - 7 * 86400000) { delete goo._notified[k]; dirty = true }
+        if (dirty) HyprMon.atomicWrite(goo._notifWriter, goo.notifiedPath, JSON.stringify(goo._notified))
     }
 
     // ── thin API layer: Bearer header, one 401-refresh-retry, JSON parse ───────

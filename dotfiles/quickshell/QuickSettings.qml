@@ -26,25 +26,59 @@ Scope {
     readonly property int firstW: new Date(calYear, calMonth, 1).getDay()
     readonly property int daysIn: new Date(calYear, calMonth + 1, 0).getDate()
     readonly property var monthNames: ["January","February","March","April","May","June","July","August","September","October","November","December"]
-    // calendar events from connected online accounts (Accounts → GOA/EDS);
-    // empty when no accounts/daemons — the calendar just shows no dots/list
+    // calendar events — the native Google account when signed in, else the
+    // optional GOA/EDS pipeline; empty → no dots, no agenda, a gentle hint
+    readonly property var calEvents: Google.signedIn ? Google.events : (Accounts.events || [])
+    // all-day events carry a bare YYYY-MM-DD — parse as LOCAL midnight, not UTC
+    function evDate(e) {
+        if (e.allDay && /^\d{4}-\d{2}-\d{2}/.test(String(e.start))) {
+            var p = String(e.start).slice(0, 10).split("-")
+            return new Date(+p[0], +p[1] - 1, +p[2])
+        }
+        return new Date(e.start)
+    }
+    // day-of-month → calendar colour of the first event that day (shown month)
     readonly property var eventDays: {
-        var days = {}, evs = Accounts.events || []
+        var days = {}, evs = root.calEvents
         for (var i = 0; i < evs.length; i++) {
-            var d = new Date(evs[i].start)
-            if (!isNaN(d.getTime()) && d.getFullYear() === root.calYear && d.getMonth() === root.calMonth) days[d.getDate()] = true
+            var d = root.evDate(evs[i])
+            if (!isNaN(d.getTime()) && d.getFullYear() === root.calYear && d.getMonth() === root.calMonth && days[d.getDate()] === undefined)
+                days[d.getDate()] = evs[i].color || ""
         }
         return days
     }
-    readonly property var upcomingEvents: {
-        var today0 = new Date(); today0.setHours(0, 0, 0, 0)
-        return (Accounts.events || []).filter(function (e) { var d = new Date(e.start); return !isNaN(d.getTime()) && d >= today0 }).slice(0, 3)
+    // GNOME-style agenda: upcoming events grouped per day (next 7 days)
+    readonly property var agenda: {
+        var evs = root.calEvents, groups = {}, now = new Date()
+        var t0 = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+        for (var i = 0; i < evs.length; i++) {
+            var d = root.evDate(evs[i])
+            if (isNaN(d.getTime())) continue
+            var day0 = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
+            if (day0 < t0 || day0 >= t0 + 7 * 86400000) continue
+            if (!evs[i].allDay && d.getTime() < now.getTime() - 3600000) continue   // hide long-finished timed events today
+            if (!groups[day0]) groups[day0] = []
+            groups[day0].push(evs[i])
+        }
+        var keys = Object.keys(groups).map(Number).sort(function (a, b) { return a - b })
+        var out = []
+        for (var k = 0; k < keys.length && out.length < 4; k++) {
+            var dd = new Date(keys[k])
+            out.push({
+                label: keys[k] === t0 ? "Today" : (keys[k] === t0 + 86400000 ? "Tomorrow" : Qt.formatDateTime(dd, "dddd d MMMM")),
+                events: groups[keys[k]].slice(0, 4)
+            })
+        }
+        return out
     }
     function fmtEventTime(e) {
+        if (e.allDay) return "All day"
         var d = new Date(e.start)
-        if (isNaN(d.getTime())) return e.calendar || ""
-        var day = d.toLocaleDateString(Qt.locale(), "ddd d MMM")
-        return e.allDay ? day + "  ·  all day" : day + "  ·  " + d.toLocaleTimeString(Qt.locale(), "h:mm AP")
+        if (isNaN(d.getTime())) return ""
+        var s = Qt.formatTime(d, "h:mm AP")
+        var de = new Date(e.end)
+        if (!isNaN(de.getTime())) s += " – " + Qt.formatTime(de, "h:mm AP")
+        return s
     }
 
     // which tile's section is expanded: "" | "wifi" | "bt" | "vpn" | "ssh"
@@ -996,26 +1030,47 @@ Scope {
                                         readonly property int dayNum: index - root.firstW + 1
                                         readonly property bool valid: dayNum >= 1 && dayNum <= root.daysIn
                                         readonly property bool isToday: valid && dayNum === root.calDate
-                                        readonly property bool hasEvent: valid && root.eventDays[dayNum] === true
+                                        readonly property bool hasEvent: valid && root.eventDays[dayNum] !== undefined
                                         width: calCol.width / 7; height: 32
                                         Rectangle { anchors.centerIn: parent; width: 26; height: 26; radius: 13; visible: parent.isToday; color: Theme.accent }
                                         Text { anchors.centerIn: parent; text: parent.valid ? parent.dayNum : ""; color: parent.isToday ? Theme.accentText : Theme.fg; font.family: Theme.fontText; font.pixelSize: 12; font.weight: parent.isToday ? Font.Bold : Font.Normal }
-                                        Rectangle { anchors.horizontalCenter: parent.horizontalCenter; anchors.bottom: parent.bottom; anchors.bottomMargin: 1; width: 4; height: 4; radius: 2; visible: parent.hasEvent; color: parent.isToday ? Theme.accentText : Theme.accent }
+                                        // event dot — tinted to the calendar's own colour when known
+                                        Rectangle { anchors.horizontalCenter: parent.horizontalCenter; anchors.bottom: parent.bottom; anchors.bottomMargin: 1; width: 4; height: 4; radius: 2; visible: parent.hasEvent; color: parent.isToday ? Theme.accentText : (root.eventDays[parent.dayNum] || Theme.accent) }
                                     }
                                 }
                             }
-                            // upcoming events from online accounts (GOA/EDS)
-                            Rectangle { visible: root.upcomingEvents.length > 0; width: parent.width; height: 1; color: Theme.stroke; opacity: 0.6 }
+                            // agenda — upcoming events grouped by day, GNOME-dropdown style
+                            Rectangle { visible: root.agenda.length > 0; width: parent.width; height: 1; color: Theme.stroke; opacity: 0.6 }
+                            Text {
+                                visible: Google.calState === "offline"
+                                width: parent.width; text: "Offline — showing last synced events"
+                                color: Theme.warning; font.family: Theme.fontText; font.pixelSize: 10
+                            }
+                            Text {
+                                visible: root.agenda.length === 0
+                                width: parent.width
+                                text: (Google.signedIn || (Accounts.events || []).length > 0) ? "No upcoming events" : "Connect a Google account (Settings → User) to see events here"
+                                color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 10; wrapMode: Text.Wrap
+                            }
                             Repeater {
-                                model: root.upcomingEvents
-                                delegate: Item {
+                                model: root.agenda
+                                delegate: Column {
+                                    id: agDay
                                     required property var modelData
-                                    width: parent.width; height: 32
-                                    Rectangle { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; width: 3; height: 18; radius: 1.5; color: Theme.accent }
-                                    Column {
-                                        anchors.left: parent.left; anchors.leftMargin: 11; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; spacing: 0
-                                        Text { width: parent.width; text: modelData.summary; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: 11; elide: Text.ElideRight }
-                                        Text { width: parent.width; text: root.fmtEventTime(modelData); color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 10; elide: Text.ElideRight }
+                                    width: parent.width; spacing: 2
+                                    Text { topPadding: 3; text: agDay.modelData.label; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 10; font.weight: Font.DemiBold }
+                                    Repeater {
+                                        model: agDay.modelData.events
+                                        delegate: Item {
+                                            required property var modelData
+                                            width: agDay.width; height: 30
+                                            Rectangle { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; width: 3; height: 20; radius: 1.5; color: modelData.color !== "" ? modelData.color : Theme.accent }
+                                            Column {
+                                                anchors.left: parent.left; anchors.leftMargin: 11; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; spacing: 0
+                                                Text { width: parent.width; text: modelData.summary; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: 11; elide: Text.ElideRight }
+                                                Text { width: parent.width; text: root.fmtEventTime(modelData) + (modelData.location ? "  ·  " + modelData.location : ""); color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 10; elide: Text.ElideRight }
+                                            }
+                                        }
                                     }
                                 }
                             }

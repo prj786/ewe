@@ -847,7 +847,7 @@ Scope {
     property var sysFacts: ({})
     function fmtSyncTime(iso) {
         var d = new Date(iso)
-        return isNaN(d.getTime()) ? (iso || "—") : d.toLocaleString(Qt.locale(), "d MMM · h:mm AP")
+        return isNaN(d.getTime()) ? (iso || "—") : Qt.formatDateTime(d, "d MMM · h:mm AP")
     }
     Process {
         id: userInfoProbe
