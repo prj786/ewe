@@ -43,7 +43,7 @@ Scope {
         else if (k === "shortcuts") scProc.running = true
         else if (k === "layout") layoutProc.running = true
         else if (k === "wallpaper") { wpBackendProbe.running = true; wpConfLoad.running = true; HyprMon.refresh(); if (root.wpDir === "") wpDirProbe.running = true; else root.wpList(root.wpDir) }
-        else if (k === "user") Globals.recheckFace()
+        else if (k === "user") { Globals.recheckFace(); userInfoProbe.running = true; Accounts.refresh() }
     }
 
     // ── persisted override state ───────────────────────────────────────────────
@@ -794,6 +794,50 @@ Scope {
         { name: "Yellow", hex: "#ffd60a" }, { name: "Green", hex: "#30d158" }, { name: "Teal", hex: "#40c8e0" },
         { name: "Graphite", hex: "#8e8e93" }
     ]
+
+    // ── User: AccountsService identity + session facts ────────────────────────
+    property string userRealName: ""
+    property var sysFacts: ({})
+    Process {
+        id: userInfoProbe
+        command: ["sh", "-c",
+            'echo "real=$(getent passwd "$USER" | cut -d: -f5 | cut -d, -f1)";' +
+            'echo "host=$(cat /etc/hostname 2>/dev/null || uname -n)";' +
+            'echo "kernel=$(uname -r)";' +
+            "echo \"up=$(uptime -p 2>/dev/null | sed 's/^up //')\";" +
+            "echo \"hypr=$(hyprctl version 2>/dev/null | head -1 | cut -d' ' -f1-2)\""]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                var d = {}, ls = this.text.split("\n")
+                for (var i = 0; i < ls.length; i++) { var k = ls[i].indexOf("="); if (k > 0) d[ls[i].slice(0, k)] = ls[i].slice(k + 1) }
+                if (d.real) root.userRealName = d.real
+                root.sysFacts = d
+            }
+        }
+    }
+    // AccountsService change-own-user-data is allowed for the active session, so
+    // this normally succeeds without a polkit prompt; failures hit the banner
+    Process {
+        id: nameSetProc
+        stdout: StdioCollector {
+            onStreamFinished: {
+                var t = this.text.trim()
+                if (t !== "") root.errorMsg = "Could not update the display name: " + t.split("\n")[0]
+                else { root.flashApplied("Name updated"); userInfoProbe.running = false; userInfoProbe.running = true }
+            }
+        }
+    }
+    function setRealName(name) {
+        nameSetProc.command = ["sh", "-c", 'busctl call org.freedesktop.Accounts "/org/freedesktop/Accounts/User$(id -u)" org.freedesktop.Accounts.User SetRealName s "$1" 2>&1', "qs-settings", name]
+        nameSetProc.running = false; nameSetProc.running = true
+    }
+    // online-account provider → glyph (safe MDI codepoints only)
+    function providerIcon(p) {
+        p = String(p).toLowerCase()
+        if (p.indexOf("google") >= 0) return 0xF02AD          // google
+        if (p.indexOf("imap") >= 0 || p.indexOf("smtp") >= 0) return 0xF01EE  // email
+        return 0xF015F                                        // cloud (exchange/nextcloud/webdav/…)
+    }
 
     // ── avatar: pick → crop (pan/zoom) → 512² PNG to ~/.face + AccountsService ──
     property string avatarCropSrc: ""      // image being cropped ("" = dialog closed)
@@ -1971,8 +2015,26 @@ Scope {
                                 Text { anchors.centerIn: parent; visible: !avatarImg.visible; text: root.g(0xF0004); font.family: Theme.fontMono; font.pixelSize: 34; color: Theme.fgDim }
                             }
                             Column {
-                                anchors.verticalCenter: parent.verticalCenter; spacing: 6
-                                Text { text: Quickshell.env("USER") || "user"; color: Theme.fg; font.family: Theme.fontDisplay; font.pixelSize: Theme.fsLarge; font.weight: Font.Bold }
+                                anchors.verticalCenter: parent.verticalCenter; spacing: 3
+                                // display name — click to edit, saved to AccountsService
+                                Rectangle {
+                                    width: Math.max(220, nameIn.implicitWidth + 26); height: 32; radius: 6
+                                    color: nameIn.activeFocus ? Theme.bg : "transparent"
+                                    border.color: nameIn.activeFocus ? Theme.accent : (nameHov.hovered ? Theme.stroke : "transparent"); border.width: 1
+                                    HoverHandler { id: nameHov }
+                                    TextInput {
+                                        id: nameIn
+                                        anchors.fill: parent; anchors.leftMargin: 8; anchors.rightMargin: 24; verticalAlignment: TextInput.AlignVCenter
+                                        text: root.userRealName !== "" ? root.userRealName : (Quickshell.env("USER") || "user")
+                                        color: Theme.fg; font.family: Theme.fontDisplay; font.pixelSize: Theme.fsLarge; font.weight: Font.Bold
+                                        selectByMouse: true; clip: true
+                                        onAccepted: focus = false
+                                        onActiveFocusChanged: if (!activeFocus && text.trim() !== "" && text.trim() !== root.userRealName) root.setRealName(text.trim())
+                                    }
+                                    Text { anchors.right: parent.right; anchors.rightMargin: 7; anchors.verticalCenter: parent.verticalCenter; visible: nameHov.hovered && !nameIn.activeFocus; text: Theme.icPencil; font.family: Theme.fontMono; font.pixelSize: 11; color: Theme.fgDim }
+                                }
+                                Text { leftPadding: 9; text: "@" + (Quickshell.env("USER") || "user"); color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
+                                Item { width: 1; height: 3 }
                                 Pill { label: "Change avatar…"; onGo: avPicker.browse() }
                             }
                         }
@@ -1984,7 +2046,84 @@ Scope {
                             onPicked: function (p) { root.avatarCropSrc = p }
                         }
                     }
-                    Text { width: parent.width; text: "Avatar is saved to ~/.face (used by login/greeters); we also try to update the system account icon."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
+                    Text { width: parent.width; text: "Avatar is saved to ~/.face (used by login/greeters); the system account icon and display name update via AccountsService."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
+
+                    SectionTitle { text: "SESSION" }
+                    Card {
+                        KV { k: "Host"; v: root.sysFacts.host || "—" }
+                        KV { k: "Compositor"; v: root.sysFacts.hypr || "Hyprland" }
+                        KV { k: "Session type"; v: "Wayland" }
+                        KV { k: "Kernel"; v: root.sysFacts.kernel || "—" }
+                        KV { k: "Uptime"; v: root.sysFacts.up || "—" }
+                    }
+
+                    SectionTitle { text: "ONLINE ACCOUNTS" }
+                    Card {
+                        visible: !Accounts.probed
+                        Text { width: parent.width; text: "Checking online-accounts support…"; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
+                    }
+                    Card {
+                        visible: Accounts.probed && !Accounts.goaAvailable
+                        Text { width: parent.width; text: "Connect Google, Microsoft or Nextcloud/CalDAV accounts to get calendar events and contacts in the shell. Install the (optional) daemons:  sudo pacman -S gnome-online-accounts evolution-data-server gnome-control-center"; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; wrapMode: Text.Wrap }
+                    }
+                    Text {
+                        visible: Accounts.probed && Accounts.goaAvailable && Accounts.accounts.length === 0
+                        width: parent.width; text: "No online accounts connected yet."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
+                    }
+                    Repeater {
+                        model: Accounts.accounts
+                        delegate: Card {
+                            id: acCard
+                            required property var modelData
+                            Item {
+                                width: parent.width; height: 30
+                                Row {
+                                    anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; spacing: 10
+                                    Text { anchors.verticalCenter: parent.verticalCenter; text: root.g(root.providerIcon(acCard.modelData.provider)); font.family: Theme.fontMono; font.pixelSize: 17; color: Theme.fg }
+                                    Text { anchors.verticalCenter: parent.verticalCenter; text: acCard.modelData.providerName; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsBody; font.weight: Font.DemiBold }
+                                    Text { anchors.verticalCenter: parent.verticalCenter; text: acCard.modelData.identity; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; elide: Text.ElideRight; width: Math.min(implicitWidth, 260) }
+                                }
+                                Pill { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; label: "Remove"; onGo: Accounts.removeAccount(acCard.modelData.path) }
+                            }
+                            Text { visible: acCard.modelData.attention; width: parent.width; text: "Needs attention — sign in again via “Add account…”."; color: Theme.warning; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
+                            ToggleRow { visible: acCard.modelData.hasCalendar; title: "Calendar"; on: !acCard.modelData.calendarDisabled; onToggled: Accounts.setService(acCard.modelData.path, "Calendar", acCard.modelData.calendarDisabled) }
+                            ToggleRow { visible: acCard.modelData.hasContacts; title: "Contacts"; on: !acCard.modelData.contactsDisabled; onToggled: Accounts.setService(acCard.modelData.path, "Contacts", acCard.modelData.contactsDisabled) }
+                            ToggleRow { visible: acCard.modelData.hasMail; title: "Mail"; on: !acCard.modelData.mailDisabled; onToggled: Accounts.setService(acCard.modelData.path, "Mail", acCard.modelData.mailDisabled) }
+                            ToggleRow { visible: acCard.modelData.hasFiles; title: "Files"; on: !acCard.modelData.filesDisabled; onToggled: Accounts.setService(acCard.modelData.path, "Files", acCard.modelData.filesDisabled) }
+                        }
+                    }
+                    Row {
+                        spacing: 10
+                        Pill { visible: Accounts.goaAvailable && Accounts.ccAvailable; label: "Add account…"; primary: true; onGo: Accounts.addAccount() }
+                        Text { visible: Accounts.goaAvailable && !Accounts.ccAvailable; anchors.verticalCenter: parent.verticalCenter; width: 520; text: "Adding accounts uses GNOME's sign-in flow — install it with: sudo pacman -S gnome-control-center"; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
+                    }
+                    Text {
+                        visible: Accounts.goaAvailable
+                        width: parent.width; text: "Calendar events feed the Quick Settings calendar; contacts are listed below. Data comes from evolution-data-server — nothing is scraped from providers directly."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap
+                    }
+
+                    SectionTitle { visible: Accounts.contacts.length > 0; text: "CONTACTS  ·  " + Accounts.contacts.length }
+                    Card {
+                        visible: Accounts.contacts.length > 0
+                        Repeater {
+                            model: Accounts.contacts.slice(0, 25)
+                            delegate: Item {
+                                required property var modelData
+                                width: parent.width; height: 36
+                                Rectangle {
+                                    anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter
+                                    width: 26; height: 26; radius: 13; color: Theme.hover
+                                    Text { anchors.centerIn: parent; text: (modelData.name || "?").charAt(0).toUpperCase(); color: Theme.fg; font.family: Theme.fontText; font.pixelSize: 12; font.weight: Font.DemiBold }
+                                }
+                                Column {
+                                    anchors.left: parent.left; anchors.leftMargin: 36; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; spacing: 1
+                                    Text { width: parent.width; text: modelData.name; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; elide: Text.ElideRight }
+                                    Text { width: parent.width; text: (modelData.emails[0] || "") + (modelData.phones && modelData.phones.length ? "  ·  " + modelData.phones[0] : ""); color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 10; elide: Text.ElideRight }
+                                }
+                            }
+                        }
+                        Text { visible: Accounts.contacts.length > 25; text: "…and " + (Accounts.contacts.length - 25) + " more"; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11 }
+                    }
                     Item { width: 1; height: 8 }
                 }
             }
