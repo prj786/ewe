@@ -1,3 +1,4 @@
+import QtQuick
 import Quickshell
 
 // Quickshell entry point. Built incrementally.
@@ -6,6 +7,11 @@ import Quickshell
 //   - Notifications: native notification server + top-right toasts.
 //   - QuickSettings: clock → calendar + Do Not Disturb + notifications.
 ShellRoot {
+    // HyprMon is a lazy singleton: poke it at startup so its display guard —
+    // hotplug/AC-transition re-assert of the saved monitor profiles — is armed
+    // from login, not from the first time Settings → Displays is opened.
+    Scope { Component.onCompleted: HyprMon.start() }
+
     Notifications {}
     Bar {}
     Dock {}

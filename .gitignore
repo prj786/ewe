@@ -1,5 +1,9 @@
 # user/machine state that shouldn't be committed (re-seeded at install)
 dotfiles/hypr/generated/user.lua
+dotfiles/hypr/generated/monitors.lua
+dotfiles/hypr/generated/input.lua
+dotfiles/hypr/generated/wallpapers.conf
+dotfiles/quickshell/display-profiles.json
 dotfiles/quickshell/user-theme.json
 dotfiles/quickshell/pinned-apps.json
 dotfiles/quickshell/places.json

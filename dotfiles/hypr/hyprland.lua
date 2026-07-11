@@ -391,8 +391,16 @@ end)
 -- ╭───────────────────────────────────────────────────────────────╮
 -- │ USER OVERRIDES — written by the Quickshell Settings app        │
 -- ╰───────────────────────────────────────────────────────────────╯
--- generated/user.lua holds hl.config{} / hl.monitor{} calls the Settings app
--- writes (gaps, border, accent, display layout). Sourced LAST so it wins over
--- the hand-written defaults above; this keeps this file clean and round-trips
--- the GUI changes across reloads/relogin. Missing/empty file is a no-op.
+-- generated/user.lua holds hl.config{} calls the Settings app writes (gaps,
+-- border, accent, animations). Sourced LAST so it wins over the hand-written
+-- defaults above; this keeps this file clean and round-trips the GUI changes
+-- across reloads/relogin. Missing/empty file is a no-op.
 pcall(dofile, home .. "/.config/hypr/generated/user.lua")
+
+-- One generated file per Settings domain, each atomically rewritten by the app
+-- that owns it (never touch these by hand). Sourced after user.lua so the
+-- dedicated files win over any stale lines an older user.lua may still carry.
+--   input.lua    — Settings → Keyboard & Mouse (input{} + per-device blocks)
+--   monitors.lua — Settings → Displays (per-monitor-set profiles, desc:-matched)
+pcall(dofile, home .. "/.config/hypr/generated/input.lua")
+pcall(dofile, home .. "/.config/hypr/generated/monitors.lua")
