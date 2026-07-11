@@ -104,6 +104,7 @@ QtObject {
     // and cache-busted (?v=) after Settings saves a new one.
     property bool hasFace: false
     property int avatarVersion: 0
+    property string avatarShape: "circle"   // "circle" | "rounded" | "square" — Avatar.qml masks to this; persisted in user-theme.json
     readonly property string faceUrl: hasFace ? "file://" + Quickshell.env("HOME") + "/.face?v=" + avatarVersion : ""
     property Process _faceChk: Process { running: true; command: ["sh", "-c", 'test -f "$HOME/.face"']; onExited: function (code) { g.hasFace = (code === 0) } }
     function recheckFace() { g.avatarVersion++; g._faceChk.running = false; g._faceChk.running = true }
@@ -152,6 +153,7 @@ QtObject {
                     if (j && j.dockAutohide !== undefined) g.dockAutohide = j.dockAutohide
                     if (j && j.animationSpeed !== undefined) g.animationSpeed = j.animationSpeed
                     if (j && j.colorScheme) g.colorScheme = j.colorScheme
+                    if (j && j.avatarShape) g.avatarShape = j.avatarShape
                 } catch (e) {}
                 // enforce the persisted (or default-dark) appearance on GTK + Qt
                 g.applyColorScheme()

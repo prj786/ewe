@@ -102,26 +102,10 @@ Scope {
 
                     // avatar + user name
                     Item { width: 1; height: 16 }   // spacer
-                    Rectangle {
+                    Avatar {
                         anchors.horizontalCenter: parent.horizontalCenter
-                        width: 86; height: 86; radius: 43
-                        color: Theme.elevated; border.color: Theme.stroke; border.width: 1
-                        clip: true
-                        Image {
-                            id: face
-                            anchors.fill: parent
-                            source: Globals.faceUrl
-                            visible: status === Image.Ready
-                            fillMode: Image.PreserveAspectCrop
-                            cache: false
-                            sourceSize.width: 172; sourceSize.height: 172
-                        }
-                        Text {
-                            anchors.centerIn: parent
-                            visible: face.status !== Image.Ready
-                            text: root.userInitial
-                            color: Theme.fg; font.family: Theme.fontDisplay; font.pixelSize: 38; font.weight: Font.Bold
-                        }
+                        size: 86
+                        initial: root.userInitial
                     }
                     Text {
                         anchors.horizontalCenter: parent.horizontalCenter

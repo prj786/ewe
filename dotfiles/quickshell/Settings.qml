@@ -130,7 +130,8 @@ Scope {
               + ', "dockEnabled": ' + (Globals.dockEnabled ? "true" : "false")
               + ', "dockAutohide": ' + (Globals.dockAutohide ? "true" : "false")
               + ', "animationSpeed": ' + Number(Globals.animationSpeed)
-              + ', "colorScheme": "' + Globals.colorScheme + '" }'
+              + ', "colorScheme": "' + Globals.colorScheme + '"'
+              + ', "avatarShape": "' + Globals.avatarShape + '" }'
         root.atomicWrite(jsonWriter, root.home + "/.config/quickshell/user-theme.json", s)
     }
     function setAccent(hex) {
@@ -1963,11 +1964,7 @@ Scope {
                     Card {
                         Row {
                             width: parent.width; spacing: 16
-                            Rectangle {
-                                width: 72; height: 72; radius: 36; color: Theme.elevated; border.color: Theme.stroke; border.width: 1; clip: true
-                                Image { id: avatarImg; anchors.fill: parent; fillMode: Image.PreserveAspectCrop; cache: false; source: Globals.faceUrl; visible: Globals.hasFace && status === Image.Ready }
-                                Text { anchors.centerIn: parent; visible: !avatarImg.visible; text: root.g(0xF0004); font.family: Theme.fontMono; font.pixelSize: 34; color: Theme.fgDim }
-                            }
+                            Avatar { size: 72; initial: (root.userRealName || Quickshell.env("USER") || "").charAt(0).toUpperCase() }
                             Column {
                                 anchors.verticalCenter: parent.verticalCenter; spacing: 3
                                 // display name — click to edit, saved to AccountsService
@@ -1989,7 +1986,19 @@ Scope {
                                 }
                                 Text { leftPadding: 9; text: "@" + (Quickshell.env("USER") || "user"); color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
                                 Item { width: 1; height: 3 }
-                                Pill { label: "Change avatar…"; onGo: avPicker.browse() }
+                                Row {
+                                    spacing: 8
+                                    Pill { label: "Change avatar…"; onGo: avPicker.browse() }
+                                    // shape picker — applies live everywhere via Globals.avatarShape
+                                    Repeater {
+                                        model: [{ l: "Circle", v: "circle" }, { l: "Rounded", v: "rounded" }, { l: "Square", v: "square" }]
+                                        delegate: Pill {
+                                            required property var modelData
+                                            label: modelData.l; primary: Globals.avatarShape === modelData.v
+                                            onGo: { Globals.avatarShape = modelData.v; root.writePrefs() }
+                                        }
+                                    }
+                                }
                             }
                         }
                         FileDropTarget {
