@@ -12,6 +12,7 @@ xdg-desktop-portal-hyprland
 xdg-desktop-portal-gtk
 polkit
 gnome-keyring
+libsecret               # secret-tool — Google refresh token lives in the keyring
 qt5-wayland
 qt6-wayland
 qt6-svg

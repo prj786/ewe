@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Effects
 import Quickshell
 import Quickshell.Io
 import Quickshell.Services.Pipewire
@@ -48,7 +49,7 @@ Scope {
         else if (k === "layout") layoutProc.running = true
         else if (k === "wallpaper") { wpBackendProbe.running = true; wpConfLoad.running = true; HyprMon.refresh(); if (root.wpDir === "") wpDirProbe.running = true; else root.wpList(root.wpDir) }
         else if (k === "saver") { saverToolProbe.running = false; saverToolProbe.running = true }
-        else if (k === "user") { Globals.recheckFace(); userInfoProbe.running = false; userInfoProbe.running = true; Accounts.refresh() }
+        else if (k === "user") { Globals.recheckFace(); userInfoProbe.running = false; userInfoProbe.running = true; Google.refresh(); Accounts.refresh() }
     }
     onPaneChanged: root.paneProbes()
 
@@ -2125,49 +2126,63 @@ Scope {
                         KV { k: "Uptime"; v: root.sysFacts.up || "—" }
                     }
 
-                    SectionTitle { text: "ONLINE ACCOUNTS" }
+                    SectionTitle { text: "GOOGLE ACCOUNT" }
+                    // not configured yet — actionable, never a spinner
                     Card {
-                        visible: !Accounts.probed
-                        Text { width: parent.width; text: "Checking online-accounts support…"; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
+                        visible: Google.probed && !Google.configured
+                        Text { width: parent.width; text: "Google client ID not configured. Create a Google Cloud OAuth client of type “Desktop app” (enable the Calendar and Drive APIs) and save it as ~/.config/quickshell/google-oauth.json:"; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; wrapMode: Text.Wrap }
+                        Text { width: parent.width; text: '{ "client_id": "…apps.googleusercontent.com", "client_secret": "…" }'; color: Theme.fgSecondary; font.family: Theme.fontMono; font.pixelSize: 11 }
+                        Text { width: parent.width; text: "The file is gitignored; tokens end up only in the system keyring. Full steps: README → Google account."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
                     }
                     Card {
-                        visible: Accounts.probed && !Accounts.goaAvailable
-                        Text { width: parent.width; text: "Connect Google, Microsoft or Nextcloud/CalDAV accounts to get calendar events and contacts in the shell. Install the (optional) daemons:  sudo pacman -S gnome-online-accounts evolution-data-server gnome-control-center"; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; wrapMode: Text.Wrap }
+                        visible: Google.probed && Google.configured && !Google.keyringOk
+                        Text { width: parent.width; text: "No Secret Service keyring found — the refresh token has nowhere safe to live. Install and enable gnome-keyring, then retry."; color: Theme.warning; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; wrapMode: Text.Wrap }
                     }
-                    Text {
-                        visible: Accounts.probed && Accounts.goaAvailable && Accounts.accounts.length === 0
-                        width: parent.width; text: "No online accounts connected yet."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
-                    }
-                    Repeater {
-                        model: Accounts.accounts
-                        delegate: Card {
-                            id: acCard
-                            required property var modelData
-                            Item {
-                                width: parent.width; height: 30
-                                Row {
-                                    anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; spacing: 10
-                                    Text { anchors.verticalCenter: parent.verticalCenter; text: root.g(root.providerIcon(acCard.modelData.provider)); font.family: Theme.fontMono; font.pixelSize: 17; color: Theme.fg }
-                                    Text { anchors.verticalCenter: parent.verticalCenter; text: acCard.modelData.providerName; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsBody; font.weight: Font.DemiBold }
-                                    Text { anchors.verticalCenter: parent.verticalCenter; text: acCard.modelData.identity; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; elide: Text.ElideRight; width: Math.min(implicitWidth, 260) }
-                                }
-                                Pill { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; label: "Remove"; onGo: Accounts.removeAccount(acCard.modelData.path) }
-                            }
-                            Text { visible: acCard.modelData.attention; width: parent.width; text: "Needs attention — sign in again via “Add account…”."; color: Theme.warning; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
-                            ToggleRow { visible: acCard.modelData.hasCalendar; title: "Calendar"; on: !acCard.modelData.calendarDisabled; onToggled: Accounts.setService(acCard.modelData.path, "Calendar", acCard.modelData.calendarDisabled) }
-                            ToggleRow { visible: acCard.modelData.hasContacts; title: "Contacts"; on: !acCard.modelData.contactsDisabled; onToggled: Accounts.setService(acCard.modelData.path, "Contacts", acCard.modelData.contactsDisabled) }
-                            ToggleRow { visible: acCard.modelData.hasMail; title: "Mail"; on: !acCard.modelData.mailDisabled; onToggled: Accounts.setService(acCard.modelData.path, "Mail", acCard.modelData.mailDisabled) }
-                            ToggleRow { visible: acCard.modelData.hasFiles; title: "Files"; on: !acCard.modelData.filesDisabled; onToggled: Accounts.setService(acCard.modelData.path, "Files", acCard.modelData.filesDisabled) }
+                    // configured, signed out → connect
+                    Card {
+                        visible: Google.probed && Google.configured && !Google.signedIn
+                        Text { width: parent.width; text: "Connect your Google account to get calendar events in Quick Settings and settings backup/restore via Google Drive (hidden app storage only — not your files)."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; wrapMode: Text.Wrap }
+                        Row {
+                            spacing: 10
+                            Pill { visible: Google.busy !== "signin"; label: "Connect Google account"; primary: true; onGo: Google.signIn() }
+                            Text { visible: Google.busy === "signin"; anchors.verticalCenter: parent.verticalCenter; text: "Waiting for the browser sign-in…"; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
+                            Pill { visible: Google.busy === "signin"; label: "Cancel"; onGo: Google.cancelSignIn() }
                         }
                     }
-                    Row {
-                        spacing: 10
-                        Pill { visible: Accounts.goaAvailable && Accounts.ccAvailable; label: "Add account…"; primary: true; onGo: Accounts.addAccount() }
-                        Text { visible: Accounts.goaAvailable && !Accounts.ccAvailable; anchors.verticalCenter: parent.verticalCenter; width: 520; text: "Adding accounts uses GNOME's sign-in flow — install it with: sudo pacman -S gnome-control-center"; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
+                    // signed in → profile + services + sign out
+                    Card {
+                        visible: Google.signedIn
+                        Item {
+                            width: parent.width; height: 46
+                            Rectangle {
+                                id: gAvBox
+                                anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter
+                                width: 40; height: 40; radius: 20; color: Theme.hover
+                                Text { anchors.centerIn: parent; visible: gAv.status !== Image.Ready; text: ((Google.profile && Google.profile.name) || "?").charAt(0).toUpperCase(); color: Theme.fg; font.family: Theme.fontText; font.pixelSize: 16; font.weight: Font.DemiBold }
+                                Image {
+                                    id: gAv
+                                    anchors.fill: parent
+                                    source: (Google.profile && Google.profile.picture) ? Google.profile.picture : ""
+                                    fillMode: Image.PreserveAspectCrop
+                                    visible: status === Image.Ready
+                                    layer.enabled: true
+                                    layer.effect: MultiEffect { maskEnabled: true; maskSource: gAvMask; maskThresholdMin: 0.5; maskSpreadAtMin: 1.0 }
+                                }
+                                Item { id: gAvMask; anchors.fill: parent; layer.enabled: true; visible: false; Rectangle { anchors.fill: parent; radius: 20; antialiasing: true } }
+                            }
+                            Column {
+                                anchors.left: parent.left; anchors.leftMargin: 52; anchors.right: gOut.left; anchors.rightMargin: 10; anchors.verticalCenter: parent.verticalCenter; spacing: 1
+                                Text { width: parent.width; text: (Google.profile && Google.profile.name) || "Google account"; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsBody; font.weight: Font.DemiBold; elide: Text.ElideRight }
+                                Text { width: parent.width; text: (Google.profile && Google.profile.email) || ""; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; elide: Text.ElideRight }
+                            }
+                            Pill { id: gOut; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; label: "Sign out"; onGo: Google.signOut() }
+                        }
+                        KV { k: "Calendar"; v: "connected · read-only"; dot: "ok" }
+                        KV { k: "Settings sync (Drive app data)"; v: "connected"; dot: "ok" }
                     }
                     Text {
-                        visible: Accounts.goaAvailable
-                        width: parent.width; text: "Calendar events feed the Quick Settings calendar; contacts are listed below. Data comes from evolution-data-server — nothing is scraped from providers directly."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap
+                        visible: Google.error !== ""
+                        width: parent.width; text: Google.error; color: Theme.danger; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap
                     }
 
                     SectionTitle { visible: Accounts.contacts.length > 0; text: "CONTACTS  ·  " + Accounts.contacts.length }

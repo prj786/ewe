@@ -12,6 +12,13 @@ dotfiles/quickshell/user-theme.json
 dotfiles/quickshell/pinned-apps.json
 dotfiles/quickshell/places.json
 dotfiles/quickshell/ssh-browse/
+# Google account runtime state (OAuth client config, cached profile/events/sync
+# state). The refresh token itself is in the system keyring, never in files.
+dotfiles/quickshell/google-oauth.json
+dotfiles/quickshell/google-profile.json
+dotfiles/quickshell/google-events.json
+dotfiles/quickshell/google-sync.json
+dotfiles/quickshell/google-notified.json
 *.bak.*
 
 # the Fresh editor regenerates these inside its (symlinked) config dir at
