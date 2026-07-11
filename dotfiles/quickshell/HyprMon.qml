@@ -49,6 +49,8 @@ QtObject {
 
     function start() { _profLoad.running = true; refresh() }
     function refresh() { loading = true; _monProc.running = false; _monProc.running = true }
+    // re-read display-profiles.json after a settings restore rewrote it
+    function reloadProfiles() { _profLoad.running = false; _profLoad.running = true }
 
     // ── spec helpers ──────────────────────────────────────────────────────────
     function specFromMonitor(m) {

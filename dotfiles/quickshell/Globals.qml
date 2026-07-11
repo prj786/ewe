@@ -101,6 +101,15 @@ QtObject {
         g._placesWriter.command = ["sh", "-c", "cat > \"$HOME/.config/quickshell/places.json\" <<'QS_EOF'\n" + JSON.stringify(a) + "\nQS_EOF\n"]
         g._placesWriter.running = false; g._placesWriter.running = true
     }
+    // Re-read every JSON state file this singleton owns — used after a settings
+    // restore rewrites them on disk (Google.applyRestore).
+    function reloadUserState() {
+        g._themeLoad.running = false; g._themeLoad.running = true
+        g._pinLoad.running = false; g._pinLoad.running = true
+        g._placesLoad.running = false; g._placesLoad.running = true
+        g.recheckFace()
+    }
+
     property Process _placesWriter: Process {}
     property Process _placesLoad: Process {
         running: true

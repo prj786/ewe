@@ -845,6 +845,10 @@ Scope {
     // ── User: AccountsService identity + session facts ────────────────────────
     property string userRealName: ""
     property var sysFacts: ({})
+    function fmtSyncTime(iso) {
+        var d = new Date(iso)
+        return isNaN(d.getTime()) ? (iso || "—") : d.toLocaleString(Qt.locale(), "d MMM · h:mm AP")
+    }
     Process {
         id: userInfoProbe
         command: ["sh", "-c",
@@ -2183,6 +2187,49 @@ Scope {
                     Text {
                         visible: Google.error !== ""
                         width: parent.width; text: Google.error; color: Theme.danger; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap
+                    }
+
+                    SectionTitle { visible: Google.signedIn; text: "SETTINGS SYNC" }
+                    Card {
+                        visible: Google.signedIn
+                        KV { k: "Cloud backup"; v: Google.cloudInfo ? ("saved on “" + Google.cloudInfo.device + "” · " + root.fmtSyncTime(Google.cloudInfo.updatedAt)) : "none yet" }
+                        KV { k: "Last synced from this device"; v: Google.lastSync !== "" ? root.fmtSyncTime(Google.lastSync) : "never" }
+                        ToggleRow {
+                            title: "Auto-sync"
+                            sub: "Pushes ~20 s after closing Settings whenever something changed."
+                            on: Google.autoSync
+                            onToggled: Google.setAutoSync(!Google.autoSync)
+                        }
+                        Row {
+                            spacing: 10
+                            Pill { label: Google.syncState === "syncing" ? "Syncing…" : "Sync now"; primary: true; onGo: Google.syncNow() }
+                            Pill { label: "Restore from cloud…"; onGo: Google.requestRestore() }
+                        }
+                        Text { width: parent.width; text: "Theme, keyboard, dock, wallpaper, shortcuts, screensaver, avatar shape and display profiles — one bundle in Drive's hidden app storage. The installed-package list is captured too; reinstalling from it is always opt-in."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
+                        Text { visible: Google.syncError !== ""; width: parent.width; text: Google.syncError; color: Theme.danger; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
+                        Text { visible: Google.restoreSummary !== ""; width: parent.width; text: Google.restoreSummary; color: Theme.success; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
+                    }
+                    // restore confirmation — explicit, summarises what will change
+                    Rectangle {
+                        visible: Google.pendingRestore !== null
+                        width: parent.width
+                        implicitHeight: restCol.implicitHeight + 24
+                        radius: Theme.radiusInner; color: Theme.elevated
+                        border.color: Theme.accent; border.width: 1
+                        Column {
+                            id: restCol
+                            anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 12; spacing: 8
+                            Text { text: "Restore settings from the cloud backup?"; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsBody; font.weight: Font.DemiBold }
+                            KV { k: "Saved on"; v: Google.pendingRestore ? ("“" + (Google.pendingRestore.device || "?") + "” · " + root.fmtSyncTime(Google.pendingRestore.updatedAt || "")) : "" }
+                            KV { k: "Sections"; v: Google.pendingRestore ? Object.keys(Google.pendingRestore.settings || {}).filter(function (k) { return k !== "files" }).join(", ") : "" }
+                            KV { k: "Captured packages"; v: Google.pendingRestore && Google.pendingRestore.apps ? ((Google.pendingRestore.apps.explicit || []).length + " repo · " + (Google.pendingRestore.apps.foreign || []).length + " AUR (opt-in, never auto-installed)") : "none" }
+                            Text { width: parent.width; text: "Overwrites this machine's theme, keyboard, dock, wallpaper, screensaver and display-profile settings, then reloads the shell config live."; color: Theme.warning; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
+                            Row {
+                                spacing: 10
+                                Pill { label: "Restore"; primary: true; onGo: Google.applyRestore() }
+                                Pill { label: "Cancel"; onGo: Google.cancelRestore() }
+                            }
+                        }
                     }
 
                     SectionTitle { visible: Accounts.contacts.length > 0; text: "CONTACTS  ·  " + Accounts.contacts.length }
