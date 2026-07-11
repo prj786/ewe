@@ -27,6 +27,7 @@ ShellRoot {
     AppMenu {}
     Lock {}
     Caffeine {}
+    Screensaver {}
     Osd {}
     Overview {}
     Settings {}

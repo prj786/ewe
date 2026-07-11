@@ -5,6 +5,7 @@ singleton Accounts 1.0 Accounts.qml
 FileDropTarget 1.0 FileDropTarget.qml
 DropRow 1.0 DropRow.qml
 Avatar 1.0 Avatar.qml
+Screensaver 1.0 Screensaver.qml
 Launcher 1.0 Launcher.qml
 Bar 1.0 Bar.qml
 Notifications 1.0 Notifications.qml

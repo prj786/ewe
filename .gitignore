@@ -4,6 +4,7 @@ dotfiles/hypr/generated/monitors.lua
 dotfiles/hypr/generated/input.lua
 dotfiles/hypr/generated/wallpapers.conf
 dotfiles/hypr/generated/kb-per-window.disabled
+dotfiles/hypr/generated/hypridle.conf
 dotfiles/hypr/hyprpaper.conf
 dotfiles/quickshell/display-profiles.json
 dotfiles/quickshell/input-devices.json

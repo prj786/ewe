@@ -54,6 +54,15 @@ QtObject {
     property bool dockEnabled: true
     property bool dockAutohide: false       // intelligent hide: slide away, reveal on bottom-edge hover
 
+    // ── Screensaver (persisted in user-theme.json; hypridle owns the timing via
+    // the generated hypridle.conf — see Settings.writeIdleConf) ────────────────
+    property bool saverEnabled: false
+    property int  saverMin: 5               // idle minutes before the saver appears
+    property string saverStyle: "clock"     // "clock" | "blank"
+    property bool saverLock: false          // true → idle goes straight to the session lock
+    property int  saverLockAfterMin: 5      // saver mode: lock N min after the saver starts (0 = never)
+    property bool saverActive: false        // runtime only: the overlay is currently shown
+
     // ── Dock popups ────────────────────────────────────────────────────────────
     property bool launcherOpen: false       // pinned-apps / launcher panel
     property bool storeOpen: false           // app-store panel
@@ -154,6 +163,13 @@ QtObject {
                     if (j && j.animationSpeed !== undefined) g.animationSpeed = j.animationSpeed
                     if (j && j.colorScheme) g.colorScheme = j.colorScheme
                     if (j && j.avatarShape) g.avatarShape = j.avatarShape
+                    if (j && j.saver) {
+                        if (j.saver.enabled !== undefined) g.saverEnabled = j.saver.enabled
+                        if (j.saver.min !== undefined) g.saverMin = j.saver.min
+                        if (j.saver.style) g.saverStyle = j.saver.style
+                        if (j.saver.lock !== undefined) g.saverLock = j.saver.lock
+                        if (j.saver.lockAfterMin !== undefined) g.saverLockAfterMin = j.saver.lockAfterMin
+                    }
                 } catch (e) {}
                 // enforce the persisted (or default-dark) appearance on GTK + Qt
                 g.applyColorScheme()

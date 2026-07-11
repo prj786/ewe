@@ -85,9 +85,12 @@ if command -v gsettings >/dev/null 2>&1 && command -v nemo >/dev/null 2>&1 && [ 
     fi
 fi
 
-# ── Idle / lock: prefer hypridle if you later add a config, else swayidle ─────
+# ── Idle / lock: hypridle. The Settings → Screensaver pane writes a generated
+# config (saver stage + timeouts) which wins over the shipped default. ────────
 LOCK="$HOME/.config/hypr/scripts/lock.sh"
-if command -v hypridle >/dev/null 2>&1 && [ -r "$HOME/.config/hypr/hypridle.conf" ]; then
+if command -v hypridle >/dev/null 2>&1 && [ -r "$HOME/.config/hypr/generated/hypridle.conf" ]; then
+    run_once hypridle hypridle -c "$HOME/.config/hypr/generated/hypridle.conf"
+elif command -v hypridle >/dev/null 2>&1 && [ -r "$HOME/.config/hypr/hypridle.conf" ]; then
     run_once hypridle hypridle
 elif command -v swayidle >/dev/null 2>&1 && ! pgrep -x swayidle >/dev/null 2>&1; then
     swayidle -w \
