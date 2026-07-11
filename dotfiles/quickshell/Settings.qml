@@ -27,7 +27,7 @@ Scope {
         { ic: 0xF0379, label: "Displays" },
         { ic: 0xF05A9, label: "Networking" },
         { ic: 0xF0614, label: "Default Apps" },
-        { ic: 0xF030C, label: "Keyboard" },
+        { ic: 0xF030C, label: "Keyboard & Mouse" },
         { ic: 0xF11C7, label: "Shortcuts" },
         { ic: 0xF0264, label: "Layout" },
         { ic: 0xF0241, label: "Theme" },
@@ -37,7 +37,7 @@ Scope {
     onPaneChanged: {
         if (pane === 1) HyprMon.refresh()
         else if (pane === 2) { wifiDevProbe.running = true; wifiState.running = true; wifiScan.running = true; vpnScan.running = true; netProc.running = true; sshProc.running = true }
-        else if (pane === 4) kbProc.running = true
+        else if (pane === 4) { inputProbe.running = true; devProbe.running = true; perWinProbe.running = true }
         else if (pane === 5) scProc.running = true
         else if (pane === 6) layoutProc.running = true
         else if (pane === 9) faceProc.running = true
@@ -48,8 +48,6 @@ Scope {
     property int  gapsOut: 14
     property int  borderSize: 1
     property int  rounding: 12      // decoration.rounding (window corner radius)
-    property string kbLayout: "us,ge"
-    property bool kbDirty: false
 
     function hex6(c) { var s = String(c).replace("#", ""); return s.length === 8 ? s.slice(2) : s }
 
@@ -63,7 +61,6 @@ Scope {
         s += gen
         s += "hl.config({ decoration = { rounding = " + root.rounding + " } })\n"
         s += root.animBlockPersist()
-        if (root.kbDirty) s += "hl.config({ input = { kb_layout = \"" + root.kbLayout + "\" } })\n"
         luaWriter.command = ["sh", "-c", "mkdir -p \"" + root.home + "/.config/hypr/generated\"; cat > \""
             + root.home + "/.config/hypr/generated/user.lua\" <<'QS_EOF'\n" + s + "QS_EOF\n"]
         luaWriter.running = false; luaWriter.running = true
@@ -426,9 +423,220 @@ Scope {
         id: sshProc; command: ["sh", "-c", "grep -iE '^[[:space:]]*Host[[:space:]]' \"$HOME/.ssh/config\" 2>/dev/null | awk '{for(i=2;i<=NF;i++)print $i}' | grep -v '[*?]' | sort -u"]
         stdout: StdioCollector { onStreamFinished: { var ls = this.text.split("\n"), arr = []; for (var i = 0; i < ls.length; i++) if (ls[i].trim()) arr.push(ls[i].trim()); root.sshHosts = arr } }
     }
-    // keyboard layout
-    Process { id: kbProc; command: ["hyprctl", "getoption", "input:kb_layout", "-j"]; stdout: StdioCollector { onStreamFinished: { try { var j = JSON.parse(this.text); if (j && j.str) root.kbLayout = j.str } catch (e) {} } } }
-    function applyKb(csv) { root.kbLayout = csv; root.kbDirty = true; Quickshell.execDetached(["hyprctl", "eval", "hl.config({ input = { kb_layout = \"" + csv + "\" } })"]); root.writeOverrides() }
+    // ── Keyboard & Mouse — the whole input{} block (and per-device overrides),
+    //    applied live via hyprctl eval and persisted to generated/input.lua ────
+    property bool inpLoaded: false
+    property var inp: ({ kb_layout: "us", kb_variant: "", kb_options: "", repeat_rate: 25, repeat_delay: 600,
+                         numlock_by_default: false, sensitivity: 0, accel_profile: "", natural_scroll: false,
+                         left_handed: false, scroll_factor: 1,
+                         tp_natural_scroll: true, tp_tap: true, tp_dwt: true, tp_clickfinger: false,
+                         tp_scroll_factor: 1, tp_mbe: false, tp_drag_lock: false, tp_tap_drag: true })
+    property var mice: []
+    property bool hasTouchpad: false
+    property bool perWindowKb: false
+    property var devOverrides: ({})    // device name → { sensitivity, natural_scroll, left_handed, accel_profile }
+    property string devTarget: ""      // "" = all pointing devices (global input{})
+
+    // generic single-line eval runner with error capture (same contract as
+    // HyprMon.applySpecs: any non-`ok` reply lands in the error banner)
+    property var _evalDone: null
+    function runEvals(stmts, done) {
+        var cmd = ["sh", "-c", 'st=0; for s in "$@"; do out=$(hyprctl eval "$s" 2>&1); case "$out" in ok*) ;; *) echo "$out"; st=1;; esac; done; exit $st', "qs-settings"]
+        for (var i = 0; i < stmts.length; i++) cmd.push(stmts[i])
+        root._evalDone = done || null
+        evalProc.command = cmd; evalProc.running = false; evalProc.running = true
+    }
+    Process { id: evalProc; stdout: StdioCollector { onStreamFinished: { var err = this.text.trim(); if (err !== "") root.errorMsg = err.split("\n")[0]; var cb = root._evalDone; root._evalDone = null; if (cb) cb(err === "") } } }
+    // atomic write: temp file + rename, so a crash mid-write can't corrupt config
+    function atomicWrite(proc, path, content) {
+        proc.command = ["sh", "-c",
+            'mkdir -p "$(dirname "$1")" && cat > "$1.tmp" <<\'QS_EOF\'\n' + content + '\nQS_EOF\nmv "$1.tmp" "$1"',
+            "qs-settings", path]
+        proc.running = false; proc.running = true
+    }
+    Process { id: inputLuaWriter }
+    Process { id: devOvWriter }
+
+    function boolLua(b) { return b ? "true" : "false" }
+    function inputLua(p) {
+        return 'hl.config({ input = { kb_layout = "' + p.kb_layout + '", kb_variant = "' + p.kb_variant + '", kb_options = "' + p.kb_options + '"'
+             + ", repeat_rate = " + p.repeat_rate + ", repeat_delay = " + p.repeat_delay
+             + ", numlock_by_default = " + root.boolLua(p.numlock_by_default)
+             + ", sensitivity = " + p.sensitivity
+             + (p.accel_profile !== "" ? ', accel_profile = "' + p.accel_profile + '"' : "")
+             + ", natural_scroll = " + root.boolLua(p.natural_scroll) + ", left_handed = " + root.boolLua(p.left_handed)
+             + ", scroll_factor = " + p.scroll_factor
+             + ", touchpad = { natural_scroll = " + root.boolLua(p.tp_natural_scroll) + ", tap_to_click = " + root.boolLua(p.tp_tap)
+             + ", disable_while_typing = " + root.boolLua(p.tp_dwt) + ", clickfinger_behavior = " + root.boolLua(p.tp_clickfinger)
+             + ", scroll_factor = " + p.tp_scroll_factor + ", middle_button_emulation = " + root.boolLua(p.tp_mbe)
+             + ", drag_lock = " + root.boolLua(p.tp_drag_lock) + ", tap_and_drag = " + root.boolLua(p.tp_tap_drag) + " } } })"
+    }
+    function deviceLua(name, o) {
+        var L = 'hl.device({ name = "' + name + '"'
+        if (o.sensitivity !== undefined) L += ", sensitivity = " + o.sensitivity
+        if (o.natural_scroll !== undefined) L += ", natural_scroll = " + root.boolLua(o.natural_scroll)
+        if (o.left_handed !== undefined) L += ", left_handed = " + root.boolLua(o.left_handed)
+        if (o.accel_profile !== undefined && o.accel_profile !== "") L += ', accel_profile = "' + o.accel_profile + '"'
+        return L + " })"
+    }
+    function writeInputLua() {
+        var s = "-- AUTO-GENERATED by Settings → Keyboard & Mouse. Do not edit by hand.\n" + root.inputLua(root.inp) + "\n"
+        var devs = Object.keys(root.devOverrides).sort()
+        for (var i = 0; i < devs.length; i++) s += root.deviceLua(devs[i], root.devOverrides[devs[i]]) + "\n"
+        root.atomicWrite(inputLuaWriter, root.home + "/.config/hypr/generated/input.lua", s)
+    }
+    function applyInput(patch) {
+        var p = {}; for (var k in root.inp) p[k] = root.inp[k]
+        for (k in patch) p[k] = patch[k]
+        root.inp = p
+        root.runEvals([root.inputLua(p)], function (ok) { if (ok) root.flashApplied() })
+        root.writeInputLua()
+    }
+    function applyDevice(name, patch) {
+        var all = {}; for (var d in root.devOverrides) all[d] = root.devOverrides[d]
+        var o = {}; var cur = all[name] || {}
+        for (var k in cur) o[k] = cur[k]
+        for (k in patch) o[k] = patch[k]
+        all[name] = o
+        root.devOverrides = all
+        root.runEvals([root.deviceLua(name, o)], function (ok) { if (ok) root.flashApplied() })
+        root.writeInputLua()
+        root.atomicWrite(devOvWriter, root.home + "/.config/quickshell/input-devices.json", JSON.stringify(all, null, 2))
+    }
+    // kb_options managed as a token set (grp:* switch shortcut + advanced extras)
+    function kbOptToken(prefix) {
+        var toks = String(root.inp.kb_options || "").split(",")
+        for (var i = 0; i < toks.length; i++) if (toks[i].indexOf(prefix) === 0) return toks[i]
+        return ""
+    }
+    function setKbOptPrefix(prefix, token) {
+        var toks = String(root.inp.kb_options || "").split(",").filter(function (t) { return t !== "" && t.indexOf(prefix) !== 0 })
+        if (token !== "") toks.push(token)
+        root.applyInput({ kb_options: toks.join(",") })
+    }
+    function hasKbOpt(token) { return String(root.inp.kb_options || "").split(",").indexOf(token) >= 0 }
+    function toggleKbOpt(token) {
+        var toks = String(root.inp.kb_options || "").split(",").filter(function (t) { return t !== "" && t !== token })
+        if (!root.hasKbOpt(token)) toks.push(token)
+        root.applyInput({ kb_options: toks.join(",") })
+    }
+    // active layouts as [{code, variant}] (kb_layout / kb_variant are parallel lists)
+    readonly property var kbActive: {
+        var codes = String(root.inp.kb_layout).split(",").map(function (s) { return s.trim() }).filter(function (x) { return x !== "" })
+        var vars = String(root.inp.kb_variant).split(",")
+        return codes.map(function (c, i) { return { code: c, variant: (vars[i] || "").trim() } })
+    }
+    function applyLayouts(list) {
+        if (!list.length) return
+        var anyVar = list.some(function (l) { return l.variant !== "" })
+        root.applyInput({
+            kb_layout: list.map(function (l) { return l.code }).join(","),
+            kb_variant: anyVar ? list.map(function (l) { return l.variant }).join(",") : ""
+        })
+    }
+    function kbAdd(code) { var l = root.kbActive.slice(); l.push({ code: code, variant: "" }); root.applyLayouts(l) }
+    function kbRemove(i) { var l = root.kbActive.slice(); if (l.length > 1) { l.splice(i, 1); root.applyLayouts(l) } }
+    function kbMove(from, to) {
+        var l = root.kbActive.slice()
+        to = Math.max(0, Math.min(l.length - 1, to))
+        if (from === to) return
+        var it = l.splice(from, 1)[0]; l.splice(to, 0, it)
+        root.applyLayouts(l)
+    }
+    function kbSetVariant(i, v) { var l = root.kbActive.slice(); l[i] = { code: l[i].code, variant: v }; root.applyLayouts(l) }
+    // per-window layout memory = the kb-per-window.py daemon; the flag file tells
+    // autostart.sh to skip it on the next login
+    function setPerWindowKb(on) {
+        if (on) Quickshell.execDetached(["sh", "-c", 'rm -f "$HOME/.config/hypr/generated/kb-per-window.disabled"; pgrep -f kb-per-window.py >/dev/null || setsid python3 "$HOME/.config/hypr/scripts/kb-per-window.py" >/dev/null 2>&1 &'])
+        else Quickshell.execDetached(["sh", "-c", 'mkdir -p "$HOME/.config/hypr/generated"; touch "$HOME/.config/hypr/generated/kb-per-window.disabled"; pkill -f kb-per-window.py'])
+        perWinRecheck.restart()
+    }
+
+    // probes
+    Process {
+        id: inputProbe
+        command: ["sh", "-c",
+            'for o in kb_layout kb_variant kb_options repeat_rate repeat_delay numlock_by_default sensitivity accel_profile natural_scroll left_handed scroll_factor ' +
+            'touchpad:natural_scroll touchpad:tap-to-click touchpad:disable_while_typing touchpad:clickfinger_behavior touchpad:scroll_factor touchpad:middle_button_emulation touchpad:drag_lock touchpad:tap-and-drag; do ' +
+            'printf "%s\\t" "$o"; hyprctl getoption "input:$o" -j 2>/dev/null | tr -d "\\n"; echo; done']
+        stdout: StdioCollector { onStreamFinished: root._parseInput(this.text) }
+    }
+    function _parseInput(text) {
+        var map = {
+            "kb_layout": "kb_layout", "kb_variant": "kb_variant", "kb_options": "kb_options",
+            "repeat_rate": "repeat_rate", "repeat_delay": "repeat_delay", "numlock_by_default": "numlock_by_default",
+            "sensitivity": "sensitivity", "accel_profile": "accel_profile", "natural_scroll": "natural_scroll",
+            "left_handed": "left_handed", "scroll_factor": "scroll_factor",
+            "touchpad:natural_scroll": "tp_natural_scroll", "touchpad:tap-to-click": "tp_tap",
+            "touchpad:disable_while_typing": "tp_dwt", "touchpad:clickfinger_behavior": "tp_clickfinger",
+            "touchpad:scroll_factor": "tp_scroll_factor", "touchpad:middle_button_emulation": "tp_mbe",
+            "touchpad:drag_lock": "tp_drag_lock", "touchpad:tap-and-drag": "tp_tap_drag"
+        }
+        var p = {}; for (var k in root.inp) p[k] = root.inp[k]
+        var ls = text.split("\n")
+        for (var i = 0; i < ls.length; i++) {
+            var t = ls[i].split("\t")
+            if (t.length < 2 || !map[t[0]]) continue
+            try {
+                var j = JSON.parse(t[1])
+                var v = j.str !== undefined ? j.str : (j.int !== undefined ? j.int : (j.float !== undefined ? j.float : (j.bool !== undefined ? j.bool : undefined)))
+                if (v === "[[EMPTY]]") v = ""
+                if (v !== undefined) p[map[t[0]]] = v
+            } catch (e) {}
+        }
+        root.inp = p; root.inpLoaded = true
+    }
+    Process {
+        id: devProbe; command: ["hyprctl", "devices", "-j"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                try {
+                    var j = JSON.parse(this.text)
+                    var m = (j.mice || []).map(function (x) { return x.name })
+                    root.mice = m
+                    root.hasTouchpad = m.some(function (n) { return n.indexOf("touchpad") >= 0 })
+                } catch (e) {}
+            }
+        }
+    }
+    Process { id: perWinProbe; command: ["sh", "-c", "pgrep -f kb-per-window.py >/dev/null && echo yes || echo no"]; stdout: StdioCollector { onStreamFinished: root.perWindowKb = this.text.trim() === "yes" } }
+    Timer { id: perWinRecheck; interval: 600; onTriggered: perWinProbe.running = true }
+    Process {
+        id: devOvLoad; running: true
+        command: ["sh", "-c", 'cat "$HOME/.config/quickshell/input-devices.json" 2>/dev/null']
+        stdout: StdioCollector { onStreamFinished: { try { var j = JSON.parse(this.text); if (j && typeof j === "object") root.devOverrides = j } catch (e) {} } }
+    }
+
+    // per-layout XKB variants (curated common set; Default = no variant)
+    readonly property var kbVariants: ({
+        us: ["", "intl", "dvorak", "colemak", "mac"], gb: ["", "extd", "intl", "dvorak", "mac"],
+        ge: ["", "qwerty", "mess", "ru"], ru: ["", "phonetic", "typewriter", "mac"], ua: ["", "phonetic", "typewriter"],
+        de: ["", "nodeadkeys", "neo", "mac"], at: ["", "nodeadkeys"], ch: ["", "de_nodeadkeys", "fr"],
+        fr: ["", "bepo", "oss", "mac"], be: ["", "oss"], ca: ["", "fr", "multix", "eng"],
+        es: ["", "nodeadkeys", "winkeys", "mac"], latam: ["", "nodeadkeys"],
+        it: ["", "nodeadkeys", "mac"], pt: ["", "nodeadkeys", "mac"], br: ["", "nodeadkeys", "thinkpad"],
+        nl: ["", "mac"], tr: ["", "f", "alt"], gr: ["", "polytonic", "extended"],
+        pl: ["", "qwertz", "dvorak"], cz: ["", "qwerty", "qwerty_bksl"], sk: ["", "qwerty"],
+        hu: ["", "standard", "nodeadkeys"], ro: ["", "std"], bg: ["", "phonetic", "bas_phonetic"],
+        se: ["", "nodeadkeys", "dvorak", "mac"], no: ["", "nodeadkeys", "dvorak", "mac"], fi: ["", "nodeadkeys", "mac"],
+        dk: ["", "nodeadkeys", "mac"], is: ["", "mac"],
+        lt: ["", "std"], lv: ["", "apostrophe"], ee: ["", "nodeadkeys"],
+        rs: ["", "latin", "yz"], hr: ["", "unicode"], si: [""],
+        by: ["", "latin"], kz: ["", "latin"], am: ["", "phonetic"], az: ["", "cyrillic"],
+        il: ["", "phonetic", "biblical"], ara: ["", "azerty", "qwerty"], ir: ["", "pes_keypad"],
+        "in": ["", "eng", "tam", "ben"], jp: ["", "kana", "mac"], kr: ["", "kr104"], cn: ["", "altgr-pinyin"],
+        th: ["", "pat"], vn: [""]
+    })
+    // XKB group-toggle shortcut presets (kb_options grp:*). Super+Space is the
+    // DE's own Hyprland bind (switchxkblayout) and always works in addition.
+    readonly property var grpOptions: [
+        { label: "Super+Space only (DE bind)", value: "" },
+        { label: "Alt+Shift", value: "grp:alt_shift_toggle" },
+        { label: "Ctrl+Alt", value: "grp:ctrl_alt_toggle" },
+        { label: "Ctrl+Shift", value: "grp:ctrl_shift_toggle" },
+        { label: "Win+Space", value: "grp:win_space_toggle" },
+        { label: "Caps Lock", value: "grp:caps_toggle" }
+    ]
     readonly property var kbPresets: [
         { c: "us", n: "English (US)" }, { c: "gb", n: "English (UK)" },
         { c: "ge", n: "Georgian" }, { c: "ru", n: "Russian" }, { c: "ua", n: "Ukrainian" },
@@ -577,6 +785,26 @@ Scope {
                     MouseArea { anchors.fill: parent; anchors.topMargin: -8; anchors.bottomMargin: -8; function pick(mx) { var f = Math.max(0, Math.min(1, mx / trk.width)); return Math.round(from + f * (to - from)) } onPressed: function (m) { moved(pick(m.x)) } onPositionChanged: function (m) { if (pressed) moved(pick(m.x)) } }
                 }
             }
+            // float twin of Slider (pointer speed, scroll factor); commits on release
+            component FSlider: Item {
+                property string label: ""; property real value: 0; property real from: 0; property real to: 1
+                property int decimals: 2; property real step: 0.05
+                signal moved(real v)
+                height: 40; width: parent ? parent.width : 0
+                Text { anchors.left: parent.left; anchors.top: parent.top; text: label; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
+                Text { anchors.right: parent.right; anchors.top: parent.top; text: Number(value).toFixed(decimals); color: Theme.accent; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold }
+                Rectangle {
+                    id: ftrk; anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; anchors.bottomMargin: 4; height: 8; radius: 4; color: Theme.hover
+                    Rectangle { height: parent.height; radius: 4; color: Theme.accent; width: parent.width * (value - from) / Math.max(0.0001, to - from) }
+                    Rectangle { width: 14; height: 14; radius: 7; color: "white"; anchors.verticalCenter: parent.verticalCenter; x: Math.max(0, Math.min(ftrk.width - width, ftrk.width * (value - from) / Math.max(0.0001, to - from) - width / 2)) }
+                    MouseArea {
+                        anchors.fill: parent; anchors.topMargin: -8; anchors.bottomMargin: -8
+                        function pick(mx) { var f = Math.max(0, Math.min(1, mx / ftrk.width)); var v = from + f * (to - from); return Math.round(v / step) * step }
+                        onPressed: function (m) { moved(pick(m.x)) }
+                        onPositionChanged: function (m) { if (pressed) moved(pick(m.x)) }
+                    }
+                }
+            }
             component Toggle: Rectangle {
                 property bool on: false
                 signal toggled()
@@ -592,6 +820,19 @@ Scope {
                 Behavior on color { ColorAnimation { duration: 120 } }
                 Text { id: pl; anchors.centerIn: parent; text: label; color: (plMa.containsMouse || primary) ? Theme.accentText : Theme.fg; font.family: Theme.fontText; font.pixelSize: 11; font.weight: Font.DemiBold }
                 MouseArea { id: plMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: go() }
+            }
+            // ToggleRow — label (+ optional sub-caption) left, Toggle right
+            component ToggleRow: Item {
+                property string title: ""; property string sub: ""; property bool on: false; property bool dim: false
+                signal toggled()
+                width: parent ? parent.width : 0; height: sub !== "" ? 34 : 28
+                opacity: dim ? 0.45 : 1
+                Column {
+                    anchors.left: parent.left; anchors.right: trTog.left; anchors.rightMargin: 10; anchors.verticalCenter: parent.verticalCenter; spacing: 1
+                    Text { text: title; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; elide: Text.ElideRight; width: parent.width }
+                    Text { visible: sub !== ""; text: sub; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 10; elide: Text.ElideRight; width: parent.width }
+                }
+                Toggle { id: trTog; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; on: parent.on; onToggled: if (!parent.dim) parent.toggled() }
             }
             // DropRow — the one dropdown used everywhere: label left, button right,
             // options expand inline below (scrollable past ~6 entries). Exclusive-open
@@ -1078,19 +1319,23 @@ Scope {
                 }
             }
 
-            // ════════ PANE 4 — Keyboard ════════
+            // ════════ PANE 4 — Keyboard & Mouse ════════
             Component {
                 id: cKeyboard
                 Column {
                     id: kbPane
                     spacing: 14
-                    property var active: root.kbLayout.split(",").filter(function (x) { return x.trim() !== "" })
                     property string kbQuery: ""
+                    property bool advOpen: false
                     function nameOf(code) { for (var i = 0; i < root.kbPresets.length; i++) if (root.kbPresets[i].c === code) return root.kbPresets[i].n; return code }
+                    function variantOpts(code) {
+                        var vs = root.kbVariants[code] || [""]
+                        return vs.map(function (v) { return { label: v === "" ? "Default" : v, value: v } })
+                    }
                     // layouts not already active, matching the search query (name or code)
                     function filtered() {
                         var q = kbPane.kbQuery.trim().toLowerCase()
-                        var act = root.kbLayout.split(",")
+                        var act = root.kbActive.map(function (l) { return l.code })
                         var out = []
                         for (var i = 0; i < root.kbPresets.length; i++) {
                             var p = root.kbPresets[i]
@@ -1099,69 +1344,236 @@ Scope {
                         }
                         return out
                     }
-                    function addLayout(code) {
-                        var a = root.kbLayout.split(",").filter(function (x) { return x.trim() !== "" })
-                        if (a.indexOf(code) < 0) a.push(code)
-                        root.applyKb(a.join(","))
+                    // effective mouse values for the selected device (override → global)
+                    readonly property var devOv: root.devTarget !== "" ? (root.devOverrides[root.devTarget] || ({})) : ({})
+                    readonly property real effSens: root.devTarget !== "" && devOv.sensitivity !== undefined ? devOv.sensitivity : root.inp.sensitivity
+                    readonly property bool effNat: root.devTarget !== "" && devOv.natural_scroll !== undefined ? devOv.natural_scroll : (root.inp.natural_scroll === true)
+                    readonly property bool effLeft: root.devTarget !== "" && devOv.left_handed !== undefined ? devOv.left_handed : (root.inp.left_handed === true)
+                    readonly property string effAccel: root.devTarget !== "" && devOv.accel_profile !== undefined ? devOv.accel_profile : root.inp.accel_profile
+                    function setMouse(patch) {
+                        if (root.devTarget !== "") root.applyDevice(root.devTarget, patch)
+                        else root.applyInput(patch)
                     }
-                    SectionTitle { text: "ACTIVE LAYOUTS  ·  switch with Super+Shift+Space" }
+
                     Card {
-                        Flow {
-                            width: parent.width; spacing: 8
+                        visible: !root.inpLoaded
+                        Text { width: parent.width; text: "Reading input configuration…"; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
+                    }
+
+                    SectionTitle { visible: root.inpLoaded; text: "KEYBOARD LAYOUTS  ·  drag to reorder — first is the default" }
+                    Card {
+                        visible: root.inpLoaded
+                        Item {
+                            width: parent.width; height: root.kbActive.length * 38
                             Repeater {
-                                model: kbPane.active
-                                delegate: Rectangle {
+                                model: root.kbActive
+                                delegate: Item {
+                                    id: kbRow
                                     required property var modelData
                                     required property int index
-                                    height: 30; width: chipRow.implicitWidth + 18; radius: 8; color: Theme.accent
-                                    Row { id: chipRow; anchors.centerIn: parent; spacing: 7
-                                        Text { anchors.verticalCenter: parent.verticalCenter; text: kbPane.nameOf(modelData) + " (" + modelData + ")"; color: Theme.accentText; font.family: Theme.fontText; font.pixelSize: 11; font.weight: Font.DemiBold }
-                                        Text { anchors.verticalCenter: parent.verticalCenter; visible: kbPane.active.length > 1; text: Theme.icClose; font.family: Theme.fontMono; font.pixelSize: 11; color: Theme.accentText
-                                            MouseArea { anchors.fill: parent; anchors.margins: -5; cursorShape: Qt.PointingHandCursor; onClicked: { var a = root.kbLayout.split(",").filter(function (x) { return x.trim() !== "" }); a.splice(index, 1); if (a.length) root.applyKb(a.join(",")) } } }
+                                    width: parent.width; height: 38
+                                    y: index * 38
+                                    z: rowDrag.drag.active || root.openDd === ("kbvar-" + index) ? 10 : 1
+                                    Rectangle {
+                                        anchors.fill: parent; anchors.bottomMargin: 6; radius: 7
+                                        color: rowDrag.drag.active ? Theme.hover : Theme.panel
+                                        border.color: Theme.stroke; border.width: 1
+                                        Text { anchors.left: parent.left; anchors.leftMargin: 10; anchors.verticalCenter: parent.verticalCenter; text: root.g(0xF01DB); font.family: Theme.fontMono; font.pixelSize: 13; color: Theme.fgDim }
+                                        Text {
+                                            anchors.left: parent.left; anchors.leftMargin: 32; anchors.right: kbRowRight.left; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter
+                                            text: kbPane.nameOf(kbRow.modelData.code) + "  (" + kbRow.modelData.code + ")" + (kbRow.index === 0 ? "  ·  default" : "")
+                                            color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: kbRow.index === 0 ? Font.DemiBold : Font.Normal; elide: Text.ElideRight
+                                        }
+                                        Row {
+                                            id: kbRowRight
+                                            anchors.right: parent.right; anchors.rightMargin: 10; anchors.verticalCenter: parent.verticalCenter; spacing: 10
+                                            Rectangle {
+                                                visible: kbPane.variantOpts(kbRow.modelData.code).length > 1
+                                                anchors.verticalCenter: parent.verticalCenter
+                                                width: 118; height: 22; radius: 6
+                                                color: kvMa.containsMouse ? Theme.hover : Theme.elevated
+                                                border.color: root.openDd === ("kbvar-" + kbRow.index) ? Theme.accent : Theme.stroke; border.width: 1
+                                                Text { anchors.left: parent.left; anchors.leftMargin: 7; anchors.right: parent.right; anchors.rightMargin: 18; anchors.verticalCenter: parent.verticalCenter; text: kbRow.modelData.variant === "" ? "Default" : kbRow.modelData.variant; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: 10; elide: Text.ElideRight }
+                                                Text { anchors.right: parent.right; anchors.rightMargin: 6; anchors.verticalCenter: parent.verticalCenter; text: Theme.icChevronDown; font.family: Theme.fontMono; font.pixelSize: 8; color: Theme.fgDim }
+                                                MouseArea { id: kvMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.openDd = root.openDd === ("kbvar-" + kbRow.index) ? "" : ("kbvar-" + kbRow.index) }
+                                            }
+                                            Text {
+                                                visible: root.kbActive.length > 1
+                                                anchors.verticalCenter: parent.verticalCenter
+                                                text: Theme.icClose; font.family: Theme.fontMono; font.pixelSize: 12; color: kxMa.containsMouse ? Theme.danger : Theme.fgDim
+                                                MouseArea { id: kxMa; anchors.fill: parent; anchors.margins: -6; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.kbRemove(kbRow.index) }
+                                            }
+                                        }
+                                    }
+                                    // variant popup — overlays the rows below (z-stacked)
+                                    Rectangle {
+                                        visible: root.openDd === ("kbvar-" + kbRow.index)
+                                        x: parent.width - 158; y: 30; width: 148; z: 30
+                                        height: Math.min(kvCol.implicitHeight + 10, 150)
+                                        radius: 7; color: Theme.bg; border.color: Theme.stroke; border.width: 1
+                                        Flickable {
+                                            anchors.fill: parent; anchors.margins: 5; contentHeight: kvCol.implicitHeight; clip: true; boundsBehavior: Flickable.StopAtBounds
+                                            Column {
+                                                id: kvCol; width: parent.width
+                                                Repeater {
+                                                    model: kbPane.variantOpts(kbRow.modelData.code)
+                                                    delegate: Rectangle {
+                                                        required property var modelData
+                                                        readonly property bool sel: modelData.value === kbRow.modelData.variant
+                                                        width: parent.width; height: 24; radius: 5; color: kvoMa.containsMouse ? Theme.hover : "transparent"
+                                                        Text { anchors.left: parent.left; anchors.leftMargin: 7; anchors.verticalCenter: parent.verticalCenter; text: modelData.label; color: sel ? Theme.accent : Theme.fg; font.family: Theme.fontText; font.pixelSize: 10; font.weight: sel ? Font.DemiBold : Font.Normal }
+                                                        MouseArea { id: kvoMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: { root.openDd = ""; root.kbSetVariant(kbRow.index, modelData.value) } }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    MouseArea {
+                                        id: rowDrag
+                                        anchors.left: parent.left; width: 30; height: parent.height - 6
+                                        drag.target: kbRow; drag.axis: Drag.YAxis
+                                        drag.minimumY: 0; drag.maximumY: Math.max(0, (root.kbActive.length - 1) * 38)
+                                        cursorShape: Qt.SizeVerCursor
+                                        onReleased: {
+                                            var to = Math.round(kbRow.y / 38)
+                                            if (to !== kbRow.index) root.kbMove(kbRow.index, to)
+                                            else kbRow.y = Qt.binding(function () { return kbRow.index * 38 })
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        // add a layout: searchable select
+                        Rectangle {
+                            width: parent.width; height: 34; radius: Theme.radiusInner
+                            color: Theme.bg; border.color: kbSearch.activeFocus ? Theme.accent : Theme.stroke; border.width: 1
+                            Text { anchors.left: parent.left; anchors.leftMargin: 11; anchors.verticalCenter: parent.verticalCenter; text: Theme.icSearch; font.family: Theme.fontMono; font.pixelSize: 13; color: Theme.fgDim }
+                            TextInput {
+                                id: kbSearch
+                                anchors.fill: parent; anchors.leftMargin: 34; anchors.rightMargin: 12; verticalAlignment: TextInput.AlignVCenter; clip: true
+                                color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
+                                onTextChanged: kbPane.kbQuery = text
+                                onAccepted: { var f = kbPane.filtered(); if (f.length) { root.kbAdd(f[0].c); text = "" } }
+                                Text { anchors.verticalCenter: parent.verticalCenter; visible: kbSearch.text.length === 0; text: "Add a layout — search by name or code…"; color: Theme.fgDim; font: kbSearch.font }
+                            }
+                        }
+                        Rectangle {
+                            visible: kbSearch.activeFocus || kbPane.kbQuery !== ""
+                            width: parent.width; height: Math.min(addCol.implicitHeight + 10, 168)
+                            radius: 7; color: Theme.bg; border.color: Theme.stroke; border.width: 1
+                            Flickable {
+                                anchors.fill: parent; anchors.margins: 5; contentHeight: addCol.implicitHeight; clip: true; boundsBehavior: Flickable.StopAtBounds
+                                Column {
+                                    id: addCol; width: parent.width
+                                    Text { visible: kbPane.filtered().length === 0; text: "No matching layout."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11; leftPadding: 8; topPadding: 4 }
+                                    Repeater {
+                                        model: kbPane.filtered()
+                                        delegate: Rectangle {
+                                            required property var modelData
+                                            width: parent.width; height: 26; radius: 6; color: kaMa.containsMouse ? Theme.hover : "transparent"
+                                            Text { anchors.left: parent.left; anchors.leftMargin: 8; anchors.verticalCenter: parent.verticalCenter; text: modelData.n + "  (" + modelData.c + ")"; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: 11 }
+                                            Text { anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter; visible: kaMa.containsMouse; text: "+ add"; color: Theme.accent; font.family: Theme.fontText; font.pixelSize: 10; font.weight: Font.DemiBold }
+                                            // onPressed (not clicked): fire before the search field loses focus
+                                            MouseArea { id: kaMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onPressed: { root.kbAdd(modelData.c); kbSearch.text = "" } }
+                                        }
                                     }
                                 }
                             }
                         }
                     }
-                    SectionTitle { text: "ADD A LAYOUT  ·  " + root.kbPresets.length + " languages" }
+
+                    SectionTitle { visible: root.inpLoaded; text: "LAYOUT SWITCHING" }
                     Card {
-                        Column {
-                            width: parent.width; spacing: 10
-                            // search field
-                            Rectangle {
-                                width: parent.width; height: 34; radius: Theme.radiusInner
-                                color: Theme.bg; border.color: kbSearch.activeFocus ? Theme.accent : Theme.stroke; border.width: 1
-                                Text { anchors.left: parent.left; anchors.leftMargin: 11; anchors.verticalCenter: parent.verticalCenter; text: Theme.icSearch; font.family: Theme.fontMono; font.pixelSize: 13; color: Theme.fgDim }
-                                TextInput {
-                                    id: kbSearch
-                                    anchors.fill: parent; anchors.leftMargin: 34; anchors.rightMargin: 12; verticalAlignment: TextInput.AlignVCenter; clip: true
-                                    color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
-                                    onTextChanged: kbPane.kbQuery = text
-                                    // Enter adds the first match
-                                    onAccepted: { var f = kbPane.filtered(); if (f.length) { kbPane.addLayout(f[0].c); text = "" } }
-                                    Text { anchors.verticalCenter: parent.verticalCenter; visible: kbSearch.text.length === 0; text: "Search languages… (e.g. German, fr, العربية)"; color: Theme.fgDim; font: kbSearch.font }
-                                }
+                        visible: root.inpLoaded
+                        DropRow {
+                            label: "Extra switch shortcut"; ddId: "kb-grp"; buttonWidth: 210
+                            options: root.grpOptions; value: root.kbOptToken("grp:")
+                            onPicked: function (v) { root.setKbOptPrefix("grp:", v) }
+                        }
+                        ToggleRow {
+                            title: "Remember layout per window"
+                            sub: "GNOME-style: each window keeps its own layout (kb-per-window daemon)."
+                            on: root.perWindowKb
+                            onToggled: root.setPerWindowKb(!root.perWindowKb)
+                        }
+                    }
+
+                    SectionTitle { visible: root.inpLoaded; text: "TYPING" }
+                    Card {
+                        visible: root.inpLoaded
+                        Slider { label: "Key repeat rate (per second)"; value: root.inp.repeat_rate; from: 5; to: 80; onMoved: function (v) { root.applyInput({ repeat_rate: v }) } }
+                        Slider { label: "Repeat delay (ms)"; value: root.inp.repeat_delay; from: 150; to: 1000; onMoved: function (v) { root.applyInput({ repeat_delay: v }) } }
+                        Item {
+                            width: parent.width; height: 24
+                            Row {
+                                anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; spacing: 6
+                                Text { anchors.verticalCenter: parent.verticalCenter; text: root.g(kbPane.advOpen ? 0xF0143 : 0xF0140); font.family: Theme.fontMono; font.pixelSize: 10; color: Theme.fgDim }
+                                Text { anchors.verticalCenter: parent.verticalCenter; text: "Advanced"; color: Theme.fgSecondary; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold }
                             }
-                            // matching layouts (chips) — click to add
-                            Flow {
-                                width: parent.width; spacing: 8
+                            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: kbPane.advOpen = !kbPane.advOpen }
+                        }
+                        Column {
+                            width: parent.width; spacing: 2; visible: kbPane.advOpen
+                            ToggleRow { title: "Num Lock on by default"; on: root.inp.numlock_by_default === true; onToggled: root.applyInput({ numlock_by_default: !(root.inp.numlock_by_default === true) }) }
+                            ToggleRow { title: "Caps Lock acts as Ctrl"; on: root.hasKbOpt("ctrl:nocaps"); onToggled: root.toggleKbOpt("ctrl:nocaps") }
+                            ToggleRow { title: "Caps Lock acts as Escape"; on: root.hasKbOpt("caps:escape"); onToggled: root.toggleKbOpt("caps:escape") }
+                            ToggleRow { title: "Right Alt is Compose"; on: root.hasKbOpt("compose:ralt"); onToggled: root.toggleKbOpt("compose:ralt") }
+                        }
+                    }
+
+                    SectionTitle { visible: root.inpLoaded; text: "MOUSE" }
+                    Card {
+                        visible: root.inpLoaded
+                        DropRow {
+                            visible: root.mice.filter(function (n) { return n.indexOf("touchpad") < 0 }).length > 1
+                            label: "Device"; ddId: "mouse-dev"; buttonWidth: 250
+                            options: { var o = [{ label: "All pointing devices", value: "" }]; var ms = root.mice; for (var i = 0; i < ms.length; i++) if (ms[i].indexOf("touchpad") < 0) o.push({ label: ms[i], value: ms[i] }); return o }
+                            value: root.devTarget
+                            onPicked: function (v) { root.devTarget = v }
+                        }
+                        Text { visible: root.devTarget !== ""; width: parent.width; text: "Overriding this device only — everything else keeps the global values."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 10; wrapMode: Text.Wrap }
+                        FSlider { label: "Pointer speed"; value: kbPane.effSens; from: -1; to: 1; onMoved: function (v) { kbPane.setMouse({ sensitivity: Math.round(v * 100) / 100 }) } }
+                        Item {
+                            width: parent.width; height: 30
+                            Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Acceleration profile"; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
+                            Row {
+                                anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; spacing: 5
                                 Repeater {
-                                    model: kbPane.filtered()
+                                    model: [{ n: "Adaptive", v: "adaptive" }, { n: "Flat", v: "flat" }]
                                     delegate: Rectangle {
                                         required property var modelData
-                                        height: 28; width: addRow.implicitWidth + 18; radius: 8; color: aMa3.containsMouse ? Theme.accent : Theme.panel; border.color: Theme.stroke; border.width: 1
-                                        Row { id: addRow; anchors.centerIn: parent; spacing: 6
-                                            Text { anchors.verticalCenter: parent.verticalCenter; text: "+"; color: aMa3.containsMouse ? Theme.accentText : Theme.accent; font.family: Theme.fontText; font.pixelSize: 13 }
-                                            Text { anchors.verticalCenter: parent.verticalCenter; text: modelData.n + "  (" + modelData.c + ")"; color: aMa3.containsMouse ? Theme.accentText : Theme.fg; font.family: Theme.fontText; font.pixelSize: 11 }
-                                        }
-                                        MouseArea { id: aMa3; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: kbPane.addLayout(modelData.c) }
+                                        readonly property bool sel: kbPane.effAccel === modelData.v || (kbPane.effAccel === "" && modelData.v === "adaptive")
+                                        width: 76; height: 24; radius: 6
+                                        color: sel ? Theme.accent : (apMa.containsMouse ? Theme.hover : Theme.panel)
+                                        border.color: sel ? Theme.accent : Theme.stroke; border.width: 1
+                                        Text { anchors.centerIn: parent; text: modelData.n; color: sel ? Theme.accentText : Theme.fg; font.family: Theme.fontText; font.pixelSize: 10; font.weight: Font.DemiBold }
+                                        MouseArea { id: apMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: kbPane.setMouse({ accel_profile: modelData.v }) }
                                     }
                                 }
                             }
-                            Text { width: parent.width; visible: kbPane.filtered().length === 0; text: "No matching layout."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
                         }
+                        ToggleRow { title: "Natural scrolling"; on: kbPane.effNat; onToggled: kbPane.setMouse({ natural_scroll: !kbPane.effNat }) }
+                        ToggleRow { title: "Left-handed buttons"; on: kbPane.effLeft; onToggled: kbPane.setMouse({ left_handed: !kbPane.effLeft }) }
+                        FSlider { label: "Scroll speed"; value: Number(root.inp.scroll_factor); from: 0.1; to: 3; step: 0.1; decimals: 1; onMoved: function (v) { root.applyInput({ scroll_factor: Math.round(v * 10) / 10 }) } }
                     }
-                    Text { width: parent.width; text: "Switch with Super+Shift+Space. Per-window layout memory is handled by the kb-per-window daemon."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
+
+                    SectionTitle { visible: root.inpLoaded; text: "TOUCHPAD" }
+                    Card {
+                        visible: root.inpLoaded && !root.hasTouchpad
+                        Text { width: parent.width; text: "No touchpad detected."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
+                    }
+                    Card {
+                        visible: root.inpLoaded && root.hasTouchpad
+                        ToggleRow { title: "Tap to click"; on: root.inp.tp_tap === true; onToggled: root.applyInput({ tp_tap: !(root.inp.tp_tap === true) }) }
+                        ToggleRow { title: "Natural scrolling"; on: root.inp.tp_natural_scroll === true; onToggled: root.applyInput({ tp_natural_scroll: !(root.inp.tp_natural_scroll === true) }) }
+                        ToggleRow { title: "Disable while typing"; on: root.inp.tp_dwt === true; onToggled: root.applyInput({ tp_dwt: !(root.inp.tp_dwt === true) }) }
+                        ToggleRow { title: "Clickfinger behaviour"; sub: "Two-finger press = right-click, three-finger = middle-click (instead of corner zones)."; on: root.inp.tp_clickfinger === true; onToggled: root.applyInput({ tp_clickfinger: !(root.inp.tp_clickfinger === true) }) }
+                        ToggleRow { title: "Tap and drag"; on: root.inp.tp_tap_drag === true; onToggled: root.applyInput({ tp_tap_drag: !(root.inp.tp_tap_drag === true) }) }
+                        ToggleRow { title: "Drag lock"; sub: "Keep dragging briefly after lifting the finger."; on: root.inp.tp_drag_lock === true; onToggled: root.applyInput({ tp_drag_lock: !(root.inp.tp_drag_lock === true) }) }
+                        ToggleRow { title: "Middle-click emulation"; sub: "Left+right button together = middle click."; on: root.inp.tp_mbe === true; onToggled: root.applyInput({ tp_mbe: !(root.inp.tp_mbe === true) }) }
+                        FSlider { label: "Scroll speed"; value: Number(root.inp.tp_scroll_factor); from: 0.1; to: 3; step: 0.1; decimals: 1; onMoved: function (v) { root.applyInput({ tp_scroll_factor: Math.round(v * 10) / 10 }) } }
+                    }
+                    Text { width: parent.width; text: "Everything here applies live and persists to generated/input.lua. Two-finger vs edge scrolling follows the hardware default (libinput); Hyprland doesn't expose it."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
                     Item { width: 1; height: 8 }
                 }
             }

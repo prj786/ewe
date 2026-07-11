@@ -64,9 +64,12 @@ fi
 # Quickshell (NotificationServer + the bar's own modules) — no swaync, no
 # nm-applet/blueman-applet tray icons (those duplicated the bar).
 
-# ── Per-window keyboard layout (GNOME-style): remembers US vs Georgian per ────
-# window and restores it on focus. Self-contained Python daemon (no extra deps).
-run_once "kb-per-window.py" python3 "$HOME/.config/hypr/scripts/kb-per-window.py"
+# ── Per-window keyboard layout (GNOME-style): remembers the layout per window ─
+# and restores it on focus. Self-contained Python daemon (no extra deps).
+# Settings → Keyboard & Mouse toggles it via the .disabled flag file.
+if [ ! -e "$HOME/.config/hypr/generated/kb-per-window.disabled" ]; then
+    run_once "kb-per-window.py" python3 "$HOME/.config/hypr/scripts/kb-per-window.py"
+fi
 
 # ── Nemo: bare-window seed (one-time; same keys as phase 60) — no sidebar/  ───
 # menubar/toolbar/statusbar, pure folder view. Stamp-guarded so the user's own

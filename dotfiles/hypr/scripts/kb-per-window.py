@@ -22,12 +22,53 @@ RUNTIME = os.environ.get("XDG_RUNTIME_DIR", "")
 SIG = os.environ.get("HYPRLAND_INSTANCE_SIGNATURE", "")
 SOCK = f"{RUNTIME}/hypr/{SIG}/.socket2.sock"
 
-# active_keymap name (as Hyprland reports it) → index in kb_layout "us,ge".
+# layout code (as configured in input.kb_layout) → prefixes of the keymap name
+# Hyprland reports in `activelayout` events. Covers the codes the Settings app
+# offers; unknown names fall back to index 0 (the default layout).
+CODE_HINTS = {
+    "us": ("english (us", "english (intl", "english (dvorak", "english (colemak"),
+    "gb": ("english (uk",), "ge": ("georgian",), "ru": ("russian",), "ua": ("ukrainian",),
+    "de": ("german",), "at": ("german (austria",), "ch": ("german (switzerland", "swiss"),
+    "fr": ("french",), "be": ("belgian",), "ca": ("french (canada",),
+    "es": ("spanish",), "latam": ("spanish (latin",), "it": ("italian",),
+    "pt": ("portuguese",), "br": ("portuguese (brazil",), "nl": ("dutch",),
+    "tr": ("turkish",), "gr": ("greek",), "pl": ("polish",), "cz": ("czech",),
+    "sk": ("slovak",), "hu": ("hungarian",), "ro": ("romanian",), "bg": ("bulgarian",),
+    "se": ("swedish",), "no": ("norwegian",), "fi": ("finnish",), "dk": ("danish",),
+    "is": ("icelandic",), "lt": ("lithuanian",), "lv": ("latvian",), "ee": ("estonian",),
+    "rs": ("serbian",), "hr": ("croatian",), "si": ("slovenian",), "by": ("belarusian",),
+    "kz": ("kazakh",), "am": ("armenian",), "az": ("azerbaijani",), "il": ("hebrew",),
+    "ara": ("arabic",), "ir": ("persian",), "in": ("indian",), "jp": ("japanese",),
+    "kr": ("korean",), "cn": ("chinese",), "th": ("thai",), "vn": ("vietnamese",),
+}
+
+
+def layout_map() -> dict:
+    """keymap-name prefix → index, built from the live kb_layout list."""
+    try:
+        out = subprocess.run(
+            ["hyprctl", "getoption", "input:kb_layout", "-j"],
+            capture_output=True, text=True, check=True,
+        ).stdout
+        codes = [c.strip() for c in json.loads(out).get("str", "us").split(",") if c.strip()]
+    except Exception:
+        codes = ["us"]
+    m = {}
+    for idx, code in enumerate(codes):
+        for hint in CODE_HINTS.get(code, (code,)):
+            m.setdefault(hint, idx)
+    return m
+
+
+LAYOUTS = layout_map()
+
+
 def name_to_index(name: str) -> int:
     n = (name or "").lower()
-    if "georg" in n:
-        return 1
-    return 0  # English (US) and anything else
+    for hint, idx in LAYOUTS.items():
+        if n.startswith(hint):
+            return idx
+    return 0  # the default layout for anything unrecognised
 
 
 def keyboards() -> list:
@@ -95,8 +136,10 @@ def main() -> int:
                 mem.pop(payload.strip(), None)
 
             elif name in ("configreloaded", "monitoradded", "monitorremoved"):
-                # keyboard set can change on reload / device hotplug
+                # keyboard set and layout list can change on reload / hotplug
+                global LAYOUTS
                 kbds = keyboards()
+                LAYOUTS = layout_map()
 
     return 0
 
