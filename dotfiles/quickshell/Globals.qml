@@ -99,9 +99,11 @@ QtObject {
     }
 
     // ── Avatar (~/.face) — shared by Settings (account card) and the lock screen.
-    // avatarVersion cache-busts the Image URL after Settings saves a new one.
+    // faceUrl is THE avatar image source everywhere: "" while no ~/.face exists,
+    // and cache-busted (?v=) after Settings saves a new one.
     property bool hasFace: false
     property int avatarVersion: 0
+    readonly property string faceUrl: hasFace ? "file://" + Quickshell.env("HOME") + "/.face?v=" + avatarVersion : ""
     property Process _faceChk: Process { running: true; command: ["sh", "-c", 'test -f "$HOME/.face"']; onExited: function (code) { g.hasFace = (code === 0) } }
     function recheckFace() { g.avatarVersion++; g._faceChk.running = false; g._faceChk.running = true }
 

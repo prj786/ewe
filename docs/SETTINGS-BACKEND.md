@@ -25,7 +25,7 @@ configuration is restored automatically.
 |---|---|---|
 | `~/.config/hypr/generated/monitors.lua` | Displays | per-monitor-set profiles, `desc:`-matched `hl.monitor{}` rules + boot-time profile matching |
 | `~/.config/hypr/generated/input.lua` | Keyboard & Mouse | the full `input { … }` block + per-device `hl.device{}` overrides |
-| `~/.config/hypr/generated/wallpapers.conf` | Wallpaper | `mode=…`, `*=<default image>`, `<output>=<image>` lines read by `scripts/wallpaper.sh` |
+| `~/.config/hypr/generated/wallpapers.conf` | Wallpaper | `mode=…`, optional `backend=…`, `*=<default image>`, `<output>=<image>` lines read by `scripts/wallpaper.sh` |
 | `~/.config/hypr/generated/user.lua` | Layout / Theme | gaps, border, corner radius, accent border, animation overrides |
 | `~/.config/hypr/generated/kb-per-window.disabled` | Keyboard & Mouse | flag file: presence tells `autostart.sh` not to start the per-window-layout daemon |
 | `~/.config/quickshell/display-profiles.json` | Displays | source of truth for the display profiles (below) |
@@ -34,6 +34,11 @@ configuration is restored automatically.
 `hyprland.lua` sources `user.lua`, then `input.lua`, then `monitors.lua`
 (missing files are a no-op), so the dedicated files win over any stale lines an
 older `user.lua` may still carry. All of these are gitignored user state.
+
+Wallpaper backend: `wallpaper.sh` prefers the **shipped** swaybg; installing
+swww or hyprpaper does not silently take over — the user opts in via the
+Backend picker (→ `backend=` in wallpapers.conf). A hand-written
+`hyprpaper.conf` (no AUTO-GENERATED header) is never overwritten.
 
 ## Display profiles
 

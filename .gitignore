@@ -3,7 +3,10 @@ dotfiles/hypr/generated/user.lua
 dotfiles/hypr/generated/monitors.lua
 dotfiles/hypr/generated/input.lua
 dotfiles/hypr/generated/wallpapers.conf
+dotfiles/hypr/generated/kb-per-window.disabled
+dotfiles/hypr/hyprpaper.conf
 dotfiles/quickshell/display-profiles.json
+dotfiles/quickshell/input-devices.json
 dotfiles/quickshell/user-theme.json
 dotfiles/quickshell/pinned-apps.json
 dotfiles/quickshell/places.json

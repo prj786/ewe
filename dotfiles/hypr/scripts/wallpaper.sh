@@ -4,21 +4,31 @@
 # Reads ~/.config/hypr/generated/wallpapers.conf, written atomically by
 # Settings → Wallpaper:
 #     mode=fill|fit|stretch|tile|center
-#     *=/path/to/default.jpg          # every output without its own line
-#     DP-1=/path/to/that-monitor.jpg  # per-output override
+#     backend=swaybg|swww|hyprpaper    # optional; default prefers the shipped swaybg
+#     *=/path/to/default.jpg           # every output without its own line
+#     DP-1=/path/to/that-monitor.jpg   # per-output override
 #
-# Backend preference: swww (animated) → hyprpaper → swaybg (the one hypr-shell
-# ships). `--reapply` re-asserts the config — Settings calls it after a change,
-# HyprMon on monitor hotplug, so a newly plugged display gets its wallpaper.
+# Flags:
+#     --reapply   re-assert the config (Settings after a change, HyprMon on
+#                 monitor hotplug) so a newly plugged display gets its wallpaper
+#     --backend   print the backend this script would use, and exit
+#
+# hypr-shell ships swaybg, so swaybg is the default; a user who installs swww or
+# hyprpaper opts in via backend= (Settings shows the picker when several exist).
 # Legacy fallback (no conf): $DE_WALLPAPER, then ~/.config/hypr/wallpaper.{jpg,…}.
 
 set -u
 
 REAPPLY=0
-[ "${1:-}" = "--reapply" ] && REAPPLY=1
+QUERY=0
+case "${1:-}" in
+    --reapply) REAPPLY=1 ;;
+    --backend) QUERY=1 ;;
+esac
 
 CONF="$HOME/.config/hypr/generated/wallpapers.conf"
 MODE=fill
+BACKEND=""
 DEFAULT=""
 declare -A PER=()
 
@@ -27,13 +37,19 @@ if [ -r "$CONF" ]; then
         case "$k" in
             ''|\#*) ;;
             mode) MODE="$v" ;;
+            backend) BACKEND="$v" ;;
             \*) DEFAULT="$v" ;;
             *) [ -n "$v" ] && PER["$k"]="$v" ;;
         esac
     done < "$CONF"
 fi
 
-# legacy single-image fallback when no conf exists yet
+# drop images that no longer exist (deleted/moved since they were picked) so a
+# dead path can't black out the desktop or mask the legacy fallback
+[ -n "$DEFAULT" ] && [ ! -r "$DEFAULT" ] && DEFAULT=""
+for o in "${!PER[@]}"; do [ -r "${PER[$o]}" ] || unset 'PER[$o]'; done
+
+# legacy single-image fallback when nothing (valid) is configured
 if [ -z "$DEFAULT" ] && [ "${#PER[@]}" -eq 0 ]; then
     for f in \
         "${DE_WALLPAPER:-}" \
@@ -45,38 +61,98 @@ if [ -z "$DEFAULT" ] && [ "${#PER[@]}" -eq 0 ]; then
     done
 fi
 
-# ── swww ──────────────────────────────────────────────────────────────────────
-if command -v swww >/dev/null 2>&1; then
+# ── backend choice: explicit backend= wins; otherwise prefer the shipped swaybg
+have() { command -v "$1" >/dev/null 2>&1; }
+if [ -n "$BACKEND" ] && ! have "$BACKEND"; then BACKEND=""; fi
+if [ -z "$BACKEND" ]; then
+    for b in swaybg swww hyprpaper; do have "$b" && { BACKEND="$b"; break; }; done
+fi
+if [ "$QUERY" -eq 1 ]; then echo "$BACKEND"; exit 0; fi
+[ -n "$BACKEND" ] || exit 0
+
+# on an explicit reapply, stop the backends we are NOT using so switching in
+# Settings never leaves two daemons fighting over the background layer
+if [ "$REAPPLY" -eq 1 ]; then
+    [ "$BACKEND" != swaybg ] && pkill -x swaybg 2>/dev/null
+    [ "$BACKEND" != swww ] && pkill -x swww-daemon 2>/dev/null
+    [ "$BACKEND" != hyprpaper ] && pkill -x hyprpaper 2>/dev/null
+fi
+
+# nothing at all to show → paint a solid Gruvbox background so the root is
+# never garbage, whatever the preferred backend is
+if [ -z "$DEFAULT" ] && [ "${#PER[@]}" -eq 0 ]; then
+    if have swaybg; then
+        [ "$REAPPLY" -eq 0 ] && pgrep -x swaybg >/dev/null 2>&1 && exit 0
+        pkill -x swaybg 2>/dev/null
+        exec swaybg -c "#282828" >/dev/null 2>&1
+    fi
+    exit 0
+fi
+
+case "$BACKEND" in
+
+swww)
     pgrep -x swww-daemon >/dev/null 2>&1 || { swww-daemon >/dev/null 2>&1 & sleep 0.4; }
-    case "$MODE" in fit) RS=fit ;; *) RS=crop ;; esac
-    [ -n "$DEFAULT" ] && swww img "$DEFAULT" --resize "$RS" >/dev/null 2>&1
+    case "$MODE" in
+        fit) RS=fit ;;
+        stretch) RS=stretch ;;
+        tile|center) RS=no ;;   # swww has no tile/centre; 'no' keeps the image unscaled
+        *) RS=crop ;;
+    esac
+    if [ -n "$DEFAULT" ]; then
+        if [ "${#PER[@]}" -eq 0 ]; then
+            swww img "$DEFAULT" --resize "$RS" >/dev/null 2>&1
+        else
+            # only paint outputs that have no override — avoids the double
+            # transition (default first, override on top) on every reapply
+            while IFS=: read -r out _; do
+                [ -n "$out" ] || continue
+                [ -n "${PER[$out]:-}" ] || swww img "$DEFAULT" -o "$out" --resize "$RS" >/dev/null 2>&1
+            done < <(swww query 2>/dev/null)
+        fi
+    fi
     for o in "${!PER[@]}"; do swww img "${PER[$o]}" -o "$o" --resize "$RS" >/dev/null 2>&1; done
-    exit 0
-fi
+    ;;
 
-# ── hyprpaper ─────────────────────────────────────────────────────────────────
-if command -v hyprpaper >/dev/null 2>&1; then
+hyprpaper)
+    # only regenerate hyprpaper.conf if it's ours (or absent) — never clobber a
+    # hand-written config the user maintains for their own hyprpaper setup
     HPC="$HOME/.config/hypr/hyprpaper.conf"
-    {
-        echo "# AUTO-GENERATED by wallpaper.sh — edit wallpapers.conf instead"
-        [ -n "$DEFAULT" ] && { echo "preload = $DEFAULT"; echo "wallpaper = ,$DEFAULT"; }
-        for o in "${!PER[@]}"; do echo "preload = ${PER[$o]}"; echo "wallpaper = $o,${PER[$o]}"; done
-        echo "splash = false"
-    } > "$HPC"
-    if [ "$REAPPLY" -eq 1 ]; then pkill -x hyprpaper 2>/dev/null; sleep 0.2; fi
-    pgrep -x hyprpaper >/dev/null 2>&1 || hyprpaper >/dev/null 2>&1 &
-    exit 0
-fi
+    OURS=1
+    [ -e "$HPC" ] && ! head -1 "$HPC" 2>/dev/null | grep -q "AUTO-GENERATED" && OURS=0
+    if [ "$OURS" -eq 1 ]; then
+        {
+            echo "# AUTO-GENERATED by wallpaper.sh — edit wallpapers.conf instead"
+            [ -n "$DEFAULT" ] && { echo "preload = $DEFAULT"; echo "wallpaper = ,$DEFAULT"; }
+            for o in "${!PER[@]}"; do echo "preload = ${PER[$o]}"; echo "wallpaper = $o,${PER[$o]}"; done
+            echo "splash = false"
+        } > "$HPC.tmp" && mv "$HPC.tmp" "$HPC"
+    fi
+    if pgrep -x hyprpaper >/dev/null 2>&1; then
+        # drive the live daemon over IPC instead of restarting it (no flash)
+        if [ "$REAPPLY" -eq 1 ] && [ "$OURS" -eq 1 ]; then
+            if [ -n "$DEFAULT" ]; then
+                hyprctl hyprpaper preload "$DEFAULT" >/dev/null 2>&1
+                hyprctl hyprpaper wallpaper ",$DEFAULT" >/dev/null 2>&1
+            fi
+            for o in "${!PER[@]}"; do
+                hyprctl hyprpaper preload "${PER[$o]}" >/dev/null 2>&1
+                hyprctl hyprpaper wallpaper "$o,${PER[$o]}" >/dev/null 2>&1
+            done
+        fi
+    else
+        hyprpaper >/dev/null 2>&1 &
+    fi
+    ;;
 
-# ── swaybg (shipped default) ──────────────────────────────────────────────────
-command -v swaybg >/dev/null 2>&1 || exit 0
-if [ "$REAPPLY" -eq 0 ] && pgrep -x swaybg >/dev/null 2>&1; then exit 0; fi
+swaybg)
+    if [ "$REAPPLY" -eq 0 ] && pgrep -x swaybg >/dev/null 2>&1; then exit 0; fi
+    args=()
+    [ -n "$DEFAULT" ] && args+=(-i "$DEFAULT" -m "$MODE")
+    for o in "${!PER[@]}"; do args+=(-o "$o" -i "${PER[$o]}" -m "$MODE"); done
+    pkill -x swaybg 2>/dev/null
+    exec swaybg "${args[@]}" >/dev/null 2>&1
+    ;;
 
-args=()
-[ -n "$DEFAULT" ] && args+=(-i "$DEFAULT" -m "$MODE")
-for o in "${!PER[@]}"; do args+=(-o "$o" -i "${PER[$o]}" -m "$MODE"); done
-# no image at all → solid Gruvbox background so the root is never garbage
-[ "${#args[@]}" -eq 0 ] && args=(-c "#282828")
-
-pkill -x swaybg 2>/dev/null
-exec swaybg "${args[@]}" >/dev/null 2>&1
+esac
+exit 0

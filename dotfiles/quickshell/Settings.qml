@@ -22,27 +22,31 @@ Scope {
     readonly property string home: Quickshell.env("HOME")
 
     property int pane: 0
+    // key is the stable identity: probe triggers and the pane component are
+    // looked up by it, so inserting a nav item never silently renumbers others
     readonly property var navItems: [
-        { ic: 0xF02FB, label: "System" },
-        { ic: 0xF0379, label: "Displays" },
-        { ic: 0xF05A9, label: "Networking" },
-        { ic: 0xF0614, label: "Default Apps" },
-        { ic: 0xF030C, label: "Keyboard & Mouse" },
-        { ic: 0xF11C7, label: "Shortcuts" },
-        { ic: 0xF0264, label: "Layout" },
-        { ic: 0xF0241, label: "Theme" },
-        { ic: 0xF02E9, label: "Wallpaper" },
-        { ic: 0xF0DC3, label: "Dock" },
-        { ic: 0xF0004, label: "User" }
+        { key: "system",    ic: 0xF02FB, label: "System" },
+        { key: "displays",  ic: 0xF0379, label: "Displays" },
+        { key: "network",   ic: 0xF05A9, label: "Networking" },
+        { key: "defaults",  ic: 0xF0614, label: "Default Apps" },
+        { key: "input",     ic: 0xF030C, label: "Keyboard & Mouse" },
+        { key: "shortcuts", ic: 0xF11C7, label: "Shortcuts" },
+        { key: "layout",    ic: 0xF0264, label: "Layout" },
+        { key: "theme",     ic: 0xF0241, label: "Theme" },
+        { key: "wallpaper", ic: 0xF02E9, label: "Wallpaper" },
+        { key: "dock",      ic: 0xF0DC3, label: "Dock" },
+        { key: "user",      ic: 0xF0004, label: "User" }
     ]
+    readonly property string paneKey: navItems[pane].key
     onPaneChanged: {
-        if (pane === 1) HyprMon.refresh()
-        else if (pane === 2) { wifiDevProbe.running = true; wifiState.running = true; wifiScan.running = true; vpnScan.running = true; netProc.running = true; sshProc.running = true }
-        else if (pane === 4) { inputProbe.running = true; devProbe.running = true; perWinProbe.running = true }
-        else if (pane === 5) scProc.running = true
-        else if (pane === 6) layoutProc.running = true
-        else if (pane === 8) { wpBackendProbe.running = true; wpConfLoad.running = true; HyprMon.refresh(); if (root.wpDir === "") wpDirProbe.running = true; else root.wpList(root.wpDir) }
-        else if (pane === 10) Globals.recheckFace()
+        var k = root.paneKey
+        if (k === "displays") HyprMon.refresh()
+        else if (k === "network") { wifiDevProbe.running = true; wifiState.running = true; wifiScan.running = true; vpnScan.running = true; netProc.running = true; sshProc.running = true }
+        else if (k === "input") { inputProbe.running = true; devProbe.running = true; perWinProbe.running = true }
+        else if (k === "shortcuts") scProc.running = true
+        else if (k === "layout") layoutProc.running = true
+        else if (k === "wallpaper") { wpBackendProbe.running = true; wpConfLoad.running = true; HyprMon.refresh(); if (root.wpDir === "") wpDirProbe.running = true; else root.wpList(root.wpDir) }
+        else if (k === "user") Globals.recheckFace()
     }
 
     // ── persisted override state ───────────────────────────────────────────────
@@ -63,9 +67,7 @@ Scope {
         s += gen
         s += "hl.config({ decoration = { rounding = " + root.rounding + " } })\n"
         s += root.animBlockPersist()
-        luaWriter.command = ["sh", "-c", "mkdir -p \"" + root.home + "/.config/hypr/generated\"; cat > \""
-            + root.home + "/.config/hypr/generated/user.lua\" <<'QS_EOF'\n" + s + "QS_EOF\n"]
-        luaWriter.running = false; luaWriter.running = true
+        root.atomicWrite(luaWriter, root.home + "/.config/hypr/generated/user.lua", s)
     }
     Process { id: luaWriter }
     Process { id: jsonWriter }
@@ -128,8 +130,7 @@ Scope {
               + ', "dockAutohide": ' + (Globals.dockAutohide ? "true" : "false")
               + ', "animationSpeed": ' + Number(Globals.animationSpeed)
               + ', "colorScheme": "' + Globals.colorScheme + '" }'
-        jsonWriter.command = ["sh", "-c", "cat > \"" + root.home + "/.config/quickshell/user-theme.json\" <<'QS_EOF'\n" + s + "\nQS_EOF\n"]
-        jsonWriter.running = false; jsonWriter.running = true
+        root.atomicWrite(jsonWriter, root.home + "/.config/quickshell/user-theme.json", s)
     }
     function setAccent(hex) {
         Globals.accentColor = hex
@@ -218,8 +219,11 @@ Scope {
     }
     function keepChange() {
         revertCountdown.stop()
-        var s = root.keepSpecs; root.revertSpecs = null; root.keepSpecs = null
-        HyprMon.commit(s); root.flashApplied("Saved")
+        root.revertSpecs = null; root.keepSpecs = null
+        // commit what is actually live (re-queried after the apply) rather than
+        // the requested specs — so e.g. a "preferred" mode used to re-enable a
+        // display is stored as the explicit mode the compositor picked
+        HyprMon.commit(HyprMon.snapshot()); root.flashApplied("Saved")
     }
     function doRevert() {
         revertCountdown.stop()
@@ -439,33 +443,21 @@ Scope {
     property var devOverrides: ({})    // device name → { sensitivity, natural_scroll, left_handed, accel_profile }
     property string devTarget: ""      // "" = all pointing devices (global input{})
 
-    // generic single-line eval runner with error capture (same contract as
-    // HyprMon.applySpecs: any non-`ok` reply lands in the error banner)
-    property var _evalDone: null
-    function runEvals(stmts, done) {
-        var cmd = ["sh", "-c", 'st=0; for s in "$@"; do out=$(hyprctl eval "$s" 2>&1); case "$out" in ok*) ;; *) echo "$out"; st=1;; esac; done; exit $st', "qs-settings"]
-        for (var i = 0; i < stmts.length; i++) cmd.push(stmts[i])
-        root._evalDone = done || null
-        evalProc.command = cmd; evalProc.running = false; evalProc.running = true
-    }
-    Process { id: evalProc; stdout: StdioCollector { onStreamFinished: { var err = this.text.trim(); if (err !== "") root.errorMsg = err.split("\n")[0]; var cb = root._evalDone; root._evalDone = null; if (cb) cb(err === "") } } }
-    // atomic write: temp file + rename, so a crash mid-write can't corrupt config
-    function atomicWrite(proc, path, content) {
-        proc.command = ["sh", "-c",
-            'mkdir -p "$(dirname "$1")" && cat > "$1.tmp" <<\'QS_EOF\'\n' + content + '\nQS_EOF\nmv "$1.tmp" "$1"',
-            "qs-settings", path]
-        proc.running = false; proc.running = true
-    }
+    // eval runner + atomic writer live in HyprMon (the one copy each); these are
+    // thin conveniences so pane code reads naturally
+    function runEvals(stmts, done) { HyprMon.runEvals(stmts, done) }
+    function atomicWrite(proc, path, content) { HyprMon.atomicWrite(proc, path, content) }
     Process { id: inputLuaWriter }
     Process { id: devOvWriter }
 
     function boolLua(b) { return b ? "true" : "false" }
+    function esc(s) { return HyprMon.luaEsc(s) }
     function inputLua(p) {
-        return 'hl.config({ input = { kb_layout = "' + p.kb_layout + '", kb_variant = "' + p.kb_variant + '", kb_options = "' + p.kb_options + '"'
+        return 'hl.config({ input = { kb_layout = "' + root.esc(p.kb_layout) + '", kb_variant = "' + root.esc(p.kb_variant) + '", kb_options = "' + root.esc(p.kb_options) + '"'
              + ", repeat_rate = " + p.repeat_rate + ", repeat_delay = " + p.repeat_delay
              + ", numlock_by_default = " + root.boolLua(p.numlock_by_default)
              + ", sensitivity = " + p.sensitivity
-             + (p.accel_profile !== "" ? ', accel_profile = "' + p.accel_profile + '"' : "")
+             + (p.accel_profile !== "" ? ', accel_profile = "' + root.esc(p.accel_profile) + '"' : "")
              + ", natural_scroll = " + root.boolLua(p.natural_scroll) + ", left_handed = " + root.boolLua(p.left_handed)
              + ", scroll_factor = " + p.scroll_factor
              + ", touchpad = { natural_scroll = " + root.boolLua(p.tp_natural_scroll) + ", tap_to_click = " + root.boolLua(p.tp_tap)
@@ -474,11 +466,11 @@ Scope {
              + ", drag_lock = " + root.boolLua(p.tp_drag_lock) + ", tap_and_drag = " + root.boolLua(p.tp_tap_drag) + " } } })"
     }
     function deviceLua(name, o) {
-        var L = 'hl.device({ name = "' + name + '"'
+        var L = 'hl.device({ name = "' + root.esc(name) + '"'
         if (o.sensitivity !== undefined) L += ", sensitivity = " + o.sensitivity
         if (o.natural_scroll !== undefined) L += ", natural_scroll = " + root.boolLua(o.natural_scroll)
         if (o.left_handed !== undefined) L += ", left_handed = " + root.boolLua(o.left_handed)
-        if (o.accel_profile !== undefined && o.accel_profile !== "") L += ', accel_profile = "' + o.accel_profile + '"'
+        if (o.accel_profile !== undefined && o.accel_profile !== "") L += ', accel_profile = "' + root.esc(o.accel_profile) + '"'
         return L + " })"
     }
     function writeInputLua() {
@@ -535,6 +527,7 @@ Scope {
             kb_layout: list.map(function (l) { return l.code }).join(","),
             kb_variant: anyVar ? list.map(function (l) { return l.variant }).join(",") : ""
         })
+        root.restartPerWindowKb()
     }
     function kbAdd(code) { var l = root.kbActive.slice(); l.push({ code: code, variant: "" }); root.applyLayouts(l) }
     function kbRemove(i) { var l = root.kbActive.slice(); if (l.length > 1) { l.splice(i, 1); root.applyLayouts(l) } }
@@ -547,47 +540,60 @@ Scope {
     }
     function kbSetVariant(i, v) { var l = root.kbActive.slice(); l[i] = { code: l[i].code, variant: v }; root.applyLayouts(l) }
     // per-window layout memory = the kb-per-window.py daemon; the flag file tells
-    // autostart.sh to skip it on the next login
+    // autostart.sh to skip it on the next login. Patterns use the [k] trick so
+    // pgrep/pkill -f never match the wrapping `sh -c` (whose own cmdline would
+    // otherwise contain the pattern and always "find" the daemon).
     function setPerWindowKb(on) {
-        if (on) Quickshell.execDetached(["sh", "-c", 'rm -f "$HOME/.config/hypr/generated/kb-per-window.disabled"; pgrep -f kb-per-window.py >/dev/null || setsid python3 "$HOME/.config/hypr/scripts/kb-per-window.py" >/dev/null 2>&1 &'])
-        else Quickshell.execDetached(["sh", "-c", 'mkdir -p "$HOME/.config/hypr/generated"; touch "$HOME/.config/hypr/generated/kb-per-window.disabled"; pkill -f kb-per-window.py'])
+        if (on) Quickshell.execDetached(["sh", "-c", 'rm -f "$HOME/.config/hypr/generated/kb-per-window.disabled"; pgrep -f "[k]b-per-window.py" >/dev/null || setsid python3 "$HOME/.config/hypr/scripts/kb-per-window.py" >/dev/null 2>&1 &'])
+        else Quickshell.execDetached(["sh", "-c", 'mkdir -p "$HOME/.config/hypr/generated"; touch "$HOME/.config/hypr/generated/kb-per-window.disabled"; pkill -f "[k]b-per-window.py"'])
+        perWinRecheck.restart()
+    }
+    // the daemon snapshots kb_layout at startup — restart it when the layout
+    // list changes so its keymap-name→index map never goes stale
+    function restartPerWindowKb() {
+        Quickshell.execDetached(["sh", "-c", 'pgrep -f "[k]b-per-window.py" >/dev/null || exit 0; pkill -f "[k]b-per-window.py"; sleep 0.3; setsid python3 "$HOME/.config/hypr/scripts/kb-per-window.py" >/dev/null 2>&1 &'])
         perWinRecheck.restart()
     }
 
-    // probes
+    // probes — one hyprctl --batch process for every option; replies come back
+    // as blank-line-separated blocks in command order ("int: 25" / "str: us" /
+    // "bool: false" / "float: 1.0")
+    readonly property var inpOptions: [
+        ["kb_layout", "kb_layout"], ["kb_variant", "kb_variant"], ["kb_options", "kb_options"],
+        ["repeat_rate", "repeat_rate"], ["repeat_delay", "repeat_delay"], ["numlock_by_default", "numlock_by_default"],
+        ["sensitivity", "sensitivity"], ["accel_profile", "accel_profile"], ["natural_scroll", "natural_scroll"],
+        ["left_handed", "left_handed"], ["scroll_factor", "scroll_factor"],
+        ["touchpad:natural_scroll", "tp_natural_scroll"], ["touchpad:tap-to-click", "tp_tap"],
+        ["touchpad:disable_while_typing", "tp_dwt"], ["touchpad:clickfinger_behavior", "tp_clickfinger"],
+        ["touchpad:scroll_factor", "tp_scroll_factor"], ["touchpad:middle_button_emulation", "tp_mbe"],
+        ["touchpad:drag_lock", "tp_drag_lock"], ["touchpad:tap-and-drag", "tp_tap_drag"]
+    ]
     Process {
         id: inputProbe
-        command: ["sh", "-c",
-            'for o in kb_layout kb_variant kb_options repeat_rate repeat_delay numlock_by_default sensitivity accel_profile natural_scroll left_handed scroll_factor ' +
-            'touchpad:natural_scroll touchpad:tap-to-click touchpad:disable_while_typing touchpad:clickfinger_behavior touchpad:scroll_factor touchpad:middle_button_emulation touchpad:drag_lock touchpad:tap-and-drag; do ' +
-            'printf "%s\\t" "$o"; hyprctl getoption "input:$o" -j 2>/dev/null | tr -d "\\n"; echo; done']
+        command: ["hyprctl", "--batch", root.inpOptions.map(function (o) { return "getoption input:" + o[0] }).join("; ")]
         stdout: StdioCollector { onStreamFinished: root._parseInput(this.text) }
     }
     function _parseInput(text) {
-        var map = {
-            "kb_layout": "kb_layout", "kb_variant": "kb_variant", "kb_options": "kb_options",
-            "repeat_rate": "repeat_rate", "repeat_delay": "repeat_delay", "numlock_by_default": "numlock_by_default",
-            "sensitivity": "sensitivity", "accel_profile": "accel_profile", "natural_scroll": "natural_scroll",
-            "left_handed": "left_handed", "scroll_factor": "scroll_factor",
-            "touchpad:natural_scroll": "tp_natural_scroll", "touchpad:tap-to-click": "tp_tap",
-            "touchpad:disable_while_typing": "tp_dwt", "touchpad:clickfinger_behavior": "tp_clickfinger",
-            "touchpad:scroll_factor": "tp_scroll_factor", "touchpad:middle_button_emulation": "tp_mbe",
-            "touchpad:drag_lock": "tp_drag_lock", "touchpad:tap-and-drag": "tp_tap_drag"
-        }
+        var blocks = text.split(/\n\s*\n/).filter(function (b) { return b.trim() !== "" })
         var p = {}; for (var k in root.inp) p[k] = root.inp[k]
-        var ls = text.split("\n")
-        for (var i = 0; i < ls.length; i++) {
-            var t = ls[i].split("\t")
-            if (t.length < 2 || !map[t[0]]) continue
-            try {
-                var j = JSON.parse(t[1])
-                var v = j.str !== undefined ? j.str : (j.int !== undefined ? j.int : (j.float !== undefined ? j.float : (j.bool !== undefined ? j.bool : undefined)))
-                if (v === "[[EMPTY]]") v = ""
-                if (v !== undefined) p[map[t[0]]] = v
-            } catch (e) {}
+        for (var i = 0; i < blocks.length && i < root.inpOptions.length; i++) {
+            var m = blocks[i].split("\n")[0].match(/^(int|float|bool|str):\s?(.*)$/)
+            if (!m) continue
+            var v
+            if (m[1] === "int") v = parseInt(m[2])
+            else if (m[1] === "float") v = parseFloat(m[2])
+            else if (m[1] === "bool") { var b = m[2].trim(); v = (b === "true" || b === "1") }
+            else { v = m[2]; if (v === "[[EMPTY]]") v = "" }
+            if (v !== undefined && !(typeof v === "number" && isNaN(v))) p[root.inpOptions[i][1]] = v
         }
         root.inp = p; root.inpLoaded = true
+        // persist the live truth right away: covers first run and migration from
+        // the days input settings lived in user.lua (idempotent, atomic)
+        root.writeInputLua()
     }
+    // best available heuristic: Hyprland exposes no device class, only names.
+    // Covers the common touchpad name shapes (libinput/vendor) case-insensitively.
+    function isTouchpadName(n) { return /touchpad|glidepoint|bcm5974|trackpad/i.test(n) }
     Process {
         id: devProbe; command: ["hyprctl", "devices", "-j"]
         stdout: StdioCollector {
@@ -596,12 +602,12 @@ Scope {
                     var j = JSON.parse(this.text)
                     var m = (j.mice || []).map(function (x) { return x.name })
                     root.mice = m
-                    root.hasTouchpad = m.some(function (n) { return n.indexOf("touchpad") >= 0 })
+                    root.hasTouchpad = m.some(root.isTouchpadName)
                 } catch (e) {}
             }
         }
     }
-    Process { id: perWinProbe; command: ["sh", "-c", "pgrep -f kb-per-window.py >/dev/null && echo yes || echo no"]; stdout: StdioCollector { onStreamFinished: root.perWindowKb = this.text.trim() === "yes" } }
+    Process { id: perWinProbe; command: ["sh", "-c", 'pgrep -f "[k]b-per-window.py" >/dev/null && echo yes || echo no']; stdout: StdioCollector { onStreamFinished: root.perWindowKb = this.text.trim() === "yes" } }
     Timer { id: perWinRecheck; interval: 600; onTriggered: perWinProbe.running = true }
     Process {
         id: devOvLoad; running: true
@@ -678,26 +684,42 @@ Scope {
 
     // ── Wallpaper — per-output assignments in generated/wallpapers.conf, applied
     //    by scripts/wallpaper.sh (backend: swww → hyprpaper → swaybg) ───────────
-    property string wpBackend: ""      // detected backend ("" = none installed)
+    property string wpBackend: ""      // effective backend (what wallpaper.sh will use; "" = none)
+    property var wpBackends: []        // every installed backend (user can pick when >1)
+    property string wpBackendChoice: ""// explicit backend= override from the conf ("" = auto)
     property var wpMap: ({})           // "*" or output name → image path
     property string wpMode: "fill"
     property string wpDir: ""          // folder shown in the thumbnail grid
     property var wpFiles: []
     property string wpTarget: "*"      // "*" = all displays
-    Process { id: wpBackendProbe; command: ["sh", "-c", "command -v swww >/dev/null && { echo swww; exit; }; command -v hyprpaper >/dev/null && { echo hyprpaper; exit; }; command -v swaybg >/dev/null && { echo swaybg; exit; }; echo ''"]; stdout: StdioCollector { onStreamFinished: root.wpBackend = this.text.trim() } }
+    // effective backend comes from wallpaper.sh itself (the single authority for
+    // the preference order); available backends probed alongside
+    Process {
+        id: wpBackendProbe
+        command: ["sh", "-c", 'eff=$("$HOME/.config/hypr/scripts/wallpaper.sh" --backend 2>/dev/null); avail=""; for b in swaybg swww hyprpaper; do command -v "$b" >/dev/null 2>&1 && avail="$avail$b "; done; echo "$eff|$avail"']
+        stdout: StdioCollector {
+            onStreamFinished: {
+                var p = this.text.trim().split("|")
+                root.wpBackend = (p[0] || "").trim()
+                root.wpBackends = (p[1] || "").trim().split(" ").filter(function (x) { return x !== "" })
+            }
+        }
+    }
     Process {
         id: wpConfLoad; command: ["sh", "-c", 'cat "$HOME/.config/hypr/generated/wallpapers.conf" 2>/dev/null']
         stdout: StdioCollector {
             onStreamFinished: {
-                var m = {}, mode = "fill", ls = this.text.split("\n")
+                var m = {}, mode = "fill", backend = "", ls = this.text.split("\n")
                 for (var i = 0; i < ls.length; i++) {
                     var l = ls[i]
                     if (l === "" || l[0] === "#") continue
                     var k = l.indexOf("="); if (k <= 0) continue
                     var key = l.slice(0, k), val = l.slice(k + 1)
-                    if (key === "mode") mode = val; else if (val !== "") m[key] = val
+                    if (key === "mode") mode = val
+                    else if (key === "backend") backend = val
+                    else if (val !== "") m[key] = val
                 }
-                root.wpMap = m; root.wpMode = mode
+                root.wpMap = m; root.wpMode = mode; root.wpBackendChoice = backend
             }
         }
     }
@@ -705,13 +727,16 @@ Scope {
     Process { id: wpLs; stdout: StdioCollector { onStreamFinished: root.wpFiles = this.text.split("\n").filter(function (x) { return x !== "" }) } }
     Process { id: wpWriter }
     Timer { id: wpApply; interval: 250; onTriggered: Quickshell.execDetached(["sh", "-c", '"$HOME/.config/hypr/scripts/wallpaper.sh" --reapply']) }
+    Timer { id: wpBackendReprobe; interval: 900; onTriggered: wpBackendProbe.running = true }
     function wpList(dir) {
         root.wpDir = dir
         wpLs.command = ["sh", "-c", 'find "$1" -maxdepth 1 -type f \\( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.webp" \\) 2>/dev/null | sort', "qs-settings", dir]
         wpLs.running = false; wpLs.running = true
     }
     function wpWrite() {
+        if (HyprMon.virtualSession) return   // test session: don't touch conf or the real backend
         var s = "# AUTO-GENERATED by Settings → Wallpaper. Do not edit by hand.\nmode=" + root.wpMode + "\n"
+        if (root.wpBackendChoice !== "") s += "backend=" + root.wpBackendChoice + "\n"
         var keys = Object.keys(root.wpMap).sort()
         for (var i = 0; i < keys.length; i++) s += keys[i] + "=" + root.wpMap[keys[i]] + "\n"
         root.atomicWrite(wpWriter, root.home + "/.config/hypr/generated/wallpapers.conf", s)
@@ -725,10 +750,13 @@ Scope {
         root.wpWrite()
         root.flashApplied("Wallpaper set")
     }
+    // FileDialog URLs are percent-encoded — decode before the path touches the
+    // filesystem (conf files, find, the backends)
+    function urlToPath(u) { return decodeURIComponent(String(u).replace(/^file:\/\//, "")) }
     FileDialog {
         id: wpDlg; title: "Choose wallpaper"; nameFilters: ["Images (*.png *.jpg *.jpeg *.webp)"]
         onAccepted: {
-            var p = String(selectedFile).replace(/^file:\/\//, "")
+            var p = root.urlToPath(selectedFile)
             root.wpAssign(p)
             root.wpList(p.replace(/\/[^/]*$/, ""))
         }
@@ -746,7 +774,7 @@ Scope {
     property string avatarCropSrc: ""      // image being cropped ("" = dialog closed)
     FileDialog {
         id: avatarDlg; title: "Choose avatar image"; nameFilters: ["Images (*.png *.jpg *.jpeg *.webp *.bmp)"]
-        onAccepted: root.avatarCropSrc = String(selectedFile).replace(/^file:\/\//, "")
+        onAccepted: root.avatarCropSrc = root.urlToPath(selectedFile)
     }
     function saveAvatar() {
         cropCanvas.grabToImage(function (res) {
@@ -848,35 +876,31 @@ Scope {
                     Dot { anchors.verticalCenter: parent.verticalCenter; visible: dot !== ""; state: dot }
                 }
             }
+            // Slider — the one slider, int or float (step/decimals). The label
+            // previews live while dragging, but `moved` only fires per-move when
+            // `live` is set — handlers that spawn processes (hyprctl + config
+            // writes) get exactly one call, on release.
             component Slider: Item {
-                property string label: ""; property int value: 0; property int from: 0; property int to: 30
-                signal moved(int v)
-                height: 40; width: parent ? parent.width : 0
-                Text { anchors.left: parent.left; anchors.top: parent.top; text: label; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
-                Text { anchors.right: parent.right; anchors.top: parent.top; text: value; color: Theme.accent; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold }
-                Rectangle { id: trk; anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; anchors.bottomMargin: 4; height: 8; radius: 4; color: Theme.hover
-                    Rectangle { height: parent.height; radius: 4; color: Theme.accent; width: parent.width * (value - from) / Math.max(1, to - from) }
-                    Rectangle { width: 14; height: 14; radius: 7; color: "white"; anchors.verticalCenter: parent.verticalCenter; x: Math.max(0, Math.min(trk.width - width, trk.width * (value - from) / Math.max(1, to - from) - width / 2)) }
-                    MouseArea { anchors.fill: parent; anchors.topMargin: -8; anchors.bottomMargin: -8; function pick(mx) { var f = Math.max(0, Math.min(1, mx / trk.width)); return Math.round(from + f * (to - from)) } onPressed: function (m) { moved(pick(m.x)) } onPositionChanged: function (m) { if (pressed) moved(pick(m.x)) } }
-                }
-            }
-            // float twin of Slider (pointer speed, scroll factor); commits on release
-            component FSlider: Item {
-                property string label: ""; property real value: 0; property real from: 0; property real to: 1
-                property int decimals: 2; property real step: 0.05
+                id: sld
+                property string label: ""; property real value: 0; property real from: 0; property real to: 30
+                property real step: 1; property int decimals: 0; property bool live: false
                 signal moved(real v)
+                property real dragVal: 0
+                property bool dragging: false
+                readonly property real shown: dragging ? dragVal : value
                 height: 40; width: parent ? parent.width : 0
-                Text { anchors.left: parent.left; anchors.top: parent.top; text: label; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
-                Text { anchors.right: parent.right; anchors.top: parent.top; text: Number(value).toFixed(decimals); color: Theme.accent; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold }
+                Text { anchors.left: parent.left; anchors.top: parent.top; text: sld.label; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
+                Text { anchors.right: parent.right; anchors.top: parent.top; text: Number(sld.shown).toFixed(sld.decimals); color: Theme.accent; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold }
                 Rectangle {
-                    id: ftrk; anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; anchors.bottomMargin: 4; height: 8; radius: 4; color: Theme.hover
-                    Rectangle { height: parent.height; radius: 4; color: Theme.accent; width: parent.width * (value - from) / Math.max(0.0001, to - from) }
-                    Rectangle { width: 14; height: 14; radius: 7; color: "white"; anchors.verticalCenter: parent.verticalCenter; x: Math.max(0, Math.min(ftrk.width - width, ftrk.width * (value - from) / Math.max(0.0001, to - from) - width / 2)) }
+                    id: strk; anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; anchors.bottomMargin: 4; height: 8; radius: 4; color: Theme.hover
+                    Rectangle { height: parent.height; radius: 4; color: Theme.accent; width: parent.width * (sld.shown - sld.from) / Math.max(0.0001, sld.to - sld.from) }
+                    Rectangle { width: 14; height: 14; radius: 7; color: "white"; anchors.verticalCenter: parent.verticalCenter; x: Math.max(0, Math.min(strk.width - width, strk.width * (sld.shown - sld.from) / Math.max(0.0001, sld.to - sld.from) - width / 2)) }
                     MouseArea {
                         anchors.fill: parent; anchors.topMargin: -8; anchors.bottomMargin: -8
-                        function pick(mx) { var f = Math.max(0, Math.min(1, mx / ftrk.width)); var v = from + f * (to - from); return Math.round(v / step) * step }
-                        onPressed: function (m) { moved(pick(m.x)) }
-                        onPositionChanged: function (m) { if (pressed) moved(pick(m.x)) }
+                        function pick(mx) { var f = Math.max(0, Math.min(1, mx / strk.width)); var v = sld.from + f * (sld.to - sld.from); return Math.round(v / sld.step) * sld.step }
+                        onPressed: function (m) { sld.dragging = true; sld.dragVal = pick(m.x); if (sld.live) sld.moved(sld.dragVal) }
+                        onPositionChanged: function (m) { if (!pressed) return; sld.dragVal = pick(m.x); if (sld.live) sld.moved(sld.dragVal) }
+                        onReleased: { sld.dragging = false; sld.moved(sld.dragVal) }
                     }
                 }
             }
@@ -1025,7 +1049,7 @@ Scope {
                         anchors.fill: parent; anchors.topMargin: 60; anchors.margins: 20
                         contentHeight: paneLoader.item ? paneLoader.item.implicitHeight : 0
                         clip: true; boundsBehavior: Flickable.StopAtBounds
-                        Loader { id: paneLoader; width: parent.width; sourceComponent: [cSystem, cDisplays, cNetwork, cDefaults, cKeyboard, cShortcuts, cLayout, cTheme, cWallpaper, cDock, cUser][root.pane] }
+                        Loader { id: paneLoader; width: parent.width; sourceComponent: ({ system: cSystem, displays: cDisplays, network: cNetwork, defaults: cDefaults, input: cKeyboard, shortcuts: cShortcuts, layout: cLayout, theme: cTheme, wallpaper: cWallpaper, dock: cDock, user: cUser })[root.paneKey] }
                     }
                 }
             }
@@ -1215,16 +1239,8 @@ Scope {
                                     options: monCard.mirrorOpts; value: monCard.modelData.mirror
                                     onPicked: function (v) { root.riskyChange(monCard.modelData.name, { mirror: v }) }
                                 }
-                                Item {
-                                    width: parent.width; height: 28
-                                    Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Variable refresh rate (VRR)"; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
-                                    Toggle { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; on: monCard.modelData.vrr; onToggled: root.directChange(monCard.modelData.name, { vrr: !monCard.modelData.vrr }) }
-                                }
-                                Item {
-                                    width: parent.width; height: 28
-                                    Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "10-bit colour"; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
-                                    Toggle { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; on: monCard.modelData.bitdepth === 10; onToggled: root.directChange(monCard.modelData.name, { bitdepth: monCard.modelData.bitdepth === 10 ? 8 : 10 }) }
-                                }
+                                ToggleRow { title: "Variable refresh rate (VRR)"; on: monCard.modelData.vrr; onToggled: root.directChange(monCard.modelData.name, { vrr: !monCard.modelData.vrr }) }
+                                ToggleRow { title: "10-bit colour"; on: monCard.modelData.bitdepth === 10; onToggled: root.directChange(monCard.modelData.name, { bitdepth: monCard.modelData.bitdepth === 10 ? 8 : 10 }) }
                                 KV { k: "Position"; v: monCard.modelData.x + ", " + monCard.modelData.y + "  ·  drag in Arrangement to move" }
                                 KV { visible: !monCard.modelData.primary; k: "Primary display"; action: true; actionLabel: "Make primary"; onAct: root.setPrimary(monCard.modelData.name) }
                             }
@@ -1447,7 +1463,17 @@ Scope {
                     Card {
                         visible: root.inpLoaded
                         Item {
-                            width: parent.width; height: root.kbActive.length * 38
+                            // when a variant popup is open its ~150px list must not be
+                            // occluded by the later search-box sibling — grow to fit
+                            width: parent.width
+                            height: {
+                                var h = root.kbActive.length * 38
+                                if (root.openDd.indexOf("kbvar-") === 0) {
+                                    var idx = parseInt(root.openDd.slice(6)) || 0
+                                    h = Math.max(h, idx * 38 + 30 + 155)
+                                }
+                                return h
+                            }
                             Repeater {
                                 model: root.kbActive
                                 delegate: Item {
@@ -1584,8 +1610,8 @@ Scope {
                     SectionTitle { visible: root.inpLoaded; text: "TYPING" }
                     Card {
                         visible: root.inpLoaded
-                        Slider { label: "Key repeat rate (per second)"; value: root.inp.repeat_rate; from: 5; to: 80; onMoved: function (v) { root.applyInput({ repeat_rate: v }) } }
-                        Slider { label: "Repeat delay (ms)"; value: root.inp.repeat_delay; from: 150; to: 1000; onMoved: function (v) { root.applyInput({ repeat_delay: v }) } }
+                        Slider { label: "Key repeat rate (per second)"; value: root.inp.repeat_rate; from: 5; to: 80; onMoved: function (v) { root.applyInput({ repeat_rate: Math.round(v) }) } }
+                        Slider { label: "Repeat delay (ms)"; value: root.inp.repeat_delay; from: 150; to: 1000; step: 10; onMoved: function (v) { root.applyInput({ repeat_delay: Math.round(v) }) } }
                         Item {
                             width: parent.width; height: 24
                             Row {
@@ -1608,14 +1634,14 @@ Scope {
                     Card {
                         visible: root.inpLoaded
                         DropRow {
-                            visible: root.mice.filter(function (n) { return n.indexOf("touchpad") < 0 }).length > 1
+                            visible: root.mice.filter(function (n) { return !root.isTouchpadName(n) }).length > 1
                             label: "Device"; ddId: "mouse-dev"; buttonWidth: 250
-                            options: { var o = [{ label: "All pointing devices", value: "" }]; var ms = root.mice; for (var i = 0; i < ms.length; i++) if (ms[i].indexOf("touchpad") < 0) o.push({ label: ms[i], value: ms[i] }); return o }
+                            options: { var o = [{ label: "All pointing devices", value: "" }]; var ms = root.mice; for (var i = 0; i < ms.length; i++) if (!root.isTouchpadName(ms[i])) o.push({ label: ms[i], value: ms[i] }); return o }
                             value: root.devTarget
                             onPicked: function (v) { root.devTarget = v }
                         }
                         Text { visible: root.devTarget !== ""; width: parent.width; text: "Overriding this device only — everything else keeps the global values."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 10; wrapMode: Text.Wrap }
-                        FSlider { label: "Pointer speed"; value: kbPane.effSens; from: -1; to: 1; onMoved: function (v) { kbPane.setMouse({ sensitivity: Math.round(v * 100) / 100 }) } }
+                        Slider { label: "Pointer speed"; value: kbPane.effSens; from: -1; to: 1; step: 0.05; decimals: 2; onMoved: function (v) { kbPane.setMouse({ sensitivity: Math.round(v * 100) / 100 }) } }
                         Item {
                             width: parent.width; height: 30
                             Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Acceleration profile"; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
@@ -1637,7 +1663,7 @@ Scope {
                         }
                         ToggleRow { title: "Natural scrolling"; on: kbPane.effNat; onToggled: kbPane.setMouse({ natural_scroll: !kbPane.effNat }) }
                         ToggleRow { title: "Left-handed buttons"; on: kbPane.effLeft; onToggled: kbPane.setMouse({ left_handed: !kbPane.effLeft }) }
-                        FSlider { label: "Scroll speed"; value: Number(root.inp.scroll_factor); from: 0.1; to: 3; step: 0.1; decimals: 1; onMoved: function (v) { root.applyInput({ scroll_factor: Math.round(v * 10) / 10 }) } }
+                        Slider { label: "Scroll speed"; value: Number(root.inp.scroll_factor); from: 0.1; to: 3; step: 0.1; decimals: 1; onMoved: function (v) { root.applyInput({ scroll_factor: Math.round(v * 10) / 10 }) } }
                     }
 
                     SectionTitle { visible: root.inpLoaded; text: "TOUCHPAD" }
@@ -1654,7 +1680,7 @@ Scope {
                         ToggleRow { title: "Tap and drag"; on: root.inp.tp_tap_drag === true; onToggled: root.applyInput({ tp_tap_drag: !(root.inp.tp_tap_drag === true) }) }
                         ToggleRow { title: "Drag lock"; sub: "Keep dragging briefly after lifting the finger."; on: root.inp.tp_drag_lock === true; onToggled: root.applyInput({ tp_drag_lock: !(root.inp.tp_drag_lock === true) }) }
                         ToggleRow { title: "Middle-click emulation"; sub: "Left+right button together = middle click."; on: root.inp.tp_mbe === true; onToggled: root.applyInput({ tp_mbe: !(root.inp.tp_mbe === true) }) }
-                        FSlider { label: "Scroll speed"; value: Number(root.inp.tp_scroll_factor); from: 0.1; to: 3; step: 0.1; decimals: 1; onMoved: function (v) { root.applyInput({ tp_scroll_factor: Math.round(v * 10) / 10 }) } }
+                        Slider { label: "Scroll speed"; value: Number(root.inp.tp_scroll_factor); from: 0.1; to: 3; step: 0.1; decimals: 1; onMoved: function (v) { root.applyInput({ tp_scroll_factor: Math.round(v * 10) / 10 }) } }
                     }
                     Text { width: parent.width; text: "Everything here applies live and persists to generated/input.lua. Two-finger vs edge scrolling follows the hardware default (libinput); Hyprland doesn't expose it."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
                     Item { width: 1; height: 8 }
@@ -1689,13 +1715,13 @@ Scope {
                     SectionTitle { text: "WINDOW GAPS, BORDER & CORNERS  ·  applied live, persisted to generated/user.lua" }
                     Card {
                         Slider { label: "Inner gap"; value: root.gapsIn; from: 0; to: 30
-                            onMoved: function (v) { root.gapsIn = v; root.applyGaps() } }
+                            onMoved: function (v) { root.gapsIn = Math.round(v); root.applyGaps() } }
                         Slider { label: "Outer gap"; value: root.gapsOut; from: 0; to: 60
-                            onMoved: function (v) { root.gapsOut = v; root.applyGaps() } }
+                            onMoved: function (v) { root.gapsOut = Math.round(v); root.applyGaps() } }
                         Slider { label: "Border width"; value: root.borderSize; from: 0; to: 6
-                            onMoved: function (v) { root.borderSize = v; root.applyGaps() } }
+                            onMoved: function (v) { root.borderSize = Math.round(v); root.applyGaps() } }
                         Slider { label: "Corner radius"; value: root.rounding; from: 0; to: 24
-                            onMoved: function (v) { root.rounding = v; root.applyGaps() } }
+                            onMoved: function (v) { root.rounding = Math.round(v); root.applyGaps() } }
                     }
                     Pill { label: "Reset to defaults"; onGo: { root.gapsIn = 6; root.gapsOut = 14; root.borderSize = 1; root.rounding = 12; root.applyGaps() } }
                 }
@@ -1825,6 +1851,13 @@ Scope {
                             value: root.wpMode
                             onPicked: function (v) { root.wpMode = v; if (Object.keys(root.wpMap).length) { root.wpWrite(); root.flashApplied() } }
                         }
+                        DropRow {
+                            visible: root.wpBackends.length > 1
+                            label: "Backend"; ddId: "wp-backend"; buttonWidth: 110
+                            options: root.wpBackends.map(function (b) { return { label: b, value: b } })
+                            value: root.wpBackend
+                            onPicked: function (v) { root.wpBackendChoice = v; root.wpWrite(); root.flashApplied(); wpBackendReprobe.restart() }
+                        }
                         Text { width: parent.width; visible: Object.keys(root.wpMap).length === 0; text: "No wallpaper set yet — pick one below."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11 }
                         Repeater {
                             model: Object.keys(root.wpMap).sort()
@@ -1905,7 +1938,7 @@ Scope {
                             width: parent.width; spacing: 16
                             Rectangle {
                                 width: 72; height: 72; radius: 36; color: Theme.elevated; border.color: Theme.stroke; border.width: 1; clip: true
-                                Image { id: avatarImg; anchors.fill: parent; fillMode: Image.PreserveAspectCrop; cache: false; source: Globals.hasFace ? ("file://" + root.home + "/.face?v=" + Globals.avatarVersion) : ""; visible: Globals.hasFace && status === Image.Ready }
+                                Image { id: avatarImg; anchors.fill: parent; fillMode: Image.PreserveAspectCrop; cache: false; source: Globals.faceUrl; visible: Globals.hasFace && status === Image.Ready }
                                 Text { anchors.centerIn: parent; visible: !avatarImg.visible; text: root.g(0xF0004); font.family: Theme.fontMono; font.pixelSize: 34; color: Theme.fgDim }
                             }
                             Column {
@@ -1981,8 +2014,8 @@ Scope {
                                 cursorShape: Qt.SizeAllCursor
                             }
                         }
-                        FSlider {
-                            label: "Zoom"; value: cropView.zoom; from: 1; to: 3; step: 0.05
+                        Slider {
+                            label: "Zoom"; value: cropView.zoom; from: 1; to: 3; step: 0.05; decimals: 2; live: true
                             onMoved: function (v) {
                                 var cx = cropImg.width > 0 ? (128 - cropImg.x) / cropImg.width : 0.5
                                 var cy = cropImg.height > 0 ? (128 - cropImg.y) / cropImg.height : 0.5

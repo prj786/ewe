@@ -64,10 +64,12 @@ LAYOUTS = layout_map()
 
 
 def name_to_index(name: str) -> int:
+    # longest hint first: "german (austria" must win over "german" when both
+    # layouts are active, or country variants could never be restored
     n = (name or "").lower()
-    for hint, idx in LAYOUTS.items():
+    for hint in sorted(LAYOUTS, key=len, reverse=True):
         if n.startswith(hint):
-            return idx
+            return LAYOUTS[hint]
     return 0  # the default layout for anything unrecognised
 
 

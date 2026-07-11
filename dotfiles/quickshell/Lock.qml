@@ -18,11 +18,7 @@ Scope {
     readonly property string userName: Quickshell.env("USER") || "user"
     readonly property string userInitial: userName.length > 0 ? userName.charAt(0).toUpperCase() : "?"
     // avatar state lives in Globals (shared with Settings, which can replace
-    // ~/.face at runtime); the ?v= suffix cache-busts after a change
-    readonly property string facePath: {
-        var h = Quickshell.env("HOME") || ""
-        return h !== "" ? "file://" + h + "/.face?v=" + Globals.avatarVersion : ""
-    }
+    // ~/.face at runtime); Globals.faceUrl is already cache-busted
 
     property string clock: ""
     property string dateStr: ""
@@ -114,7 +110,7 @@ Scope {
                         Image {
                             id: face
                             anchors.fill: parent
-                            source: Globals.hasFace ? root.facePath : ""
+                            source: Globals.faceUrl
                             visible: status === Image.Ready
                             fillMode: Image.PreserveAspectCrop
                             cache: false
