@@ -3,6 +3,7 @@ singleton Globals 1.0 Globals.qml
 singleton HyprMon 1.0 HyprMon.qml
 singleton Accounts 1.0 Accounts.qml
 FileDropTarget 1.0 FileDropTarget.qml
+DropRow 1.0 DropRow.qml
 Launcher 1.0 Launcher.qml
 Bar 1.0 Bar.qml
 Notifications 1.0 Notifications.qml

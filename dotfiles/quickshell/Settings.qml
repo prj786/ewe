@@ -158,7 +158,6 @@ Scope {
     function isLaptop(m) { return ((m && m.name) ? m.name : "").toLowerCase().indexOf("edp") >= 0 }
     // reactive snapshot of the current spec list (re-evaluates with HyprMon state)
     readonly property var dispSpecs: HyprMon.snapshot()
-    property string openDd: ""          // ddId of the one open DropRow ("" = none)
     property string errorMsg: ""        // inline error banner (dismissable)
     property string appliedMsg: ""      // transient "Applied" confirmation
     property var revertSpecs: null      // pre-change snapshot while confirm-or-revert is up
@@ -995,63 +994,8 @@ Scope {
                 }
                 Toggle { id: trTog; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; on: parent.on; onToggled: if (!parent.dim) parent.toggled() }
             }
-            // DropRow — the one dropdown used everywhere: label left, button right,
-            // options expand inline below (scrollable past ~6 entries). Exclusive-open
-            // via root.openDd keyed by ddId.
-            component DropRow: Column {
-                id: dr
-                property string label: ""
-                property string ddId: ""
-                property var options: []            // [{ label, value }]
-                property var value
-                property bool dim: false            // disabled look + no interaction
-                property int buttonWidth: 150
-                signal picked(var v)
-                readonly property bool open: dr.ddId !== "" && root.openDd === dr.ddId
-                width: parent ? parent.width : 0
-                spacing: 3
-                function labelFor(v) { for (var i = 0; i < options.length; i++) if (String(options[i].value) === String(v)) return options[i].label; return "—" }
-                Item {
-                    width: parent.width; height: 28; opacity: dr.dim ? 0.45 : 1
-                    Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: dr.label; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
-                    Rectangle {
-                        anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
-                        width: dr.buttonWidth; height: 26; radius: 7
-                        color: drMa.containsMouse && !dr.dim ? Theme.hover : Theme.panel
-                        border.color: (dr.open || drBtn.activeFocus) ? Theme.accent : Theme.stroke; border.width: 1
-                        activeFocusOnTab: !dr.dim; id: drBtn
-                        Keys.onSpacePressed: root.openDd = dr.open ? "" : dr.ddId
-                        Keys.onReturnPressed: root.openDd = dr.open ? "" : dr.ddId
-                        Text { anchors.left: parent.left; anchors.leftMargin: 9; anchors.right: drChev.left; anchors.rightMargin: 4; anchors.verticalCenter: parent.verticalCenter; text: dr.labelFor(dr.value); color: Theme.fg; font.family: Theme.fontText; font.pixelSize: 11; elide: Text.ElideRight }
-                        Text { id: drChev; anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter; text: dr.open ? root.g(0xF0143) : Theme.icChevronDown; font.family: Theme.fontMono; font.pixelSize: 9; color: Theme.fgDim }
-                        MouseArea { id: drMa; anchors.fill: parent; hoverEnabled: true; cursorShape: dr.dim ? Qt.ArrowCursor : Qt.PointingHandCursor; onClicked: if (!dr.dim) root.openDd = dr.open ? "" : dr.ddId }
-                    }
-                }
-                Rectangle {
-                    visible: dr.open
-                    width: parent.width; height: Math.min(drOptCol.implicitHeight + 10, 172)
-                    radius: 7; color: Theme.bg; border.color: Theme.stroke; border.width: 1
-                    Flickable {
-                        anchors.fill: parent; anchors.margins: 5
-                        contentHeight: drOptCol.implicitHeight; clip: true; boundsBehavior: Flickable.StopAtBounds
-                        Column {
-                            id: drOptCol; width: parent.width
-                            Repeater {
-                                model: dr.options
-                                delegate: Rectangle {
-                                    required property var modelData
-                                    readonly property bool sel: String(modelData.value) === String(dr.value)
-                                    width: parent.width; height: 26; radius: 6
-                                    color: drOMa.containsMouse ? Theme.hover : "transparent"
-                                    Text { anchors.left: parent.left; anchors.leftMargin: 8; anchors.right: parent.right; anchors.rightMargin: 26; anchors.verticalCenter: parent.verticalCenter; text: modelData.label; color: sel ? Theme.accent : Theme.fg; font.family: Theme.fontText; font.pixelSize: 11; font.weight: sel ? Font.DemiBold : Font.Normal; elide: Text.ElideRight }
-                                    Text { anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter; visible: sel; text: Theme.icCheck; font.family: Theme.fontMono; font.pixelSize: 11; color: Theme.accent }
-                                    MouseArea { id: drOMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: { root.openDd = ""; dr.picked(modelData.value) } }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+            // DropRow moved to the shared DropRow.qml (qmldir) so Quick Settings
+            // uses the same dropdown; exclusive-open state lives in Globals.openDd.
 
             // ════════ layout: sidebar + content ════════
             Row {
@@ -1522,8 +1466,8 @@ Scope {
                             width: parent.width
                             height: {
                                 var h = root.kbActive.length * 38
-                                if (root.openDd.indexOf("kbvar-") === 0) {
-                                    var idx = parseInt(root.openDd.slice(6)) || 0
+                                if (Globals.openDd.indexOf("kbvar-") === 0) {
+                                    var idx = parseInt(Globals.openDd.slice(6)) || 0
                                     h = Math.max(h, idx * 38 + 30 + 155)
                                 }
                                 return h
@@ -1536,7 +1480,7 @@ Scope {
                                     required property int index
                                     width: parent.width; height: 38
                                     y: index * 38
-                                    z: rowDrag.drag.active || root.openDd === ("kbvar-" + index) ? 10 : 1
+                                    z: rowDrag.drag.active || Globals.openDd === ("kbvar-" + index) ? 10 : 1
                                     Rectangle {
                                         anchors.fill: parent; anchors.bottomMargin: 6; radius: 7
                                         color: rowDrag.drag.active ? Theme.hover : Theme.panel
@@ -1555,10 +1499,10 @@ Scope {
                                                 anchors.verticalCenter: parent.verticalCenter
                                                 width: 118; height: 22; radius: 6
                                                 color: kvMa.containsMouse ? Theme.hover : Theme.elevated
-                                                border.color: root.openDd === ("kbvar-" + kbRow.index) ? Theme.accent : Theme.stroke; border.width: 1
+                                                border.color: Globals.openDd === ("kbvar-" + kbRow.index) ? Theme.accent : Theme.stroke; border.width: 1
                                                 Text { anchors.left: parent.left; anchors.leftMargin: 7; anchors.right: parent.right; anchors.rightMargin: 18; anchors.verticalCenter: parent.verticalCenter; text: kbRow.modelData.variant === "" ? "Default" : kbRow.modelData.variant; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: 10; elide: Text.ElideRight }
                                                 Text { anchors.right: parent.right; anchors.rightMargin: 6; anchors.verticalCenter: parent.verticalCenter; text: Theme.icChevronDown; font.family: Theme.fontMono; font.pixelSize: 8; color: Theme.fgDim }
-                                                MouseArea { id: kvMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.openDd = root.openDd === ("kbvar-" + kbRow.index) ? "" : ("kbvar-" + kbRow.index) }
+                                                MouseArea { id: kvMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: Globals.openDd = Globals.openDd === ("kbvar-" + kbRow.index) ? "" : ("kbvar-" + kbRow.index) }
                                             }
                                             Text {
                                                 visible: root.kbActive.length > 1
@@ -1570,7 +1514,7 @@ Scope {
                                     }
                                     // variant popup — overlays the rows below (z-stacked)
                                     Rectangle {
-                                        visible: root.openDd === ("kbvar-" + kbRow.index)
+                                        visible: Globals.openDd === ("kbvar-" + kbRow.index)
                                         x: parent.width - 158; y: 30; width: 148; z: 30
                                         height: Math.min(kvCol.implicitHeight + 10, 150)
                                         radius: 7; color: Theme.bg; border.color: Theme.stroke; border.width: 1
@@ -1585,7 +1529,7 @@ Scope {
                                                         readonly property bool sel: modelData.value === kbRow.modelData.variant
                                                         width: parent.width; height: 24; radius: 5; color: kvoMa.containsMouse ? Theme.hover : "transparent"
                                                         Text { anchors.left: parent.left; anchors.leftMargin: 7; anchors.verticalCenter: parent.verticalCenter; text: modelData.label; color: sel ? Theme.accent : Theme.fg; font.family: Theme.fontText; font.pixelSize: 10; font.weight: sel ? Font.DemiBold : Font.Normal }
-                                                        MouseArea { id: kvoMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: { root.openDd = ""; root.kbSetVariant(kbRow.index, modelData.value) } }
+                                                        MouseArea { id: kvoMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: { Globals.openDd = ""; root.kbSetVariant(kbRow.index, modelData.value) } }
                                                     }
                                                 }
                                             }

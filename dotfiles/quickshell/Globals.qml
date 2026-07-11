@@ -22,6 +22,7 @@ QtObject {
     property bool clipboardOpen: false     // the clipboard-history / emoji popup (scissors icon)
     property bool appMenuOpen: false       // the move-to-workspace dropdown (→ button in the bar's window actions)
     property bool settingsOpen: false      // the Quickshell Settings window (Super+, or the CC gear)
+    property string openDd: ""             // ddId of the one open DropRow, shell-wide ("" = none)
     property real clipAnchorX: 40           // screen-local x of the scissors icon (clipboard opens under it)
     property real appAnchorX: 40            // screen-local x of the move-to button (its dropdown opens under it)
 

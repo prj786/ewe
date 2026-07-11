@@ -73,7 +73,6 @@ Scope {
     // sliders (0..1), read on open, updated optimistically on drag
     property real brightnessVal: 0.5
     property real volumeVal: 0.5
-    property bool audioExpanded: false
 
     // power menu (floating popover). Power profiles come from the PowerProfiles
     // service, which talks to the net.hadess.PowerProfiles D-Bus iface — provided
@@ -82,6 +81,7 @@ Scope {
 
     function refresh() {
         var d = new Date()
+        Globals.openDd = ""   // never reopen with a stale dropdown expanded
         root.today = d; root.calYear = d.getFullYear(); root.calMonth = d.getMonth(); root.calDate = d.getDate()
         wifiState.running = true; wiredState.running = true; brightnessProc.running = true; volumeProc.running = true
         sshScan.running = true   // always: the SSH tile's sub-label needs the host count
@@ -576,17 +576,27 @@ Scope {
                                         MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { Quickshell.execDetached(["nmcli","radio","wifi", root.wifiOn ? "off" : "on"]); rescanTimer.restart() } }
                                     }
                                 }
+                                // network list — same inset panel style as the DropRow options
+                                Rectangle {
+                                    width: parent.width
+                                    visible: root.wifiOn && root.wifiList.length > 0
+                                    height: visible ? wifiOptCol.implicitHeight + 10 : 0
+                                    radius: 7; color: Theme.bg; border.color: Theme.stroke; border.width: 1
+                                    Column {
+                                        id: wifiOptCol
+                                        anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 5
                                 Repeater {
                                     model: root.wifiOn ? root.wifiList : []
                                     delegate: Column {
                                         required property var modelData
-                                        width: d1Col.width
+                                        width: wifiOptCol.width
                                         Item {
-                                            width: parent.width; height: 30
-                                            Rectangle { anchors.fill: parent; radius: 7; color: wMa.containsMouse ? Theme.hover : "transparent" }
-                                            Text { anchors.left: parent.left; anchors.leftMargin: 4; anchors.verticalCenter: parent.verticalCenter; text: modelData.signal >= 66 ? root.g(0xF0925) : (modelData.signal >= 33 ? root.g(0xF0922) : root.g(0xF091F)); font.family: Theme.fontMono; font.pixelSize: 13; color: modelData.active ? Theme.accent : Theme.fgDim }
-                                            Text { anchors.left: parent.left; anchors.leftMargin: 28; anchors.right: parent.right; anchors.rightMargin: 20; anchors.verticalCenter: parent.verticalCenter; text: modelData.ssid; color: modelData.active ? Theme.accent : Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: modelData.active ? Font.DemiBold : Font.Normal; elide: Text.ElideRight }
-                                            Text { anchors.right: parent.right; anchors.rightMargin: 4; anchors.verticalCenter: parent.verticalCenter; visible: modelData.sec !== ""; text: Theme.icLock; font.family: Theme.fontMono; font.pixelSize: 10; color: Theme.fgDim }
+                                            width: parent.width; height: 28
+                                            Rectangle { anchors.fill: parent; radius: 6; color: wMa.containsMouse ? Theme.hover : "transparent" }
+                                            Text { anchors.left: parent.left; anchors.leftMargin: 8; anchors.verticalCenter: parent.verticalCenter; text: modelData.signal >= 66 ? root.g(0xF0925) : (modelData.signal >= 33 ? root.g(0xF0922) : root.g(0xF091F)); font.family: Theme.fontMono; font.pixelSize: 13; color: modelData.active ? Theme.accent : Theme.fgDim }
+                                            Text { anchors.left: parent.left; anchors.leftMargin: 32; anchors.right: parent.right; anchors.rightMargin: 40; anchors.verticalCenter: parent.verticalCenter; text: modelData.ssid; color: modelData.active ? Theme.accent : Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: modelData.active ? Font.DemiBold : Font.Normal; elide: Text.ElideRight }
+                                            Text { anchors.right: parent.right; anchors.rightMargin: modelData.active ? 26 : 8; anchors.verticalCenter: parent.verticalCenter; visible: modelData.sec !== ""; text: Theme.icLock; font.family: Theme.fontMono; font.pixelSize: 10; color: Theme.fgDim }
+                                            Text { anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter; visible: modelData.active; text: Theme.icCheck; font.family: Theme.fontMono; font.pixelSize: 11; color: Theme.accent }
                                             MouseArea { id: wMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.connectWifi(modelData.ssid, modelData.sec) }
                                         }
                                         Item {
@@ -608,6 +618,8 @@ Scope {
                                         }
                                     }
                                 }
+                                    }
+                                }
                             }
 
                             // BLUETOOTH
@@ -627,16 +639,29 @@ Scope {
                                         MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: if (parent.parent.adapter) parent.parent.adapter.enabled = !parent.parent.adapter.enabled }
                                     }
                                 }
-                                Repeater {
-                                    model: Bluetooth.devices ? Bluetooth.devices.values : []
-                                    delegate: Item {
-                                        required property var modelData
-                                        visible: modelData.paired || modelData.connected || (Bluetooth.defaultAdapter && Bluetooth.defaultAdapter.discovering)
-                                        width: d1Col.width; height: visible ? 30 : 0
-                                        Rectangle { anchors.fill: parent; radius: 7; color: bMa.containsMouse ? Theme.hover : "transparent" }
-                                        Text { anchors.left: parent.left; anchors.leftMargin: 4; anchors.verticalCenter: parent.verticalCenter; text: root.g(modelData.connected ? 0xF294 : 0xF293); font.family: Theme.fontMono; font.pixelSize: 12; color: modelData.connected ? Theme.accent : Theme.fgDim }
-                                        Text { anchors.left: parent.left; anchors.leftMargin: 26; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; text: (modelData.name || modelData.deviceName || modelData.address) + (modelData.connected ? "  ·  connected" : (modelData.paired ? "" : "  ·  new")); color: modelData.connected ? Theme.accent : Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: modelData.connected ? Font.DemiBold : Font.Normal; elide: Text.ElideRight }
-                                        MouseArea { id: bMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: modelData.connected ? modelData.disconnect() : (modelData.paired ? modelData.connect() : modelData.pair()) }
+                                // device list — same inset panel style as the DropRow options
+                                Rectangle {
+                                    width: parent.width
+                                    visible: btOptCol.shown > 0
+                                    height: visible ? btOptCol.implicitHeight + 10 : 0
+                                    radius: 7; color: Theme.bg; border.color: Theme.stroke; border.width: 1
+                                    Column {
+                                        id: btOptCol
+                                        property int shown: { var c = 0, d = Bluetooth.devices ? Bluetooth.devices.values : []; for (var i = 0; i < d.length; i++) if (d[i].paired || d[i].connected || (Bluetooth.defaultAdapter && Bluetooth.defaultAdapter.discovering)) c++; return c }
+                                        anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 5
+                                        Repeater {
+                                            model: Bluetooth.devices ? Bluetooth.devices.values : []
+                                            delegate: Item {
+                                                required property var modelData
+                                                visible: modelData.paired || modelData.connected || (Bluetooth.defaultAdapter && Bluetooth.defaultAdapter.discovering)
+                                                width: btOptCol.width; height: visible ? 28 : 0
+                                                Rectangle { anchors.fill: parent; radius: 6; color: bMa.containsMouse ? Theme.hover : "transparent" }
+                                                Text { anchors.left: parent.left; anchors.leftMargin: 8; anchors.verticalCenter: parent.verticalCenter; text: root.g(modelData.connected ? 0xF294 : 0xF293); font.family: Theme.fontMono; font.pixelSize: 12; color: modelData.connected ? Theme.accent : Theme.fgDim }
+                                                Text { anchors.left: parent.left; anchors.leftMargin: 30; anchors.right: parent.right; anchors.rightMargin: 26; anchors.verticalCenter: parent.verticalCenter; text: (modelData.name || modelData.deviceName || modelData.address) + (modelData.connected ? "" : (modelData.paired ? "" : "  ·  new")); color: modelData.connected ? Theme.accent : Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: modelData.connected ? Font.DemiBold : Font.Normal; elide: Text.ElideRight }
+                                                Text { anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter; visible: modelData.connected; text: Theme.icCheck; font.family: Theme.fontMono; font.pixelSize: 11; color: Theme.accent }
+                                                MouseArea { id: bMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: modelData.connected ? modelData.disconnect() : (modelData.paired ? modelData.connect() : modelData.pair()) }
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -676,15 +701,27 @@ Scope {
                                 width: parent.width; spacing: 2; visible: root.expanded === "vpn"
                                 Text { text: "VPN"; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold; bottomPadding: 4 }
                                 Text { width: parent.width; visible: root.vpnList.length === 0; text: "No VPN connections configured."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; wrapMode: Text.Wrap }
-                                Repeater {
-                                    model: root.vpnList
-                                    delegate: Item {
-                                        required property var modelData
-                                        width: detailCol.width; height: 30
-                                        Rectangle { anchors.fill: parent; radius: 7; color: vMa.containsMouse ? Theme.hover : "transparent" }
-                                        Text { anchors.left: parent.left; anchors.leftMargin: 4; anchors.verticalCenter: parent.verticalCenter; text: Theme.icVpn; font.family: Theme.fontMono; font.pixelSize: 12; color: modelData.active ? Theme.accent : Theme.fgDim }
-                                        Text { anchors.left: parent.left; anchors.leftMargin: 26; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; text: modelData.name + (modelData.active ? "  ·  connected" : ""); color: modelData.active ? Theme.accent : Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: modelData.active ? Font.DemiBold : Font.Normal; elide: Text.ElideRight }
-                                        MouseArea { id: vMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.toggleVpn(modelData.name, !modelData.active) }
+                                // connection list — same inset panel style as the DropRow options
+                                Rectangle {
+                                    width: parent.width
+                                    visible: root.vpnList.length > 0
+                                    height: visible ? vpnOptCol.implicitHeight + 10 : 0
+                                    radius: 7; color: Theme.bg; border.color: Theme.stroke; border.width: 1
+                                    Column {
+                                        id: vpnOptCol
+                                        anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 5
+                                        Repeater {
+                                            model: root.vpnList
+                                            delegate: Item {
+                                                required property var modelData
+                                                width: vpnOptCol.width; height: 28
+                                                Rectangle { anchors.fill: parent; radius: 6; color: vMa.containsMouse ? Theme.hover : "transparent" }
+                                                Text { anchors.left: parent.left; anchors.leftMargin: 8; anchors.verticalCenter: parent.verticalCenter; text: Theme.icVpn; font.family: Theme.fontMono; font.pixelSize: 12; color: modelData.active ? Theme.accent : Theme.fgDim }
+                                                Text { anchors.left: parent.left; anchors.leftMargin: 30; anchors.right: parent.right; anchors.rightMargin: 26; anchors.verticalCenter: parent.verticalCenter; text: modelData.name; color: modelData.active ? Theme.accent : Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: modelData.active ? Font.DemiBold : Font.Normal; elide: Text.ElideRight }
+                                                Text { anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter; visible: modelData.active; text: Theme.icCheck; font.family: Theme.fontMono; font.pixelSize: 11; color: Theme.accent }
+                                                MouseArea { id: vMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.toggleVpn(modelData.name, !modelData.active) }
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -701,15 +738,24 @@ Scope {
                                     text: "No hosts configured. Add one to ~/.ssh/config:\nHost mypc\n    HostName 192.168.1.20\n    User you"
                                     color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
                                 }
+                                // host list — same inset panel style as the DropRow options
+                                Rectangle {
+                                    width: parent.width
+                                    visible: root.sshList.length > 0
+                                    height: visible ? sshOptCol.implicitHeight + 10 : 0
+                                    radius: 7; color: Theme.bg; border.color: Theme.stroke; border.width: 1
+                                    Column {
+                                        id: sshOptCol
+                                        anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 5
                                 Repeater {
                                     model: root.sshList
                                     delegate: Column {
                                         id: sshRow
                                         required property var modelData
-                                        width: detailCol.width
+                                        width: sshOptCol.width
                                         Item {
-                                            width: parent.width; height: 30
-                                            Rectangle { anchors.fill: parent; radius: 7; color: sMa.containsMouse ? Theme.hover : "transparent" }
+                                            width: parent.width; height: 28
+                                            Rectangle { anchors.fill: parent; radius: 6; color: sMa.containsMouse ? Theme.hover : "transparent" }
                                             Text { anchors.left: parent.left; anchors.leftMargin: 4; anchors.verticalCenter: parent.verticalCenter; text: Theme.icSsh; font.family: Theme.fontMono; font.pixelSize: 12; color: sshRow.modelData.tunnel ? Theme.accent : Theme.fgDim }
                                             Text {
                                                 anchors.left: parent.left; anchors.leftMargin: 26; anchors.right: btns.left; anchors.rightMargin: 6; anchors.verticalCenter: parent.verticalCenter
@@ -810,6 +856,8 @@ Scope {
                                         }
                                     }
                                 }
+                                    }
+                                }
                             }
                         }
                     }
@@ -836,28 +884,21 @@ Scope {
                             id: sCol
                             anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 12; spacing: 12
                             Slider { width: parent.width; icon: Theme.icSun; value: root.brightnessVal; onMoved: function (v) { root.setBrightness(v) } }
-                            Item {
-                                width: parent.width; height: 26
-                                Slider { id: volSlider; anchors.left: parent.left; anchors.right: outBtn.left; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter; icon: Theme.icVolHigh; value: root.volumeVal; onMoved: function (v) { root.setVolume(v) } }
-                                Text { id: outBtn; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; text: root.g(root.audioExpanded ? 0xF077 : 0xF078); font.family: Theme.fontMono; font.pixelSize: 11; color: Theme.fgDim; MouseArea { anchors.fill: parent; anchors.margins: -6; cursorShape: Qt.PointingHandCursor; onClicked: root.audioExpanded = !root.audioExpanded } }
-                            }
-                            Column {
-                                width: parent.width; spacing: 2; visible: root.audioExpanded
-                                Repeater {
-                                    model: {
-                                        var out = [], n = Pipewire.nodes.values
-                                        for (var i = 0; i < n.length; i++) { var x = n[i]; if (x.isSink && !x.isStream && x.audio) out.push(x) }
-                                        return out
-                                    }
-                                    delegate: Item {
-                                        required property var modelData
-                                        readonly property bool cur: Pipewire.defaultAudioSink === modelData
-                                        width: sCol.width; height: 28
-                                        Rectangle { anchors.fill: parent; radius: 7; color: aMa.containsMouse ? Theme.hover : "transparent" }
-                                        Text { anchors.left: parent.left; anchors.leftMargin: 4; anchors.verticalCenter: parent.verticalCenter; text: root.g(parent.cur ? 0xF058 : 0xF111); font.family: Theme.fontMono; font.pixelSize: 12; color: parent.cur ? Theme.accent : Theme.fgDim }
-                                        Text { anchors.left: parent.left; anchors.leftMargin: 26; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; text: modelData.description || modelData.nickname || modelData.name; color: parent.cur ? Theme.accent : Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; elide: Text.ElideRight }
-                                        MouseArea { id: aMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: Pipewire.preferredDefaultAudioSink = modelData }
-                                    }
+                            Slider { width: parent.width; icon: Theme.icVolHigh; value: root.volumeVal; onMoved: function (v) { root.setVolume(v) } }
+                            // output device — the shared DropRow (same dropdown as Settings)
+                            DropRow {
+                                label: "Output"
+                                ddId: "qs-audio-out"
+                                buttonWidth: 210
+                                options: {
+                                    var out = [], n = Pipewire.nodes.values
+                                    for (var i = 0; i < n.length; i++) { var x = n[i]; if (x.isSink && !x.isStream && x.audio) out.push({ label: x.description || x.nickname || x.name, value: x.id }) }
+                                    return out
+                                }
+                                value: Pipewire.defaultAudioSink ? Pipewire.defaultAudioSink.id : ""
+                                onPicked: function (v) {
+                                    var n = Pipewire.nodes.values
+                                    for (var i = 0; i < n.length; i++) if (n[i].id === v) { Pipewire.preferredDefaultAudioSink = n[i]; break }
                                 }
                             }
                         }
