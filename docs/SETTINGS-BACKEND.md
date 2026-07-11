@@ -77,14 +77,19 @@ through the shared `FileDropTarget` component (portal chooser + drop zone).
   retries exactly once on 401. Sign-out revokes at Google and clears
   everything. Scopes: `openid email profile calendar.readonly drive.appdata`.
 - **Settings sync**: `scripts/settings-bundle.py collect|apply` serializes /
-  re-applies the files in the table above plus `pacman -Qqe`/`-Qqm` package
-  lists; Google.qml stores the bundle as `hypr-shell-settings.json` in
-  Drive's hidden `appDataFolder`. Restore is explicit (confirmation card,
-  last-write-wins by `updatedAt`); after apply the shell re-reads its JSON
-  state and reloads Hyprland/wallpaper/hypridle live. Auto-sync (off by
-  default) pushes ~20 s after Settings closes when the content hash changed.
-  Package reinstall is opt-in via the written
-  `google-restore-packages.txt` / `-aur.txt` — never automatic.
+  re-applies the files in the table above plus `~/.ssh/config` (hosts only —
+  **never keys**), the `ssh-browse/` tunnel scripts, VPN connection
+  **names/types only** (the profiles are root-owned and can embed secrets —
+  those never enter the bundle; restore lists them for manual re-import),
+  and `pacman -Qqe`/`-Qqm` package lists; Google.qml stores the bundle as
+  `hypr-shell-settings.json` in Drive's hidden `appDataFolder`. Restore is
+  explicit (confirmation card, last-write-wins by `updatedAt`); after apply
+  the shell re-reads its JSON state and reloads Hyprland/wallpaper/hypridle
+  live. Auto-sync (off by default) pushes ~20 s after Settings closes when
+  the content hash changed. Packages are never auto-installed: the
+  "Packages from backup…" card diffs the bundle against `pacman -Qq` and
+  installs the checked selection visibly in a kitty terminal
+  (`sudo pacman -S --needed`, AUR via `paru`).
 - **Calendar**: 14-day window over every selected calendar
   (`calendarList` → `events.list`, `singleEvents`, per-calendar colours),
   polled every 15 min + on sign-in + when Quick Settings opens stale;

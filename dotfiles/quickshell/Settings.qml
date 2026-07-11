@@ -849,6 +849,71 @@ Scope {
         var d = new Date(iso)
         return isNaN(d.getTime()) ? (iso || "—") : Qt.formatDateTime(d, "d MMM · h:mm AP")
     }
+
+    // ── packages-from-backup review: diff the cloud bundle against pacman -Qq
+    // and offer a checkbox install (runs visibly in kitty; AUR via paru) ───────
+    property var pkgReview: null      // { repo: [{name,on}], aur: [{name,on}] } | null = closed
+    function reviewPackages() {
+        if (!Google.getCloudBundle()) {
+            Google.checkCloud(function (ok) {
+                if (ok) { pkgProbe.running = false; pkgProbe.running = true }
+                else root.errorMsg = "No cloud backup found for this account."
+            })
+            return
+        }
+        pkgProbe.running = false; pkgProbe.running = true
+    }
+    Process {
+        id: pkgProbe
+        command: ["pacman", "-Qq"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                var installed = {}, ls = this.text.split("\n")
+                for (var i = 0; i < ls.length; i++) if (ls[i] !== "") installed[ls[i]] = true
+                var b = Google.getCloudBundle()
+                var mk = function (arr) {
+                    var out = []
+                    for (var j = 0; j < (arr || []).length; j++) if (!installed[arr[j]]) out.push({ name: arr[j], on: true })
+                    return out
+                }
+                root.pkgReview = { repo: mk(b && b.apps ? b.apps.explicit : []), aur: mk(b && b.apps ? b.apps.foreign : []) }
+            }
+        }
+    }
+    function pkgToggle(kind, idx) {
+        var r = JSON.parse(JSON.stringify(root.pkgReview))
+        r[kind][idx].on = !r[kind][idx].on
+        root.pkgReview = r
+    }
+    function pkgSetAll(on) {
+        var r = JSON.parse(JSON.stringify(root.pkgReview))
+        for (var i = 0; i < r.repo.length; i++) r.repo[i].on = on
+        for (var j = 0; j < r.aur.length; j++) r.aur[j].on = on
+        root.pkgReview = r
+    }
+    function pkgSelectedCount() {
+        if (!root.pkgReview) return 0
+        var n = 0
+        for (var i = 0; i < root.pkgReview.repo.length; i++) if (root.pkgReview.repo[i].on) n++
+        for (var j = 0; j < root.pkgReview.aur.length; j++) if (root.pkgReview.aur[j].on) n++
+        return n
+    }
+    function pkgInstallSelected() {
+        var repo = [], aur = []
+        for (var i = 0; i < root.pkgReview.repo.length; i++) if (root.pkgReview.repo[i].on) repo.push(root.pkgReview.repo[i].name)
+        for (var j = 0; j < root.pkgReview.aur.length; j++) if (root.pkgReview.aur[j].on) aur.push(root.pkgReview.aur[j].name)
+        if (repo.length === 0 && aur.length === 0) return
+        var cmd = ""
+        if (repo.length > 0) cmd += "sudo pacman -S --needed " + repo.join(" ")
+        if (aur.length > 0) cmd += (cmd !== "" ? " && " : "") + "paru -S --needed " + aur.join(" ")
+        Quickshell.execDetached(["kitty", "--title", "hypr-shell package restore", "-e", "sh", "-c",
+            cmd + '; s=$?; echo; if [ $s -eq 0 ]; then echo "── done ──"; else echo "── exited with status $s ──"; fi; read -n 1 -s -p "press any key to close"'])
+    }
+    // after a cloud restore lands, open the review so the user sees what's missing
+    Connections {
+        target: Google
+        function onRestoreSummaryChanged() { if (Google.restoreSummary !== "" && Globals.settingsOpen) root.reviewPackages() }
+    }
     Process {
         id: userInfoProbe
         command: ["sh", "-c",
@@ -2229,8 +2294,9 @@ Scope {
                             spacing: 10
                             Pill { label: Google.syncState === "syncing" ? "Syncing…" : "Sync now"; primary: true; onGo: Google.syncNow() }
                             Pill { label: "Restore from cloud…"; onGo: Google.requestRestore() }
+                            Pill { label: "Packages from backup…"; onGo: root.reviewPackages() }
                         }
-                        Text { width: parent.width; text: "Theme, keyboard, dock, wallpaper, shortcuts, screensaver, avatar shape and display profiles — one bundle in Drive's hidden app storage. The installed-package list is captured too; reinstalling from it is always opt-in."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
+                        Text { width: parent.width; text: "Theme, keyboard, dock, wallpaper, shortcuts, screensaver, avatar shape, display profiles, SSH hosts + browse tunnels (never keys) — one bundle in Drive's hidden app storage. VPN profiles hold secrets, so only their names are captured. The installed-package list is captured too; reinstalling from it is always opt-in."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
                         Text { visible: Google.syncError !== ""; width: parent.width; text: Google.syncError; color: Theme.danger; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
                         Text { visible: Google.restoreSummary !== ""; width: parent.width; text: Google.restoreSummary; color: Theme.success; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
                     }
@@ -2248,12 +2314,78 @@ Scope {
                             KV { k: "Saved on"; v: Google.pendingRestore ? ("“" + (Google.pendingRestore.device || "?") + "” · " + root.fmtSyncTime(Google.pendingRestore.updatedAt || "")) : "" }
                             KV { k: "Sections"; v: Google.pendingRestore ? Object.keys(Google.pendingRestore.settings || {}).filter(function (k) { return k !== "files" }).join(", ") : "" }
                             KV { k: "Captured packages"; v: Google.pendingRestore && Google.pendingRestore.apps ? ((Google.pendingRestore.apps.explicit || []).length + " repo · " + (Google.pendingRestore.apps.foreign || []).length + " AUR (opt-in, never auto-installed)") : "none" }
-                            Text { width: parent.width; text: "Overwrites this machine's theme, keyboard, dock, wallpaper, screensaver and display-profile settings, then reloads the shell config live."; color: Theme.warning; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
+                            Text { width: parent.width; text: "Overwrites this machine's theme, keyboard, dock, wallpaper, screensaver, SSH-host and display-profile settings, then reloads the shell config live."; color: Theme.warning; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
                             Row {
                                 spacing: 10
                                 Pill { label: "Restore"; primary: true; onGo: Google.applyRestore() }
                                 Pill { label: "Cancel"; onGo: Google.cancelRestore() }
                             }
+                        }
+                    }
+
+                    // packages-from-backup — checkbox picker for what's not installed here
+                    Rectangle {
+                        visible: root.pkgReview !== null
+                        width: parent.width
+                        implicitHeight: pkgCol.implicitHeight + 24
+                        radius: Theme.radiusInner; color: Theme.elevated
+                        border.color: Theme.accent; border.width: 1
+                        Column {
+                            id: pkgCol
+                            anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 12; spacing: 8
+                            Text { text: "Packages from the backup"; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsBody; font.weight: Font.DemiBold }
+                            Text {
+                                width: parent.width
+                                readonly property int missing: root.pkgReview ? (root.pkgReview.repo.length + root.pkgReview.aur.length) : 0
+                                text: missing === 0 ? "Everything from the backup is already installed on this machine."
+                                                    : missing + " captured packages are not installed here — pick what to install:"
+                                color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; wrapMode: Text.Wrap
+                            }
+                            component PkgRow: Item {
+                                property string kind: "repo"
+                                property int idx: 0
+                                property var entry: null
+                                width: parent ? parent.width : 0; height: 26
+                                Rectangle {
+                                    id: pkBox
+                                    anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter
+                                    width: 16; height: 16; radius: 4
+                                    color: entry && entry.on ? Theme.accent : "transparent"
+                                    border.color: entry && entry.on ? Theme.accent : Theme.stroke; border.width: 1
+                                    Text { anchors.centerIn: parent; visible: entry && entry.on; text: Theme.icCheck; font.family: Theme.fontMono; font.pixelSize: 10; color: Theme.accentText }
+                                }
+                                Text { anchors.left: pkBox.right; anchors.leftMargin: 9; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; text: (entry ? entry.name : "") + (kind === "aur" ? "   · AUR" : ""); color: Theme.fg; font.family: Theme.fontMono; font.pixelSize: 11; elide: Text.ElideRight }
+                                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.pkgToggle(kind, idx) }
+                            }
+                            Rectangle {
+                                width: parent.width
+                                visible: root.pkgReview !== null && (root.pkgReview.repo.length + root.pkgReview.aur.length) > 0
+                                height: visible ? Math.min(pkgListCol.implicitHeight + 10, 240) : 0
+                                radius: 7; color: Theme.bg; border.color: Theme.stroke; border.width: 1
+                                Flickable {
+                                    anchors.fill: parent; anchors.margins: 5
+                                    contentHeight: pkgListCol.implicitHeight; clip: true; boundsBehavior: Flickable.StopAtBounds
+                                    Column {
+                                        id: pkgListCol; width: parent.width
+                                        Repeater {
+                                            model: root.pkgReview ? root.pkgReview.repo : []
+                                            delegate: PkgRow { required property var modelData; required property int index; kind: "repo"; idx: index; entry: modelData }
+                                        }
+                                        Repeater {
+                                            model: root.pkgReview ? root.pkgReview.aur : []
+                                            delegate: PkgRow { required property var modelData; required property int index; kind: "aur"; idx: index; entry: modelData }
+                                        }
+                                    }
+                                }
+                            }
+                            Row {
+                                spacing: 10
+                                Pill { visible: root.pkgSelectedCount() > 0; label: "Install selected (" + root.pkgSelectedCount() + ") in terminal"; primary: true; onGo: root.pkgInstallSelected() }
+                                Pill { visible: root.pkgReview !== null && (root.pkgReview.repo.length + root.pkgReview.aur.length) > 0; label: "All"; onGo: root.pkgSetAll(true) }
+                                Pill { visible: root.pkgReview !== null && (root.pkgReview.repo.length + root.pkgReview.aur.length) > 0; label: "None"; onGo: root.pkgSetAll(false) }
+                                Pill { label: "Close"; onGo: root.pkgReview = null }
+                            }
+                            Text { visible: root.pkgReview !== null && (root.pkgReview.repo.length + root.pkgReview.aur.length) > 0; width: parent.width; text: "Opens a terminal running sudo pacman -S --needed (AUR entries via paru) — you authenticate there and watch it happen. Nothing installs silently."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
                         }
                     }
 

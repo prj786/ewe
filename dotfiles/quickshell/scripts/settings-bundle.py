@@ -94,6 +94,39 @@ def cmd_collect():
         settings["files"] = files
     settings["kbPerWindowDisabled"] = os.path.exists(KB_FLAG)
 
+    # ssh: the host config + the shell's browse-tunnel scripts (SOCKS port /
+    # browser command per host). NEVER keys, never known_hosts.
+    ssh_cfg = read_text(HOME + "/.ssh/config")
+    if ssh_cfg is not None:
+        settings["sshConfig"] = ssh_cfg
+    browse = {}
+    bdir = QS + "/ssh-browse"
+    if os.path.isdir(bdir):
+        for fn in sorted(os.listdir(bdir)):
+            p = os.path.join(bdir, fn)
+            if os.path.isfile(p):
+                t = read_text(p)
+                if t is not None:
+                    browse[fn] = t
+    if browse:
+        settings["sshBrowse"] = browse
+    # vpn: names + types ONLY. The actual profiles live root-owned in /etc and
+    # can embed credentials — secrets never go into the cloud bundle. Restore
+    # lists these so the user knows what to re-import.
+    vpns = []
+    try:
+        r = subprocess.run(["nmcli", "-t", "-f", "NAME,TYPE", "connection", "show"],
+                           capture_output=True, text=True, timeout=15)
+        if r.returncode == 0:
+            for line in r.stdout.split("\n"):
+                parts = line.split(":")
+                if len(parts) >= 2 and parts[1] in ("vpn", "wireguard"):
+                    vpns.append({"name": parts[0], "type": parts[1]})
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+    if vpns:
+        settings["vpnConnections"] = vpns
+
     apps = {
         "explicit": pacman_list(["-Qqe"]),
         "foreign": pacman_list(["-Qqm"]),
@@ -137,6 +170,25 @@ def cmd_apply(path):
             os.remove(KB_FLAG)
         applied.append("kbPerWindowDisabled")
 
+    if isinstance(settings.get("sshConfig"), str):
+        sshdir = HOME + "/.ssh"
+        os.makedirs(sshdir, exist_ok=True)
+        os.chmod(sshdir, 0o700)
+        atomic_write(sshdir + "/config", settings["sshConfig"])
+        os.chmod(sshdir + "/config", 0o600)   # ssh refuses group/world-readable configs
+        applied.append("sshConfig")
+    if isinstance(settings.get("sshBrowse"), dict):
+        bdir = QS + "/ssh-browse"
+        os.makedirs(bdir, exist_ok=True)
+        for fn, content in settings["sshBrowse"].items():
+            fn = os.path.basename(str(fn))   # no path traversal from a tampered bundle
+            if not fn or not isinstance(content, str):
+                continue
+            p = os.path.join(bdir, fn)
+            atomic_write(p, content)
+            os.chmod(p, 0o755)
+        applied.append("sshBrowse")
+
     # package lists → plain files for an opt-in reinstall; NEVER installed here
     apps = bundle.get("apps") or {}
     n_repo, n_aur = len(apps.get("explicit") or []), len(apps.get("foreign") or [])
@@ -145,9 +197,10 @@ def cmd_apply(path):
     if n_aur:
         atomic_write(QS + "/google-restore-aur.txt", "\n".join(apps["foreign"]) + "\n")
 
+    vpns = [v.get("name", "?") for v in (settings.get("vpnConnections") or []) if isinstance(v, dict)]
     out({"ok": True, "applied": applied, "device": bundle.get("device", "?"),
          "updatedAt": bundle.get("updatedAt", "?"),
-         "packages": {"repo": n_repo, "aur": n_aur}})
+         "packages": {"repo": n_repo, "aur": n_aur}, "vpn": vpns})
 
 
 if __name__ == "__main__":

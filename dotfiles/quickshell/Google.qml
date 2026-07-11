@@ -198,6 +198,9 @@ QtObject {
         }
     }
 
+    // the last-downloaded cloud bundle (Settings' package-review card diffs it)
+    function getCloudBundle() { return goo._cloudBundle }
+
     // fetch the cloud copy (6 KB) — feeds both the panel info line and restore
     function checkCloud(cb) {
         goo.api("GET", goo.driveListUrl, null, function (st, j, err) {
@@ -302,8 +305,8 @@ QtObject {
                         'hyprctl reload >/dev/null 2>&1; "$HOME/.config/hypr/scripts/wallpaper.sh" --reapply >/dev/null 2>&1; pkill -x hypridle; sleep 0.6; hypridle -c "$HOME/.config/hypr/generated/hypridle.conf" >/dev/null 2>&1'])
                 goo.lastSync = j.updatedAt; goo.lastHash = ""; goo._saveSyncMeta()
                 goo.syncState = "idle"
-                goo.restoreSummary = "Restored " + j.applied.length + " sections from “" + j.device + "”. "
-                    + (j.packages.repo > 0 ? j.packages.repo + " repo + " + j.packages.aur + " AUR packages captured — reinstall (optional): sudo pacman -S --needed - < ~/.config/quickshell/google-restore-packages.txt" : "")
+                goo.restoreSummary = "Restored " + j.applied.length + " sections from “" + j.device + "”."
+                    + (j.vpn && j.vpn.length ? " VPNs to re-import manually (profiles hold secrets and are never synced): " + j.vpn.join(", ") + "." : "")
             }
         }
     }
