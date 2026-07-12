@@ -508,6 +508,55 @@ Scope {
                                 font.family: Theme.fontMono; font.pixelSize: 13
                                 color: Theme.accent
                             }
+                            // Phone (KDE Connect) — only when paired + reachable;
+                            // battery % and an accent dot for unread phone notifications
+                            Row {
+                                visible: KdeConnect.connected
+                                anchors.verticalCenter: parent.verticalCenter
+                                spacing: 4
+                                Item {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    width: phGlyph.implicitWidth; height: phGlyph.implicitHeight
+                                    Text {
+                                        id: phGlyph
+                                        text: Theme.icPhone
+                                        font.family: Theme.fontMono; font.pixelSize: 13
+                                        color: Theme.fgSecondary
+                                    }
+                                    Rectangle {
+                                        visible: KdeConnect.unreadCount > 0
+                                        anchors.right: parent.right; anchors.top: parent.top
+                                        anchors.rightMargin: -2; anchors.topMargin: -1
+                                        width: 6; height: 6; radius: 3
+                                        color: Theme.accent
+                                    }
+                                }
+                                Text {
+                                    visible: KdeConnect.connected && KdeConnect.device.batteryCharge >= 0
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: KdeConnect.connected ? KdeConnect.device.batteryCharge + "%" : ""
+                                    font.family: Theme.fontText; font.pixelSize: 11
+                                    color: Theme.fgSecondary
+                                }
+                            }
+                            // Mail (Gmail) — envelope + count, only when there is unread mail
+                            Row {
+                                visible: Google.signedIn && Google.mailUnread > 0
+                                anchors.verticalCenter: parent.verticalCenter
+                                spacing: 3
+                                Text {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: Theme.icMail
+                                    font.family: Theme.fontMono; font.pixelSize: 13
+                                    color: Theme.accent
+                                }
+                                Text {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: Google.mailUnread > 99 ? "99+" : String(Google.mailUnread)
+                                    font.family: Theme.fontText; font.pixelSize: 11; font.weight: Font.DemiBold
+                                    color: Theme.fgSecondary
+                                }
+                            }
                             // Power profile (leaf · balance · speedometer) — reflects tuned profile
                             Text {
                                 anchors.verticalCenter: parent.verticalCenter

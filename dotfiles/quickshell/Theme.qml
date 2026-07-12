@@ -110,4 +110,11 @@ QtObject {
     readonly property string icPower:       ic(0xF0425)  // power
     readonly property string icCog:         ic(0xF0493)  // cog
     readonly property string icCheck:       ic(0xF012C)  // check
+    readonly property string icPhone:       ic(0xF011C)  // cellphone (mobile connection)
+    readonly property string icMessage:     ic(0xF0361)  // message (SMS)
+    readonly property string icSend:        ic(0xF048A)  // send
+    readonly property string icBellRing:    ic(0xF009E)  // bell-ring (find my phone / mail notify)
+    readonly property string icRefresh:     ic(0xF0450)  // refresh
+    readonly property string icBack:        ic(0xF004D)  // arrow-left
+    readonly property string icMail:        ic(0xF01EE)  // email (Gmail)
 }

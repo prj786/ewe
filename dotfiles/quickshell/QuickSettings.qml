@@ -84,8 +84,18 @@ Scope {
         return s
     }
 
-    // which tile's section is expanded: "" | "wifi" | "bt" | "vpn" | "ssh"
+    // which tile's section is expanded: "" | "wifi" | "bt" | "vpn" | "ssh" | "mobile" | "mail"
     property string expanded: ""
+
+    // mobile (KDE Connect) sub-state
+    property string mobileView: "notifs"      // "notifs" | "msgs"
+    property string replyTarget: ""           // notification id with the reply box open
+    function fmtMsgTime(ms) {
+        var d = new Date(ms), now = new Date()
+        if (d.toDateString() === now.toDateString()) return Qt.formatTime(d, "h:mm AP")
+        if (now.getTime() - ms < 6 * 86400000) return Qt.formatDateTime(d, "ddd")
+        return Qt.formatDateTime(d, "d MMM")
+    }
 
     // wifi
     property var wifiList: []
@@ -893,6 +903,644 @@ Scope {
                                         }
                                     }
                                 }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // ── row 3: Mobile (KDE Connect) / Mail (Gmail) ──
+                    Row {
+                        width: parent.width; spacing: 10
+                        Tile {
+                            ic: Theme.icPhone; label: "Mobile"
+                            active: KdeConnect.connected || root.expanded === "mobile"
+                            sub: !KdeConnect.installed ? "Not set up"
+                               : KdeConnect.connected ? (KdeConnect.unreadCount > 0 ? KdeConnect.unreadCount + " new"
+                                                        : KdeConnect.device.batteryCharge >= 0 ? KdeConnect.device.batteryCharge + "%" : "Connected")
+                               : (KdeConnect.device && KdeConnect.device.isPaired) ? "Offline" : "Not connected"
+                            onClicked: {
+                                root.expanded = root.expanded === "mobile" ? "" : "mobile"
+                                if (root.expanded === "mobile") { root.mobileView = "notifs"; KdeConnect.refresh() }
+                            }
+                        }
+                        Tile {
+                            ic: Theme.icMail; label: "Mail"
+                            active: root.expanded === "mail"
+                            sub: !Google.signedIn ? "Not connected"
+                               : Google.mailState === "offline" ? "Offline"
+                               : Google.mailUnread > 0 ? Google.mailUnread + " unread" : "No unread"
+                            onClicked: {
+                                root.expanded = root.expanded === "mail" ? "" : "mail"
+                                if (root.expanded === "mail" && Google.signedIn) Google.fetchMail()
+                            }
+                        }
+                    }
+
+                    // ── options for row 3 (Mobile / Mail) ──
+                    Rectangle {
+                        width: parent.width
+                        visible: root.expanded === "mobile" || root.expanded === "mail"
+                        height: visible ? d3Col.implicitHeight + 20 : 0
+                        radius: Theme.radiusInner
+                        color: Theme.elevated
+                        Column {
+                            id: d3Col
+                            anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 10
+                            spacing: 4
+
+                            // ═══ MOBILE (KDE Connect) ═══
+                            Column {
+                                width: parent.width; spacing: 6; visible: root.expanded === "mobile"
+
+                                // mark everything seen while the list is on screen
+                                Connections {
+                                    target: KdeConnect
+                                    function onNotifsChanged() {
+                                        if (Globals.quickSettingsOpen && root.expanded === "mobile" && root.mobileView === "notifs")
+                                            KdeConnect.markAllSeen()
+                                    }
+                                }
+                                onVisibleChanged: if (visible) KdeConnect.markAllSeen()
+
+                                // header
+                                Item {
+                                    width: parent.width; height: 26
+                                    Text {
+                                        anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter
+                                        text: KdeConnect.connected ? KdeConnect.device.name : "Mobile  ·  KDE Connect"
+                                        color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold
+                                    }
+                                    Row {
+                                        anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; spacing: 6
+                                        // battery of the connected phone
+                                        Row {
+                                            visible: KdeConnect.connected && KdeConnect.device.batteryCharge >= 0
+                                            anchors.verticalCenter: parent.verticalCenter; spacing: 3
+                                            Text {
+                                                anchors.verticalCenter: parent.verticalCenter
+                                                text: KdeConnect.connected && KdeConnect.device.isCharging ? Theme.icBolt : Theme.icBattFull
+                                                font.family: Theme.fontMono; font.pixelSize: 11
+                                                color: KdeConnect.connected && KdeConnect.device.isCharging ? Theme.success : Theme.fgDim
+                                            }
+                                            Text {
+                                                anchors.verticalCenter: parent.verticalCenter
+                                                text: KdeConnect.connected ? KdeConnect.device.batteryCharge + "%" : ""
+                                                color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold
+                                            }
+                                        }
+                                        // refresh / rescan
+                                        Rectangle {
+                                            width: 22; height: 22; radius: 6
+                                            color: mrfMa.containsMouse ? Theme.hover : "transparent"
+                                            Text { anchors.centerIn: parent; text: Theme.icRefresh; font.family: Theme.fontMono; font.pixelSize: 12; color: Theme.fgDim }
+                                            MouseArea { id: mrfMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: KdeConnect.refresh() }
+                                        }
+                                    }
+                                }
+
+                                // — not installed —
+                                Text {
+                                    width: parent.width; visible: KdeConnect.bridgeUp && !KdeConnect.installed; wrapMode: Text.Wrap
+                                    text: "KDE Connect is not installed.\nsudo pacman -S kdeconnect — then install the app on your phone (same Wi-Fi network)."
+                                    color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
+                                }
+                                // — installed, daemon down —
+                                Row {
+                                    visible: KdeConnect.installed && !KdeConnect.daemonRunning; spacing: 8
+                                    Text { anchors.verticalCenter: parent.verticalCenter; text: "KDE Connect daemon is not running."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
+                                    Rectangle {
+                                        width: sdTxt.implicitWidth + 20; height: 24; radius: 12
+                                        color: sdMa.containsMouse ? Qt.lighter(Theme.accent, 1.15) : Theme.accent
+                                        Text { id: sdTxt; anchors.centerIn: parent; text: "Start"; color: Theme.accentText; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold }
+                                        MouseArea { id: sdMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: KdeConnect.refresh() }
+                                    }
+                                }
+
+                                // — incoming pair request —
+                                Column {
+                                    width: parent.width; spacing: 6
+                                    visible: KdeConnect.device !== null && KdeConnect.device.pairRequestedByPeer
+                                    Text {
+                                        width: parent.width; wrapMode: Text.Wrap
+                                        text: "“" + (KdeConnect.device ? KdeConnect.device.name : "") + "” wants to pair with this computer."
+                                        color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
+                                    }
+                                    Row {
+                                        spacing: 6
+                                        Rectangle {
+                                            width: apTxt.implicitWidth + 22; height: 24; radius: 12
+                                            color: apMa.containsMouse ? Qt.lighter(Theme.accent, 1.15) : Theme.accent
+                                            Text { id: apTxt; anchors.centerIn: parent; text: "Accept"; color: Theme.accentText; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold }
+                                            MouseArea { id: apMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: KdeConnect.acceptPair(KdeConnect.device.id) }
+                                        }
+                                        Rectangle {
+                                            width: rjTxt.implicitWidth + 22; height: 24; radius: 12
+                                            color: rjMa.containsMouse ? Theme.hover : "transparent"; border.color: Theme.hover; border.width: 1
+                                            Text { id: rjTxt; anchors.centerIn: parent; text: "Reject"; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
+                                            MouseArea { id: rjMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: KdeConnect.cancelPair(KdeConnect.device.id) }
+                                        }
+                                    }
+                                }
+
+                                // — pairing in progress (we asked) —
+                                Row {
+                                    visible: KdeConnect.pairingId !== ""; spacing: 8
+                                    Text { anchors.verticalCenter: parent.verticalCenter; text: "Pairing — accept the request on your phone…"; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
+                                    Rectangle {
+                                        width: cpTxt.implicitWidth + 20; height: 24; radius: 12
+                                        color: cpMa.containsMouse ? Theme.hover : "transparent"; border.color: Theme.hover; border.width: 1
+                                        Text { id: cpTxt; anchors.centerIn: parent; text: "Cancel"; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
+                                        MouseArea { id: cpMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: KdeConnect.cancelPair(KdeConnect.pairingId) }
+                                    }
+                                }
+                                Text {
+                                    width: parent.width; visible: KdeConnect.pairError !== ""; wrapMode: Text.Wrap
+                                    text: KdeConnect.pairError
+                                    color: Theme.danger; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
+                                }
+
+                                // — no paired device: reachable-device picker —
+                                Column {
+                                    width: parent.width; spacing: 2
+                                    visible: KdeConnect.installed && KdeConnect.daemonRunning
+                                             && (KdeConnect.device === null || (!KdeConnect.device.isPaired && !KdeConnect.device.pairRequestedByPeer))
+                                             && KdeConnect.pairingId === ""
+                                    Text {
+                                        width: parent.width; wrapMode: Text.Wrap
+                                        visible: KdeConnect.devices.length === 0
+                                        text: "No phones found. Open KDE Connect on your phone — both devices must be on the same network."
+                                        color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
+                                    }
+                                    Rectangle {
+                                        width: parent.width
+                                        visible: KdeConnect.devices.length > 0
+                                        height: visible ? kdcPickCol.implicitHeight + 10 : 0
+                                        radius: 7; color: Theme.bg; border.color: Theme.stroke; border.width: 1
+                                        Column {
+                                            id: kdcPickCol
+                                            anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 5
+                                            Repeater {
+                                                model: KdeConnect.devices
+                                                delegate: Item {
+                                                    required property var modelData
+                                                    width: kdcPickCol.width; height: 28
+                                                    Rectangle { anchors.fill: parent; radius: 6; color: kpMa.containsMouse ? Theme.hover : "transparent" }
+                                                    Text { anchors.left: parent.left; anchors.leftMargin: 8; anchors.verticalCenter: parent.verticalCenter; text: Theme.icPhone; font.family: Theme.fontMono; font.pixelSize: 12; color: modelData.isReachable ? Theme.fg : Theme.fgDim }
+                                                    Text {
+                                                        anchors.left: parent.left; anchors.leftMargin: 30; anchors.right: parent.right; anchors.rightMargin: 60; anchors.verticalCenter: parent.verticalCenter
+                                                        text: modelData.name + (modelData.isReachable ? "" : "  ·  offline")
+                                                        color: modelData.isReachable ? Theme.fg : Theme.fgDim
+                                                        font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; elide: Text.ElideRight
+                                                    }
+                                                    Text {
+                                                        anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter
+                                                        visible: modelData.isReachable
+                                                        text: "Pair"; color: Theme.accent; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold
+                                                    }
+                                                    MouseArea { id: kpMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: if (modelData.isReachable) KdeConnect.requestPair(modelData.id) }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // — paired but unreachable —
+                                Text {
+                                    width: parent.width; wrapMode: Text.Wrap
+                                    visible: KdeConnect.device !== null && KdeConnect.device.isPaired && !KdeConnect.device.isReachable
+                                    text: "“" + (KdeConnect.device ? KdeConnect.device.name : "") + "” is offline — same network + KDE Connect running on the phone, then Refresh."
+                                    color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
+                                }
+
+                                // — connected: quick actions + notifications ⇄ messages —
+                                Column {
+                                    width: parent.width; spacing: 6
+                                    visible: KdeConnect.connected
+
+                                    Row {
+                                        spacing: 6
+                                        // view switch: Notifications | Messages
+                                        Rectangle {
+                                            width: nvTxt.implicitWidth + 20; height: 24; radius: 12
+                                            color: root.mobileView === "notifs" ? Theme.accent : (nvMa.containsMouse ? Theme.hover : "transparent")
+                                            border.color: root.mobileView === "notifs" ? Theme.accent : Theme.hover; border.width: 1
+                                            Text { id: nvTxt; anchors.centerIn: parent; text: "Notifications" + (KdeConnect.unreadCount > 0 ? " · " + KdeConnect.unreadCount : ""); color: root.mobileView === "notifs" ? Theme.accentText : Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold }
+                                            MouseArea { id: nvMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: { root.mobileView = "notifs"; KdeConnect.markAllSeen() } }
+                                        }
+                                        Rectangle {
+                                            width: mvTxt.implicitWidth + 20; height: 24; radius: 12
+                                            color: root.mobileView === "msgs" ? Theme.accent : (mvvMa.containsMouse ? Theme.hover : "transparent")
+                                            border.color: root.mobileView === "msgs" ? Theme.accent : Theme.hover; border.width: 1
+                                            Text { id: mvTxt; anchors.centerIn: parent; text: "Messages"; color: root.mobileView === "msgs" ? Theme.accentText : Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold }
+                                            MouseArea { id: mvvMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: { root.mobileView = "msgs"; if (!KdeConnect.convsRequested) KdeConnect.loadConversations() } }
+                                        }
+                                        // ring (find my phone)
+                                        Rectangle {
+                                            width: 24; height: 24; radius: 12
+                                            color: rgMa.containsMouse ? Theme.accent : "transparent"; border.color: Theme.hover; border.width: 1
+                                            Text { anchors.centerIn: parent; text: Theme.icBellRing; font.family: Theme.fontMono; font.pixelSize: 12; color: rgMa.containsMouse ? Theme.accentText : Theme.fg }
+                                            MouseArea { id: rgMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: KdeConnect.ring() }
+                                        }
+                                    }
+
+                                    // ── notifications list ──
+                                    Column {
+                                        width: parent.width; spacing: 2; visible: root.mobileView === "notifs"
+                                        Text {
+                                            visible: KdeConnect.notifs.length === 0
+                                            text: "No notifications on the phone."
+                                            color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
+                                        }
+                                        Rectangle {
+                                            width: parent.width
+                                            visible: KdeConnect.notifs.length > 0
+                                            height: visible ? Math.min(kdcNotifCol.implicitHeight + 10, 260) : 0
+                                            radius: 7; color: Theme.bg; border.color: Theme.stroke; border.width: 1
+                                            Flickable {
+                                                anchors.fill: parent; anchors.margins: 5; clip: true
+                                                contentHeight: kdcNotifCol.implicitHeight
+                                                boundsBehavior: Flickable.StopAtBounds
+                                                Column {
+                                                    id: kdcNotifCol
+                                                    width: parent.width
+                                                    Repeater {
+                                                        model: KdeConnect.notifs
+                                                        delegate: Column {
+                                                            id: knRow
+                                                            required property var modelData
+                                                            width: kdcNotifCol.width
+                                                            Item {
+                                                                width: parent.width
+                                                                height: knBody.implicitHeight + 12
+                                                                Rectangle { anchors.fill: parent; radius: 6; color: knMa.containsMouse ? Theme.hover : "transparent" }
+                                                                Image {
+                                                                    id: knIcon
+                                                                    anchors.left: parent.left; anchors.leftMargin: 6; anchors.top: parent.top; anchors.topMargin: 8
+                                                                    width: 18; height: 18
+                                                                    visible: knRow.modelData.iconPath !== ""
+                                                                    source: knRow.modelData.iconPath !== "" ? "file://" + knRow.modelData.iconPath : ""
+                                                                    sourceSize.width: 36; sourceSize.height: 36
+                                                                }
+                                                                Text {
+                                                                    visible: knRow.modelData.iconPath === ""
+                                                                    anchors.left: parent.left; anchors.leftMargin: 6; anchors.top: parent.top; anchors.topMargin: 8
+                                                                    text: Theme.icPhone; font.family: Theme.fontMono; font.pixelSize: 14; color: Theme.fgDim
+                                                                }
+                                                                Column {
+                                                                    id: knBody
+                                                                    anchors.left: parent.left; anchors.leftMargin: 32
+                                                                    anchors.right: parent.right; anchors.rightMargin: 44
+                                                                    anchors.top: parent.top; anchors.topMargin: 6
+                                                                    spacing: 1
+                                                                    Text {
+                                                                        width: parent.width
+                                                                        text: (knRow.modelData.title || knRow.modelData.appName)
+                                                                        color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold; elide: Text.ElideRight
+                                                                    }
+                                                                    Text {
+                                                                        width: parent.width
+                                                                        visible: text !== ""
+                                                                        text: knRow.modelData.text || knRow.modelData.ticker
+                                                                        color: Theme.fgSecondary; font.family: Theme.fontText; font.pixelSize: 11
+                                                                        wrapMode: Text.Wrap; maximumLineCount: 2; elide: Text.ElideRight
+                                                                    }
+                                                                    Text {
+                                                                        text: knRow.modelData.appName
+                                                                        color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 10
+                                                                    }
+                                                                }
+                                                                MouseArea { id: knMa; anchors.fill: parent; hoverEnabled: true }
+                                                                Row {
+                                                                    anchors.right: parent.right; anchors.rightMargin: 4; anchors.top: parent.top; anchors.topMargin: 6; spacing: 2
+                                                                    // reply (only when the app allows it)
+                                                                    Rectangle {
+                                                                        visible: knRow.modelData.replyId !== ""
+                                                                        width: 20; height: 20; radius: 6
+                                                                        color: krMa.containsMouse ? Theme.accent : "transparent"
+                                                                        Text { anchors.centerIn: parent; text: Theme.icSend; font.family: Theme.fontMono; font.pixelSize: 10; color: krMa.containsMouse ? Theme.accentText : Theme.fgDim }
+                                                                        MouseArea { id: krMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.replyTarget = root.replyTarget === knRow.modelData.id ? "" : knRow.modelData.id }
+                                                                    }
+                                                                    // dismiss
+                                                                    Rectangle {
+                                                                        visible: knRow.modelData.dismissable
+                                                                        width: 20; height: 20; radius: 6
+                                                                        color: kdMa.containsMouse ? Theme.danger : "transparent"
+                                                                        Text { anchors.centerIn: parent; text: Theme.icClose; font.family: Theme.fontMono; font.pixelSize: 10; color: kdMa.containsMouse ? Theme.accentText : Theme.fgDim }
+                                                                        MouseArea { id: kdMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: KdeConnect.dismissNotif(knRow.modelData.id) }
+                                                                    }
+                                                                }
+                                                            }
+                                                            // inline reply box
+                                                            Item {
+                                                                width: parent.width; height: visible ? 34 : 0
+                                                                visible: root.replyTarget === knRow.modelData.id
+                                                                Rectangle {
+                                                                    anchors.fill: parent; anchors.topMargin: 2; anchors.bottomMargin: 4; radius: 7
+                                                                    color: Theme.bg; border.color: Theme.accent; border.width: 1
+                                                                    TextInput {
+                                                                        id: knReply
+                                                                        anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 52; verticalAlignment: TextInput.AlignVCenter
+                                                                        color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
+                                                                        Component.onCompleted: if (root.replyTarget === knRow.modelData.id) forceActiveFocus()
+                                                                        onAccepted: { if (text.trim() !== "") { KdeConnect.replyNotif(knRow.modelData.replyId, text.trim()); root.replyTarget = "" } }
+                                                                        Text { anchors.verticalCenter: parent.verticalCenter; visible: knReply.text.length === 0; text: "Reply…"; color: Theme.fgDim; font: knReply.font }
+                                                                    }
+                                                                    Text {
+                                                                        anchors.right: parent.right; anchors.rightMargin: 12; anchors.verticalCenter: parent.verticalCenter
+                                                                        text: "Send"; color: Theme.accent; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold
+                                                                        MouseArea { anchors.fill: parent; anchors.margins: -6; cursorShape: Qt.PointingHandCursor; onClicked: { if (knReply.text.trim() !== "") { KdeConnect.replyNotif(knRow.modelData.replyId, knReply.text.trim()); root.replyTarget = "" } } }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    // ── messages: conversation list ⇄ thread ──
+                                    Column {
+                                        width: parent.width; spacing: 4; visible: root.mobileView === "msgs"
+
+                                        // conversation list
+                                        Column {
+                                            width: parent.width; spacing: 2; visible: KdeConnect.openThread < 0
+                                            Text {
+                                                visible: KdeConnect.conversations.length === 0
+                                                width: parent.width; wrapMode: Text.Wrap
+                                                text: KdeConnect.convsRequested ? "Loading conversations from the phone…" : "No conversations yet."
+                                                color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
+                                            }
+                                            Rectangle {
+                                                width: parent.width
+                                                visible: KdeConnect.conversations.length > 0
+                                                height: visible ? Math.min(kdcConvCol.implicitHeight + 10, 280) : 0
+                                                radius: 7; color: Theme.bg; border.color: Theme.stroke; border.width: 1
+                                                Flickable {
+                                                    anchors.fill: parent; anchors.margins: 5; clip: true
+                                                    contentHeight: kdcConvCol.implicitHeight
+                                                    boundsBehavior: Flickable.StopAtBounds
+                                                    Column {
+                                                        id: kdcConvCol
+                                                        width: parent.width
+                                                        Repeater {
+                                                            model: KdeConnect.conversations
+                                                            delegate: Item {
+                                                                id: kcRow
+                                                                required property var modelData
+                                                                width: kdcConvCol.width; height: 40
+                                                                Rectangle { anchors.fill: parent; radius: 6; color: kcMa.containsMouse ? Theme.hover : "transparent" }
+                                                                Rectangle {
+                                                                    visible: kcRow.modelData.unread
+                                                                    anchors.left: parent.left; anchors.leftMargin: 4; anchors.verticalCenter: parent.verticalCenter
+                                                                    width: 6; height: 6; radius: 3; color: Theme.accent
+                                                                }
+                                                                Column {
+                                                                    anchors.left: parent.left; anchors.leftMargin: 14
+                                                                    anchors.right: parent.right; anchors.rightMargin: 52
+                                                                    anchors.verticalCenter: parent.verticalCenter
+                                                                    spacing: 1
+                                                                    Text {
+                                                                        width: parent.width
+                                                                        text: kcRow.modelData.display
+                                                                        color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
+                                                                        font.weight: kcRow.modelData.unread ? Font.Bold : Font.DemiBold; elide: Text.ElideRight
+                                                                    }
+                                                                    Text {
+                                                                        width: parent.width
+                                                                        text: kcRow.modelData.body
+                                                                        color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11; elide: Text.ElideRight
+                                                                    }
+                                                                }
+                                                                Text {
+                                                                    anchors.right: parent.right; anchors.rightMargin: 8; anchors.top: parent.top; anchors.topMargin: 5
+                                                                    text: root.fmtMsgTime(kcRow.modelData.date)
+                                                                    color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 10
+                                                                }
+                                                                MouseArea { id: kcMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: KdeConnect.openConversation(kcRow.modelData.threadId) }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        // thread view
+                                        Column {
+                                            width: parent.width; spacing: 4; visible: KdeConnect.openThread >= 0
+                                            Item {
+                                                width: parent.width; height: 24
+                                                Rectangle {
+                                                    width: 24; height: 24; radius: 6
+                                                    color: bkMa.containsMouse ? Theme.hover : "transparent"
+                                                    Text { anchors.centerIn: parent; text: Theme.icBack; font.family: Theme.fontMono; font.pixelSize: 13; color: Theme.fg }
+                                                    MouseArea { id: bkMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: KdeConnect.openThread = -1 }
+                                                }
+                                                Text {
+                                                    anchors.left: parent.left; anchors.leftMargin: 30; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
+                                                    text: {
+                                                        for (var i = 0; i < KdeConnect.conversations.length; i++)
+                                                            if (KdeConnect.conversations[i].threadId === KdeConnect.openThread) return KdeConnect.conversations[i].display
+                                                        return "Conversation"
+                                                    }
+                                                    color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold; elide: Text.ElideRight
+                                                }
+                                            }
+                                            Rectangle {
+                                                width: parent.width; height: 260
+                                                radius: 7; color: Theme.bg; border.color: Theme.stroke; border.width: 1
+                                                Flickable {
+                                                    id: kdcThreadFlick
+                                                    anchors.fill: parent; anchors.margins: 8; clip: true
+                                                    contentHeight: kdcThreadCol.implicitHeight
+                                                    boundsBehavior: Flickable.StopAtBounds
+                                                    // stick to the newest message
+                                                    onContentHeightChanged: contentY = Math.max(0, contentHeight - height)
+                                                    // pull past the top → page older messages in
+                                                    onAtYBeginningChanged: if (atYBeginning && contentHeight > height) KdeConnect.loadOlder()
+                                                    Column {
+                                                        id: kdcThreadCol
+                                                        width: parent.width; spacing: 4
+                                                        Repeater {
+                                                            model: KdeConnect.thread
+                                                            delegate: Item {
+                                                                id: kmRow
+                                                                required property var modelData
+                                                                readonly property bool sent: modelData.type === 2
+                                                                width: kdcThreadCol.width
+                                                                height: kmBubble.height
+                                                                Rectangle {
+                                                                    id: kmBubble
+                                                                    anchors.right: kmRow.sent ? parent.right : undefined
+                                                                    anchors.left: kmRow.sent ? undefined : parent.left
+                                                                    width: Math.min(kmTxt.implicitWidth + 20, kmRow.width * 0.8)
+                                                                    height: kmTxt.implicitHeight + 14
+                                                                    radius: 10
+                                                                    color: kmRow.sent ? Theme.accent : Theme.elevated
+                                                                    opacity: kmRow.modelData.pending ? 0.6 : 1
+                                                                    Text {
+                                                                        id: kmTxt
+                                                                        anchors.fill: parent; anchors.margins: 7; anchors.leftMargin: 10; anchors.rightMargin: 10
+                                                                        text: kmRow.modelData.body !== "" ? kmRow.modelData.body
+                                                                            : (kmRow.modelData.hasAttachments ? "📎 Attachment (view on phone)" : "(no text — MMS)")
+                                                                        color: kmRow.sent ? Theme.accentText : Theme.fg
+                                                                        font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
+                                                                        font.italic: kmRow.modelData.body === ""
+                                                                        wrapMode: Text.Wrap
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            // compose
+                                            Rectangle {
+                                                width: parent.width; height: 32; radius: 7
+                                                color: Theme.bg; border.color: kdcCompose.activeFocus ? Theme.accent : Theme.stroke; border.width: 1
+                                                TextInput {
+                                                    id: kdcCompose
+                                                    anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 34; verticalAlignment: TextInput.AlignVCenter
+                                                    color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
+                                                    onAccepted: { if (text.trim() !== "") { KdeConnect.sendMessage(text.trim()); text = "" } }
+                                                    Text { anchors.verticalCenter: parent.verticalCenter; visible: kdcCompose.text.length === 0; text: "Message…"; color: Theme.fgDim; font: kdcCompose.font }
+                                                }
+                                                Text {
+                                                    anchors.right: parent.right; anchors.rightMargin: 10; anchors.verticalCenter: parent.verticalCenter
+                                                    text: Theme.icSend; font.family: Theme.fontMono; font.pixelSize: 13
+                                                    color: kdcCompose.text.trim() !== "" ? Theme.accent : Theme.fgDim
+                                                    MouseArea { anchors.fill: parent; anchors.margins: -6; cursorShape: Qt.PointingHandCursor; onClicked: { if (kdcCompose.text.trim() !== "") { KdeConnect.sendMessage(kdcCompose.text.trim()); kdcCompose.text = "" } } }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // ═══ MAIL (Gmail) ═══
+                            Column {
+                                width: parent.width; spacing: 6; visible: root.expanded === "mail"
+                                Item {
+                                    width: parent.width; height: 26
+                                    Text {
+                                        anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter
+                                        text: Google.signedIn ? ("Inbox" + (Google.mailUnread > 0 ? "  ·  " + Google.mailUnread + " unread" : "")) : "Mail"
+                                        color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold
+                                    }
+                                    Row {
+                                        anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; spacing: 6
+                                        // new-mail notifications on/off
+                                        Rectangle {
+                                            visible: Google.signedIn
+                                            width: 22; height: 22; radius: 6
+                                            color: mnMa.containsMouse ? Theme.hover : "transparent"
+                                            Text { anchors.centerIn: parent; text: Theme.icBellRing; font.family: Theme.fontMono; font.pixelSize: 12; color: Google.mailNotify ? Theme.accent : Theme.fgDim }
+                                            MouseArea { id: mnMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: Google.setMailNotify(!Google.mailNotify) }
+                                        }
+                                        Rectangle {
+                                            visible: Google.signedIn
+                                            width: 22; height: 22; radius: 6
+                                            color: mlrMa.containsMouse ? Theme.hover : "transparent"
+                                            Text { anchors.centerIn: parent; text: Theme.icRefresh; font.family: Theme.fontMono; font.pixelSize: 12; color: Theme.fgDim }
+                                            MouseArea { id: mlrMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: Google.fetchMail() }
+                                        }
+                                        Rectangle {
+                                            width: ogTxt.implicitWidth + 18; height: 22; radius: 11
+                                            color: ogMa.containsMouse ? Theme.hover : "transparent"; border.color: Theme.hover; border.width: 1
+                                            Text { id: ogTxt; anchors.centerIn: parent; text: "Open Gmail"; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: 11 }
+                                            MouseArea { id: ogMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: Quickshell.execDetached(["xdg-open", "https://mail.google.com/mail/u/0/"]) }
+                                        }
+                                    }
+                                }
+                                Text {
+                                    width: parent.width; visible: !Google.signedIn; wrapMode: Text.Wrap
+                                    text: "Connect a Google account (Settings → User) to see mail here."
+                                    color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
+                                }
+                                Text {
+                                    width: parent.width; visible: Google.signedIn && Google.mailError !== ""; wrapMode: Text.Wrap
+                                    text: Google.mailError
+                                    color: Theme.warning; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
+                                }
+                                Row {
+                                    visible: Google.signedIn && Google.mailState === "scope"; spacing: 6
+                                    Rectangle {
+                                        width: rcTxt.implicitWidth + 22; height: 24; radius: 12
+                                        color: rcMa.containsMouse ? Qt.lighter(Theme.accent, 1.15) : Theme.accent
+                                        Text { id: rcTxt; anchors.centerIn: parent; text: "Reconnect Google"; color: Theme.accentText; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold }
+                                        MouseArea { id: rcMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: Google.signIn() }
+                                    }
+                                }
+                                Text {
+                                    width: parent.width
+                                    visible: Google.signedIn && Google.mailState === "offline"
+                                    text: "Offline — showing the last check."
+                                    color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
+                                }
+                                Text {
+                                    width: parent.width
+                                    visible: Google.signedIn && Google.mailState === "" && Google.mailList.length === 0
+                                    text: "Inbox is empty."
+                                    color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
+                                }
+                                Rectangle {
+                                    width: parent.width
+                                    visible: Google.signedIn && Google.mailList.length > 0
+                                    height: visible ? Math.min(mailCol.implicitHeight + 10, 300) : 0
+                                    radius: 7; color: Theme.bg; border.color: Theme.stroke; border.width: 1
+                                    Flickable {
+                                        anchors.fill: parent; anchors.margins: 5; clip: true
+                                        contentHeight: mailCol.implicitHeight
+                                        boundsBehavior: Flickable.StopAtBounds
+                                        Column {
+                                            id: mailCol
+                                            width: parent.width
+                                            Repeater {
+                                                model: Google.mailList
+                                                delegate: Item {
+                                                    id: mRow
+                                                    required property var modelData
+                                                    width: mailCol.width; height: 46
+                                                    Rectangle { anchors.fill: parent; radius: 6; color: mmMa.containsMouse ? Theme.hover : "transparent" }
+                                                    Rectangle {
+                                                        visible: mRow.modelData.unread
+                                                        anchors.left: parent.left; anchors.leftMargin: 4; anchors.verticalCenter: parent.verticalCenter
+                                                        width: 6; height: 6; radius: 3; color: Theme.accent
+                                                    }
+                                                    Column {
+                                                        anchors.left: parent.left; anchors.leftMargin: 14
+                                                        anchors.right: parent.right; anchors.rightMargin: 52
+                                                        anchors.verticalCenter: parent.verticalCenter
+                                                        spacing: 1
+                                                        Text {
+                                                            width: parent.width
+                                                            text: mRow.modelData.from
+                                                            color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
+                                                            font.weight: mRow.modelData.unread ? Font.Bold : Font.DemiBold; elide: Text.ElideRight
+                                                        }
+                                                        Text {
+                                                            width: parent.width
+                                                            text: mRow.modelData.subject
+                                                            color: mRow.modelData.unread ? Theme.fg : Theme.fgSecondary
+                                                            font.family: Theme.fontText; font.pixelSize: 11; elide: Text.ElideRight
+                                                        }
+                                                        Text {
+                                                            width: parent.width
+                                                            text: mRow.modelData.snippet
+                                                            color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 10; elide: Text.ElideRight
+                                                        }
+                                                    }
+                                                    Text {
+                                                        anchors.right: parent.right; anchors.rightMargin: 8; anchors.top: parent.top; anchors.topMargin: 6
+                                                        text: root.fmtMsgTime(mRow.modelData.date)
+                                                        color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 10
+                                                    }
+                                                    MouseArea { id: mmMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: Google.openMail(mRow.modelData.id) }
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             }
