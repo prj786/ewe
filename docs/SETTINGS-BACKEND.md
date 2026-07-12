@@ -33,6 +33,7 @@ configuration is restored automatically.
 | `~/.config/quickshell/input-devices.json` | Keyboard & Mouse | per-device pointer overrides (mirrors the `hl.device{}` lines) |
 | `~/.config/quickshell/google-*` | User (Google) | OAuth client config + non-secret caches (profile, events, mail cursor/list, sync meta, restore bundle/package lists) — all gitignored; the refresh token is in the keyring only |
 | `~/.config/quickshell/kdeconnect-state.json` | Mobile card | seen phone-notification ids (unread badge) + chosen device — pairing keys stay in kdeconnectd |
+| `~/.config/quickshell/startup-apps.json` | Startup | user startup applications; `autostart.sh` launches the enabled entries via `jq` at login |
 
 `hyprland.lua` sources `user.lua`, then `input.lua`, then `monitors.lua`
 (missing files are a no-op), so the dedicated files win over any stale lines an
@@ -78,7 +79,9 @@ through the shared `FileDropTarget` component (portal chooser + drop zone).
   retries exactly once on 401. Sign-out revokes at Google and clears
   everything. Scopes: `openid email profile calendar.readonly drive.appdata`.
 - **Settings sync**: `scripts/settings-bundle.py collect|apply` serializes /
-  re-applies the files in the table above plus `~/.ssh/config` (hosts only —
+  re-applies the files in the table above plus the avatar (`~/.face`,
+  base64 in the bundle; apply also refreshes the AccountsService icon so the
+  greeter picture survives a reinstall), `~/.ssh/config` (hosts only —
   **never keys**), the `ssh-browse/` tunnel scripts, VPN connection
   **names/types only** (the profiles are root-owned and can embed secrets —
   those never enter the bundle; restore lists them for manual re-import),

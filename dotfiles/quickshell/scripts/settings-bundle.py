@@ -12,6 +12,7 @@ Both commands always print a single JSON object and exit 0 so the QML side
 can parse unconditionally.
 """
 
+import base64
 import hashlib
 import json
 import os
@@ -31,7 +32,10 @@ JSON_FILES = {
     "pinnedPlaces": QS + "/places.json",
     "displayProfiles": QS + "/display-profiles.json",
     "inputDevices": QS + "/input-devices.json",
+    "startupApps": QS + "/startup-apps.json",
 }
+FACE = HOME + "/.face"
+FACE_MAX = 1024 * 1024   # avatars are ~100 KB; refuse to inflate the bundle past 1 MB
 # generated plain-text configs (bundle path → real path)
 TEXT_FILES = {
     "hypr/generated/user.lua": HYPR + "/generated/user.lua",
@@ -127,6 +131,14 @@ def cmd_collect():
     if vpns:
         settings["vpnConnections"] = vpns
 
+    # avatar: ~/.face travels base64 so a fresh install gets the user icon back
+    try:
+        if os.path.isfile(FACE) and os.path.getsize(FACE) <= FACE_MAX:
+            with open(FACE, "rb") as f:
+                settings["face"] = base64.b64encode(f.read()).decode()
+    except OSError:
+        pass
+
     apps = {
         # -Qqen: explicit NATIVE only — plain -Qqe also lists AUR packages,
         # which then duplicate into both lists and break the pacman install
@@ -192,6 +204,24 @@ def cmd_apply(path):
             atomic_write(p, content)
             os.chmod(p, 0o755)
         applied.append("sshBrowse")
+
+    if isinstance(settings.get("face"), str):
+        try:
+            data = base64.b64decode(settings["face"])
+            if 0 < len(data) <= FACE_MAX:
+                tmp = FACE + ".tmp"
+                with open(tmp, "wb") as f:
+                    f.write(data)
+                os.replace(tmp, FACE)
+                applied.append("face")
+                # AccountsService copy (world-readable — the greeter reads it);
+                # best-effort: a missing accountsservice just skips
+                subprocess.run(["busctl", "call", "org.freedesktop.Accounts",
+                                "/org/freedesktop/Accounts/User" + str(os.getuid()),
+                                "org.freedesktop.Accounts.User", "SetIconFile", "s", FACE],
+                               capture_output=True, timeout=15)
+        except (ValueError, OSError, subprocess.TimeoutExpired):
+            pass
 
     # package lists → plain files for an opt-in reinstall; NEVER installed here
     apps = bundle.get("apps") or {}
