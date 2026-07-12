@@ -120,5 +120,14 @@ phase_services() {
         warn "greetd not installed — start the session from a TTY with start-hyprland.sh, or enable a greeter."
     fi
 
+    # ── KDE Connect through the firewall (the Mobile card in Quick Settings).
+    # Discovery is UDP broadcast on 1716; transfers use TCP/UDP 1714-1764. A
+    # default-deny ufw silently eats it and phone + PC never see each other.
+    if command -v ufw >/dev/null 2>&1 && systemctl is-active ufw >/dev/null 2>&1; then
+        sudo_run ufw allow 1714:1764/tcp comment 'KDE Connect' \
+            && sudo_run ufw allow 1714:1764/udp comment 'KDE Connect' \
+            && ok "opened ufw 1714-1764 (KDE Connect device discovery + transfer)"
+    fi
+
     ok "services done"
 }
