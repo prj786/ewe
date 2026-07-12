@@ -34,6 +34,7 @@ Scope {
         { key: "wallpaper", ic: 0xF02E9, label: "Wallpaper" },
         { key: "saver",     ic: 0xF0904, label: "Screensaver" },
         { key: "dock",      ic: 0xF0DC3, label: "Dock" },
+        { key: "startup",   ic: 0xF040A, label: "Startup" },
         { key: "user",      ic: 0xF0004, label: "User" }
     ]
     readonly property string paneKey: navItems[pane].key
@@ -49,9 +50,45 @@ Scope {
         else if (k === "layout") layoutProc.running = true
         else if (k === "wallpaper") { wpBackendProbe.running = true; wpConfLoad.running = true; HyprMon.refresh(); if (root.wpDir === "") wpDirProbe.running = true; else root.wpList(root.wpDir) }
         else if (k === "saver") { saverToolProbe.running = false; saverToolProbe.running = true }
+        else if (k === "startup") { saLoad.running = false; saLoad.running = true }
         else if (k === "user") { Globals.recheckFace(); userInfoProbe.running = false; userInfoProbe.running = true; Google.refresh(); Accounts.refresh() }
     }
     onPaneChanged: root.paneProbes()
+
+    // ── startup applications (Settings → Startup; launched by autostart.sh) ────
+    property var startupApps: []          // [{name, exec, icon, enabled}]
+    property string startupQuery: ""
+    property Process saWriter: Process {}
+    property Process saLoad: Process {
+        running: true
+        command: ["sh", "-c", "cat \"$HOME/.config/quickshell/startup-apps.json\" 2>/dev/null"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                try { var j = JSON.parse(this.text); if (j && Array.isArray(j.apps)) root.startupApps = j.apps } catch (e) {}
+            }
+        }
+    }
+    function saveStartup() {
+        HyprMon.atomicWrite(root.saWriter, Quickshell.env("HOME") + "/.config/quickshell/startup-apps.json",
+                            JSON.stringify({ apps: root.startupApps }, null, 2))
+    }
+    function startupAdd(name, exec, icon) {
+        var a = root.startupApps.slice()
+        for (var i = 0; i < a.length; i++) if (a[i].exec === exec) return   // no dupes
+        a.push({ name: name, exec: exec, icon: icon || "", enabled: true })
+        root.startupApps = a; root.saveStartup()
+    }
+    function startupRemove(idx) {
+        var a = root.startupApps.slice(); a.splice(idx, 1)
+        root.startupApps = a; root.saveStartup()
+    }
+    function startupToggle(idx) {
+        var a = JSON.parse(JSON.stringify(root.startupApps))
+        a[idx].enabled = a[idx].enabled === false
+        root.startupApps = a; root.saveStartup()
+    }
+    // desktop-entry Exec strings carry %-field codes (%U, %f…) — strip for sh -c
+    function cleanExec(s) { return String(s || "").replace(/%[a-zA-Z]/g, "").trim() }
 
     // ── persisted override state ───────────────────────────────────────────────
     property int  gapsIn: 6
@@ -1195,7 +1232,7 @@ Scope {
                         anchors.fill: parent; anchors.topMargin: 60; anchors.margins: 20
                         contentHeight: paneLoader.item ? paneLoader.item.implicitHeight : 0
                         clip: true; boundsBehavior: Flickable.StopAtBounds
-                        Loader { id: paneLoader; width: parent.width; sourceComponent: ({ system: cSystem, displays: cDisplays, network: cNetwork, defaults: cDefaults, input: cKeyboard, shortcuts: cShortcuts, layout: cLayout, theme: cTheme, wallpaper: cWallpaper, saver: cSaver, dock: cDock, user: cUser })[root.paneKey] }
+                        Loader { id: paneLoader; width: parent.width; sourceComponent: ({ system: cSystem, displays: cDisplays, network: cNetwork, defaults: cDefaults, input: cKeyboard, shortcuts: cShortcuts, layout: cLayout, theme: cTheme, wallpaper: cWallpaper, saver: cSaver, dock: cDock, startup: cStartup, user: cUser })[root.paneKey] }
                     }
                 }
             }
@@ -2161,6 +2198,148 @@ Scope {
                 }
             }
 
+            // ════════ PANE — Startup applications ════════
+            Component {
+                id: cStartup
+                Column {
+                    spacing: 14
+                    SectionTitle { text: "LAUNCH AT LOGIN" }
+
+                    Card {
+                        Text {
+                            visible: root.startupApps.length === 0
+                            width: parent.width; wrapMode: Text.Wrap
+                            text: "Nothing starts automatically yet. Search below to add an application."
+                            color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
+                        }
+                        Repeater {
+                            model: root.startupApps
+                            delegate: Item {
+                                id: saRow
+                                required property var modelData
+                                required property int index
+                                width: parent.width; height: 36
+                                opacity: saRow.modelData.enabled === false ? 0.45 : 1
+                                Image {
+                                    id: saIcon
+                                    anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter
+                                    width: 20; height: 20
+                                    visible: source !== ""
+                                    source: saRow.modelData.icon ? Quickshell.iconPath(saRow.modelData.icon, true) : ""
+                                    sourceSize.width: 40; sourceSize.height: 40
+                                }
+                                Column {
+                                    anchors.left: parent.left; anchors.leftMargin: 30
+                                    anchors.right: saCtl.left; anchors.rightMargin: 8
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    spacing: 1
+                                    Text { width: parent.width; text: saRow.modelData.name || saRow.modelData.exec; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold; elide: Text.ElideRight }
+                                    Text { width: parent.width; text: saRow.modelData.exec; color: Theme.fgDim; font.family: Theme.fontMono; font.pixelSize: 10; elide: Text.ElideRight }
+                                }
+                                Row {
+                                    id: saCtl
+                                    anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; spacing: 8
+                                    Toggle { anchors.verticalCenter: parent.verticalCenter; on: saRow.modelData.enabled !== false; onToggled: root.startupToggle(saRow.index) }
+                                    Rectangle {
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        width: 22; height: 22; radius: 6
+                                        color: saDelMa.containsMouse ? Theme.danger : "transparent"
+                                        Text { anchors.centerIn: parent; text: Theme.icClose; font.family: Theme.fontMono; font.pixelSize: 11; color: saDelMa.containsMouse ? Theme.accentText : Theme.fgDim }
+                                        MouseArea { id: saDelMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.startupRemove(saRow.index) }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    SectionTitle { text: "ADD APPLICATION" }
+                    Card {
+                        // search over installed desktop entries
+                        Rectangle {
+                            width: parent.width; height: 32; radius: 8
+                            color: Theme.bg; border.color: saSearch.activeFocus ? Theme.accent : Theme.stroke; border.width: 1
+                            Text { anchors.left: parent.left; anchors.leftMargin: 10; anchors.verticalCenter: parent.verticalCenter; text: Theme.icSearch; font.family: Theme.fontMono; font.pixelSize: 13; color: Theme.fgDim }
+                            TextInput {
+                                id: saSearch
+                                anchors.fill: parent; anchors.leftMargin: 30; anchors.rightMargin: 10
+                                verticalAlignment: TextInput.AlignVCenter
+                                color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
+                                onTextChanged: root.startupQuery = text
+                                Text { anchors.verticalCenter: parent.verticalCenter; visible: saSearch.text.length === 0; text: "Search apps — or type any command…"; color: Theme.fgDim; font: saSearch.font }
+                            }
+                        }
+                        Column {
+                            width: parent.width
+                            visible: root.startupQuery.trim().length > 0
+                            Repeater {
+                                model: {
+                                    var q = root.startupQuery.trim().toLowerCase()
+                                    if (q === "") return []
+                                    var out = [], a = DesktopEntries.applications.values
+                                    for (var i = 0; i < a.length; i++) {
+                                        var e = a[i]
+                                        if (e && !e.noDisplay && (e.name || "").toLowerCase().indexOf(q) >= 0) out.push(e)
+                                        if (out.length >= 8) break
+                                    }
+                                    return out
+                                }
+                                delegate: Item {
+                                    id: saRes
+                                    required property var modelData
+                                    width: parent.width; height: 30
+                                    Rectangle { anchors.fill: parent; radius: 6; color: saResMa.containsMouse ? Theme.hover : "transparent" }
+                                    Image {
+                                        anchors.left: parent.left; anchors.leftMargin: 4; anchors.verticalCenter: parent.verticalCenter
+                                        width: 18; height: 18
+                                        source: saRes.modelData.icon ? Quickshell.iconPath(saRes.modelData.icon, true) : ""
+                                        sourceSize.width: 36; sourceSize.height: 36
+                                    }
+                                    Text {
+                                        anchors.left: parent.left; anchors.leftMargin: 30; anchors.right: parent.right; anchors.rightMargin: 60
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        text: saRes.modelData.name; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; elide: Text.ElideRight
+                                    }
+                                    Text {
+                                        anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter
+                                        text: "Add"; color: Theme.accent; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold
+                                    }
+                                    MouseArea {
+                                        id: saResMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                                        onClicked: { root.startupAdd(saRes.modelData.name, root.cleanExec(saRes.modelData.execString), saRes.modelData.icon); saSearch.text = "" }
+                                    }
+                                }
+                            }
+                            // raw command fallback — whatever was typed runs via sh -c
+                            Item {
+                                width: parent.width; height: 30
+                                Rectangle { anchors.fill: parent; radius: 6; color: saCmdMa.containsMouse ? Theme.hover : "transparent" }
+                                Text { anchors.left: parent.left; anchors.leftMargin: 8; anchors.verticalCenter: parent.verticalCenter; text: Theme.icSsh; font.family: Theme.fontMono; font.pixelSize: 12; color: Theme.fgDim }
+                                Text {
+                                    anchors.left: parent.left; anchors.leftMargin: 30; anchors.right: parent.right; anchors.rightMargin: 90
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: "Run command: " + root.startupQuery.trim()
+                                    color: Theme.fgSecondary; font.family: Theme.fontMono; font.pixelSize: 11; elide: Text.ElideRight
+                                }
+                                Text {
+                                    anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter
+                                    text: "Add command"; color: Theme.accent; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold
+                                }
+                                MouseArea {
+                                    id: saCmdMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                                    onClicked: { root.startupAdd(root.startupQuery.trim(), root.startupQuery.trim(), ""); saSearch.text = "" }
+                                }
+                            }
+                        }
+                    }
+                    Text {
+                        width: parent.width; wrapMode: Text.Wrap
+                        text: "Entries launch once at login (autostart). Changes apply at the next login — the toggle disables an entry without removing it. This list is included in Settings sync."
+                        color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11
+                    }
+                    Item { width: 1; height: 8 }
+                }
+            }
+
             // ════════ PANE — User ════════
             Component {
                 id: cUser
@@ -2303,7 +2482,7 @@ Scope {
                             Pill { label: "Restore from cloud…"; onGo: Google.requestRestore() }
                             Pill { label: "Packages from backup…"; onGo: root.reviewPackages() }
                         }
-                        Text { width: parent.width; text: "Theme, keyboard, dock, wallpaper, shortcuts, screensaver, avatar shape, display profiles, SSH hosts + browse tunnels (never keys) — one bundle in Drive's hidden app storage. VPN profiles hold secrets, so only their names are captured. The installed-package list is captured too; reinstalling from it is always opt-in."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
+                        Text { width: parent.width; text: "Theme, keyboard, dock, wallpaper, shortcuts, screensaver, avatar (picture + shape), startup applications, display profiles, SSH hosts + browse tunnels (never keys) — one bundle in Drive's hidden app storage. VPN profiles hold secrets, so only their names are captured. The installed-package list is captured too; reinstalling from it is always opt-in."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
                         Text { visible: Google.syncError !== ""; width: parent.width; text: Google.syncError; color: Theme.danger; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
                         Text { visible: Google.restoreSummary !== ""; width: parent.width; text: Google.restoreSummary; color: Theme.success; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
                     }

@@ -100,6 +100,15 @@ elif command -v swayidle >/dev/null 2>&1 && ! pgrep -x swayidle >/dev/null 2>&1;
         before-sleep "$LOCK" >/dev/null 2>&1 &
 fi
 
+# ── User startup applications (Settings → Startup). A plain JSON list the
+# Settings pane owns; disabled entries are kept but skipped. ──────────────────
+SAPPS="$HOME/.config/quickshell/startup-apps.json"
+if [ -r "$SAPPS" ] && command -v jq >/dev/null 2>&1; then
+    jq -r '.apps[] | select(.enabled != false) | .exec' "$SAPPS" 2>/dev/null | while IFS= read -r cmd; do
+        [ -n "$cmd" ] && sh -c "$cmd" >/dev/null 2>&1 &
+    done
+fi
+
 # ── KDE Connect daemon (phone integration — Quick Settings "Mobile" card).
 # Hyprland doesn't process XDG autostart, so start it here; the shell's bridge
 # can also D-Bus-activate it on demand. ────────────────────────────────────────

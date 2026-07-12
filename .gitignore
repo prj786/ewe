@@ -18,6 +18,8 @@ dotfiles/quickshell/ssh-browse/
 dotfiles/quickshell/google-*
 # KDE Connect UI state (seen phone-notification ids, chosen device)
 dotfiles/quickshell/kdeconnect-state.json
+# user startup applications (Settings → Startup; seeded from the .default)
+dotfiles/quickshell/startup-apps.json
 *.bak.*
 
 # the Fresh editor regenerates these inside its (symlinked) config dir at
