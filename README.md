@@ -72,16 +72,21 @@ bat, cmake, meson). A plain `bash install.sh` asks once for each, interactively;
 `--yes` skips both. (Flags combine: `--gaming --dev` installs everything unattended
 with `--yes`.)
 
-**Updating** is the same command — pull and re-run:
+**Updating** — the repo is the single source of truth; one command converges
+the machine onto it (pull → re-run the installer unattended → restart the
+shell):
 
 ```sh
-cd ~/hypr-shell && git pull && bash install.sh
+~/hypr-shell/update.sh
 ```
 
 The installer is fully **re-runnable**: package installs are skipped if already
-present, dotfiles are a symlink farm (re-linking is a no-op), and a package that
-isn't in the repos is **warned and skipped** rather than aborting the run — so a
-single missing package never blocks the rest of the install.
+present, dotfiles are a symlink farm (re-linking is a no-op), system files in
+`/etc` are (re)installed idempotently, and a package that isn't in the repos is
+**warned and skipped** rather than aborting the run — so a single missing
+package never blocks the rest of the install. Anything the repo gained since
+your last run — new packages, greeter, logind/firewall config, services —
+lands on the next `update.sh`, so the machine never drifts from the repo.
 
 Run it as your **normal user** (not root) — the AUR helper and `makepkg` refuse
 root, and the script uses `sudo` only where it must. Then reboot, pick
