@@ -127,7 +127,34 @@ QtObject {
     }
     function applySpecs(specs, done) {
         if (!specs || !specs.length) { if (done) done(false); return }
-        runEvals(specs.map(function (s) { return "hl.monitor(" + luaArgs(s) + ")" }), done)
+        runEvals(specs.map(function (s) {
+            // clamshell: while the lid is closed the internal panel must STAY
+            // off — a profile re-assert (hotplug/AC/idle events) would
+            // otherwise relight the panel inside the closed lid
+            var t = (mgr.lidClosed && mgr.isInternal(s.name)) ? { desc: s.desc, name: s.name, disabled: true } : s
+            return "hl.monitor(" + luaArgs(t) + ")"
+        }), done)
+    }
+
+    // ── clamshell (lid) state — lid.sh reports via `qs ipc call display lid …`
+    property bool lidClosed: false
+    function isInternal(name) { return /^(eDP|LVDS|DSI)/.test(String(name || "")) }
+    function setLid(closed) {
+        lidClosed = closed
+        // reopened: the panel's enable event + this re-assert bring it back
+        // with the saved mode/scale/position (no hardcoded geometry anywhere)
+        if (!closed) _reassertT.restart()
+    }
+    property IpcHandler _displayIpc: IpcHandler {
+        target: "display"
+        function lid(state: string): void { mgr.setLid(state === "close" || state === "closed") }
+        function reset(): void { mgr.resetDisplays() }
+    }
+    // shell (re)started with the lid already shut (docked boot) — sync from ACPI
+    property Process _lidProbe: Process {
+        running: true
+        command: ["sh", "-c", "cat /proc/acpi/button/lid/*/state 2>/dev/null | head -1"]
+        stdout: StdioCollector { onStreamFinished: { if (this.text.indexOf("closed") >= 0) mgr.lidClosed = true } }
     }
 
     // ── commit: save profile + regenerate monitors.lua + verify ──────────────

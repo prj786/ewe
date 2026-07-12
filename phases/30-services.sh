@@ -120,6 +120,20 @@ phase_services() {
         warn "greetd not installed — start the session from a TTY with start-hyprland.sh, or enable a greeter."
     fi
 
+    # ── Lid ownership: Hyprland's lid.sh does clamshell (panel off when docked,
+    # lock+suspend when alone) — logind must not ALSO suspend on lid close.
+    sudo_run install -d /etc/systemd/logind.conf.d
+    sudo_run install -m 644 "$DOTREPO/system/logind/10-hypr-shell-lid.conf" /etc/systemd/logind.conf.d/10-hypr-shell-lid.conf \
+        && ok "installed logind lid drop-in (Hyprland owns the lid switch)"
+    # logind only reads its config at start; a restart is session-safe on systemd ≥ 254
+    sudo_run systemctl restart systemd-logind || warn "could not restart systemd-logind — lid config applies after reboot"
+
+    # ── plocate index for the launcher's file search (Super+D → files) ──
+    if pkg_present plocate; then
+        _enable_system plocate-updatedb.timer
+        sudo_run updatedb 2>/dev/null || true   # first index now, not at 2 AM
+    fi
+
     # ── KDE Connect through the firewall (the Mobile card in Quick Settings).
     # Discovery is UDP broadcast on 1716; transfers use TCP/UDP 1714-1764. A
     # default-deny ufw silently eats it and phone + PC never see each other.

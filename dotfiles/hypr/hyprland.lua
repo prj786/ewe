@@ -287,8 +287,9 @@ hl.bind(mainMod .. " + CTRL + Q", hl.dsp.exit())                         -- quit
 hl.bind(mainMod .. " + SHIFT + B", hl.dsp.exec_cmd("qs ipc call bar toggle"))  -- toggle bar
 hl.bind(mainMod .. " + ALT + L",   hl.dsp.exec_cmd("qs ipc call lock lock"))  -- lock (Quickshell session lock)
 
--- Laptop lid (clamshell via lid.sh). Needs logind HandleLidSwitch=ignore so logind
--- doesn't also suspend. `l` flag = fire even while locked.
+-- Laptop lid (clamshell via lid.sh). logind is told to ignore the lid by
+-- /etc/systemd/logind.conf.d/10-hypr-shell-lid.conf (installed by phase 30)
+-- so the two suspend paths never race. `l` flag = fire even while locked.
 hl.bind("switch:on:Lid Switch",  hl.dsp.exec_cmd(scripts .. "/lid.sh close"), { locked = true })
 hl.bind("switch:off:Lid Switch", hl.dsp.exec_cmd(scripts .. "/lid.sh open"),  { locked = true })
 -- Layout toggle disabled: single (US) layout. Re-enable with a second kb_layout.
