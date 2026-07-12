@@ -591,7 +591,7 @@ QtObject {
         })
     }
     function _refreshMailList() {
-        goo.api("GET", "https://gmail.googleapis.com/gmail/v1/users/me/messages?q=" + encodeURIComponent("in:inbox") + "&maxResults=12",
+        goo.api("GET", "https://gmail.googleapis.com/gmail/v1/users/me/messages?q=" + encodeURIComponent("in:inbox") + "&maxResults=10",
                 null, function (st, j, err) {
             if (st !== 200 || !j) return
             var ms = j.messages || []

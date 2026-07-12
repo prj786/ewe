@@ -1133,7 +1133,7 @@ Scope {
                                             color: root.mobileView === "msgs" ? Theme.accent : (mvvMa.containsMouse ? Theme.hover : "transparent")
                                             border.color: root.mobileView === "msgs" ? Theme.accent : Theme.hover; border.width: 1
                                             Text { id: mvTxt; anchors.centerIn: parent; text: "Messages"; color: root.mobileView === "msgs" ? Theme.accentText : Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold }
-                                            MouseArea { id: mvvMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: { root.mobileView = "msgs"; if (!KdeConnect.convsRequested) KdeConnect.loadConversations() } }
+                                            MouseArea { id: mvvMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: { root.mobileView = "msgs"; KdeConnect.loadConversations() } }
                                         }
                                         // ring (find my phone)
                                         Rectangle {
@@ -1485,60 +1485,51 @@ Scope {
                                     text: "Inbox is empty."
                                     color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
                                 }
+                                // latest 10, compact two-line rows — no inner scrolling
                                 Rectangle {
                                     width: parent.width
                                     visible: Google.signedIn && Google.mailList.length > 0
-                                    height: visible ? Math.min(mailCol.implicitHeight + 10, 300) : 0
+                                    height: visible ? mailCol.implicitHeight + 10 : 0
                                     radius: 7; color: Theme.bg; border.color: Theme.stroke; border.width: 1
-                                    Flickable {
-                                        anchors.fill: parent; anchors.margins: 5; clip: true
-                                        contentHeight: mailCol.implicitHeight
-                                        boundsBehavior: Flickable.StopAtBounds
-                                        Column {
-                                            id: mailCol
-                                            width: parent.width
-                                            Repeater {
-                                                model: Google.mailList
-                                                delegate: Item {
-                                                    id: mRow
-                                                    required property var modelData
-                                                    width: mailCol.width; height: 46
-                                                    Rectangle { anchors.fill: parent; radius: 6; color: mmMa.containsMouse ? Theme.hover : "transparent" }
-                                                    Rectangle {
-                                                        visible: mRow.modelData.unread
-                                                        anchors.left: parent.left; anchors.leftMargin: 4; anchors.verticalCenter: parent.verticalCenter
-                                                        width: 6; height: 6; radius: 3; color: Theme.accent
-                                                    }
-                                                    Column {
-                                                        anchors.left: parent.left; anchors.leftMargin: 14
-                                                        anchors.right: parent.right; anchors.rightMargin: 52
-                                                        anchors.verticalCenter: parent.verticalCenter
-                                                        spacing: 1
-                                                        Text {
-                                                            width: parent.width
-                                                            text: mRow.modelData.from
-                                                            color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
-                                                            font.weight: mRow.modelData.unread ? Font.Bold : Font.DemiBold; elide: Text.ElideRight
-                                                        }
-                                                        Text {
-                                                            width: parent.width
-                                                            text: mRow.modelData.subject
-                                                            color: mRow.modelData.unread ? Theme.fg : Theme.fgSecondary
-                                                            font.family: Theme.fontText; font.pixelSize: 11; elide: Text.ElideRight
-                                                        }
-                                                        Text {
-                                                            width: parent.width
-                                                            text: mRow.modelData.snippet
-                                                            color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 10; elide: Text.ElideRight
-                                                        }
+                                    Column {
+                                        id: mailCol
+                                        anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 5
+                                        Repeater {
+                                            model: Google.mailList.slice(0, 10)
+                                            delegate: Item {
+                                                id: mRow
+                                                required property var modelData
+                                                width: mailCol.width; height: 34
+                                                Rectangle { anchors.fill: parent; radius: 6; color: mmMa.containsMouse ? Theme.hover : "transparent" }
+                                                Rectangle {
+                                                    visible: mRow.modelData.unread
+                                                    anchors.left: parent.left; anchors.leftMargin: 4; anchors.verticalCenter: parent.verticalCenter
+                                                    width: 6; height: 6; radius: 3; color: Theme.accent
+                                                }
+                                                Column {
+                                                    anchors.left: parent.left; anchors.leftMargin: 14
+                                                    anchors.right: parent.right; anchors.rightMargin: 52
+                                                    anchors.verticalCenter: parent.verticalCenter
+                                                    spacing: 0
+                                                    Text {
+                                                        width: parent.width
+                                                        text: mRow.modelData.from
+                                                        color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
+                                                        font.weight: mRow.modelData.unread ? Font.Bold : Font.DemiBold; elide: Text.ElideRight
                                                     }
                                                     Text {
-                                                        anchors.right: parent.right; anchors.rightMargin: 8; anchors.top: parent.top; anchors.topMargin: 6
-                                                        text: root.fmtMsgTime(mRow.modelData.date)
-                                                        color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 10
+                                                        width: parent.width
+                                                        text: mRow.modelData.subject
+                                                        color: mRow.modelData.unread ? Theme.fgSecondary : Theme.fgDim
+                                                        font.family: Theme.fontText; font.pixelSize: 11; elide: Text.ElideRight
                                                     }
-                                                    MouseArea { id: mmMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: Google.openMail(mRow.modelData.id) }
                                                 }
+                                                Text {
+                                                    anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter
+                                                    text: root.fmtMsgTime(mRow.modelData.date)
+                                                    color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 10
+                                                }
+                                                MouseArea { id: mmMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: Google.openMail(mRow.modelData.id) }
                                             }
                                         }
                                     }
