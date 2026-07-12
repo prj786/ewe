@@ -93,7 +93,11 @@ through the shared `FileDropTarget` component (portal chooser + drop zone).
 - **Calendar**: 14-day window over every selected calendar
   (`calendarList` → `events.list`, `singleEvents`, per-calendar colours),
   polled every 15 min + on sign-in + when Quick Settings opens stale;
-  cached to `google-events.json` so offline shows the last sync. Reminders
+  cached to `google-events.json` so offline shows the last sync. Boot-race
+  safe: the signed-in probe retries with backoff (gnome-keyring may come up
+  after the shell), a failed fetch retries every minute (Wi-Fi may connect
+  after the shell), and Quick Settings renders the cached events without
+  waiting for the probe — sign-out clears the cache so nothing stale leaks. Reminders
   honour per-event/calendar popup overrides (else 10 min lead), fire through
   the shell's own notification server via `notify-send`, and are de-duped
   across restarts in `google-notified.json`.

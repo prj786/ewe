@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Effects
 import Quickshell
 import Quickshell.Io
 import Quickshell.Services.Greetd
@@ -31,6 +32,21 @@ FloatingWindow {
         readonly property string fontText: "Inter"
         readonly property string fontMono: "JetBrainsMono Nerd Font"
     }
+
+    // cage shows the greeter as ONE surface stretched across every connected
+    // output, so anchoring to the window centres in the union of all screens
+    // (way off-centre on each physical panel). Pin the UI to a single screen's
+    // region instead — the built-in panel when present, else the first.
+    readonly property var scr: {
+        var ss = Quickshell.screens
+        for (var i = 0; i < ss.length; i++)
+            if (/^(eDP|LVDS|DSI)/i.test(ss[i].name)) return ss[i]
+        return ss.length > 0 ? ss[0] : null
+    }
+    // cage leaves outputs at scale 1, so HiDPI laptop panels render the UI at
+    // half size — treat tall panels as ~2x and transform-scale (Qt's distance-
+    // field text stays crisp under scale).
+    readonly property real ui: stage.height >= 1600 ? stage.height / 900 : 1
 
     property string userName: ""
     property string userReal: ""
@@ -128,21 +144,60 @@ FloatingWindow {
         // close the session menu on an outside click
         MouseArea { anchors.fill: parent; enabled: win.sessionMenuOpen; onClicked: win.sessionMenuOpen = false }
 
+        // everything lives inside the chosen screen's region, not the window
+        Item {
+            id: stage
+            x: win.scr ? win.scr.x : 0
+            y: win.scr ? win.scr.y : 0
+            width: win.scr ? win.scr.width : win.width
+            height: win.scr ? win.scr.height : win.height
+
         // ── centred stack: avatar · name · password ──
         Column {
             anchors.centerIn: parent
-            anchors.verticalCenterOffset: -40
+            anchors.verticalCenterOffset: -40 * win.ui
             spacing: 18
+            scale: win.ui
 
-            // avatar — circle with the user's initial (matches the mockup)
-            Rectangle {
+            // avatar — the user's account icon (AccountsService copy is world-
+            // readable, unlike ~/.face), circle-masked; initial as fallback
+            Item {
                 anchors.horizontalCenter: parent.horizontalCenter
-                width: 128; height: 128; radius: 64
-                color: pal.field; border.color: pal.stroke; border.width: 1
-                Text {
-                    anchors.centerIn: parent
-                    text: (win.userReal || win.userName || "?").charAt(0).toUpperCase()
-                    color: pal.fgDim; font.family: pal.fontText; font.pixelSize: 52; font.weight: Font.Light
+                width: 128; height: 128
+
+                Rectangle {
+                    anchors.fill: parent; radius: 64
+                    color: pal.field; border.color: pal.stroke; border.width: 1
+                    Text {
+                        anchors.centerIn: parent
+                        visible: face.status !== Image.Ready
+                        text: (win.userReal || win.userName || "?").charAt(0).toUpperCase()
+                        color: pal.fgDim; font.family: pal.fontText; font.pixelSize: 52; font.weight: Font.Light
+                    }
+                }
+                Image {
+                    id: face
+                    anchors.fill: parent
+                    source: win.userName !== "" ? "file:///var/lib/AccountsService/icons/" + win.userName : ""
+                    visible: status === Image.Ready
+                    fillMode: Image.PreserveAspectCrop
+                    sourceSize.width: 256; sourceSize.height: 256
+                    layer.enabled: status === Image.Ready
+                    layer.effect: MultiEffect {
+                        maskEnabled: true
+                        maskSource: faceMask
+                        maskThresholdMin: 0.5
+                        maskSpreadAtMin: 1.0
+                    }
+                }
+                Item {
+                    id: faceMask
+                    anchors.fill: parent; layer.enabled: true; visible: false
+                    Rectangle { anchors.fill: parent; radius: 64; antialiasing: true }
+                }
+                Rectangle {   // hairline rim so the photo edge reads crisp
+                    anchors.fill: parent; visible: face.visible; radius: 64
+                    color: "transparent"; border.color: pal.stroke; border.width: 1; antialiasing: true
                 }
             }
 
@@ -198,8 +253,9 @@ FloatingWindow {
         // ── clock, bottom-left ──
         Column {
             anchors.left: parent.left; anchors.bottom: parent.bottom
-            anchors.leftMargin: 40; anchors.bottomMargin: 36
+            anchors.leftMargin: 40 * win.ui; anchors.bottomMargin: 36 * win.ui
             spacing: 2
+            scale: win.ui; transformOrigin: Item.BottomLeft
             Text { text: win.clockText; color: pal.fg; font.family: pal.fontText; font.pixelSize: 34; font.weight: Font.Light }
             Text { text: win.dateText; color: pal.fgDim; font.family: pal.fontText; font.pixelSize: 13 }
         }
@@ -207,8 +263,9 @@ FloatingWindow {
         // ── session picker, bottom-right ──
         Item {
             anchors.right: parent.right; anchors.bottom: parent.bottom
-            anchors.rightMargin: 40; anchors.bottomMargin: 36
+            anchors.rightMargin: 40 * win.ui; anchors.bottomMargin: 36 * win.ui
             width: 200; height: 38
+            scale: win.ui; transformOrigin: Item.BottomRight
 
             // dropdown list (opens upward)
             Rectangle {
@@ -257,5 +314,6 @@ FloatingWindow {
                     onClicked: win.sessionMenuOpen = !win.sessionMenuOpen }
             }
         }
+        }   // stage
     }
 }
