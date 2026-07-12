@@ -42,7 +42,9 @@ AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 TOKEN_URL = "https://oauth2.googleapis.com/token"
 REVOKE_URL = "https://oauth2.googleapis.com/revoke"
 USERINFO_URL = "https://openidconnect.googleapis.com/v1/userinfo"
-SCOPES = "openid email profile https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/drive.appdata"
+# gmail.readonly is a RESTRICTED scope: works for a personal client published
+# "In production" (unverified-app warning clickthrough) — see README
+SCOPES = "openid email profile https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/drive.appdata https://www.googleapis.com/auth/gmail.readonly"
 
 KEYRING_ARGS = ["service", "hypr-shell", "account", "google"]
 LOGIN_TIMEOUT = 300  # seconds to wait for the browser round-trip
