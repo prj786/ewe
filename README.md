@@ -182,19 +182,26 @@ you drive the sudo/build steps.
 
 Settings → User can connect a Google account **natively** (OAuth 2.0
 installed-app flow with PKCE + loopback redirect — no GNOME Online Accounts
-needed). It powers two things: **calendar events** in the Quick Settings
-calendar (dots + agenda + reminder notifications) and **settings sync** — one
-versioned bundle (theme, keyboard, dock, wallpaper, shortcuts, screensaver,
-avatar shape, display profiles, plus your package *list*) stored in Google
-Drive's hidden per-app `appDataFolder`. After a reinstall, sign in and hit
-"Restore from cloud" to get your setup back; reinstalling packages from the
-captured list is always a separate, opt-in command.
+needed). It powers three things: **calendar events** in the Quick Settings
+calendar (dots + agenda + reminder notifications), **Gmail** (a bar envelope
+with the real INBOX unread count, new-mail notifications, and a mail list in
+the control centre that deep-links into Gmail — read-only) and **settings
+sync** — one versioned bundle (theme, keyboard, dock, wallpaper, shortcuts,
+screensaver, avatar shape, display profiles, plus your package *list*) stored
+in Google Drive's hidden per-app `appDataFolder`. After a reinstall, sign in
+and hit "Restore from cloud" to get your setup back; reinstalling packages
+from the captured list is always a separate, opt-in command.
 
 One-time setup (Google requires your own OAuth client for native apps):
 
 1. [console.cloud.google.com](https://console.cloud.google.com) → new project →
-   enable the **Google Calendar API** and **Google Drive API**.
-2. *OAuth consent screen*: External, add your own address as a test user.
+   enable the **Google Calendar API**, **Google Drive API** and **Gmail API**.
+2. *OAuth consent screen*: External. Then **publish the app to "In
+   production"** (Audience → Publish). Don't leave it in *Testing*: with
+   Calendar/Drive/Gmail scopes a Testing app issues refresh tokens that
+   **expire after 7 days**, forcing a weekly re-login. Publishing an app for
+   personal use needs **no Google verification** — you just click through an
+   "unverified app" warning once during consent.
 3. *Credentials* → **Create OAuth client ID** → type **Desktop app**.
 4. Save the id/secret as `~/.config/quickshell/google-oauth.json`:
    `{ "client_id": "…apps.googleusercontent.com", "client_secret": "…" }`
@@ -203,10 +210,36 @@ That file is **gitignored**; a Desktop-app client secret is explicitly
 non-confidential. The **refresh token** never touches a file — it lives in the
 Secret Service keyring (`gnome-keyring`, via `secret-tool`; both installed by
 phase 20). Scopes requested: `openid email profile`, `calendar.readonly`,
-`drive.appdata` (the shell can read your calendar and its own hidden app
-folder — nothing else). Sign out revokes the token at Google and clears the
-keyring. Helper: `dotfiles/quickshell/scripts/google-auth.py` (stdlib-only
-Python). Everything degrades cleanly when signed out or offline.
+`drive.appdata`, `gmail.readonly` (the shell can read your calendar, mail
+headers and its own hidden app folder — nothing else; it can never send or
+delete anything). `gmail.readonly` is Google's *restricted* tier — fine for a
+personal published-unverified client via the warning clickthrough; if Google
+ever hard-blocks it, the shell simply shows mail as unavailable while
+calendar and sync keep working. Accounts connected before the Gmail feature
+show a one-time "reconnect" prompt in the Mail card (the old token lacks the
+new scope). Sign out revokes the token at Google and clears the keyring.
+Helper: `dotfiles/quickshell/scripts/google-auth.py` (stdlib-only Python).
+Everything degrades cleanly when signed out or offline.
+
+## Phone (KDE Connect, optional)
+
+The control centre has a **Mobile** card that pairs your Android phone
+through **KDE Connect's daemon** (only the daemon — the UI is all hypr-shell):
+device discovery + pairing (both directions), phone battery in the bar, the
+phone's notifications (read, dismiss, inline-reply), and **SMS** — full
+conversation list and thread view with send, right in the control centre.
+
+Setup: `kdeconnect` is in the package set (phase 20); install the KDE Connect
+app on the phone ([F-Droid](https://f-droid.org/packages/org.kde.kdeconnect_tp/)
+/ Play Store), put both devices on the same Wi-Fi, open the Mobile card and
+tap **Pair** — accept on the phone, then grant the app's notification/SMS
+permissions there. `kdeconnectd` is started by autostart and D-Bus-activated
+on demand; the shell talks to it through
+`dotfiles/quickshell/scripts/kdeconnect-bridge.py` (`python-dbus` +
+`python-gobject`, both in the package set). Pairing keys stay in kdeconnectd;
+the shell only persists which notifications you've seen (unread badge) and
+the chosen device. MMS bodies often aren't exposed over D-Bus — threads label
+them instead of showing garbage.
 
 ## Repo layout
 

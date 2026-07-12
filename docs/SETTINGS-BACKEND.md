@@ -31,7 +31,8 @@ configuration is restored automatically.
 | `~/.config/hypr/generated/kb-per-window.disabled` | Keyboard & Mouse | flag file: presence tells `autostart.sh` not to start the per-window-layout daemon |
 | `~/.config/quickshell/display-profiles.json` | Displays | source of truth for the display profiles (below) |
 | `~/.config/quickshell/input-devices.json` | Keyboard & Mouse | per-device pointer overrides (mirrors the `hl.device{}` lines) |
-| `~/.config/quickshell/google-*` | User (Google) | OAuth client config + non-secret caches (profile, events, sync meta, restore bundle/package lists) — all gitignored; the refresh token is in the keyring only |
+| `~/.config/quickshell/google-*` | User (Google) | OAuth client config + non-secret caches (profile, events, mail cursor/list, sync meta, restore bundle/package lists) — all gitignored; the refresh token is in the keyring only |
+| `~/.config/quickshell/kdeconnect-state.json` | Mobile card | seen phone-notification ids (unread badge) + chosen device — pairing keys stay in kdeconnectd |
 
 `hyprland.lua` sources `user.lua`, then `input.lua`, then `monitors.lua`
 (missing files are a no-op), so the dedicated files win over any stale lines an
@@ -101,6 +102,14 @@ through the shared `FileDropTarget` component (portal chooser + drop zone).
   honour per-event/calendar popup overrides (else 10 min lead), fire through
   the shell's own notification server via `notify-send`, and are de-duped
   across restarts in `google-notified.json`.
+- **Gmail** (read-only): `labels.get(INBOX)` feeds the unread badge (bar
+  envelope + Mail tile); `users.history.list` with a persisted `historyId`
+  cursor detects genuinely new arrivals (404 → silent re-baseline; first sync
+  marks existing unread as seen so sign-in never floods notifications); rows
+  are metadata-only fetches (From/Subject/Date + snippet, never bodies) that
+  deep-link to Gmail in the browser. Poll: 2 min + on QS open when stale.
+  State in `google-mail.json`. Tokens minted before the `gmail.readonly`
+  scope get `mailState=scope` → a "Reconnect Google" pill re-runs consent.
 - **EDS** (`evolution-data-server`) remains an optional secondary source:
   `scripts/eds-query.py` still feeds the contacts list, and the Quick
   Settings calendar falls back to `Accounts.events` when no Google account
@@ -110,6 +119,24 @@ through the shared `FileDropTarget` component (portal chooser + drop zone).
 Everything degrades cleanly: not configured → actionable message (no
 spinners), signed out/offline → cached or empty states, keyring missing →
 explicit install hint.
+
+## Mobile (KDE Connect) — the D-Bus bridge
+
+Quickshell has no generic QML D-Bus client (its D-Bus features are compiled
+C++ types), so `scripts/kdeconnect-bridge.py` (dbus-python + GLib) owns every
+KDE Connect D-Bus call and speaks newline-delimited JSON over stdio to the
+`KdeConnect.qml` singleton — events out (devices, pair state, battery,
+notifications, messages), commands in (pair/accept/cancel/unpair, dismiss,
+reply, request/send SMS, ring, share). Signals are subscribed globally with
+the device id parsed from the object path, so device add/remove needs no
+re-subscription. The bridge D-Bus-activates `kdeconnectd` (or spawns the
+binary) and survives daemon restarts via a name-owner watch; the QML side
+restarts the bridge if it dies. The Quick Settings Mobile card, the bar
+phone indicator and the SMS panel are pure consumers of the singleton —
+nothing else in the shell knows a D-Bus path. Interface signatures pinned
+against kdeconnect 26.04 (conversations arrive as single message events;
+the conversation list is "latest message per thread"; sends are echoed
+optimistically and reconciled on the real signal).
 
 ## Screensaver (hypridle-driven)
 
@@ -125,8 +152,9 @@ the bar's Insomnia toggle), which keeps saver, lock *and* suspend away.
 ## Runtime dependencies added in 0.3
 
 Installed by `packages/common.list`: `awww` (swww), `mpvpaper`, `libsecret`
-(secret-tool; gnome-keyring was already shipped). Optional (contacts/EDS
-fallback): `evolution-data-server`, `python-gobject`.
+(secret-tool; gnome-keyring was already shipped), `kdeconnect` +
+`python-dbus` + `python-gobject` (the Mobile card's daemon and bridge).
+Optional (contacts/EDS fallback): `evolution-data-server`.
 
 ## Display profiles
 
