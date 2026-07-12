@@ -23,7 +23,9 @@ Scope {
     function toggle() { opened = !opened }
     function hide()   { opened = false }
 
-    onOpenedChanged: if (opened) { query = ""; selected = 0; fileResults = [] }
+    // clear the INPUT too — resetting only `query` leaves the old text on
+    // screen while the results are unfiltered (stale-search bug on reopen)
+    onOpenedChanged: if (opened) { query = ""; input.text = ""; selected = 0; fileResults = [] }
     onResultsChanged: if (selected >= results.length) selected = Math.max(0, results.length - 1)
     onQueryChanged: {
         var q = query.trim()
