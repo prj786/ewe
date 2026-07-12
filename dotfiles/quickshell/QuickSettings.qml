@@ -27,8 +27,11 @@ Scope {
     readonly property int daysIn: new Date(calYear, calMonth + 1, 0).getDate()
     readonly property var monthNames: ["January","February","March","April","May","June","July","August","September","October","November","December"]
     // calendar events — the native Google account when signed in, else the
-    // optional GOA/EDS pipeline; empty → no dots, no agenda, a gentle hint
-    readonly property var calEvents: Google.signedIn ? Google.events : (Accounts.events || [])
+    // optional GOA/EDS pipeline; empty → no dots, no agenda, a gentle hint.
+    // Keyed on the events themselves, NOT Google.signedIn: right after boot the
+    // signed-in probe can lag (keyring/Wi-Fi race) while the cached events are
+    // already loaded — sign-out clears Google.events, so nothing stale leaks.
+    readonly property var calEvents: Google.events.length > 0 ? Google.events : (Accounts.events || [])
     // all-day events carry a bare YYYY-MM-DD — parse as LOCAL midnight, not UTC
     function evDate(e) {
         if (e.allDay && /^\d{4}-\d{2}-\d{2}/.test(String(e.start))) {

@@ -48,9 +48,19 @@ QtObject {
                     if (goo.signedIn && !was) goo.sessionReady()
                 } catch (e) { /* helper always prints JSON; treat garbage as unconfigured */ }
                 goo.probed = true
+                // right after boot the first probe can race gnome-keyring coming
+                // up and report signed-out even though a refresh token is stored
+                // — re-probe with backoff instead of staying signed-out forever
+                if (!goo.signedIn && goo.configured && goo._probeRetries < 3) {
+                    goo._probeRetries++
+                    goo._probeRetry.interval = 5000 * goo._probeRetries
+                    goo._probeRetry.restart()
+                }
             }
         }
     }
+    property int _probeRetries: 0
+    property Timer _probeRetry: Timer { onTriggered: { if (!goo.signedIn) goo.refresh() } }
 
     // ── sign in / out ──────────────────────────────────────────────────────────
     function signIn() {
@@ -343,7 +353,9 @@ QtObject {
         var timeMin = encodeURIComponent(t0.toISOString())
         var timeMax = encodeURIComponent(new Date(t0.getTime() + 14 * 86400000).toISOString())
         goo.api("GET", "https://www.googleapis.com/calendar/v3/users/me/calendarList", null, function (st, j, err) {
-            if (st !== 200 || !j || !j.items) { if (goo.events.length > 0) goo.calState = "offline"; return }
+            // "offline" keeps the cached events on screen AND arms the 60 s
+            // retry — right after boot this fetch races Wi-Fi coming up
+            if (st !== 200 || !j || !j.items) { goo.calState = "offline"; return }
             var cals = j.items.filter(function (c) { return c.selected !== false })
             if (cals.length === 0) { goo.events = []; goo.calState = ""; goo._writeEventsCache(); return }
             goo._calAccum = []
@@ -404,10 +416,19 @@ QtObject {
         interval: 15 * 60 * 1000; running: goo.signedIn; repeat: true
         onTriggered: goo.fetchCalendar()
     }
+    // a failed fetch retries every minute (boot-time Wi-Fi race, flaky network)
+    property Timer _calRetry: Timer {
+        interval: 60 * 1000; running: goo.signedIn && goo.calState === "offline"; repeat: true
+        onTriggered: goo.fetchCalendar()
+    }
     property Connections _qsHook: Connections {
         target: Globals
         function onQuickSettingsOpenChanged() {
-            if (Globals.quickSettingsOpen && goo.signedIn && Date.now() - goo.lastFetch > 5 * 60 * 1000) goo.fetchCalendar()
+            if (!Globals.quickSettingsOpen) return
+            if (goo.signedIn && Date.now() - goo.lastFetch > 5 * 60 * 1000) goo.fetchCalendar()
+            // signed-out but configured: the boot probe may have raced the
+            // keyring — opening QS is a natural moment to re-check
+            else if (!goo.signedIn && goo.configured && goo.busy === "") goo.refresh()
         }
     }
 
