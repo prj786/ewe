@@ -3,6 +3,7 @@ singleton Globals 1.0 Globals.qml
 singleton HyprMon 1.0 HyprMon.qml
 singleton Accounts 1.0 Accounts.qml
 singleton Google 1.0 Google.qml
+singleton KdeConnect 1.0 KdeConnect.qml
 FileDropTarget 1.0 FileDropTarget.qml
 DropRow 1.0 DropRow.qml
 Avatar 1.0 Avatar.qml

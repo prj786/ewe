@@ -16,6 +16,8 @@ dotfiles/quickshell/ssh-browse/
 # sync meta, restore bundles + captured package lists). The refresh token
 # itself is in the system keyring, never in files.
 dotfiles/quickshell/google-*
+# KDE Connect UI state (seen phone-notification ids, chosen device)
+dotfiles/quickshell/kdeconnect-state.json
 *.bak.*
 
 # the Fresh editor regenerates these inside its (symlinked) config dir at

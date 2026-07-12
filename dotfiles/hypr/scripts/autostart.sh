@@ -100,4 +100,13 @@ elif command -v swayidle >/dev/null 2>&1 && ! pgrep -x swayidle >/dev/null 2>&1;
         before-sleep "$LOCK" >/dev/null 2>&1 &
 fi
 
+# ── KDE Connect daemon (phone integration — Quick Settings "Mobile" card).
+# Hyprland doesn't process XDG autostart, so start it here; the shell's bridge
+# can also D-Bus-activate it on demand. ────────────────────────────────────────
+if command -v kdeconnectd >/dev/null 2>&1; then
+    run_once kdeconnectd kdeconnectd
+elif [ -x /usr/lib/kdeconnectd ]; then
+    run_once kdeconnectd /usr/lib/kdeconnectd
+fi
+
 exit 0

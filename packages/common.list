@@ -13,6 +13,9 @@ xdg-desktop-portal-gtk
 polkit
 gnome-keyring
 libsecret               # secret-tool — Google refresh token lives in the keyring
+kdeconnect              # phone integration daemon (Quick Settings "Mobile" card drives it over D-Bus)
+python-dbus             # kdeconnect-bridge.py (D-Bus side)
+python-gobject          # kdeconnect-bridge.py GLib loop (also the optional EDS helper)
 qt5-wayland
 qt6-wayland
 qt6-svg
