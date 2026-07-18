@@ -107,8 +107,21 @@ Scope {
         gen += " } })\n"
         s += gen
         s += "hl.config({ decoration = { rounding = " + root.rounding + " } })\n"
+        s += root.transparencyLua() + "\n"
         s += root.animBlockPersist()
         root.atomicWrite(luaWriter, root.home + "/.config/hypr/generated/user.lua", s)
+    }
+    // window transparency: hyprland.lua ships inactive_opacity 0.97; the toggle
+    // forces full opacity. Always emitted so flipping it back re-applies 0.97.
+    function transparencyLua() {
+        return "hl.config({ decoration = { active_opacity = 1.0, inactive_opacity = "
+             + (Globals.windowTransparency ? "0.97" : "1.0") + " } })"
+    }
+    function setTransparency(on) {
+        Globals.windowTransparency = on
+        root.writePrefs()
+        root.writeOverrides()
+        Quickshell.execDetached(["hyprctl", "eval", root.transparencyLua()])
     }
     Process { id: luaWriter }
     Process { id: jsonWriter }
@@ -167,6 +180,7 @@ Scope {
     // ── shell prefs (accent + dock) persisted to user-theme.json ──────────────────
     function writePrefs() {
         var s = '{ "accent": "' + String(Globals.accentColor) + '", "tintBorders": ' + (Globals.tintBorders ? "true" : "false")
+              + ', "windowTransparency": ' + (Globals.windowTransparency ? "true" : "false")
               + ', "dockEnabled": ' + (Globals.dockEnabled ? "true" : "false")
               + ', "dockAutohide": ' + (Globals.dockAutohide ? "true" : "false")
               + ', "animationSpeed": ' + Number(Globals.animationSpeed)
@@ -1971,6 +1985,15 @@ Scope {
                             sub: "Replaces the default border colour with your accent."
                             on: Globals.tintBorders
                             onToggled: { Globals.tintBorders = !Globals.tintBorders; root.applyBorder(); root.setAccent(String(Globals.accentColor)) }
+                        }
+                    }
+                    SectionTitle { text: "WINDOW TRANSPARENCY" }
+                    Card {
+                        ToggleRow {
+                            title: "Transparent unfocused windows"
+                            sub: "Slight see-through on windows without focus. Off = every window fully opaque."
+                            on: Globals.windowTransparency
+                            onToggled: root.setTransparency(!Globals.windowTransparency)
                         }
                     }
                     SectionTitle { text: "ANIMATIONS" }

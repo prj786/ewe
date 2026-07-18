@@ -233,6 +233,11 @@ hl.bind(mainMod .. " + B",      hl.dsp.exec_cmd(browser))
 hl.bind(mainMod .. " + C",      hl.dsp.exec_cmd(scripts .. "/calendar.sh"))
 hl.bind(mainMod .. " + N",      hl.dsp.exec_cmd("qs ipc call quicksettings toggle"))  -- Quick Settings
 hl.bind(mainMod .. " + comma",  hl.dsp.exec_cmd("qs ipc call settings toggle")) -- Super+, Settings
+-- Blind display recovery: works with a BLACK screen — forces every output's
+-- dpms on and re-asserts the saved display profile. If a plug/unplug or the
+-- xe driver ever blanks everything, press this instead of the power button.
+-- (Super+Ctrl+R is taken by config reload below.)
+hl.bind(mainMod .. " + SHIFT + R", hl.dsp.exec_cmd("qs ipc call display reset"))
 
 -- Super tapped ALONE → Overview (GNOME-style window switcher). `release` fires on key-up;
 -- with the modifier as its own key Hyprland only triggers it on a clean tap (no other key

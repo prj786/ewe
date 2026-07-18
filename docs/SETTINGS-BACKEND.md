@@ -26,7 +26,7 @@ configuration is restored automatically.
 | `~/.config/hypr/generated/monitors.lua` | Displays | per-monitor-set profiles, `desc:`-matched `hl.monitor{}` rules + boot-time profile matching |
 | `~/.config/hypr/generated/input.lua` | Keyboard & Mouse | the full `input { … }` block + per-device `hl.device{}` overrides |
 | `~/.config/hypr/generated/wallpapers.conf` | Wallpaper | `mode=…`, `mute=…`, optional `backend=…`, `*=<default file>`, `<output>=<file>` lines read by `scripts/wallpaper.sh` (files may be images, GIFs or videos) |
-| `~/.config/hypr/generated/user.lua` | Layout / Theme | gaps, border, corner radius, accent border, animation overrides |
+| `~/.config/hypr/generated/user.lua` | Layout / Theme | gaps, border, corner radius, accent border, window transparency, animation overrides |
 | `~/.config/hypr/generated/hypridle.conf` | Screensaver | full hypridle config: saver/lock listeners + battery idle-suspend; `autostart.sh` prefers it over the shipped default and Settings restarts hypridle on change |
 | `~/.config/hypr/generated/kb-per-window.disabled` | Keyboard & Mouse | flag file: presence tells `autostart.sh` not to start the per-window-layout daemon |
 | `~/.config/quickshell/display-profiles.json` | Displays | source of truth for the display profiles (below) |

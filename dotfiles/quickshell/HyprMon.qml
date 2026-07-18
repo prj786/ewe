@@ -127,13 +127,20 @@ QtObject {
     }
     function applySpecs(specs, done) {
         if (!specs || !specs.length) { if (done) done(false); return }
-        runEvals(specs.map(function (s) {
-            // clamshell: while the lid is closed the internal panel must STAY
-            // off — a profile re-assert (hotplug/AC/idle events) would
-            // otherwise relight the panel inside the closed lid
-            var t = (mgr.lidClosed && mgr.isInternal(s.name)) ? { desc: s.desc, name: s.name, disabled: true } : s
-            return "hl.monitor(" + luaArgs(t) + ")"
-        }), done)
+        // clamshell: while the lid is closed the internal panel must STAY
+        // off — a profile re-assert (hotplug/AC/idle events) would
+        // otherwise relight the panel inside the closed lid
+        var eff = specs.map(function (s) {
+            return (mgr.lidClosed && mgr.isInternal(s.name)) ? { desc: s.desc, name: s.name, disabled: true } : s
+        })
+        // last-ditch guard: a profile that would turn off EVERY output leaves
+        // no way to recover but a blind reboot — refuse it outright
+        if (eff.every(function (s) { return s.disabled })) {
+            mgr.lastError = "Refused to apply: profile would disable every display"
+            if (done) done(false)
+            return
+        }
+        runEvals(eff.map(function (s) { return "hl.monitor(" + luaArgs(s) + ")" }), done)
     }
 
     // ── clamshell (lid) state — lid.sh reports via `qs ipc call display lid …`
@@ -239,11 +246,34 @@ QtObject {
         if (!force && verifyAgainst(prof) === "") return
         applySpecs(prof)
     }
+    // Re-assert against a FRESH monitor query. The hotplug/lid/AC handlers used
+    // to call applyMatching() directly, but `monitors` is refreshed async — on
+    // an unplug the stale list still contained the departed output, so the OLD
+    // profile was re-applied, forcing a needless modeset on the panel (which
+    // the xe driver's PSR path answers with a permanent black screen).
+    property bool _assertPending: false
+    property bool _assertForce: false
+    function reassert(force) {
+        _assertPending = true
+        if (force) _assertForce = true
+        refresh()
+    }
     function resetDisplays() {
-        Quickshell.execDetached(["hyprctl", "dispatch", "dpms", "on"])
-        applyMatching(true)
+        // explicit escape hatch (screens are dark) — forcing dpms on is right
+        // here; the dispatch arg must be Lua on this Hyprland (raw `dpms on`
+        // errors — and used to fail silently, which is why Reset never worked)
+        Quickshell.execDetached(["hyprctl", "dispatch", 'hl.dsp.dpms("on")'])
+        reassert(true)
         _wallpaperReapply.restart()
     }
+    // Wake only outputs that actually report dpms-off. NEVER dpms-cycle a
+    // panel that is already on: on xe/Lunar Lake that alone can re-trigger the
+    // PSR bug and black the screen (verified on hardware).
+    property Process _dpmsGuard: Process {
+        command: ["sh", "-c",
+            "hyprctl monitors all -j 2>/dev/null | grep -q '\"dpmsStatus\": *false' && exec hyprctl dispatch 'hl.dsp.dpms(\"on\")'; exit 0"]
+    }
+    function wakeIfAsleep() { _dpmsGuard.running = false; _dpmsGuard.running = true }
 
     // ── plumbing ──────────────────────────────────────────────────────────────
     // The ONE atomic file writer (Settings uses it too): temp file + rename so a
@@ -282,6 +312,12 @@ QtObject {
                 mgr.loading = false
                 mgr._monLoaded = true
                 mgr._maybeStartupAssert()
+                if (mgr._assertPending) {
+                    mgr._assertPending = false
+                    var f = mgr._assertForce; mgr._assertForce = false
+                    mgr.applyMatching(f)
+                    mgr._wallpaperReapply.restart()
+                }
             }
         }
     }
@@ -329,9 +365,9 @@ QtObject {
     // wallpaper backend a chance to cover a newly-added output.
     property Timer _hotplugT: Timer {
         interval: 800
-        onTriggered: { mgr.refresh(); mgr._reassertT.restart() }
+        onTriggered: mgr.reassert(false)
     }
-    property Timer _reassertT: Timer { interval: 500; onTriggered: { mgr.applyMatching(false); mgr._wallpaperReapply.restart() } }
+    property Timer _reassertT: Timer { interval: 500; onTriggered: mgr.reassert(false) }
     property Timer _wallpaperReapply: Timer {
         interval: 700
         onTriggered: Quickshell.execDetached(["sh", "-c", '"$HOME/.config/hypr/scripts/wallpaper.sh" --reapply'])
@@ -345,16 +381,18 @@ QtObject {
         }
     }
     // AC ↔ battery: the panel/driver may re-probe (and on xe/Lunar Lake, blank).
-    // Wait out the re-probe, force dpms on, then re-assert the saved profile.
+    // Wait out the re-probe, then RECOVER-ONLY: wake outputs that report
+    // dpms-off and re-apply the profile only if the live state drifted from it.
+    // (The old behaviour — unconditional dpms-cycle + forced re-apply on every
+    // charger plug — was itself a blanking trigger on the xe PSR path.)
     property Timer _powerT: Timer {
         interval: 2500
         onTriggered: {
-            Quickshell.execDetached(["hyprctl", "dispatch", "dpms", "on"])
-            mgr.refresh()
+            mgr.wakeIfAsleep()
             mgr._powerAssertT.restart()
         }
     }
-    property Timer _powerAssertT: Timer { interval: 600; onTriggered: mgr.applyMatching(true) }
+    property Timer _powerAssertT: Timer { interval: 600; onTriggered: mgr.reassert(false) }
     property Connections _powerConn: Connections {
         target: UPower
         function onOnBatteryChanged() { mgr._powerT.restart() }

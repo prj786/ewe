@@ -100,22 +100,40 @@ elif command -v swayidle >/dev/null 2>&1 && ! pgrep -x swayidle >/dev/null 2>&1;
         before-sleep "$LOCK" >/dev/null 2>&1 &
 fi
 
-# ── User startup applications (Settings → Startup). A plain JSON list the
-# Settings pane owns; disabled entries are kept but skipped. ──────────────────
-SAPPS="$HOME/.config/quickshell/startup-apps.json"
-if [ -r "$SAPPS" ] && command -v jq >/dev/null 2>&1; then
-    jq -r '.apps[] | select(.enabled != false) | .exec' "$SAPPS" 2>/dev/null | while IFS= read -r cmd; do
-        [ -n "$cmd" ] && sh -c "$cmd" >/dev/null 2>&1 &
-    done
-fi
+# ── User startup applications (Settings → Startup) + kdeconnectd — launched in
+# a detached waiter that first blocks (max ~20 s) until the Quickshell bar owns
+# org.kde.StatusNotifierWatcher. Launching earlier has TWO silent failure
+# modes: tray apps register no icon (no watcher on the bus yet → the icon never
+# appears), and 1Password probes for a polkit agent once at startup — before
+# the shell's agent is registered it caches "system auth: NotSetup" for the
+# whole run. Waiting for the watcher covers both (same process registers both).
+(
+    if command -v busctl >/dev/null 2>&1; then
+        _i=0
+        while [ "$_i" -lt 40 ] && ! busctl --user status org.kde.StatusNotifierWatcher >/dev/null 2>&1; do
+            sleep 0.5; _i=$((_i + 1))
+        done
+    else
+        sleep 3   # no busctl (non-systemd?) — a fixed grace beats nothing
+    fi
 
-# ── KDE Connect daemon (phone integration — Quick Settings "Mobile" card).
-# Hyprland doesn't process XDG autostart, so start it here; the shell's bridge
-# can also D-Bus-activate it on demand. ────────────────────────────────────────
-if command -v kdeconnectd >/dev/null 2>&1; then
-    run_once kdeconnectd kdeconnectd
-elif [ -x /usr/lib/kdeconnectd ]; then
-    run_once kdeconnectd /usr/lib/kdeconnectd
-fi
+    # user startup applications: a plain JSON list the Settings pane owns;
+    # disabled entries are kept but skipped
+    SAPPS="$HOME/.config/quickshell/startup-apps.json"
+    if [ -r "$SAPPS" ] && command -v jq >/dev/null 2>&1; then
+        jq -r '.apps[] | select(.enabled != false) | .exec' "$SAPPS" 2>/dev/null | while IFS= read -r cmd; do
+            [ -n "$cmd" ] && sh -c "$cmd" >/dev/null 2>&1 &
+        done
+    fi
+
+    # KDE Connect daemon (phone integration — Quick Settings "Mobile" card).
+    # Hyprland doesn't process XDG autostart, so start it here; the shell's
+    # bridge can also D-Bus-activate it on demand.
+    if command -v kdeconnectd >/dev/null 2>&1; then
+        run_once kdeconnectd kdeconnectd
+    elif [ -x /usr/lib/kdeconnectd ]; then
+        run_once kdeconnectd /usr/lib/kdeconnectd
+    fi
+) >/dev/null 2>&1 &
 
 exit 0

@@ -32,6 +32,9 @@ QtObject {
     // user-theme.json and re-read here at startup (default = system blue).
     property color accentColor: "#0a84ff"
     property bool tintBorders: false        // mirror window border colour to the accent
+    // false → fully opaque windows (decoration inactive_opacity forced to 1.0);
+    // true keeps hyprland.lua's subtle unfocused translucency. user-theme.json.
+    property bool windowTransparency: true
 
     // Animation speed multiplier driving both the QML shell (Theme.dur*) and the
     // Hyprland window animations (Settings writes scaled hl.animation overrides).
@@ -167,6 +170,7 @@ QtObject {
                     var j = JSON.parse(this.text)
                     if (j && j.accent) g.accentColor = j.accent
                     if (j && j.tintBorders !== undefined) g.tintBorders = j.tintBorders
+                    if (j && j.windowTransparency !== undefined) g.windowTransparency = j.windowTransparency
                     if (j && j.dockEnabled !== undefined) g.dockEnabled = j.dockEnabled
                     if (j && j.dockAutohide !== undefined) g.dockAutohide = j.dockAutohide
                     if (j && j.animationSpeed !== undefined) g.animationSpeed = j.animationSpeed
