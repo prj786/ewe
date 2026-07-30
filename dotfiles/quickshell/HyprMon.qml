@@ -370,7 +370,9 @@ QtObject {
     property Timer _reassertT: Timer { interval: 500; onTriggered: mgr.reassert(false) }
     property Timer _wallpaperReapply: Timer {
         interval: 700
-        onTriggered: Quickshell.execDetached(["sh", "-c", '"$HOME/.config/hypr/scripts/wallpaper.sh" --reapply'])
+        // via Wallpaper so the freeze state is re-asserted afterwards — a hotplug
+        // re-apply spawns a fresh, unpaused mpvpaper
+        onTriggered: Wallpaper.reapply()
     }
     property Connections _hyprConn: Connections {
         target: Hyprland

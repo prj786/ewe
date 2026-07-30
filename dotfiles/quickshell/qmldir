@@ -6,6 +6,7 @@ singleton Logind 1.0 Logind.qml
 singleton Resume 1.0 Resume.qml
 singleton Lid 1.0 Lid.qml
 singleton Power 1.0 Power.qml
+singleton Wallpaper 1.0 Wallpaper.qml
 singleton Accounts 1.0 Accounts.qml
 singleton Google 1.0 Google.qml
 singleton KdeConnect 1.0 KdeConnect.qml

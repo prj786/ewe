@@ -18,6 +18,9 @@
 #     --reapply   re-assert everything (Settings after a change, HyprMon on
 #                 monitor hotplug) so a newly plugged display gets covered
 #     --backend   print "img=<swww|awww|swaybg|none> video=<mpvpaper|none>"
+#     --pause     freeze video wallpaper (SIGSTOP) — the compositor keeps the
+#                 last committed frame, so it becomes a still image at zero cost
+#     --resume    thaw it again
 #
 # Problems are printed with an "error:"/"note:" prefix and a non-zero exit for
 # errors — Settings runs this through a Process and shows the output inline.
@@ -28,6 +31,11 @@ REAPPLY=0; QUERY=0
 case "${1:-}" in
     --reapply) REAPPLY=1 ;;
     --backend) QUERY=1 ;;
+    # Wallpaper.qml drives these on battery, on lock and while the screensaver
+    # is up. A frozen client keeps its last frame on screen but stops decoding
+    # entirely, which on a laptop is the single biggest win available here.
+    --pause)   pkill -STOP -x mpvpaper 2>/dev/null; exit 0 ;;
+    --resume)  pkill -CONT -x mpvpaper 2>/dev/null; exit 0 ;;
 esac
 
 CONF="$HOME/.config/hypr/generated/wallpapers.conf"
@@ -143,18 +151,55 @@ if [ "$REAPPLY" -eq 0 ]; then
 fi
 
 # ── videos → mpvpaper (one instance per output; never '*' to avoid overlap) ──
+# CONT first: SIGTERM to a SIGSTOPped process stays pending until it is
+# continued, so killing a paused wallpaper without this leaves it alive forever.
+pkill -CONT -x mpvpaper 2>/dev/null
 pkill -x mpvpaper 2>/dev/null
 if [ "${#VID[@]}" -gt 0 ]; then
-    MPVOPTS="loop"
-    [ "$MUTE" = "1" ] && MPVOPTS="$MPVOPTS no-audio"
+    BASEOPTS="loop"
+    [ "$MUTE" = "1" ] && BASEOPTS="$BASEOPTS no-audio"
     case "$MODE" in
-        fill) MPVOPTS="$MPVOPTS panscan=1.0" ;;
-        stretch) MPVOPTS="$MPVOPTS keepaspect=no" ;;
-        center) MPVOPTS="$MPVOPTS video-unscaled=yes" ;;
+        fill) BASEOPTS="$BASEOPTS panscan=1.0" ;;
+        stretch) BASEOPTS="$BASEOPTS keepaspect=no" ;;
+        center) BASEOPTS="$BASEOPTS video-unscaled=yes" ;;
     esac
-    for o in "${!VID[@]}"; do
-        out=$(mpvpaper -f -o "$MPVOPTS" "$o" "${VID[$o]}" 2>&1) || { echo "error: mpvpaper $o: ${out:-failed}"; st=1; }
-    done
+    # Hardware decode. On Lunar Lake the media engine decodes without waking the
+    # CPU or the render engine — the difference between a video wallpaper costing
+    # a little battery and costing a lot. gpu-next is mpv's current renderer and
+    # pairs with vaapi; both are verified below rather than assumed.
+    FASTOPTS="$BASEOPTS hwdec=vaapi vo=gpu-next"
+
+    start_video() {   # $1 = mpv option string; remaining args = extra mpvpaper flags
+        local opts="$1"; shift
+        local rc=0 o out
+        for o in "${!VID[@]}"; do
+            out=$(mpvpaper -f "$@" -o "$opts" "$o" "${VID[$o]}" 2>&1) \
+                || { echo "error: mpvpaper $o: ${out:-failed}"; rc=1; }
+        done
+        return $rc
+    }
+
+    # --auto-pause stops decoding while the wallpaper is covered by a fullscreen
+    # or opaque window: there is no reason to decode video nobody can see.
+    #
+    # Both that flag and the hwdec options are checked by confirming the process
+    # SURVIVED. mpvpaper forks immediately with -f, so an unsupported option or a
+    # missing renderer makes it exit after the fork — an exit status alone would
+    # report success and leave a black desktop.
+    if start_video "$FASTOPTS" --auto-pause >/dev/null 2>&1 \
+       && { sleep 0.4; pgrep -x mpvpaper >/dev/null 2>&1; }; then
+        :   # hardware path is up
+    else
+        pkill -CONT -x mpvpaper 2>/dev/null; pkill -x mpvpaper 2>/dev/null
+        echo "note: mpvpaper rejected hwdec/gpu-next or --auto-pause — falling back to software decode"
+        start_video "$BASEOPTS" || st=1
+    fi
+
+    # Explains an unexpectedly expensive video wallpaper: without a VLD
+    # entrypoint the media engine is not being used no matter what we asked for.
+    if have vainfo && ! vainfo 2>/dev/null | grep -q 'VAEntrypointVLD'; then
+        echo "note: no VA-API decode entrypoints — video wallpaper is decoding in software"
+    fi
 fi
 
 # ── images/GIFs → swww (animated) or swaybg (static) ─────────────────────────

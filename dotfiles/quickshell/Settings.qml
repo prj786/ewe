@@ -900,6 +900,8 @@ Scope {
                 if (out.indexOf("error:") >= 0) root.errorMsg = out.split("\n").filter(function (l) { return l.indexOf("error:") >= 0 })[0].replace(/^error:\s*/, "")
                 else if (out !== "") root.flashApplied(out.split("\n")[0].replace(/^note:\s*/, ""))
                 else root.flashApplied("Wallpaper applied")
+                // a fresh mpvpaper is now running unpaused — re-assert the freeze
+                Wallpaper.reapplied()
             }
         }
     }

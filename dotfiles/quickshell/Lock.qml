@@ -63,6 +63,7 @@ Scope {
     // so loginctl and anything else on the system agree with us
     readonly property bool locked: lock.locked
     onLockedChanged: {
+        Globals.locked = root.locked                    // one shell-wide source of truth
         Logind.setLockedHint(root.locked)
         if (root.locked) Globals.saverDimming = false   // the lock replaces the dim
     }

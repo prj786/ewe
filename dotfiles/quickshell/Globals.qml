@@ -79,6 +79,10 @@ QtObject {
     property string saverStyle: "clock"     // "clock" | "blank"
     property bool saverLock: false          // true → idle goes straight to the session lock
     property int  saverLockAfterMin: 5      // saver mode: lock N min after the saver starts (0 = never)
+    // runtime only: the session lock surface is up. Set by Lock.qml. Nothing in
+    // the shell could condition on lock state before this existed — it was a
+    // private bool inside one component.
+    property bool locked: false
     property bool saverActive: false        // runtime only: the overlay is currently shown
     // runtime only: the pre-lock dim is showing. This is the grace period made
     // visible — the screen fades down a little before anything irreversible

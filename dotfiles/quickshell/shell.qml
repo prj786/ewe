@@ -16,7 +16,7 @@ ShellRoot {
     // suspend, not after it.
     // Lid likewise: the lid can be shut before anything else would have touched
     // the singleton, and a lid event nobody is listening for does nothing.
-    Scope { Component.onCompleted: { HyprMon.start(); Logind.start(); Resume.start(); Lid.start() } }
+    Scope { Component.onCompleted: { HyprMon.start(); Logind.start(); Resume.start(); Lid.start(); Wallpaper.start() } }
 
     Notifications {}
     Bar {}

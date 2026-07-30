@@ -349,9 +349,11 @@ QtObject {
                 // reload everything the bundle touched
                 Globals.reloadUserState()
                 HyprMon.reloadProfiles()
-                if (!HyprMon.virtualSession)
+                if (!HyprMon.virtualSession) {
                     Quickshell.execDetached(["sh", "-c",
                         'hyprctl reload >/dev/null 2>&1; "$HOME/.config/hypr/scripts/wallpaper.sh" --reapply >/dev/null 2>&1; pkill -x hypridle; sleep 0.6; hypridle -c "$HOME/.config/hypr/generated/hypridle.conf" >/dev/null 2>&1'])
+                    Wallpaper.reapplied()   // the restore respawned mpvpaper unpaused
+                }
                 goo.lastSync = j.updatedAt; goo.lastHash = ""; goo._saveSyncMeta()
                 goo.syncState = "idle"
                 goo.restoreSummary = "Restored " + j.applied.length + " sections from “" + j.device + "”."
