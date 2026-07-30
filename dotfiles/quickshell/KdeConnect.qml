@@ -16,6 +16,9 @@ QtObject {
     property bool bridgeUp: false        // helper process alive and spoke
     property bool installed: false       // kdeconnectd binary present
     property bool daemonRunning: false
+    property bool bridgeFailed: false    // terminal — respawning cannot help
+    property string bridgeError: ""      // why the bridge is unavailable ("" = fine)
+    property int _restarts: 0
 
     // ── devices ─────────────────────────────────────────────────────────────
     property var devices: []             // [{id,name,type,isReachable,isPaired,pairState,pairRequestedByPeer,batteryCharge,isCharging}]
@@ -70,10 +73,34 @@ QtObject {
         command: ["python3", kc.bridgePath]
         stdinEnabled: true
         stdout: SplitParser { onRead: function (data) { kc._onEvent(data) } }
-        onExited: { kc.bridgeUp = false; kc.daemonRunning = false; kc._restart.restart() }
+        // A bridge that cannot start (no python-dbus/python-gobject) used to be
+        // relaunched every 5 s for the whole session — 720 doomed interpreter
+        // starts an hour on any box missing those packages. Back off, then stop.
+        onExited: {
+            kc.bridgeUp = false
+            kc.daemonRunning = false
+            if (kc.bridgeFailed) return                  // told us why; retrying is pointless
+            if (kc._restarts >= 5) {
+                kc.bridgeError = "KDE Connect bridge keeps exiting — run with HS_LOG=info for the reason."
+                Log.error("kdeconnect", "bridge exited", kc._restarts, "times — giving up")
+                return
+            }
+            kc._restarts++
+            kc._restart.interval = 5000 * kc._restarts   // 5s, 10s, 15s, …
+            Log.warn("kdeconnect", "bridge exited — retry", kc._restarts, "in", kc._restart.interval + "ms")
+            kc._restart.restart()
+        }
     }
     property Timer _restart: Timer { interval: 5000; onTriggered: { kc._bridge.running = true } }
     function send(o) { if (kc._bridge.running) kc._bridge.write(JSON.stringify(o) + "\n") }
+
+    // manual recovery after a terminal failure (install the deps, then retry)
+    function retryBridge() {
+        kc.bridgeFailed = false; kc.bridgeError = ""; kc._restarts = 0
+        kc._restart.interval = 5000
+        kc._bridge.running = false
+        kc._bridge.running = true
+    }
 
     function _onEvent(line) {
         var e
@@ -82,6 +109,20 @@ QtObject {
         case "hello":
             kc.bridgeUp = true
             kc.installed = !!e.installed
+            kc.bridgeError = ""
+            kc._restarts = 0                 // it spoke — a later exit starts fresh
+            kc._restart.interval = 5000
+            break
+        // the bridge reports its own fatals and per-command failures; both used to
+        // fall through this switch and vanish, so the python side's careful error
+        // reporting reached nobody
+        case "fatal":
+            kc.bridgeFailed = true
+            kc.bridgeError = e.error || "KDE Connect bridge unavailable"
+            Log.error("kdeconnect", "bridge fatal:", kc.bridgeError)
+            break
+        case "error":
+            Log.warn("kdeconnect", "command", e.cmd || "?", "failed:", e.error || "?")
             break
         case "daemon":
             kc.daemonRunning = !!e.running

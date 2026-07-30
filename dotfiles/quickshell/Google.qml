@@ -137,6 +137,10 @@ QtObject {
                         goo._accessToken = j.access_token
                         goo._expiresAt = j.expires_at * 1000
                         tok = j.access_token
+                        // clear a previous failure — a wake-time network blip used
+                        // to leave a permanent red banner in Settings long after
+                        // everything had recovered
+                        goo.error = ""
                     } else if (j.error === "signed-out") {
                         // refresh token revoked server-side — drop the session cleanly
                         goo.signedIn = false
@@ -144,8 +148,12 @@ QtObject {
                         goo.sessionClosed()
                     } else {
                         goo.error = "Google token refresh failed: " + j.error
+                        Log.warn("google", "token refresh failed:", j.error)
                     }
-                } catch (e) { goo.error = "Google token refresh failed — could not parse the helper output." }
+                } catch (e) {
+                    goo.error = "Google token refresh failed — could not parse the helper output."
+                    Log.error("google", "token refresh returned unparseable output")
+                }
                 var ws = goo._tokenWaiters
                 goo._tokenWaiters = []
                 for (var i = 0; i < ws.length; i++) ws[i](tok)   // "" → the api() call reports not-authorized
@@ -204,6 +212,10 @@ QtObject {
         function onSessionClosed() {
             goo.cloudInfo = null; goo._cloudBundle = null; goo._cloudFileId = ""
             goo.pendingRestore = null; goo.syncState = "idle"; goo.syncError = ""; goo.restoreSummary = ""
+            // reset the fan-out latch too: a sign-out landing mid-fetch left
+            // _calPending non-zero, and fetchCalendar early-returns on that —
+            // wedging the calendar for the rest of the session
+            goo._calPending = 0; goo._calOk = 0; goo._calFail = 0
             goo.events = []; goo.calState = ""; goo._writeEventsCache()
             goo.mailUnread = 0; goo.mailList = []; goo.mailState = ""; goo.mailError = ""
             goo._mailHistoryId = ""; goo._mailIds = []; goo._saveMailState()
@@ -345,6 +357,8 @@ QtObject {
     property double lastFetch: 0
     property int _calPending: 0
     property var _calAccum: []
+    property int _calOk: 0               // per-calendar fetches that returned events
+    property int _calFail: 0             // …and ones that did not
     readonly property string eventsCachePath: Quickshell.env("HOME") + "/.config/quickshell/google-events.json"
     readonly property string notifiedPath: Quickshell.env("HOME") + "/.config/quickshell/google-notified.json"
 
@@ -361,6 +375,7 @@ QtObject {
             var cals = j.items.filter(function (c) { return c.selected !== false })
             if (cals.length === 0) { goo.events = []; goo.calState = ""; goo._writeEventsCache(); return }
             goo._calAccum = []
+            goo._calOk = 0; goo._calFail = 0
             goo._calPending = cals.length
             for (var i = 0; i < cals.length; i++) goo._fetchCalEvents(cals[i], timeMin, timeMax)
         })
@@ -369,7 +384,9 @@ QtObject {
         var url = "https://www.googleapis.com/calendar/v3/calendars/" + encodeURIComponent(cal.id)
                 + "/events?singleEvents=true&orderBy=startTime&maxResults=100&timeMin=" + timeMin + "&timeMax=" + timeMax
         goo.api("GET", url, null, function (st, j, err) {
-            if (st === 200 && j && j.items) {
+            if (st !== 200 || !j || !j.items) goo._calFail++
+            else {
+                goo._calOk++
                 var defRem = (cal.defaultReminders || []).filter(function (r) { return r.method === "popup" }).map(function (r) { return r.minutes })
                 for (var i = 0; i < j.items.length; i++) {
                     var ev = j.items[i]
@@ -391,6 +408,15 @@ QtObject {
             }
             goo._calPending--
             if (goo._calPending === 0) {
+                // every calendar failed → a network/quota problem, not an empty
+                // calendar. Committing here used to overwrite the offline cache
+                // with [] AND clear calState, so the retry never armed and the
+                // card read "No upcoming events" until the next 15-minute poll.
+                if (goo._calOk === 0 && goo._calFail > 0) {
+                    goo.calState = "offline"
+                    Log.warn("google", "calendar: all", goo._calFail, "calendars failed — keeping cache")
+                    return
+                }
                 goo._calAccum.sort(function (a, b) { return a.start < b.start ? -1 : (a.start > b.start ? 1 : 0) })
                 goo.events = goo._calAccum
                 goo.calState = ""
@@ -504,13 +530,22 @@ QtObject {
     readonly property string mailStatePath: Quickshell.env("HOME") + "/.config/quickshell/google-mail.json"
 
     property Process _mailWriter: Process {}
-    function _saveMailState() {
-        var cut = Date.now() - 7 * 86400000
-        for (var k in goo._mailNotified) if (goo._mailNotified[k] < cut) delete goo._mailNotified[k]
-        HyprMon.atomicWrite(goo._mailWriter, goo.mailStatePath, JSON.stringify({
+    // _saveMailState fires from several callbacks that can land in the same tick
+    // (history → baseline → list refresh). They all share _mailWriter, and
+    // atomicWrite restarts the process, so the earlier `sh` was killed mid-heredoc
+    // and its write silently lost — taking the historyId cursor with it and
+    // leaving a stray .tmp behind. Coalesce the burst into one write.
+    property Timer _mailSaveT: Timer {
+        interval: 200
+        onTriggered: HyprMon.atomicWrite(goo._mailWriter, goo.mailStatePath, JSON.stringify({
             historyId: goo._mailHistoryId, notified: goo._mailNotified,
             notify: goo.mailNotify, unread: goo.mailUnread, list: goo.mailList.slice(0, 15)
         }))
+    }
+    function _saveMailState() {
+        var cut = Date.now() - 7 * 86400000
+        for (var k in goo._mailNotified) if (goo._mailNotified[k] < cut) delete goo._mailNotified[k]
+        goo._mailSaveT.restart()
     }
     property Process _mailLoad: Process {
         running: true
@@ -554,31 +589,61 @@ QtObject {
             }
         })
     }
+    // How many new-mail toasts a single history walk may fire before it stops
+    // naming them individually. A multi-hour suspend can surface dozens at once.
+    readonly property int mailNotifyBurst: 5
+
+    property var _mailFresh: ({})        // message ids gathered across history pages
+
     function _mailHistory() {
-        if (goo._mailHistoryId === "") { goo._mailBaseline(false); return }
-        goo.api("GET", "https://gmail.googleapis.com/gmail/v1/users/me/history?historyTypes=messageAdded&labelId=INBOX&startHistoryId="
-                + goo._mailHistoryId, null, function (st, j, err) {
-            if (st === 404) { goo._mailBaseline(true); return }   // cursor aged out — reconcile silently
-            if (st !== 200 || !j) { goo._refreshMailList(); return }
-            if (j.historyId) goo._mailHistoryId = String(j.historyId)
-            var fresh = {}
+        if (goo._mailHistoryId === "") { goo._mailBaseline(); return }
+        goo._mailFresh = {}
+        goo._mailHistoryPage("", 0)
+    }
+    // history.list pages at ~100 records. Reading only the first page while still
+    // advancing the cursor to j.historyId (which is the mailbox's CURRENT id, not
+    // the last id on the page) silently dropped every arrival past page one and
+    // left the cursor looking healthy — so walk the pages before committing.
+    function _mailHistoryPage(pageToken, depth) {
+        var url = "https://gmail.googleapis.com/gmail/v1/users/me/history?historyTypes=messageAdded&labelId=INBOX&startHistoryId="
+                + goo._mailHistoryId
+        if (pageToken !== "") url += "&pageToken=" + encodeURIComponent(pageToken)
+        goo.api("GET", url, null, function (st, j, err) {
+            if (st === 404) { goo._mailFresh = {}; goo._mailBaseline(); return }   // cursor aged out — reconcile silently
+            if (st !== 200 || !j) { goo._mailFresh = {}; goo._refreshMailList(); return }
             var hs = j.history || []
             for (var h = 0; h < hs.length; h++)
                 for (var a = 0; a < (hs[h].messagesAdded || []).length; a++) {
                     var msg = hs[h].messagesAdded[a].message
-                    if (msg && msg.id && !goo._mailNotified[msg.id]) fresh[msg.id] = true
+                    if (msg && msg.id && !goo._mailNotified[msg.id]) goo._mailFresh[msg.id] = true
                 }
-            var ids = Object.keys(fresh)
+            if (j.nextPageToken) {
+                if (depth < 20) { goo._mailHistoryPage(String(j.nextPageToken), depth + 1); return }
+                // gap too large to walk — rebaseline rather than advance the cursor
+                // past pages we never read
+                Log.warn("google", "gmail history gap over", depth, "pages — rebaselining")
+                goo._mailFresh = {}
+                goo._mailBaseline()
+                return
+            }
+            if (j.historyId) goo._mailHistoryId = String(j.historyId)
+            var ids = Object.keys(goo._mailFresh)
+            goo._mailFresh = {}
+            if (ids.length > 0) Log.info("google", "gmail:", ids.length, "new message(s) since the cursor")
             for (var i = 0; i < ids.length; i++) {
                 goo._mailNotified[ids[i]] = Date.now()
-                if (goo.mailNotify) goo._notifyMail(ids[i])
+                if (goo.mailNotify && i < goo.mailNotifyBurst) goo._notifyMail(ids[i])
             }
+            // one summary instead of a toast storm for the rest
+            if (goo.mailNotify && ids.length > goo.mailNotifyBurst)
+                Quickshell.execDetached(["notify-send", "-a", "Gmail", "-i", "mail-unread",
+                    "New mail", (ids.length - goo.mailNotifyBurst) + " more new messages in your inbox."])
             goo._saveMailState()
             goo._refreshMailList()
         })
     }
     // (re)baseline the history cursor; everything currently unread is "seen"
-    function _mailBaseline(silent) {
+    function _mailBaseline() {
         goo.api("GET", "https://gmail.googleapis.com/gmail/v1/users/me/profile", null, function (st, j, err) {
             if (st === 200 && j && j.historyId) goo._mailHistoryId = String(j.historyId)
             goo.api("GET", "https://gmail.googleapis.com/gmail/v1/users/me/messages?q=" + encodeURIComponent("is:unread in:inbox") + "&maxResults=15",

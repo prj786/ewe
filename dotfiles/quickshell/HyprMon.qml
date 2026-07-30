@@ -283,7 +283,7 @@ QtObject {
     // real $HOME, and a throwaway compositor's state must never overwrite the
     // user's config (live apply against the nested instance still works).
     function atomicWrite(proc, path, content) {
-        if (_virtualSession()) { console.log("HyprMon: virtual session — skipped write to", path); return }
+        if (_virtualSession()) { Log.info("display", "virtual session — skipped write to", path); return }
         proc.command = ["sh", "-c",
             'mkdir -p "$(dirname "$1")" && cat > "$1.tmp" <<\'HS_ATOMIC_EOF_7f3a\'\n' + content + '\nHS_ATOMIC_EOF_7f3a\nmv "$1.tmp" "$1"',
             "hyprmon", path]
