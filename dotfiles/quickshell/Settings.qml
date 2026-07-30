@@ -181,7 +181,8 @@ Scope {
 
     // ── shell prefs (accent + dock) persisted to user-theme.json ──────────────────
     function writePrefs() {
-        var s = '{ "accent": "' + String(Globals.accentColor) + '", "tintBorders": ' + (Globals.tintBorders ? "true" : "false")
+        var s = '{ "themeName": "' + Globals.themeName + '"'
+              + ', "accent": "' + String(Globals.accentColor) + '", "tintBorders": ' + (Globals.tintBorders ? "true" : "false")
               + ', "windowTransparency": ' + (Globals.windowTransparency ? "true" : "false")
               + ', "dockEnabled": ' + (Globals.dockEnabled ? "true" : "false")
               + ', "dockAutohide": ' + (Globals.dockAutohide ? "true" : "false")
@@ -1981,6 +1982,23 @@ Scope {
                 id: cTheme
                 Column {
                     spacing: 14
+                    SectionTitle { text: "SHELL STYLE" }
+                    Card {
+                        DropRow {
+                            label: "Look"; ddId: "theme-name"; buttonWidth: 150
+                            options: [{ label: "Graphite", value: "graphite" },
+                                      { label: "Ambiance (Unity)", value: "ambiance" }]
+                            value: Globals.themeName
+                            onPicked: function (v) { Globals.themeName = v; root.writePrefs() }
+                        }
+                        Text {
+                            width: parent.width; wrapMode: Text.Wrap
+                            text: Globals.themeName === "ambiance"
+                                ? "Unity 7 Ambiance: warm gradient panel, full-height square highlights, Ubuntu type and aubergine menus. The accent is fixed to Ubuntu orange — a custom hue beside aubergine reads as a mistake — so the swatches below apply to Graphite only. Needs ttf-ubuntu-font-family; without it fontconfig substitutes and the shell still runs, just not looking right."
+                                : "The original look: neutral dark greys, rounded corners, and the accent colour you pick below."
+                            color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11
+                        }
+                    }
                     SectionTitle { text: "APP APPEARANCE" }
                     Card {
                         Row {

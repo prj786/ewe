@@ -119,7 +119,7 @@ Scope {
         Rectangle {
             id: mainBox
             x: Math.max(6, Math.min(parent.width - width - 6, Globals.trayMenuAnchorX - width / 2))
-            y: 34
+            y: Theme.barHeight + 4
             width: 230
             height: mainCol.implicitHeight + 10
             radius: Theme.radius; color: Theme.panel; border.color: Theme.stroke; border.width: 1

@@ -1,27 +1,62 @@
 pragma Singleton
 import QtQuick
 
-// Theme — single source of truth for the "graphite dark + blue" look.
-// Tuned for SF Pro and compact, polished metrics. Imported as `Theme.*`.
+// Theme — single source of truth for colour, type and metrics. Imported as
+// `Theme.*`; components must never define their own.
+//
+// TWO looks, chosen by Globals.themeName and switchable live from
+// Settings → Theme:
+//
+//   graphite   the original: dark neutral greys, rounded, user-picked accent
+//   ambiance   Unity 7 "Ambiance": a warm vertical gradient panel, full-height
+//              square highlight blocks, Ubuntu type, deep aubergine menus
+//
+// Every token below keeps the SAME NAME in both, so switching is a palette
+// swap and no consumer needs to know which is active. Where the two genuinely
+// differ in shape rather than colour (bar height, corner radius, whether the
+// panel has a gradient at all) there is an explicit token for it — that is the
+// part Unity actually needs and the part that used to be hardcoded per file.
 QtObject {
-    // ── Palette: graphite dark — SINGLE SOURCE OF TRUTH for colour ─────────
-    // Solid, no glass/transparency (we revisit theming later). Keep every colour
-    // here and reference it as Theme.* — components should not define their own.
-    readonly property color bg:          "#1c1c1e"   // desktop / app base
-    readonly property color panel:       "#1d1d1f"   // popup / panel surface (solid)
-    readonly property color elevated:    "#2c2c2e"   // cards / rows on a panel
-    readonly property color hover:       "#3a3a3c"   // hover fill
-    readonly property color stroke:      "#38383a"   // hairline border
+    id: t
+
+    readonly property bool ambiance: Globals.themeName === "ambiance"
+
+    // ── Palette ───────────────────────────────────────────────────────────
+    readonly property color bg:          ambiance ? "#2C001E" : "#1c1c1e"   // desktop / app base
+    readonly property color panel:       ambiance ? "#2C001E" : "#1d1d1f"   // popup / panel surface
+    readonly property color elevated:    ambiance ? "#3D1030" : "#2c2c2e"   // cards / rows on a panel
+    // In Ambiance this doubles as the menu selection colour — Unity highlighted
+    // the hovered row in aubergine rather than a lighter grey.
+    readonly property color hover:       ambiance ? "#77216F" : "#3a3a3c"
+    readonly property color stroke:      ambiance ? "#4A1038" : "#38383a"   // hairline border
     readonly property color shadow:      Qt.rgba(0, 0, 0, 0.45)
 
-    readonly property color fg:          "#f2f2f7"   // primary text
-    readonly property color fgSecondary: "#aeaeb2"
-    readonly property color fgDim:       "#8e8e93"   // tertiary / placeholder
+    readonly property color fg:          ambiance ? "#DFDBD2" : "#f2f2f7"   // warm off-white, never pure white
+    readonly property color fgSecondary: ambiance ? "#C3BBB0" : "#aeaeb2"
+    readonly property color fgDim:       ambiance ? "#A8A29A" : "#8e8e93"
 
-    // Accent is user-settable: it binds to Globals.accentColor (written by the
-    // Settings → Theme pane, persisted in user-theme.json). Changing it recolours
-    // every surface live. Default stays system blue.
-    readonly property color accent:      Globals.accentColor
+    // ── Bar shape — the part Unity changes that is not colour ─────────────
+    // Graphite's stops are identical, so the same gradient node renders flat and
+    // there is no conditional to get wrong. A static gradient paints once, so
+    // this costs nothing at idle (it does not defeat panel self-refresh).
+    readonly property color barTop:      ambiance ? "#3C3B37" : bg
+    readonly property color barBottom:   ambiance ? "#2D2A26" : bg
+    readonly property color barBorder:   ambiance ? "#1F1D1A" : stroke
+    // hover / popup-open blocks. Unity fills the indicator's FULL panel height,
+    // edge to edge, with no inset and no rounding — after the gradient it is the
+    // most recognisable Ambiance trait.
+    readonly property color barHover:    ambiance ? Qt.rgba(1, 1, 1, 0.10) : hover
+    readonly property color barActive:   ambiance ? Qt.rgba(1, 1, 1, 0.16) : hover
+    readonly property int barItemRadius: ambiance ? 0 : 6
+    readonly property int barItemHeight: ambiance ? barHeight : 22
+    // Unity's indicators sit in a tight rhythm; with full-height blocks that
+    // abut, generous gaps read as gaps rather than as a panel.
+    readonly property int barItemSpacing: ambiance ? 4 : 16
+
+    // Accent. Ambiance forces Ubuntu orange — it is the identity of the theme,
+    // and a user-picked hue beside aubergine reads as a mistake. Graphite keeps
+    // the accent the Settings → Theme pane writes into user-theme.json.
+    readonly property color accent:      ambiance ? "#E95420" : Globals.accentColor
     // accentText auto-contrasts with the accent (white on dark accents, ink on
     // light ones) so foreground text on accent fills stays legible at any hue.
     readonly property color accentText:  (0.299 * accent.r + 0.587 * accent.g + 0.114 * accent.b) > 0.6 ? "#1c1c1e" : "#ffffff"
@@ -31,28 +66,33 @@ QtObject {
     readonly property color warning:     "#ff9f0a"   // low-ish · performance
     readonly property color danger:      "#ff453a"   // critical / low battery
 
-    // ── Type (SF Pro) ─────────────────────────────────────────────────────
-    // SF Pro Text for body/small, SF Pro Display for large/titles (the
-    // optical-size split).
-    readonly property string fontText:    "SF Pro Text"
-    readonly property string fontDisplay: "SF Pro Display"
+    // ── Type ──────────────────────────────────────────────────────────────
+    // Graphite: SF Pro Text for body, SF Pro Display for titles (the optical-size
+    // split). Ambiance: Ubuntu — its humanist forms are doing most of the "this
+    // is Unity" work, so a geometric sans is not a substitute.
+    // ttf-ubuntu-font-family is in packages/common.list; if it is missing,
+    // fontconfig substitutes and the shell still runs, just not looking right.
+    readonly property string fontText:    ambiance ? "Ubuntu" : "SF Pro Text"
+    readonly property string fontDisplay: ambiance ? "Ubuntu" : "SF Pro Display"
     // glyphs + mono fallback — ttf-jetbrains-mono-nerd from packages/common.list
     // (the old "Hurmit Nerd Font" was never installed; it only worked because
     // fontconfig silently fell back to a Nerd Font that happened to be present)
     readonly property string fontMono:    "JetBrainsMono Nerd Font"
 
-    readonly property int fsSmall:  12
+    readonly property int fsSmall:  ambiance ? 13 : 12
     readonly property int fsBody:   14
     readonly property int fsLarge:  17
     readonly property int fsTitle:  22
 
     // ── Metrics ───────────────────────────────────────────────────────────
-    readonly property int radius:       14    // panels / launcher
-    readonly property int radiusInner:  10    // rows, input field
-    readonly property int radiusPill:   8
+    // Unity's panel is sharp-cornered throughout — bar AND menus.
+    readonly property int radius:       ambiance ? 0 : 14    // panels / launcher
+    readonly property int radiusInner:  ambiance ? 0 : 10    // rows, input field
+    readonly property int radiusPill:   ambiance ? 0 : 8
     readonly property int pad:          12
     readonly property int gap:          8
-    readonly property int barHeight:    28
+    // 24px is Unity 7's panel height; graphite's bar has always drawn at 30.
+    readonly property int barHeight:    ambiance ? 24 : 30
 
     // ── Motion (ms) — quick, ease-out. Scaled by the global
     //    animation-speed setting (>1 faster, 0 = instant) so the whole shell

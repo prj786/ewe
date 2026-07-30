@@ -183,12 +183,23 @@ Scope {
         property string glyph: ""
         property color fg: Theme.fgSecondary
         property int fontPx: 15
+        property bool active: false      // its popup is open
         signal activated()
         signal secondary()
         signal tertiary()
         signal scrolled(real dy)
         implicitWidth: lbl.implicitWidth + 18
-        height: parent ? parent.height : 30
+        height: parent ? parent.height : Theme.barHeight
+        // Ambiance highlights every indicator, full panel height and square.
+        // Graphite left these bare (only the control-centre group had a block),
+        // so the token is what decides — not a per-item decision.
+        Rectangle {
+            anchors.centerIn: parent
+            width: parent.width; height: Theme.barItemHeight
+            radius: Theme.barItemRadius
+            color: si.active ? Theme.barActive : (ma.containsMouse ? Theme.barHover : "transparent")
+            visible: Theme.ambiance || si.active
+        }
         Text {
             id: lbl
             anchors.centerIn: parent
@@ -200,7 +211,7 @@ Scope {
         MouseArea {
             id: ma
             anchors.fill: parent
-            hoverEnabled: false
+            hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
             acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
             onClicked: function (m) {
@@ -223,10 +234,10 @@ Scope {
         property string label: ""
         signal triggered()
         width: abLbl.implicitWidth + 16
-        height: parent ? parent.height : 30
+        height: parent ? parent.height : Theme.barHeight
         Rectangle {
-            anchors.centerIn: parent; width: parent.width; height: 22; radius: 6
-            color: abMa.containsMouse ? Theme.hover : "transparent"
+            anchors.centerIn: parent; width: parent.width; height: Theme.barItemHeight; radius: Theme.barItemRadius
+            color: abMa.containsMouse ? Theme.barHover : "transparent"
         }
         Text {
             id: abLbl
@@ -256,20 +267,28 @@ Scope {
             screen: modelData
             visible: bar.barVisible
             color: "transparent"
-            implicitHeight: 30
-            exclusiveZone: bar.barVisible ? 30 : 0
+            implicitHeight: Theme.barHeight
+            exclusiveZone: bar.barVisible ? Theme.barHeight : 0
             WlrLayershell.namespace: "quickshell:bar"
             anchors { top: true; left: true; right: true }
 
             Rectangle {
                 anchors.fill: parent
-                color: Theme.bg
+                // A subtle vertical gradient is Ambiance's most recognisable
+                // trait. Graphite sets both stops to the same colour, so this one
+                // node renders flat there and there is no conditional to get
+                // wrong. Static either way, so it paints once and never fights
+                // panel self-refresh.
+                gradient: Gradient {
+                    GradientStop { position: 0.0; color: Theme.barTop }
+                    GradientStop { position: 1.0; color: Theme.barBottom }
+                }
                 Rectangle {
                     anchors.left: parent.left
                     anchors.right: parent.right
                     anchors.bottom: parent.bottom
                     height: 1
-                    color: Theme.stroke
+                    color: Theme.barBorder
                 }
 
                 // ── LEFT: workspace chip, then the focused app: icon (falls back
@@ -285,9 +304,9 @@ Scope {
                     // current workspace id — always shown; click opens the overview
                     Rectangle {
                         anchors.verticalCenter: parent.verticalCenter
-                        width: 22; height: 22; radius: 6
-                        color: wsMa.containsMouse ? Theme.hover : "transparent"
-                        border.color: Theme.stroke; border.width: 1
+                        width: 22; height: Theme.barItemHeight; radius: Theme.barItemRadius
+                        color: wsMa.containsMouse ? Theme.barHover : "transparent"
+                        border.color: Theme.stroke; border.width: Theme.ambiance ? 0 : 1
                         Text {
                             anchors.centerIn: parent
                             text: Hyprland.focusedWorkspace ? Hyprland.focusedWorkspace.id : 1
@@ -351,7 +370,7 @@ Scope {
                         anchors.verticalCenter: parent.verticalCenter
                         width: mvRow.implicitWidth + 16
                         height: parent.height
-                        Rectangle { anchors.centerIn: parent; width: parent.width; height: 22; radius: 6; color: (mvMa.containsMouse || Globals.appMenuOpen) ? Theme.hover : "transparent" }
+                        Rectangle { anchors.centerIn: parent; width: parent.width; height: Theme.barItemHeight; radius: Theme.barItemRadius; color: Globals.appMenuOpen ? Theme.barActive : (mvMa.containsMouse ? Theme.barHover : "transparent") }
                         Row {
                             id: mvRow
                             anchors.centerIn: parent
@@ -372,7 +391,7 @@ Scope {
                         width: 26
                         height: parent.height
                         Rectangle {
-                            anchors.centerIn: parent; width: 24; height: 22; radius: 6
+                            anchors.centerIn: parent; width: 24; height: Theme.barItemHeight; radius: Theme.barItemRadius
                             color: clMa.containsMouse ? Theme.danger : "transparent"
                         }
                         Text {
@@ -400,7 +419,7 @@ Scope {
                     anchors.right: parent.right
                     anchors.rightMargin: 8
                     anchors.verticalCenter: parent.verticalCenter
-                    spacing: 16
+                    spacing: Theme.barItemSpacing
 
                     // system tray
                     Row {
@@ -469,6 +488,7 @@ Scope {
                         id: scissorsItem
                         glyph: Theme.icClipboard        // scissors
                         fg: Globals.clipboardOpen ? Theme.fg : Theme.fgSecondary
+                        active: Globals.clipboardOpen
                         fontPx: 14
                         onActivated: { Globals.clipAnchorX = scissorsItem.mapToItem(null, scissorsItem.width / 2, 0).x; Globals.clipboardOpen = !Globals.clipboardOpen }
                     }
@@ -502,10 +522,10 @@ Scope {
                     Rectangle {
                         id: ctlGroup
                         anchors.verticalCenter: parent.verticalCenter
-                        height: 22
-                        radius: 8
+                        height: Theme.barItemHeight
+                        radius: Theme.barItemRadius
                         width: ctlRow.implicitWidth + 18
-                        color: (ctlMa.containsMouse || Globals.quickSettingsOpen) ? Theme.hover : "transparent"
+                        color: Globals.quickSettingsOpen ? Theme.barActive : (ctlMa.containsMouse ? Theme.barHover : "transparent")
 
                         Row {
                             id: ctlRow

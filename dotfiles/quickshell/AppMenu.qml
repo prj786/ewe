@@ -69,7 +69,7 @@ Scope {
             id: clipBox
             x: Math.max(8, Math.min(Globals.appAnchorX, win.width - width - 8))
             anchors.top: parent.top
-            anchors.topMargin: 30          // window spans the full output → offset by the bar height
+            anchors.topMargin: Theme.barHeight   // window spans the full output → offset by the bar
             width: 190
             height: menu.height
             clip: true

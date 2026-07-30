@@ -25,7 +25,7 @@ QtObject {
     // Project version — the shell's runtime copy. Keep in sync with the repo-root
     // VERSION file (the canonical source used for git tags / releases). Semver, with
     // an -alpha/-beta pre-release suffix until the first stable cut.
-    readonly property string version: "0.3.0-alpha"
+    readonly property string version: "0.4.0-alpha"
 
     property bool quickSettingsOpen: false  // the Quick Settings panel
     property bool dnd: false               // Do Not Disturb (suppresses toasts)
@@ -41,10 +41,16 @@ QtObject {
     property real clipAnchorX: 40           // screen-local x of the scissors icon (clipboard opens under it)
     property real appAnchorX: 40            // screen-local x of the move-to button (its dropdown opens under it)
 
+    // ── Shell look ────────────────────────────────────────────────────────────
+    // Which palette Theme.qml renders: "graphite" (the original) or "ambiance"
+    // (Unity 7). Every Theme token switches on this; nothing else needs to know.
+    property string themeName: "graphite"
+
     // ── User-chosen accent colour ─────────────────────────────────────────────
     // Single mutable source the Settings → Theme pane writes; Theme.accent binds to
     // it so the whole shell recolours live. Persisted to ~/.config/quickshell/
     // user-theme.json and re-read here at startup (default = system blue).
+    // Ignored under Ambiance, which fixes the accent to Ubuntu orange.
     property color accentColor: "#0a84ff"
     property bool tintBorders: false        // mirror window border colour to the accent
     // false → fully opaque windows (decoration inactive_opacity forced to 1.0);
@@ -204,6 +210,7 @@ QtObject {
             onStreamFinished: {
                 try {
                     var j = JSON.parse(this.text)
+                    if (j && j.themeName) g.themeName = j.themeName
                     if (j && j.accent) g.accentColor = j.accent
                     if (j && j.tintBorders !== undefined) g.tintBorders = j.tintBorders
                     if (j && j.windowTransparency !== undefined) g.windowTransparency = j.windowTransparency

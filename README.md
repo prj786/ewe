@@ -26,7 +26,7 @@ minimal Arch install into the full DE.
 
 ## Status
 
-**Alpha — `0.2.0-alpha`.** Usable and daily-drivable, but expect rough edges and
+**Alpha — `0.4.0-alpha`.** Usable and daily-drivable, but expect rough edges and
 breaking changes between versions. Tested on a minimal Arch install in a QEMU/KVM
 VM. Feedback and issues welcome.
 
