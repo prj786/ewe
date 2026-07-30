@@ -258,7 +258,14 @@ Scope {
         vpnUpProc.command = ["nmcli", "connection", up ? "up" : "down", name]
         vpnUpProc.running = true
     }
-    function setBrightness(v) { root.brightnessVal = v; Quickshell.execDetached(["brightnessctl", "set", Math.round(v * 100) + "%"]) }
+    // logind writes the backlight for us (no udev rule, no setuid helper); fall
+    // back to brightnessctl when the bridge is down or the machine has no
+    // backlight device logind will accept
+    function setBrightness(v) {
+        root.brightnessVal = v
+        if (Logind.setBrightness(v)) return
+        Quickshell.execDetached(["brightnessctl", "set", Math.round(v * 100) + "%"])
+    }
     function setVolume(v) { root.volumeVal = v; Quickshell.execDetached(["wpctl", "set-volume", "-l", "1.0", "@DEFAULT_AUDIO_SINK@", Math.round(v * 100) + "%"]) }
     // ── power actions ──
     // All session/power actions go through ~/.config/hypr/scripts/power.sh: one

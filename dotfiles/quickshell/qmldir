@@ -2,6 +2,7 @@ singleton Log 1.0 Log.qml
 singleton Theme 1.0 Theme.qml
 singleton Globals 1.0 Globals.qml
 singleton HyprMon 1.0 HyprMon.qml
+singleton Logind 1.0 Logind.qml
 singleton Accounts 1.0 Accounts.qml
 singleton Google 1.0 Google.qml
 singleton KdeConnect 1.0 KdeConnect.qml

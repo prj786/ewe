@@ -16,8 +16,8 @@ libsecret               # secret-tool — Google refresh token lives in the keyr
 kdeconnect              # phone integration daemon (Quick Settings "Mobile" card drives it over D-Bus)
 accountsservice         # user icon store (greeter avatar; Settings writes it via busctl)
 plocate                 # launcher file search (Super+D); phase 30 enables the updatedb timer
-python-dbus             # kdeconnect-bridge.py (D-Bus side)
-python-gobject          # kdeconnect-bridge.py GLib loop (also the optional EDS helper)
+python-dbus             # kdeconnect-bridge.py + logind-bridge.py (D-Bus side)
+python-gobject          # those two bridges' GLib loop (also the optional EDS helper)
 qt5-wayland
 qt6-wayland
 qt6-svg

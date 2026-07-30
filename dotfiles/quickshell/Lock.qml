@@ -42,6 +42,28 @@ Scope {
         function toggle(): void { lock.locked = !lock.locked }
     }
 
+    // ── logind ────────────────────────────────────────────────────────────────
+    // `loginctl lock-session` / `unlock-session` emit Lock/Unlock on our session.
+    // The header above has promised the unlock-session escape hatch since this
+    // file was written, but nothing listened for it until now — hypridle owned
+    // the Lock signal and there was no unlock path at all.
+    Connections {
+        target: Logind
+        function onLockRequested() { lock.locked = true }
+        function onUnlockRequested() { lock.locked = false }
+        // We hold a logind delay inhibitor, so this runs BEFORE the machine
+        // suspends rather than racing it. Lock, then release immediately — the
+        // lock surface is up synchronously, so there is nothing to wait for.
+        function onAboutToSleep() {
+            lock.locked = true
+            Logind.sleepReady()
+        }
+    }
+    // one source of truth for "is the screen locked": mirror it onto the session
+    // so loginctl and anything else on the system agree with us
+    readonly property bool locked: lock.locked
+    onLockedChanged: Logind.setLockedHint(root.locked)
+
     // minute-aligned — the lock clock shows "h:mm", so a 1 s tick bought nothing
     Timer {
         id: lockClock
