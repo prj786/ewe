@@ -17,6 +17,11 @@ QtObject {
     property bool lowPowerEnabled: true
     readonly property bool lowPower: onBattery && lowPowerEnabled
 
+    // Lid policy (Lid.qml). Default: suspend even with an external monitor
+    // connected — a laptop being closed is usually a laptop being carried.
+    // Turn off to keep working docked with just the built-in panel dark.
+    property bool lidDockedSuspend: true
+
     // Project version — the shell's runtime copy. Keep in sync with the repo-root
     // VERSION file (the canonical source used for git tags / releases). Semver, with
     // an -alpha/-beta pre-release suffix until the first stable cut.
@@ -198,6 +203,8 @@ QtObject {
                     if (j && j.animationSpeed !== undefined) g.animationSpeed = j.animationSpeed
                     if (j && j.colorScheme) g.colorScheme = j.colorScheme
                     if (j && j.avatarShape) g.avatarShape = j.avatarShape
+                    if (j && j.lidDockedSuspend !== undefined) g.lidDockedSuspend = j.lidDockedSuspend
+                    if (j && j.lowPowerEnabled !== undefined) g.lowPowerEnabled = j.lowPowerEnabled
                     if (j && j.saver) {
                         if (j.saver.enabled !== undefined) g.saverEnabled = j.saver.enabled
                         if (j.saver.min !== undefined) g.saverMin = j.saver.min

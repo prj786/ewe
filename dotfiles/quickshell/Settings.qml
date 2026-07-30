@@ -33,6 +33,7 @@ Scope {
         { key: "theme",     ic: 0xF0241, label: "Theme" },
         { key: "wallpaper", ic: 0xF02E9, label: "Wallpaper" },
         { key: "saver",     ic: 0xF0904, label: "Screensaver" },
+        { key: "power",     ic: 0xF0425, label: "Power" },
         { key: "dock",      ic: 0xF0DC3, label: "Dock" },
         { key: "startup",   ic: 0xF040A, label: "Startup" },
         { key: "user",      ic: 0xF0004, label: "User" }
@@ -186,6 +187,8 @@ Scope {
               + ', "animationSpeed": ' + Number(Globals.animationSpeed)
               + ', "colorScheme": "' + Globals.colorScheme + '"'
               + ', "avatarShape": "' + Globals.avatarShape + '"'
+              + ', "lidDockedSuspend": ' + (Globals.lidDockedSuspend ? "true" : "false")
+              + ', "lowPowerEnabled": ' + (Globals.lowPowerEnabled ? "true" : "false")
               + ', "saver": { "enabled": ' + (Globals.saverEnabled ? "true" : "false")
               + ', "min": ' + Number(Globals.saverMin)
               + ', "style": "' + Globals.saverStyle + '"'
@@ -1246,7 +1249,7 @@ Scope {
                         anchors.fill: parent; anchors.topMargin: 60; anchors.margins: 20
                         contentHeight: paneLoader.item ? paneLoader.item.implicitHeight : 0
                         clip: true; boundsBehavior: Flickable.StopAtBounds
-                        Loader { id: paneLoader; width: parent.width; sourceComponent: ({ system: cSystem, displays: cDisplays, network: cNetwork, defaults: cDefaults, input: cKeyboard, shortcuts: cShortcuts, layout: cLayout, theme: cTheme, wallpaper: cWallpaper, saver: cSaver, dock: cDock, startup: cStartup, user: cUser })[root.paneKey] }
+                        Loader { id: paneLoader; width: parent.width; sourceComponent: ({ system: cSystem, displays: cDisplays, network: cNetwork, defaults: cDefaults, input: cKeyboard, shortcuts: cShortcuts, layout: cLayout, theme: cTheme, wallpaper: cWallpaper, saver: cSaver, power: cPower, dock: cDock, startup: cStartup, user: cUser })[root.paneKey] }
                     }
                 }
             }
@@ -2191,6 +2194,64 @@ Scope {
             }
 
             // ════════ PANE — Dock ════════
+            // ════════ PANE — Power / lid ════════
+            Component {
+                id: cPower
+                Column {
+                    spacing: 14
+                    SectionTitle { text: "WHEN THE LID CLOSES" }
+                    Card {
+                        Item {
+                            width: parent.width; height: 34
+                            Column { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; spacing: 1
+                                Text { text: "Suspend even when docked"; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
+                                Text { text: "Off: with an external monitor connected, keep working and just blank the built-in panel."
+                                       color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 10 }
+                            }
+                            Toggle {
+                                anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
+                                on: Globals.lidDockedSuspend
+                                onToggled: { Globals.lidDockedSuspend = !Globals.lidDockedSuspend; root.writePrefs() }
+                            }
+                        }
+                        Rectangle { width: parent.width; height: 1; color: Theme.stroke; opacity: 0.5 }
+                        KV { k: "Right now"; v: Lid.docked ? (Lid.externals + " external display" + (Lid.externals === 1 ? "" : "s") + " connected")
+                                                           : "no external display — the lid always suspends" }
+                    }
+                    Text { width: parent.width
+                           text: "With the laptop alone, closing the lid always suspends. The session is locked on the way down through a logind delay inhibitor, so the lock is up before the machine sleeps rather than racing it."
+                           color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
+
+                    SectionTitle { text: "ON BATTERY" }
+                    Card {
+                        Item {
+                            width: parent.width; height: 34
+                            Column { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; spacing: 1
+                                Text { text: "Low-power mode"; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
+                                Text { text: "Slow background polling down while unplugged."
+                                       color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 10 }
+                            }
+                            Toggle {
+                                anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
+                                on: Globals.lowPowerEnabled
+                                onToggled: { Globals.lowPowerEnabled = !Globals.lowPowerEnabled; root.writePrefs() }
+                            }
+                        }
+                        Rectangle { width: parent.width; height: 1; color: Theme.stroke; opacity: 0.5 }
+                        KV { k: "Power source"; v: Globals.onBattery ? "battery" + (Globals.lowPower ? " · low-power active" : "") : "mains" }
+                    }
+
+                    SectionTitle { text: "SESSION" }
+                    Card {
+                        KV { k: "logind bridge"; v: Logind.bridgeUp ? "connected" : (Logind.bridgeError !== "" ? Logind.bridgeError : "starting…") }
+                        KV { k: "Sleep inhibitor"; v: Logind.inhibited ? "held (" + Logind.delayMs + " ms to lock)" : "not held" }
+                        KV { k: "Panel backlight"; v: Logind.hasBacklight ? Logind.backlight.name : "none detected" }
+                        KV { k: "Keyboard backlight"; v: Logind.hasKbdBacklight ? Logind.kbdBacklight.name : "none detected" }
+                    }
+                    Item { width: 1; height: 8 }
+                }
+            }
+
             Component {
                 id: cDock
                 Column {

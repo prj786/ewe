@@ -38,7 +38,7 @@ Hyprland straight from the official repos (installed by phase 20).
 │   ├── wallpaper.sh      # per-monitor wallpaper (swww/hyprpaper/swaybg)
 │   ├── calendar.sh       # Super+C calendar popup
 │   ├── idle-suspend.sh   # battery-only idle suspend helper
-│   ├── lid.sh            # laptop lid handling
+│   ├── lid.sh            # reports the lid switch (policy lives in Lid.qml)
 │   ├── kb-per-window.py  # per-window keyboard-layout memory
 │   └── install-sf-pro.sh # optional: fetch SF Pro fonts (user-level)
 ├── SHORTCUTS.md          # every keybinding

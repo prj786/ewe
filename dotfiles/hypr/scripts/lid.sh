@@ -1,38 +1,32 @@
 #!/usr/bin/env bash
-# lid.sh — clamshell lid handling for Hyprland (Lua config).
-#   close: if an external monitor is connected, turn off the laptop panel and
-#          keep working on the external; if the laptop is alone, lock + suspend.
-#   open:  re-enable the laptop panel; the shell (HyprMon) then re-asserts the
-#          saved display profile, restoring the panel's real mode/scale/position.
+# lid.sh — report the lid switch to the shell. Nothing more.
 #
-# The shell is told about the lid first (`qs ipc call display lid …`) so its
-# profile re-asserts never relight a panel inside a closed lid.
+# ALL clamshell policy now lives in the shell (dotfiles/quickshell/Lid.qml):
+# whether to suspend, whether to keep working on an external monitor, and which
+# output is the built-in panel. This script used to hold that policy, which meant
+# a hardcoded eDP-1 (wrong on LVDS/DSI or a second panel), a jq dependency, and
+# nothing the user could configure. The compositor reports the event; the shell
+# decides what it means.
+#
+# The ONE decision left here is the failure case: if the shell is not answering
+# (crashed, or not up yet), a closing lid must never leave the machine awake in a
+# bag, so we suspend. That path cannot lock first — with the shell down there is
+# no locker running — but a hot laptop in a rucksack is the worse outcome.
+#
+# Locking on the normal path is not done here either: suspending raises
+# PrepareForSleep, and the shell's logind delay inhibitor locks the session
+# before the machine goes down. That handshake replaced an unreliable `sleep 0.5`.
 #
 # NOTE: this only runs if systemd-logind ignores the lid — phase 30 installs
 # /etc/systemd/logind.conf.d/10-hypr-shell-lid.conf for exactly that.
 
 set -u
-INTERNAL="eDP-1"
-
-externals() { hyprctl monitors -j | jq "[.[] | select(.name != \"$INTERNAL\")] | length"; }
 
 case "${1:-}" in
   close)
-    qs ipc call display lid close >/dev/null 2>&1 || true
-    if [ "$(externals)" -gt 0 ]; then
-        # docked-style: external present → power off just the laptop panel
-        hyprctl eval "hl.monitor({output=\"$INTERNAL\", disabled=true})" >/dev/null 2>&1
-    else
-        # laptop alone → lock, then sleep
-        qs ipc call lock lock >/dev/null 2>&1
-        sleep 0.5
-        systemctl suspend
-    fi
+    qs ipc call display lid close >/dev/null 2>&1 || systemctl suspend
     ;;
   open)
     qs ipc call display lid open >/dev/null 2>&1 || true
-    # enable with safe defaults — HyprMon's re-assert applies the saved profile
-    # (exact mode/scale/position) right after the monitoradded event
-    hyprctl eval "hl.monitor({output=\"$INTERNAL\", disabled=false, mode=\"preferred\", position=\"auto\"})" >/dev/null 2>&1
     ;;
 esac
