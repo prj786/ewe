@@ -26,14 +26,15 @@ Scope {
     // wayland idle inhibitor (same mechanism as Caffeine, own 1px surface), so
     // NO idle stage fires — saver, lock or suspend. Most video players inhibit
     // on their own; this covers the ones that don't and audio-only playback.
-    property bool mediaPlaying: false
-    Timer {
-        interval: 5000; running: true; repeat: true; triggeredOnStart: true
-        onTriggered: {
-            var ps = Mpris.players.values, on = false
-            for (var i = 0; i < ps.length; i++) if (ps[i].isPlaying) { on = true; break }
-            root.mediaPlaying = on
-        }
+    // Mpris publishes isPlaying as a change signal, so a plain binding re-evaluates
+    // on its own — the old 5 s poll was ~17k wakeups a day to usually learn nothing.
+    // Note the loop deliberately does NOT break early: every player's isPlaying has
+    // to be read for the binding to depend on it, or a later player starting would
+    // go unnoticed.
+    readonly property bool mediaPlaying: {
+        var ps = Mpris.players.values, on = false
+        for (var i = 0; i < ps.length; i++) if (ps[i].isPlaying) on = true
+        return on
     }
     property bool fullscreenFocused: false
     Connections {
@@ -114,7 +115,17 @@ Scope {
                 Item {
                     id: clockRoot
                     property date now: new Date()
-                    Timer { interval: 1000; running: Globals.saverActive; repeat: true; triggeredOnStart: true; onTriggered: clockRoot.now = new Date() }
+                    // minute-aligned: this is the idle screen, so a 1 s tick was
+                    // re-evaluating bindings every second at exactly the moment the
+                    // panel should be sitting in self-refresh doing nothing at all
+                    Timer {
+                        id: saverClock
+                        interval: 1000; running: Globals.saverActive; repeat: true; triggeredOnStart: true
+                        onTriggered: {
+                            clockRoot.now = new Date()
+                            saverClock.interval = 60000 - (Date.now() % 60000)
+                        }
+                    }
                     Column {
                         anchors.centerIn: parent
                         spacing: 10

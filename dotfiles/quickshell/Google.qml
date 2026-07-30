@@ -704,8 +704,11 @@ QtObject {
         Quickshell.execDetached(["xdg-open", "https://mail.google.com/mail/u/0/#inbox/" + id])
     }
 
+    // back off on battery: each poll is an HTTPS round-trip that wakes the Wi-Fi
+    // radio out of power-save, 720 times a day at the 2-minute cadence
     property Timer _mailPoll: Timer {
-        interval: 2 * 60 * 1000; running: goo.signedIn; repeat: true   // sessionReady does the first fetch
+        interval: (Globals.lowPower ? 5 : 2) * 60 * 1000
+        running: goo.signedIn; repeat: true   // sessionReady does the first fetch
         onTriggered: goo.fetchMail()
     }
     property Connections _mailQsHook: Connections {

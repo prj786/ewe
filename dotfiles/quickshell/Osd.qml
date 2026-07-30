@@ -70,7 +70,11 @@ Scope {
 
     PanelWindow {
         id: win
-        visible: true
+        // Only map the surface while the pill is actually on screen. This is a
+        // full-width 140px overlay that used to stay composited for the entire
+        // session for something visible a second at a time. The opacity term keeps
+        // it mapped through the fade-out.
+        visible: root.shown || pill.opacity > 0.01
         color: "transparent"
         exclusionMode: ExclusionMode.Ignore
         mask: Region {}                                   // click-through

@@ -216,9 +216,14 @@ Scope {
 
         // small reusable spinner
         component Spinner: Item {
+            id: sp
             property color ring: Theme.stroke
             property color dot: Theme.accent
-            RotationAnimator on rotation { from: 0; to: 360; duration: 850; loops: Animation.Infinite; running: true }
+            // `running: true` drove a 60 fps repaint of the whole store overlay
+            // whenever it was open — even with no job and the spinner hidden.
+            // QML propagates `visible` down from ancestors, so this stops the
+            // animator whenever the chip/button holding it isn't drawn.
+            RotationAnimator on rotation { from: 0; to: 360; duration: 850; loops: Animation.Infinite; running: sp.visible }
             Rectangle { anchors.fill: parent; radius: width / 2; color: "transparent"; border.color: parent.ring; border.width: 2 }
             Rectangle { width: parent.width * 0.3; height: width; radius: width / 2; color: parent.dot; anchors.horizontalCenter: parent.horizontalCenter; anchors.top: parent.top; anchors.topMargin: -1 }
         }

@@ -401,7 +401,9 @@ Scope {
             }
         }
     }
-    Timer { interval: 6000; running: true; repeat: true; onTriggered: { if (!Globals.quickSettingsOpen) return; wifiState.running = true; wiredState.running = true; if (root.expanded === "wifi") wifiScan.running = true; if (root.expanded === "ssh") sshScan.running = true } }
+    // gated on the panel, not just no-op'd inside it: this used to wake every 6 s
+    // for the whole session only to hit the early return on the first line
+    Timer { interval: 6000; running: Globals.quickSettingsOpen; repeat: true; onTriggered: { wifiState.running = true; wiredState.running = true; if (root.expanded === "wifi") wifiScan.running = true; if (root.expanded === "ssh") sshScan.running = true } }
 
     PanelWindow {
         id: win

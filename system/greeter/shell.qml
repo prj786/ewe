@@ -134,8 +134,17 @@ FloatingWindow {
             }
         }
     }
-    Timer { interval: 1000; running: true; repeat: true; triggeredOnStart: true
-        onTriggered: { var d = new Date(); win.clockText = Qt.formatDateTime(d, "HH:mm"); win.dateText = Qt.formatDateTime(d, "dddd, d MMMM") } }
+    // minute-aligned (the greeter shows "HH:mm") — see the shell's other clocks
+    Timer {
+        id: greeterClock
+        interval: 1000; running: true; repeat: true; triggeredOnStart: true
+        onTriggered: {
+            var d = new Date()
+            win.clockText = Qt.formatDateTime(d, "HH:mm")
+            win.dateText = Qt.formatDateTime(d, "dddd, d MMMM")
+            greeterClock.interval = 60000 - (Date.now() % 60000)
+        }
+    }
 
     // ══════════════════════ UI ══════════════════════
     Item {

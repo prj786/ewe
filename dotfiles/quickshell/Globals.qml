@@ -2,10 +2,20 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import Quickshell.Services.UPower
 
 // Globals — shared, instant shell state (no IPC round-trip for in-shell toggles).
 QtObject {
     id: g
+
+    // ── power state — the hook every battery-aware behaviour hangs off ─────────
+    // On this hardware (Lunar Lake) the display controller can stop reading from
+    // memory entirely while the screen is static (Panel Self Refresh), so a timer
+    // that wakes for nothing is not free — it costs real battery. Anything that
+    // can be lazier on battery reads `lowPower`.
+    readonly property bool onBattery: UPower.onBattery
+    property bool lowPowerEnabled: true
+    readonly property bool lowPower: onBattery && lowPowerEnabled
 
     // Project version — the shell's runtime copy. Keep in sync with the repo-root
     // VERSION file (the canonical source used for git tags / releases). Semver, with
@@ -130,10 +140,17 @@ QtObject {
     property Process _faceChk: Process { running: true; command: ["sh", "-c", 'test -f "$HOME/.face"']; onExited: function (code) { g.hasFace = (code === 0) } }
     function recheckFace() { g.avatarVersion++; g._faceChk.running = false; g._faceChk.running = true }
 
-    // ── CPU / memory sampling (shared by the RunCat in the bar + Quick Settings) ─
+    // ── CPU / memory sampling (the Quick Settings meters) ─────────────────────
+    // Sampled ONLY while the panel that shows it is open. This used to run at
+    // 1.5 s for the whole session, spawning three processes per tick — roughly
+    // 170k fork/exec a day — to feed two meters behind a closed panel and a
+    // RunCat widget that was deleted in 191d969.
     property real cpuUsage: 0      // 0..1
     property real memUsage: 0      // 0..1
     property var _prevCpu: null
+    // drop the baseline when we stop sampling, so the first tick after reopening
+    // doesn't compute a delta across the whole closed period
+    onQuickSettingsOpenChanged: if (!g.quickSettingsOpen) g._prevCpu = null
     property Process _statProc: Process {
         command: ["sh", "-c", "head -1 /proc/stat; echo SEP; grep -E 'MemTotal|MemAvailable' /proc/meminfo"]
         stdout: StdioCollector {
@@ -152,7 +169,12 @@ QtObject {
             }
         }
     }
-    property Timer _statTimer: Timer { interval: 1500; running: true; repeat: true; triggeredOnStart: true; onTriggered: g._statProc.running = true }
+    property Timer _statTimer: Timer {
+        interval: g.lowPower ? 3000 : 1500
+        running: g.quickSettingsOpen
+        repeat: true; triggeredOnStart: true
+        onTriggered: g._statProc.running = true
+    }
 
     property Process _pinWriter: Process {}
     property Process _pinLoad: Process {

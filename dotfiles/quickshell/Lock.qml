@@ -42,7 +42,15 @@ Scope {
         function toggle(): void { lock.locked = !lock.locked }
     }
 
-    Timer { interval: 1000; running: lock.locked; repeat: true; triggeredOnStart: true; onTriggered: root.tick() }
+    // minute-aligned — the lock clock shows "h:mm", so a 1 s tick bought nothing
+    Timer {
+        id: lockClock
+        interval: 1000; running: lock.locked; repeat: true; triggeredOnStart: true
+        onTriggered: {
+            root.tick()
+            lockClock.interval = 60000 - (Date.now() % 60000)
+        }
+    }
 
     PamContext {
         id: pam

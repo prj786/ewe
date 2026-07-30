@@ -57,28 +57,71 @@ Scope {
     // ── clock (shared, 12-hour like the old waybar) ───────────────────────
     property string clockText: ""
     function updateClock() { bar.clockText = Qt.formatDateTime(new Date(), "ddd dd MMM   hh:mm AP") }
-    Timer { interval: 1000; running: true; repeat: true; triggeredOnStart: true; onTriggered: bar.updateClock() }
+    // Tick on the minute, not every second — the format only shows minutes, so a
+    // 1 s timer was 86,400 wakeups a day for the 1,440 that change anything. Each
+    // tick re-aims at the next minute boundary, so it stays in step with the
+    // wall clock instead of drifting.
+    Timer {
+        id: clockTimer
+        interval: 1000; running: true; repeat: true; triggeredOnStart: true
+        onTriggered: {
+            bar.updateClock()
+            clockTimer.interval = 60000 - (Date.now() % 60000)
+        }
+    }
 
-    // ── nmcli polls: VPN active → Globals.vpnActive, Wi-Fi connected → wifiUp,
+    // ── network state: VPN active → Globals.vpnActive, Wi-Fi connected → wifiUp,
     //    wired (ethernet) connected → wiredUp (shown when no Wi-Fi, e.g. VMs) ──
+    //
+    // This was a 5 s timer firing FOUR processes — ~170k spawns a day, of which
+    // the wifi and wired ones ran the identical nmcli query and the keyboard one
+    // duplicated an event we already receive. `nmcli monitor` is a single
+    // long-lived process that prints a line whenever NetworkManager changes
+    // anything, so we now re-query only when the world actually moves.
     property bool wifiUp: false
     property bool wiredUp: false
     Process {
         id: vpnProc
+        running: true                     // one read at startup; nmcli monitor drives the rest
         command: ["sh", "-c", "nmcli -t -f TYPE,STATE connection show --active 2>/dev/null | awk -F: '($1 ~ /vpn|wireguard|tun/) && $2==\"activated\"{print \"yes\"; exit}'"]
         stdout: StdioCollector { onStreamFinished: Globals.vpnActive = (this.text.trim() === "yes") }
     }
+    // one query answers both wifi and wired — they used to be two identical calls
     Process {
-        id: wifiProc
-        command: ["sh", "-c", "nmcli -t -f TYPE,STATE device 2>/dev/null | awk -F: '$1==\"wifi\" && $2==\"connected\"{print \"yes\"; exit}'"]
-        stdout: StdioCollector { onStreamFinished: bar.wifiUp = (this.text.trim() === "yes") }
+        id: devProc
+        running: true
+        command: ["sh", "-c", "nmcli -t -f TYPE,STATE device 2>/dev/null | awk -F: '$2==\"connected\"{print $1}'"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                var t = "\n" + this.text.trim() + "\n"
+                bar.wifiUp = t.indexOf("\nwifi\n") >= 0
+                bar.wiredUp = t.indexOf("\nethernet\n") >= 0
+            }
+        }
     }
+    function netRefresh() {
+        vpnProc.running = false; vpnProc.running = true
+        devProc.running = false; devProc.running = true
+    }
+    // NM emits a burst of lines per transition — coalesce them into one re-query
+    Timer { id: netDebounce; interval: 400; onTriggered: bar.netRefresh() }
     Process {
-        id: wiredProc
-        command: ["sh", "-c", "nmcli -t -f TYPE,STATE device 2>/dev/null | awk -F: '$1==\"ethernet\" && $2==\"connected\"{print \"yes\"; exit}'"]
-        stdout: StdioCollector { onStreamFinished: bar.wiredUp = (this.text.trim() === "yes") }
+        id: netMon
+        running: true
+        command: ["nmcli", "monitor"]
+        stdout: SplitParser { onRead: function (line) { bar._netMonTries = 0; netDebounce.restart() } }
+        // if NetworkManager isn't running, nmcli monitor exits immediately — back
+        // off and stop rather than respawning it forever (the bug the KDE Connect
+        // bridge used to have). Any successful line resets the counter below.
+        onExited: {
+            if (bar._netMonTries >= 5) { Log.warn("bar", "nmcli monitor keeps exiting — network indicators are static"); return }
+            bar._netMonTries++
+            netMonRestart.interval = 5000 * bar._netMonTries
+            netMonRestart.restart()
+        }
     }
-    Timer { interval: 5000; running: true; repeat: true; triggeredOnStart: true; onTriggered: { vpnProc.running = true; wifiProc.running = true; wiredProc.running = true; kbProc.running = true } }
+    property int _netMonTries: 0
+    Timer { id: netMonRestart; interval: 5000; onTriggered: netMon.running = true }
 
     // ── keyboard layout indicator (US ↔ GE) ───────────────────────────────
     property string kbLayout: "US"
@@ -91,6 +134,7 @@ Scope {
     }
     Process {
         id: kbProc
+        running: true          // one read at startup — `activelayout` below is the live source
         command: ["hyprctl", "devices", "-j"]
         stdout: StdioCollector {
             onStreamFinished: {
