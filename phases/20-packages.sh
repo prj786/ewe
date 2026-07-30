@@ -109,6 +109,16 @@ phase_packages() {
         ask_yes "Build & install ${#aur[@]} AUR packages now? (compiles from source)" \
             && install_aur "${aur[@]}" || warn "skipped AUR packages"
     fi
+    # Komble — the standalone app store (pacman + AUR + AppImages). It
+    # COMPLEMENTS the shell's built-in App Store rather than replacing it: the
+    # in-shell one is a quick installer on the dock, Komble is the full browser
+    # with AppImages and an update view. Not on the AUR yet, so it is built from
+    # its own PKGBUILD; move it to packages/aur.list once it is published.
+    if ask_yes "Build & install Komble, the standalone app store? (compiles from source)"; then
+        install_git_pkgbuild komble-arch https://github.com/prj786/komble-arch.git
+    else
+        warn "skipped Komble"
+    fi
     _install_themes
     ok "package phase done"
 }

@@ -41,6 +41,38 @@ install_aur() {
     return 0
 }
 
+# install_git_pkgbuild <pkgname> <git-url> — build and install a PKGBUILD that
+# lives in a git repo rather than the AUR. Same resilience contract as
+# install_aur: it warns and returns 0 no matter what, because a first-party tool
+# failing to build must never sink a desktop install.
+#
+# This exists for our own apps that are not published to the AUR yet. Once one
+# is, drop the call here and add the package name to packages/aur.list instead —
+# paru does this better than we can.
+install_git_pkgbuild() {
+    local name="$1" url="$2" tmp=""
+    pkg_present "$name" && { ok "$name already installed"; return 0; }
+    command -v git >/dev/null 2>&1 || { warn "git missing — skipping $name"; return 0; }
+    command -v makepkg >/dev/null 2>&1 || { warn "base-devel missing — skipping $name"; return 0; }
+    if [ "${DRY_RUN:-0}" = "1" ]; then
+        printf '%s   would run:%s git clone %s && makepkg -si (%s)\n' "$C_DIM" "$C_0" "$url" "$name"
+        return 0
+    fi
+    tmp="$(mktemp -d)" || { warn "no build dir — skipping $name"; return 0; }
+    if git clone --depth 1 "$url" "$tmp/$name" >/dev/null 2>&1; then
+        # makepkg refuses to run as root and escalates only for the final install
+        if ( cd "$tmp/$name" && makepkg -si --noconfirm --needed ); then
+            ok "built and installed $name"
+        else
+            warn "$name failed to build — skipped (retry later: git clone $url && makepkg -si)"
+        fi
+    else
+        warn "could not clone $url — skipping $name"
+    fi
+    rm -rf "$tmp"
+    return 0
+}
+
 # pkg_present <pkg> — installed? (official or AUR, pacman tracks both)
 pkg_present() { pacman -Qq "$1" >/dev/null 2>&1; }
 

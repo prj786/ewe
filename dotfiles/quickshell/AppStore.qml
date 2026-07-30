@@ -26,6 +26,10 @@ Scope {
 
     // ── one background operation at a time (gated by the single password prompt) ──
     property string busyId: ""          // pkg id currently being installed/removed ("" = idle)
+    // Komble is the STANDALONE store (repos + AUR + AppImages + updates). This
+    // panel stays the quick installer on the dock; when Komble is present we
+    // offer a way through to it rather than duplicating what it does.
+    property bool kombleInstalled: false
     property string busyKind: ""        // "install" | "remove"
     property real   busyPct: -1         // 0..1 step progress (-1 = indeterminate, e.g. AUR build)
     property string busyStat: ""        // live status line parsed from pacman/paru output
@@ -215,6 +219,13 @@ Scope {
         MouseArea { anchors.fill: parent; onClicked: Globals.storeOpen = false }
 
         // small reusable spinner
+        Process {
+            id: kombleProbe
+            running: true
+            command: ["sh", "-c", "command -v komble >/dev/null && echo yes || echo no"]
+            stdout: StdioCollector { onStreamFinished: root.kombleInstalled = this.text.trim() === "yes" }
+        }
+
         component Spinner: Item {
             id: sp
             property color ring: Theme.stroke
@@ -260,6 +271,28 @@ Scope {
                     // AUR helper (paru) is provided by setup — just reflect its presence.
                     Row {
                         anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; spacing: 8
+                        // through to the full store — only when it is actually installed
+                        Item {
+                            visible: root.kombleInstalled
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: kombleLbl.implicitWidth + 16; height: 18
+                            Rectangle {
+                                anchors.fill: parent; radius: Theme.radiusPill
+                                color: kombleMa.containsMouse ? Theme.hover : "transparent"
+                            }
+                            Text {
+                                id: kombleLbl
+                                anchors.centerIn: parent
+                                text: "Open Komble ↗"
+                                color: kombleMa.containsMouse ? Theme.fg : Theme.fgDim
+                                font.family: Theme.fontText; font.pixelSize: 10; font.weight: Font.DemiBold
+                            }
+                            MouseArea {
+                                id: kombleMa
+                                anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                                onClicked: { Quickshell.execDetached(["komble"]); Globals.storeOpen = false }
+                            }
+                        }
                         // running-job chip: "1 app installing/removing" — hover names it.
                         Rectangle {
                             visible: root.busyId !== ""
