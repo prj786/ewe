@@ -123,6 +123,24 @@ Scope {
     property int _netMonTries: 0
     Timer { id: netMonRestart; interval: 5000; onTriggered: netMon.running = true }
 
+    // Driven by the wake sequence in Resume.qml — see the ordering rationale
+    // there. Both timers are re-aimed by assigning `interval` (which restarts a
+    // running Timer's countdown) rather than restart(), which would assign
+    // `running` imperatively and break its declarative binding.
+    Connections {
+        target: Resume
+        function onResyncTime() {
+            bar.updateClock()
+            clockTimer.interval = 60000 - (Date.now() % 60000)
+        }
+        function onResyncNetwork() {
+            // nmcli monitor usually dies with the link it was watching
+            bar._netMonTries = 0
+            if (!netMon.running) netMon.running = true
+            bar.netRefresh()
+        }
+    }
+
     // ── keyboard layout indicator (US ↔ GE) ───────────────────────────────
     property string kbLayout: "US"
     property string kbDevice: ""

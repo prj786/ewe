@@ -60,4 +60,12 @@ Scope {
     onPctChanged: evaluate()
     onDischargingChanged: evaluate()
     Component.onCompleted: evaluate()
+
+    // Suspend still drains, and the charger may have been plugged or unplugged
+    // while we were down — so the thresholds have to be re-checked on wake even
+    // if UPower's own properties happen not to change afterwards.
+    Connections {
+        target: Resume
+        function onResyncPower() { root.evaluate() }
+    }
 }

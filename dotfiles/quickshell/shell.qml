@@ -12,7 +12,9 @@ ShellRoot {
     // from login, not from the first time Settings → Displays is opened.
     // Logind owns the sleep delay inhibitor, so it must be up from login too —
     // a suspend that happens before anything touches it would not be locked.
-    Scope { Component.onCompleted: { HyprMon.start(); Logind.start() } }
+    // Resume hangs off Logind's wake signal and must be armed before the first
+    // suspend, not after it.
+    Scope { Component.onCompleted: { HyprMon.start(); Logind.start(); Resume.start() } }
 
     Notifications {}
     Bar {}

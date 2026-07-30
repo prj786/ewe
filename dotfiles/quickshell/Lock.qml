@@ -64,6 +64,15 @@ Scope {
     readonly property bool locked: lock.locked
     onLockedChanged: Logind.setLockedHint(root.locked)
 
+    // The lock clock's Timer was frozen mid-tick through the suspend, so the
+    // displayed minute is stale on wake — which is the first thing you look at.
+    // Just re-tick: the timer re-aims itself on its next fire, and restart()
+    // here would break `running: lock.locked`.
+    Connections {
+        target: Resume
+        function onResyncTime() { root.tick() }
+    }
+
     // minute-aligned — the lock clock shows "h:mm", so a 1 s tick bought nothing
     Timer {
         id: lockClock

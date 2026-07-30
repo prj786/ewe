@@ -62,6 +62,31 @@ QtObject {
     property int _probeRetries: 0
     property Timer _probeRetry: Timer { onTriggered: { if (!goo.signedIn) goo.refresh() } }
 
+    // Called by Resume, not by a timer. After a multi-hour suspend every access
+    // token is expired and ensureToken's 60s skew check cannot help — the cached
+    // token is simply stale. Drop it and force one refresh up front, so the
+    // calendar and mail come back on their own instead of the next poll
+    // discovering the expiry by failing a request.
+    function refreshAfterResume() {
+        if (!goo.configured) return
+        goo._accessToken = ""
+        goo._expiresAt = 0
+        if (!goo.signedIn) {
+            // the boot probe gives up after 3 tries and never re-arms, so a
+            // keyring that was locked at login leaves the shell believing it is
+            // signed out forever — a wake is a fair moment to try again
+            goo._probeRetries = 0
+            goo.refresh()
+            return
+        }
+        goo.ensureToken(function (tok) {
+            if (tok === "") { Log.warn("google", "resume: token refresh failed — services keep their own retries"); return }
+            goo.fetchCalendar()
+            goo.fetchMail()
+            goo.checkCloud()
+        })
+    }
+
     // ── sign in / out ──────────────────────────────────────────────────────────
     function signIn() {
         if (goo.busy === "signin" || !goo.configured) return

@@ -94,6 +94,29 @@ QtObject {
     property Timer _restart: Timer { interval: 5000; onTriggered: { kc._bridge.running = true } }
     function send(o) { if (kc._bridge.running) kc._bridge.write(JSON.stringify(o) + "\n") }
 
+    // A bridge whose bus connection died does NOT exit: every D-Bus call raises,
+    // the handlers swallow it, and it sits there with bridgeUp still true,
+    // serving a frozen device list, while onExited never fires so nothing
+    // respawns it. A suspend is exactly when that happens. So ask it to speak,
+    // and recycle it if it doesn't — `refresh` always answers with a devices
+    // event, even when kdeconnectd itself is gone.
+    property bool _probePending: false
+    property Timer _probeT: Timer {
+        interval: 4000
+        onTriggered: {
+            if (!kc._probePending) return
+            kc._probePending = false
+            Log.warn("kdeconnect", "bridge did not answer a probe — recycling it")
+            kc._bridge.running = false      // onExited schedules the respawn
+        }
+    }
+    function probeLiveness() {
+        if (!kc.bridgeUp || kc.bridgeFailed) return
+        kc._probePending = true
+        kc._probeT.restart()
+        kc.send({ cmd: "refresh" })
+    }
+
     // manual recovery after a terminal failure (install the deps, then retry)
     function retryBridge() {
         kc.bridgeFailed = false; kc.bridgeError = ""; kc._restarts = 0
@@ -105,6 +128,9 @@ QtObject {
     function _onEvent(line) {
         var e
         try { e = JSON.parse(line) } catch (err) { return }
+        // anything at all arriving proves the bridge is still alive
+        kc._probePending = false
+        kc._probeT.stop()
         switch (e.event) {
         case "hello":
             kc.bridgeUp = true
