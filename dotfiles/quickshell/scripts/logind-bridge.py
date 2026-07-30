@@ -81,6 +81,12 @@ class Bridge:
     def __init__(self):
         DBusGMainLoop(set_as_default=True)
         self.bus = dbus.SystemBus()          # login1 lives on the SYSTEM bus
+        # a second, optional connection purely to ask who owns
+        # org.freedesktop.ScreenSaver — see screensaver_owner()
+        try:
+            self.session_bus = dbus.SessionBus()
+        except dbus.DBusException:
+            self.session_bus = None
         self.loop = GLib.MainLoop()
         self.fd = None                       # the delay inhibitor
         self.release_timer = None
@@ -306,6 +312,8 @@ class Bridge:
             self.session().SetIdleHint(dbus.Boolean(bool(c.get("value", False))))
         elif cmd == "lockSession":
             self.session().Lock()
+        elif cmd == "listInhibitors":
+            self.push_inhibitors()
         elif cmd == "refresh":
             self.push_hello()
 
@@ -327,6 +335,43 @@ class Bridge:
         emit({"event": "brightness",
               "backlight": self.device_state(self.backlight),
               "kbd": self.device_state(self.kbd)})
+
+    # ── who is keeping this machine awake ───────────────────────────────────
+    def screensaver_owner(self):
+        """The process owning org.freedesktop.ScreenSaver, if any.
+
+        We deliberately do NOT own this name ourselves: hypridle implements it
+        (that is what `ignore_dbus_inhibit = false` honours), and two owners
+        would fight over it. Reporting who holds it tells the user whether app
+        inhibits — "don't blank, I'm playing a video" — are being heard at all."""
+        if not self.session_bus:
+            return ""
+        try:
+            d = dbus.Interface(
+                self.session_bus.get_object("org.freedesktop.DBus", "/org/freedesktop/DBus"),
+                "org.freedesktop.DBus")
+            if not bool(d.NameHasOwner("org.freedesktop.ScreenSaver")):
+                return ""
+            pid = int(d.GetConnectionUnixProcessID(str(d.GetNameOwner("org.freedesktop.ScreenSaver"))))
+            try:
+                with open("/proc/%d/comm" % pid) as f:
+                    return f.read().strip()
+            except OSError:
+                return "pid %d" % pid
+        except dbus.DBusException:
+            return ""
+
+    def push_inhibitors(self):
+        out = []
+        try:
+            for it in self.manager().ListInhibitors():
+                what, who, why, mode, uid, pid = [plain(x) for x in it]
+                out.append({"what": what, "who": who, "why": why,
+                            "mode": mode, "uid": uid, "pid": pid})
+        except dbus.DBusException as e:
+            emit({"event": "error", "cmd": "listInhibitors", "error": e.get_dbus_message()})
+            return
+        emit({"event": "inhibitors", "list": out, "screensaver": self.screensaver_owner()})
 
     def push_hello(self):
         locked, idle = False, False

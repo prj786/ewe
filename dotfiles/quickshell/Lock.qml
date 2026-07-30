@@ -62,7 +62,10 @@ Scope {
     // one source of truth for "is the screen locked": mirror it onto the session
     // so loginctl and anything else on the system agree with us
     readonly property bool locked: lock.locked
-    onLockedChanged: Logind.setLockedHint(root.locked)
+    onLockedChanged: {
+        Logind.setLockedHint(root.locked)
+        if (root.locked) Globals.saverDimming = false   // the lock replaces the dim
+    }
 
     // The lock clock's Timer was frozen mid-tick through the suspend, so the
     // displayed minute is stale on wake — which is the first thing you look at.

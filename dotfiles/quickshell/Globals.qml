@@ -80,6 +80,11 @@ QtObject {
     property bool saverLock: false          // true → idle goes straight to the session lock
     property int  saverLockAfterMin: 5      // saver mode: lock N min after the saver starts (0 = never)
     property bool saverActive: false        // runtime only: the overlay is currently shown
+    // runtime only: the pre-lock dim is showing. This is the grace period made
+    // visible — the screen fades down a little before anything irreversible
+    // happens, so "it's about to lock" is something you can see and cancel by
+    // moving, rather than something you discover afterwards.
+    property bool saverDimming: false
 
     // ── Dock popups ────────────────────────────────────────────────────────────
     property bool launcherOpen: false       // pinned-apps / launcher panel

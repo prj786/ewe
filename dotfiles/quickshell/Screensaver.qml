@@ -17,9 +17,42 @@ Scope {
     IpcHandler {
         target: "saver"
         // gate on the setting so a stale hypridle config can't flash the saver
-        function show(): void { if (Globals.saverEnabled && !Globals.saverLock) Globals.saverActive = true }
-        function hide(): void { Globals.saverActive = false }
+        function show(): void { Globals.saverDimming = false; if (Globals.saverEnabled && !Globals.saverLock) Globals.saverActive = true }
+        function hide(): void { Globals.saverActive = false; Globals.saverDimming = false }
         function toggle(): void { Globals.saverActive = !Globals.saverActive }
+        // the grace period: hypridle fires this shortly before the first
+        // irreversible stage, and fires undim the moment you touch anything
+        function dim(): void { Globals.saverDimming = true }
+        function undim(): void { Globals.saverDimming = false }
+    }
+
+    // ── pre-lock dim ─────────────────────────────────────────────────────────
+    // Click-through by design: this must never swallow the very input meant to
+    // cancel it. hypridle's on-resume is what clears it — the overlay is purely
+    // something to look at. Fades in slowly enough to read as a warning, out
+    // quickly enough to feel like a wake.
+    Variants {
+        model: Quickshell.screens
+        PanelWindow {
+            required property var modelData
+            screen: modelData
+            visible: Globals.saverDimming || dimRect.opacity > 0.01
+            color: "transparent"
+            exclusionMode: ExclusionMode.Ignore
+            mask: Region {}
+            WlrLayershell.namespace: "quickshell:saver-dim"
+            WlrLayershell.layer: WlrLayer.Overlay
+            anchors { top: true; bottom: true; left: true; right: true }
+            Rectangle {
+                id: dimRect
+                anchors.fill: parent
+                color: "black"
+                opacity: Globals.saverDimming ? 0.55 : 0
+                Behavior on opacity {
+                    NumberAnimation { duration: Globals.saverDimming ? 1500 : Theme.durBase; easing.type: Easing.OutCubic }
+                }
+            }
+        }
     }
 
     // Auto idle-inhibit: playing media or a fullscreen focused window holds a

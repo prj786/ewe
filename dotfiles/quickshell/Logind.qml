@@ -37,6 +37,12 @@ QtObject {
     property bool idleHint: false
     property bool preparingForSleep: false
 
+    // who is holding the machine awake — [{what,who,why,mode,uid,pid}]. We do
+    // not own org.freedesktop.ScreenSaver ourselves (hypridle does); this is
+    // visibility, which is the part that was missing.
+    property var inhibitors: []
+    property string screensaverOwner: ""
+
     // { name, max, value, percent } — null when the machine has no such device
     property var backlight: null
     property var kbdBacklight: null
@@ -143,6 +149,10 @@ QtObject {
             ld.backlight = e.backlight || null
             ld.kbdBacklight = e.kbd || null
             break
+        case "inhibitors":
+            ld.inhibitors = e.list || []
+            ld.screensaverOwner = e.screensaver || ""
+            break
         case "fatal":
             ld.bridgeFailed = true
             ld.bridgeError = e.error || "logind bridge unavailable"
@@ -177,6 +187,20 @@ QtObject {
         return true
     }
     function refreshBrightness() { if (ld.bridgeUp) ld.send({ cmd: "getBrightness" }) }
+    function refreshInhibitors() { if (ld.bridgeUp) ld.send({ cmd: "listInhibitors" }) }
+
+    // only the ones that actually block idle/sleep, and only this user's —
+    // the list is full of housekeeping delay inhibitors nobody wants to read
+    function blockingInhibitors() {
+        var out = []
+        for (var i = 0; i < ld.inhibitors.length; i++) {
+            var h = ld.inhibitors[i]
+            if (String(h.mode) !== "block") continue
+            if (String(h.what).indexOf("idle") < 0 && String(h.what).indexOf("sleep") < 0) continue
+            out.push(h)
+        }
+        return out
+    }
 
     // Keyboard backlight in raw steps (0..max — 0-3 on this ASUS hardware), not
     // percent: there are so few levels that rounding a percentage back to a step
