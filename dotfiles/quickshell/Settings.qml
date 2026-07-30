@@ -51,6 +51,7 @@ Scope {
         else if (k === "layout") layoutProc.running = true
         else if (k === "wallpaper") { wpBackendProbe.running = true; wpConfLoad.running = true; HyprMon.refresh(); if (root.wpDir === "") wpDirProbe.running = true; else root.wpList(root.wpDir) }
         else if (k === "saver") { saverToolProbe.running = false; saverToolProbe.running = true }
+        else if (k === "power") { Power.refresh(); Logind.refreshBrightness() }
         else if (k === "startup") { saLoad.running = false; saLoad.running = true }
         else if (k === "user") { Globals.recheckFace(); userInfoProbe.running = false; userInfoProbe.running = true; Google.refresh(); Accounts.refresh() }
     }
@@ -2221,6 +2222,68 @@ Scope {
                     Text { width: parent.width
                            text: "With the laptop alone, closing the lid always suspends. The session is locked on the way down through a logind delay inhibitor, so the lock is up before the machine sleeps rather than racing it."
                            color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
+
+                    SectionTitle { text: "BATTERY" }
+                    Card {
+                        KV { k: "Charge"; v: Power.capacity >= 0 ? Power.capacity + "%  ·  " + Power.remainingText() : "—" }
+                        KV { k: "Health"; v: Power.healthText() }
+                        Rectangle { visible: Power.hasChargeLimit; width: parent.width; height: 1; color: Theme.stroke; opacity: 0.5 }
+                        DropRow {
+                            visible: Power.hasChargeLimit && Power.chargeLimitWritable
+                            label: "Charge ceiling"; ddId: "chg-limit"; buttonWidth: 120
+                            options: [{ label: "60%  (longest life)", value: 60 },
+                                      { label: "80%  (balanced)", value: 80 },
+                                      { label: "100%  (full capacity)", value: 100 }]
+                            value: Power.chargeLimit
+                            onPicked: function (v) { Power.setChargeLimit(v) }
+                        }
+                        // present but root-only: say why rather than offering a
+                        // control that would silently write into the void
+                        Text {
+                            visible: Power.hasChargeLimit && !Power.chargeLimitWritable
+                            width: parent.width; wrapMode: Text.Wrap
+                            text: "Charge ceiling is " + Power.chargeLimit + "%, but this attribute is root-only here. Re-run install.sh to add the udev rule, or manage it with asusctl."
+                            color: Theme.warning; font.family: Theme.fontText; font.pixelSize: 11
+                        }
+                        Text {
+                            visible: !Power.hasChargeLimit
+                            width: parent.width; wrapMode: Text.Wrap
+                            text: "This machine's battery exposes no charge-ceiling control."
+                            color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11
+                        }
+                    }
+
+                    SectionTitle { visible: Logind.hasKbdBacklight; text: "KEYBOARD BACKLIGHT" }
+                    Card {
+                        visible: Logind.hasKbdBacklight
+                        DropRow {
+                            label: "Level"; ddId: "kbd-bl"; buttonWidth: 120
+                            options: [{ label: "Off", value: 0 }, { label: "Low", value: 1 },
+                                      { label: "Medium", value: 2 }, { label: "High", value: 3 }]
+                            value: Logind.hasKbdBacklight ? Logind.kbdBacklight.value : 0
+                            onPicked: function (v) { Logind.setKbdStep(v) }
+                        }
+                        KV { k: "Hotkeys"; v: "the keyboard-backlight keys step this too" }
+                    }
+
+                    SectionTitle { text: "PERFORMANCE" }
+                    Card {
+                        KV { k: "Profile daemon"; v: Power.ppdRunning ? "power-profiles-daemon" : "none — using " + (Power.platformProfile !== "" ? "the firmware profile" : "kernel defaults") }
+                        KV { visible: !Power.ppdRunning && Power.platformProfile !== ""
+                             k: "Firmware profile"; v: Power.platformProfile + (Power.platformChoices.length ? "  (" + Power.platformChoices.join(" · ") + ")" : "") }
+                        Text {
+                            visible: Power.degraded
+                            width: parent.width; wrapMode: Text.Wrap
+                            text: "Performance is being held back: " + Power.degradedReason + "."
+                            color: Theme.warning; font.family: Theme.fontText; font.pixelSize: 11
+                        }
+                        Text {
+                            visible: !Power.degraded && Power.ppdRunning
+                            width: parent.width
+                            text: "Not thermally limited. Switch profiles from Quick Settings."
+                            color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11
+                        }
+                    }
 
                     SectionTitle { text: "ON BATTERY" }
                     Card {

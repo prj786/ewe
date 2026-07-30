@@ -72,6 +72,7 @@ QtObject {
         //    we were down, and brightness may have been changed by firmware.
         Log.info("resume", "2/6 power + brightness")
         Logind.refreshBrightness()
+        Power.refresh()
         rs.resyncPower()
 
         // 3. displays — the dock state can have changed while asleep, which no

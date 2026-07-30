@@ -128,6 +128,20 @@ phase_services() {
     # logind only reads its config at start; a restart is session-safe on systemd ≥ 254
     sudo_run systemctl restart systemd-logind || warn "could not restart systemd-logind — lid config applies after reboot"
 
+    # ── Battery charge ceiling: hand that ONE sysfs attribute to the wheel
+    # group so Settings → Power can set it without a root prompt. Skipped on
+    # machines whose battery has no such attribute (desktops, most non-ASUS).
+    if compgen -G "/sys/class/power_supply/BAT*/charge_control_end_threshold" >/dev/null 2>&1; then
+        sudo_run install -d /etc/udev/rules.d
+        sudo_run install -m 644 "$DOTREPO/system/udev/99-hypr-shell-charge-threshold.rules" \
+            /etc/udev/rules.d/99-hypr-shell-charge-threshold.rules \
+            && ok "installed udev rule (battery charge ceiling settable from Settings)"
+        sudo_run udevadm control --reload || warn "udevadm reload failed — the charge ceiling applies after reboot"
+        sudo_run udevadm trigger --subsystem-match=power_supply || true
+    else
+        ok "no battery charge-ceiling attribute on this machine — skipping the udev rule"
+    fi
+
     # ── plocate index for the launcher's file search (Super+D → files) ──
     if pkg_present plocate; then
         _enable_system plocate-updatedb.timer

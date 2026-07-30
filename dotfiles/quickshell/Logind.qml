@@ -178,6 +178,26 @@ QtObject {
     }
     function refreshBrightness() { if (ld.bridgeUp) ld.send({ cmd: "getBrightness" }) }
 
+    // Keyboard backlight in raw steps (0..max — 0-3 on this ASUS hardware), not
+    // percent: there are so few levels that rounding a percentage back to a step
+    // makes the hotkeys feel like they skip.
+    function setKbdStep(n) {
+        if (!ld.bridgeUp || !ld.hasKbdBacklight) return
+        var mx = ld.kbdBacklight.max || 1
+        ld.send({ cmd: "setBrightness", device: "kbd", value: Math.max(0, Math.min(mx, Math.round(n))) })
+    }
+    function stepKbd(delta) {
+        if (!ld.hasKbdBacklight) return
+        ld.setKbdStep((ld.kbdBacklight.value || 0) + delta)
+    }
+
+    // hyprland.lua binds the XF86Kbd* keys to these
+    property IpcHandler _ipc: IpcHandler {
+        target: "power"
+        function kbdUp(): void { ld.stepKbd(1) }
+        function kbdDown(): void { ld.stepKbd(-1) }
+    }
+
     // Mirror the shell's lock state onto the session so `loginctl` and anything
     // else on the system agrees with us about whether the screen is locked.
     function setLockedHint(v) { if (ld.bridgeUp) ld.send({ cmd: "setLockedHint", value: !!v }) }

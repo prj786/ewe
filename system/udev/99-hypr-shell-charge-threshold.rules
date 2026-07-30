@@ -1,0 +1,20 @@
+# Battery charge ceiling — hand this ONE sysfs attribute to the wheel group so
+# Settings → Power can set it without a root prompt or a setuid helper.
+#
+# The kernel exposes charge_control_end_threshold read-only to non-root. The
+# alternatives are worse: a polkit helper is a whole privileged binary to review,
+# and prompting for a password every time you nudge a battery limit is the kind
+# of friction that makes people run the shell as root instead.
+#
+# Scope is deliberately narrow — one attribute, one subsystem, no RUN+= scripts
+# beyond the two chmod/chgrp calls, and nothing here grants power over anything
+# else on the device. Worst case a member of wheel changes their own laptop's
+# charge limit, which they can already do with sudo.
+#
+# On hardware where asusd (asusctl) is running, that daemon owns the same
+# attribute and this rule is simply redundant.
+#
+# Installed by phases/30-services.sh. Remove the file and re-run
+# `udevadm control --reload && udevadm trigger` to revert.
+
+ACTION=="add|change", SUBSYSTEM=="power_supply", KERNEL=="BAT*", TEST=="charge_control_end_threshold", RUN+="/usr/bin/chgrp wheel /sys%p/charge_control_end_threshold", RUN+="/usr/bin/chmod 0664 /sys%p/charge_control_end_threshold"
