@@ -89,6 +89,38 @@ phase_postcheck() {
         _note "dev: toolchain not installed (opt-in — re-run with --dev)"
     fi
 
+    # ── Laptop hardening (0.4.x). Only meaningful on a laptop, and every item is
+    # something a user would otherwise discover missing days later — a lid that
+    # suspends when docked, a charge ceiling that silently refuses to write, a
+    # keyboard backlight key that does nothing.
+    if [ "$CHASSIS" = "laptop" ]; then
+        echo
+        _check "laptop: logind lid drop-in installed"  test -r /etc/systemd/logind.conf.d/10-hypr-shell-lid.conf
+        _check "laptop: panel backlight present"       sh -c 'ls /sys/class/backlight/*/brightness >/dev/null 2>&1'
+        # The bridge is what locks BEFORE suspend and makes loginctl lock-session
+        # work; without it those silently do nothing.
+        _check "laptop: logind bridge script"          test -r "$HOME/.config/quickshell/scripts/logind-bridge.py"
+        _check "laptop: python D-Bus deps for it"      sh -c 'python3 -c "import dbus, gi" 2>/dev/null'
+
+        if ls /sys/class/power_supply/BAT*/charge_control_end_threshold >/dev/null 2>&1; then
+            # Present-but-root-only is the normal state WITHOUT the udev rule, and
+            # is exactly the case worth reporting: Settings hides the control and
+            # the user is left wondering where it went.
+            _check "laptop: charge ceiling writable"   sh -c 'test -w /sys/class/power_supply/BAT*/charge_control_end_threshold'
+        else
+            _note "laptop: no battery charge-ceiling control on this hardware"
+        fi
+
+        if ls /sys/class/leds/*kbd_backlight >/dev/null 2>&1; then
+            _check "laptop: keyboard backlight"        sh -c 'ls /sys/class/leds/*kbd_backlight/max_brightness >/dev/null 2>&1'
+        else
+            _note "laptop: no keyboard backlight on this hardware"
+        fi
+
+        _check "laptop: hypridle (idle timing)"        sh -c 'command -v hypridle'
+        _check "laptop: checkupdates (safe updates)"   sh -c 'command -v checkupdates'
+    fi
+
     echo
     info "manual: Firefox → about:support → Compositing = 'WebRender'; play a video and watch \`intel_gpu_top\` Video engine."
     ok "verification done"

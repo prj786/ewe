@@ -69,7 +69,10 @@ QtObject {
     property string colorScheme: "dark"
     property Process _csApply: Process {}
     function applyColorScheme() {
-        var acc = String(g.accentColor).replace("#", "")
+        // Theme.accent, not accentColor: under Ambiance the effective accent is
+        // forced to Ubuntu orange, and GTK/Qt apps must match the shell rather
+        // than the hue stored for the Graphite look.
+        var acc = String(Theme.accent).replace("#", "")
         g._csApply.command = ["sh", "-c", "\"$HOME/.config/quickshell/scripts/colorscheme.sh\" " + g.colorScheme + " " + acc]
         g._csApply.running = false; g._csApply.running = true
     }

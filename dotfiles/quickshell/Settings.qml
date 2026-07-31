@@ -105,7 +105,7 @@ Scope {
         var gen = "hl.config({ general = { gaps_in = " + root.gapsIn
                 + ", gaps_out = " + root.gapsOut + ", border_size = " + root.borderSize
         if (Globals.tintBorders)
-            gen += ", col = { active_border = \"rgba(" + root.hex6(Globals.accentColor) + "ff)\" }"
+            gen += ", col = { active_border = \"rgba(" + root.hex6(Theme.accent) + "ff)\" }"
         gen += " } })\n"
         s += gen
         s += "hl.config({ decoration = { rounding = " + root.rounding + " } })\n"
@@ -286,7 +286,7 @@ Scope {
     // re-apply the GTK/Qt/KDE appearance (scheme + accent) to external apps
     function applyAppColors() {
         Quickshell.execDetached(["sh", "-c", "\"" + root.home + "/.config/quickshell/scripts/colorscheme.sh\" "
-            + Globals.colorScheme + " " + String(Globals.accentColor).replace("#", "")])
+            + Globals.colorScheme + " " + String(Theme.accent).replace("#", "")])
     }
     // light/dark for external GTK + Qt apps (the shell itself is always dark)
     function setColorScheme(mode) {
@@ -297,7 +297,7 @@ Scope {
     function applyBorder() {
         if (Globals.tintBorders)
             Quickshell.execDetached(["hyprctl", "eval",
-                "hl.config({ general = { col = { active_border = \"rgba(" + root.hex6(Globals.accentColor) + "ff)\" } } })"])
+                "hl.config({ general = { col = { active_border = \"rgba(" + root.hex6(Theme.accent) + "ff)\" } } })"])
         root.writeOverrides()
     }
 
@@ -1989,7 +1989,16 @@ Scope {
                             options: [{ label: "Graphite", value: "graphite" },
                                       { label: "Ambiance (Unity)", value: "ambiance" }]
                             value: Globals.themeName
-                            onPicked: function (v) { Globals.themeName = v; root.writePrefs() }
+                            onPicked: function (v) {
+                                Globals.themeName = v
+                                root.writePrefs()
+                                // The effective accent changes with the look (Ambiance
+                                // forces Ubuntu orange), so the things OUTSIDE the shell
+                                // that follow it have to be re-applied: GTK/Qt via
+                                // colorscheme.sh, and Hyprland's window border.
+                                Globals.applyColorScheme()
+                                root.applyBorder()
+                            }
                         }
                         Text {
                             width: parent.width; wrapMode: Text.Wrap
