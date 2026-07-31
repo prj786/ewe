@@ -51,10 +51,10 @@ deploy_dotfiles() {
     seed_state
     link_tree "$DOTREPO/dotfiles/hypr"       "$HOME/.config/hypr"
     link_tree "$DOTREPO/dotfiles/quickshell" "$HOME/.config/quickshell"
-    # dev environment: Fresh IDE, kitty, tmux, mise (all themed to the DE palette)
+    # dev environment: Fresh IDE, kitty, oh-my-posh, mise (themed to the DE palette)
     link_tree "$DOTREPO/dotfiles/fresh"      "$HOME/.config/fresh"
     link_tree "$DOTREPO/dotfiles/kitty"      "$HOME/.config/kitty"
-    link_tree "$DOTREPO/dotfiles/tmux"       "$HOME/.config/tmux"
+    link_tree "$DOTREPO/dotfiles/oh-my-posh" "$HOME/.config/oh-my-posh"
     link_tree "$DOTREPO/dotfiles/mise"       "$HOME/.config/mise"
 
     # systemd user units (portal-activation target + the shell respawn service)

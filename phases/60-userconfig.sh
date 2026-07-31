@@ -174,6 +174,36 @@ phase_userconfig() {
         warn "mise not installed — Node toolchain not provisioned (install mise, then 'mise install')."
     fi
 
+    # ── prompt: oh-my-posh, themed to match the shell ────────────────────────
+    # The snippet picks its theme by reading themeName out of user-theme.json, so
+    # switching look in Settings → Theme carries into the next shell with no
+    # extra wiring. Written once and guarded by a grep so re-running the
+    # installer never duplicates it.
+    if command -v oh-my-posh >/dev/null 2>&1; then
+        local rcf sh_name
+        for rcf in "$HOME/.bashrc" "$HOME/.zshrc"; do
+            [ -e "$rcf" ] || continue
+            grep -q 'oh-my-posh init' "$rcf" 2>/dev/null && continue
+            sh_name="$(basename "$rcf" | sed 's/^\.//; s/rc$//')"
+            info "adding the oh-my-posh prompt to $(basename "$rcf")"
+            if [ "${DRY_RUN:-0}" != "1" ]; then
+                cat >> "$rcf" <<RC
+
+# hypr-shell: oh-my-posh prompt (theme follows Settings → Theme)
+if command -v oh-my-posh >/dev/null 2>&1; then
+    _hs_omp=graphite
+    grep -q '"themeName"[[:space:]]*:[[:space:]]*"ambiance"' \
+        "\$HOME/.config/quickshell/user-theme.json" 2>/dev/null && _hs_omp=ambiance
+    eval "\$(oh-my-posh init $sh_name --config "\$HOME/.config/oh-my-posh/\$_hs_omp.omp.json")"
+    unset _hs_omp
+fi
+RC
+            fi
+        done
+    else
+        warn "oh-my-posh not installed — prompt left as-is (install it, then re-run)."
+    fi
+
     # zram (laptop benefit). Ship a sane generator config if none exists.
     if [ "$CHASSIS" = "laptop" ] && [ ! -e /etc/systemd/zram-generator.conf ]; then
         info "writing /etc/systemd/zram-generator.conf (zstd, capped at 8G)"

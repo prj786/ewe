@@ -8,7 +8,7 @@ on save). Ported from the old Qtile bindings so most muscle memory carries over.
 
 | Shortcut | Action | Program |
 |---|---|---|
-| `Super` + `Return` | Terminal (auto-attaches themed tmux) | `kitty` |
+| `Super` + `Return` | Terminal | `kitty` |
 | `Super` + `D` | **Launcher** — fuzzy app / file search (press again to close) | Quickshell |
 | `Super` + `E` | File manager | `nemo` |
 | `Super` + `B` | Web browser | default browser (Settings → Default Apps) |

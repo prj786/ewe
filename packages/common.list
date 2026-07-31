@@ -60,11 +60,10 @@ blueman
 power-profiles-daemon
 upower                  # battery/AC state for the bar, control centre and display re-asserts
 
-# ── terminal (single, fast, GPU-accelerated) + multiplexer ───────────────────
-# kitty is the one terminal (foot/ghostty dropped). It auto-attaches a themed
-# tmux session — see dotfiles/kitty/kitty.conf + dotfiles/tmux/tmux.conf.
+# ── terminal (single, fast, GPU-accelerated) ─────────────────────────────────
+# kitty is the one terminal (foot/ghostty dropped). No multiplexer: the prompt
+# is oh-my-posh (packages/aur.list) and Hyprland already does windows/workspaces.
 kitty
-tmux
 
 # ── file manager + utility apps = traditional GTK (NOT libadwaita) ────────────
 #    Nemo/Engrampa/Zathura use a normal menubar/toolbar + server-side decorations,

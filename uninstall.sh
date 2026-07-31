@@ -27,7 +27,7 @@ restore "$HOME/.config/hypr"
 restore "$HOME/.config/quickshell"
 restore "$HOME/.config/fresh"
 restore "$HOME/.config/kitty"
-restore "$HOME/.config/tmux"
+restore "$HOME/.config/oh-my-posh"
 restore "$HOME/.config/mise"
 
 # the Fresh launcher we copied into the user apps dir

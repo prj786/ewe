@@ -535,19 +535,29 @@ Scope {
                             // Wired / ethernet (shown when a wired link is up and
                             // Wi-Fi isn't — the common case in VMs and on docks)
                             Text {
-                                visible: bar.wiredUp && !bar.wifiUp
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: Theme.icEthernet        // mdi-ethernet
                                 font.family: Theme.fontMono; font.pixelSize: 13
                                 color: Theme.fgSecondary
+                                visible: !Theme.ambiance && bar.wiredUp && !bar.wifiUp
+                            }
+                            UnityIcon {
+                                visible: Theme.ambiance && bar.wiredUp && !bar.wifiUp
+                                anchors.verticalCenter: parent.verticalCenter
+                                kind: "wired"; tint: Theme.fgSecondary
                             }
                             // Wi-Fi (only when connected)
                             Text {
-                                visible: bar.wifiUp
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: Theme.icWifi
                                 font.family: Theme.fontMono; font.pixelSize: 13
                                 color: Theme.fgSecondary
+                                visible: !Theme.ambiance && bar.wifiUp
+                            }
+                            UnityIcon {
+                                visible: Theme.ambiance && bar.wifiUp
+                                anchors.verticalCenter: parent.verticalCenter
+                                kind: "wifi"; tint: Theme.fgSecondary
                             }
                             // Bluetooth (only when adapter on); blue when a device is connected
                             Text {
@@ -558,19 +568,37 @@ Scope {
                                     for (var i = 0; i < d.length; i++) if (d[i].connected) n++
                                     return n
                                 }
-                                visible: adapter && adapter.enabled
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: conn > 0 ? Theme.icBluetoothOn : Theme.icBluetooth
                                 font.family: Theme.fontMono; font.pixelSize: 13
                                 color: conn > 0 ? Theme.accent : Theme.fgSecondary
+                                visible: !Theme.ambiance && adapter && adapter.enabled
+                            }
+                            UnityIcon {
+                                property var adapter2: Bluetooth.defaultAdapter
+                                property int conn2: {
+                                    if (!Bluetooth.devices) return 0
+                                    var d = Bluetooth.devices.values, n = 0
+                                    for (var i = 0; i < d.length; i++) if (d[i].connected) n++
+                                    return n
+                                }
+                                visible: Theme.ambiance && adapter2 && adapter2.enabled
+                                anchors.verticalCenter: parent.verticalCenter
+                                kind: "bluetooth"
+                                tint: conn2 > 0 ? Theme.accent : Theme.fgSecondary
                             }
                             // VPN (only when active) — key glyph, accent colour
                             Text {
-                                visible: Globals.vpnActive
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: Theme.icVpn
                                 font.family: Theme.fontMono; font.pixelSize: 14
                                 color: Theme.accent
+                                visible: !Theme.ambiance && Globals.vpnActive
+                            }
+                            UnityIcon {
+                                visible: Theme.ambiance && Globals.vpnActive
+                                anchors.verticalCenter: parent.verticalCenter
+                                kind: "vpn"; tint: Theme.accent
                             }
                             // SSH tunnel (only when one of the Quick Settings
                             // port-forward tunnels is up) — console glyph, accent

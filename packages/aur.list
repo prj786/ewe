@@ -5,6 +5,7 @@
 # No theme-settings GUI here (e.g. nwg-look): theme/icon/cursor/accent are owned
 # end-to-end by the Quickshell Settings app (scripts/colorscheme.sh writes the
 # GTK/Qt/KDE config). One place to manage everything — no extra app.
+oh-my-posh-bin             # shell prompt engine; themes in dotfiles/oh-my-posh/
 gpu-screen-recorder        # GPU-encoded screen capture + replay buffer (VAAPI/NVENC)
 fresh-editor-bin           # Fresh — terminal IDE (default editor). PREBUILT x86_64 binary (no
                            # ~500-crate source compile). For aarch64/other arches use 'fresh-editor'.
