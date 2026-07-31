@@ -119,6 +119,15 @@ phase_packages() {
     else
         warn "skipped Komble"
     fi
+    # Settings — the standalone app, which is replacing the in-shell panel. Also
+    # not on the AUR yet. Skipping it is safe: the Quick Settings gear falls back
+    # to the in-shell Settings whenever the binary is absent, so the desktop is
+    # fully configurable either way.
+    if ask_yes "Build & install the standalone Settings app? (compiles from source)"; then
+        install_git_pkgbuild hypr-shell-settings https://github.com/prj786/hypr-shell-settings.git
+    else
+        warn "skipped the standalone Settings app"
+    fi
     _install_themes
     ok "package phase done"
 }
