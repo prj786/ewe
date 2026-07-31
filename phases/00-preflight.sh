@@ -9,11 +9,35 @@ phase_preflight() {
         command -v "$t" >/dev/null 2>&1 || die "missing required tool: $t"
     done
 
-    # network (best-effort; skip the test under --dry-run)
-    if [ "${DRY_RUN:-0}" != "1" ]; then
-        if command -v curl >/dev/null 2>&1; then
-            curl -fsS --max-time 5 -o /dev/null https://github.com 2>/dev/null \
-                || warn "no network to github.com — package/repo steps may fail."
+    # Network. This is FATAL, not a warning, and the check deliberately does not
+    # use curl.
+    #
+    # Every package helper here warns and skips on failure so one bad package
+    # cannot sink a run. With no network at all that forgiveness compounds: all
+    # of them skip, and the installer reports success having installed nothing —
+    # no Hyprland, no Quickshell, no greeter. That happened to a real install,
+    # and the symptom ("the desktop does not start") points nowhere near the
+    # cause. Better to refuse up front.
+    #
+    # The old check was guarded by `command -v curl`, and a base Arch install has
+    # no curl — so it silently skipped on precisely the systems most likely to be
+    # freshly installed and unconfigured. getent is part of glibc and always there.
+    if [ "${DRY_RUN:-0}" != "1" ] && [ "${HYPR_SHELL_SKIP_NET:-0}" != "1" ]; then
+        if ! getent hosts archlinux.org >/dev/null 2>&1 \
+           && ! getent hosts github.com >/dev/null 2>&1; then
+            # distinguish "no route" from "route fine, DNS broken" — the second
+            # is much more common on a fresh install and needs a different fix
+            if (exec 3<>/dev/tcp/1.1.1.1/443) 2>/dev/null; then
+                die "DNS is not working (routing is fine — 1.1.1.1:443 is reachable).
+   Fix name resolution, then re-run. On a fresh Arch install that usually means
+   no resolver is configured: put a nameserver in /etc/resolv.conf, or enable
+   systemd-resolved. Override with HYPR_SHELL_SKIP_NET=1."
+            fi
+            die "no network. Every package step would silently install nothing,
+   leaving a desktop that cannot start. Bring the link up first — on a fresh
+   Arch install nothing enables networking by default; systemd-networkd plus a
+   .network file, or NetworkManager, is the usual fix.
+   Override with HYPR_SHELL_SKIP_NET=1 if you really mean to continue."
         fi
     fi
 

@@ -58,7 +58,22 @@ install_git_pkgbuild() {
         printf '%s   would run:%s git clone %s && makepkg -si (%s)\n' "$C_DIM" "$C_0" "$url" "$name"
         return 0
     fi
-    tmp="$(mktemp -d)" || { warn "no build dir — skipping $name"; return 0; }
+    # Build on REAL DISK, never /tmp. Arch mounts /tmp as tmpfs at roughly half
+    # of RAM, and a Rust/Tauri release build with LTO needs several GB — it
+    # exhausts the tmpfs partway through linking and dies with "Disk quota
+    # exceeded (os error 122)", which reads like a disk-full bug rather than a
+    # RAM one. /var/tmp is on persistent storage by design (FHS: large or
+    # long-lived temporary files), which is exactly this case.
+    local build_root=/var/tmp
+    [ -d "$build_root" ] && [ -w "$build_root" ] || build_root="${TMPDIR:-/tmp}"
+    local avail_mb
+    avail_mb="$(df -Pm "$build_root" 2>/dev/null | awk 'NR==2{print $4}')"
+    if [ -n "$avail_mb" ] && [ "$avail_mb" -lt 6144 ]; then
+        warn "$name needs ~6 GB to build; $build_root has ${avail_mb} MB — skipping"
+        return 0
+    fi
+    tmp="$(mktemp -d -p "$build_root" "hypr-shell-$name.XXXXXX")" \
+        || { warn "no build dir — skipping $name"; return 0; }
     if git clone --depth 1 "$url" "$tmp/$name" >/dev/null 2>&1; then
         # makepkg refuses to run as root and escalates only for the final install
         if ( cd "$tmp/$name" && makepkg -si --noconfirm --needed ); then
