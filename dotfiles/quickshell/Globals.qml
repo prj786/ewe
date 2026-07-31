@@ -57,6 +57,12 @@ QtObject {
     // true keeps hyprland.lua's subtle unfocused translucency. user-theme.json.
     property bool windowTransparency: true
 
+    // Tiling on (the Hyprland default) vs every new window opening floating, for
+    // people who want the DE to behave like GNOME/Unity rather than a tiling WM.
+    // Implemented as a catch-all float window rule in hypr/generated/user.lua —
+    // see Settings.tilingLua(). Persisted in user-theme.json.
+    property bool tilingEnabled: true
+
     // Animation speed multiplier driving both the QML shell (Theme.dur*) and the
     // Hyprland window animations (Settings writes scaled hl.animation overrides).
     // 1.0 = default; >1 faster; 0 = animations off. Persisted in user-theme.json.
@@ -138,8 +144,16 @@ QtObject {
         g._placesWriter.running = false; g._placesWriter.running = true
     }
     // Re-read every JSON state file this singleton owns — used after a settings
-    // restore rewrites them on disk (Google.applyRestore).
+    // restore rewrites them on disk (Google.applyRestore), and by the `settings
+    // reload` IPC verb after the out-of-process Settings app has written one.
+    //
+    // The reads are asynchronous, so anything depending on the NEW values must
+    // wait for prefsReloaded rather than run on the next line: until the reader
+    // has parsed the file, the accent is still the old one.
+    signal prefsReloaded()
+    property bool _reloadPending: false
     function reloadUserState() {
+        g._reloadPending = true
         g._themeLoad.running = false; g._themeLoad.running = true
         g._pinLoad.running = false; g._pinLoad.running = true
         g._placesLoad.running = false; g._placesLoad.running = true
@@ -206,6 +220,14 @@ QtObject {
         stdout: StdioCollector { onStreamFinished: { try { var j = JSON.parse(this.text); if (Array.isArray(j)) g.pinnedApps = j } catch (e) {} } }
     }
 
+    // The last parsed contents of user-theme.json, verbatim.
+    //
+    // The shell is no longer the only writer of that file: the standalone Settings
+    // app writes it too, and a newer Settings knows keys this shell does not. Kept
+    // so writePrefs() can merge into it — a writer that emits only the keys it
+    // knows would silently delete everyone else's.
+    property var prefsRaw: ({})
+
     property Process _themeLoad: Process {
         running: true
         command: ["sh", "-c", "cat \"$HOME/.config/quickshell/user-theme.json\" 2>/dev/null"]
@@ -213,6 +235,7 @@ QtObject {
             onStreamFinished: {
                 try {
                     var j = JSON.parse(this.text)
+                    if (j && typeof j === "object" && !Array.isArray(j)) g.prefsRaw = j
                     if (j && j.themeName) g.themeName = j.themeName
                     if (j && j.accent) g.accentColor = j.accent
                     if (j && j.tintBorders !== undefined) g.tintBorders = j.tintBorders
@@ -224,6 +247,7 @@ QtObject {
                     if (j && j.avatarShape) g.avatarShape = j.avatarShape
                     if (j && j.lidDockedSuspend !== undefined) g.lidDockedSuspend = j.lidDockedSuspend
                     if (j && j.lowPowerEnabled !== undefined) g.lowPowerEnabled = j.lowPowerEnabled
+                    if (j && j.tilingEnabled !== undefined) g.tilingEnabled = j.tilingEnabled
                     if (j && j.saver) {
                         if (j.saver.enabled !== undefined) g.saverEnabled = j.saver.enabled
                         if (j.saver.min !== undefined) g.saverMin = j.saver.min
@@ -234,6 +258,10 @@ QtObject {
                 } catch (e) {}
                 // enforce the persisted (or default-dark) appearance on GTK + Qt
                 g.applyColorScheme()
+                // Only on an explicit reload: at startup every consumer is being
+                // constructed anyway, and firing this then would re-apply the
+                // Hyprland border on every login for no reason.
+                if (g._reloadPending) { g._reloadPending = false; g.prefsReloaded() }
             }
         }
     }

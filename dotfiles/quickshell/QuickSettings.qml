@@ -293,6 +293,16 @@ Scope {
         function hide(): void { Globals.quickSettingsOpen = false }
     }
 
+    // Is the standalone Settings app installed? Probed once at startup rather
+    // than per click, so opening Settings never waits on a subprocess.
+    property bool settingsAppInstalled: false
+    Process {
+        id: settingsAppProbe
+        running: true
+        command: ["sh", "-c", "command -v hypr-settings >/dev/null && echo yes || echo no"]
+        stdout: StdioCollector { onStreamFinished: root.settingsAppInstalled = this.text.trim() === "yes" }
+    }
+
     Process {
         id: wifiScan
         command: ["nmcli", "-t", "-f", "IN-USE,SIGNAL,SECURITY,SSID", "device", "wifi", "list"]
@@ -560,7 +570,12 @@ Scope {
                                 Text { anchors.verticalCenter: parent.verticalCenter; text: Math.round(parent.pct) + "%"; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold }
                                 Text { anchors.verticalCenter: parent.verticalCenter; text: parent.charging ? Theme.icBolt : (parent.pct >= 60 ? Theme.icBattFull : parent.pct >= 30 ? Theme.icBatt50 : Theme.icBattEmpty); font.family: Theme.fontMono; font.pixelSize: 13; color: parent.charging ? Theme.success : (parent.pct <= 15 ? Theme.danger : Theme.fgDim) }
                             }
-                            // settings gear → opens the Settings window
+                            // settings gear → the standalone Settings app when it
+                            // is installed, otherwise the in-shell panel. Settings
+                            // is mid-migration to Tauri (its own repo), and the
+                            // shell must stay usable on a machine that has not got
+                            // the new package yet — same rule as Komble vs the
+                            // in-shell AppStore.
                             Rectangle {
                                 id: gearBtn
                                 anchors.verticalCenter: parent.verticalCenter
@@ -568,7 +583,15 @@ Scope {
                                 color: gbMa.containsMouse ? Theme.hover : Theme.elevated
                                 Behavior on color { ColorAnimation { duration: 120 } }
                                 Text { anchors.centerIn: parent; text: Theme.icCog; font.family: Theme.fontMono; font.pixelSize: 15; color: Theme.fg }
-                                MouseArea { id: gbMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: { Globals.quickSettingsOpen = false; Globals.settingsOpen = true } }
+                                MouseArea {
+                                    id: gbMa
+                                    anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        Globals.quickSettingsOpen = false
+                                        if (root.settingsAppInstalled) Quickshell.execDetached(["hypr-settings"])
+                                        else Globals.settingsOpen = true
+                                    }
+                                }
                             }
                             // power button → opens the floating power menu
                             Rectangle {
@@ -1559,6 +1582,20 @@ Scope {
                             ic: root.g(Globals.caffeine ? 0xF0208 : 0xF0209); label: "Insomnia"; active: Globals.caffeine
                             sub: Globals.caffeine ? "Awake" : "Off"
                             onClicked: Globals.caffeine = !Globals.caffeine
+                        }
+                    }
+
+                    Row {
+                        width: parent.width; spacing: 10
+                        // Tiling off makes new windows open floating, for people who
+                        // want this to behave like a stacking desktop. Flipping the
+                        // Globals bool is the whole interaction — Settings.qml owns
+                        // persisting it and reloading Hyprland.
+                        Tile {
+                            width: parent.width
+                            ic: Theme.icTiling; label: "Tiling"; active: Globals.tilingEnabled
+                            sub: Globals.tilingEnabled ? "On" : "Windows float"
+                            onClicked: Globals.tilingEnabled = !Globals.tilingEnabled
                         }
                     }
 

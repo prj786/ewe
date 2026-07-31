@@ -282,10 +282,15 @@ QtObject {
     // Persistence is refused wholesale in a nested/test session: those share the
     // real $HOME, and a throwaway compositor's state must never overwrite the
     // user's config (live apply against the nested instance still works).
-    function atomicWrite(proc, path, content) {
+    // `after` (optional) is a shell command run once the file is in place. It runs
+    // in the SAME sh as the write because there is no completion signal to hang a
+    // second Process off — two processes would race, and `hyprctl reload` losing
+    // that race re-reads the old file and silently discards the change.
+    function atomicWrite(proc, path, content, after) {
         if (_virtualSession()) { Log.info("display", "virtual session — skipped write to", path); return }
         proc.command = ["sh", "-c",
-            'mkdir -p "$(dirname "$1")" && cat > "$1.tmp" <<\'HS_ATOMIC_EOF_7f3a\'\n' + content + '\nHS_ATOMIC_EOF_7f3a\nmv "$1.tmp" "$1"',
+            'mkdir -p "$(dirname "$1")" && cat > "$1.tmp" <<\'HS_ATOMIC_EOF_7f3a\'\n' + content + '\nHS_ATOMIC_EOF_7f3a\nmv "$1.tmp" "$1"'
+            + (after ? " && " + after : ""),
             "hyprmon", path]
         proc.running = false; proc.running = true
     }
