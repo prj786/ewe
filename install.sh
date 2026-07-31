@@ -23,6 +23,33 @@ set -u
 DOTREPO="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 export DOTREPO
 
+# ── Never run as root. This is not a style rule; running under sudo produces a
+# silently broken install that is very hard to trace back.
+#
+# $HOME builds the ENTIRE symlink farm (~/.config/hypr, quickshell, kitty, …),
+# the systemd user units, and the Exec= line of the system-wide session entry.
+# Under sudo, $HOME is /root, so the desktop installs into root's home while the
+# session entry — written system-wide, so it lands regardless — points at
+# /root/.config/hypr/start-hyprland.sh. Your own account then picks "Hyprland
+# (DE)" at the greeter, greetd execs a path it cannot reach, the session dies
+# instantly and you are dropped back at the greeter with no error anywhere.
+#
+# The installer escalates on its own (sudo_run) exactly where root is needed, so
+# there has never been a reason to invoke it as root. makepkg refuses to run as
+# root too, so the AUR phase could not work either.
+if [ "$(id -u)" = "0" ]; then
+    if [ -n "${SUDO_USER:-}" ]; then
+        printf 'error: do not run install.sh with sudo.\n\n' >&2
+        printf '  Run it as your normal user — it asks for a password only where\n' >&2
+        printf '  root is actually needed:\n\n      bash install.sh\n\n' >&2
+        printf '  (Under sudo, $HOME is /root, so the whole desktop would install\n' >&2
+        printf '   into root'"'"'s home and the login session would fail silently.)\n' >&2
+    else
+        printf 'error: do not run install.sh as root — run it as your normal user.\n' >&2
+    fi
+    exit 2
+fi
+
 # --- flags ---
 DRY_RUN=0; ASSUME_YES=0; NO_PACKAGES=0; CHECK_ONLY=0; GAMING=0; DEV=0; COEXIST=0
 for a in "$@"; do
