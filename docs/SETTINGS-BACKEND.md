@@ -1,7 +1,15 @@
 # Settings app — config backend
 
-How the Quickshell Settings app writes through to Hyprland, what files it owns,
-and what it can (and honestly cannot) fix.
+How the Settings app writes through to Hyprland, what files it owns, and what
+it can (and honestly cannot) fix.
+
+Two implementations follow this contract: the standalone **hypr-settings**
+(Tauri, its own repo — THE settings UI when installed) and the in-shell
+Quickshell panel (the fallback while the binary is absent). Both write the
+same files with the same generators — byte-identical output — and the
+standalone app then calls `qs ipc call settings reload`, which re-reads
+user-theme.json/pinned lists **and display-profiles.json** (HyprMon must never
+re-assert from a stale in-memory copy after an out-of-process commit).
 
 ## Two-layer apply model
 

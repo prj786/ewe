@@ -293,16 +293,6 @@ Scope {
         function hide(): void { Globals.quickSettingsOpen = false }
     }
 
-    // Is the standalone Settings app installed? Probed once at startup rather
-    // than per click, so opening Settings never waits on a subprocess.
-    property bool settingsAppInstalled: false
-    Process {
-        id: settingsAppProbe
-        running: true
-        command: ["sh", "-c", "command -v hypr-settings >/dev/null && echo yes || echo no"]
-        stdout: StdioCollector { onStreamFinished: root.settingsAppInstalled = this.text.trim() === "yes" }
-    }
-
     Process {
         id: wifiScan
         command: ["nmcli", "-t", "-f", "IN-USE,SIGNAL,SECURITY,SSID", "device", "wifi", "list"]
@@ -570,12 +560,9 @@ Scope {
                                 Text { anchors.verticalCenter: parent.verticalCenter; text: Math.round(parent.pct) + "%"; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold }
                                 Text { anchors.verticalCenter: parent.verticalCenter; text: parent.charging ? Theme.icBolt : (parent.pct >= 60 ? Theme.icBattFull : parent.pct >= 30 ? Theme.icBatt50 : Theme.icBattEmpty); font.family: Theme.fontMono; font.pixelSize: 13; color: parent.charging ? Theme.success : (parent.pct <= 15 ? Theme.danger : Theme.fgDim) }
                             }
-                            // settings gear → the standalone Settings app when it
-                            // is installed, otherwise the in-shell panel. Settings
-                            // is mid-migration to Tauri (its own repo), and the
-                            // shell must stay usable on a machine that has not got
-                            // the new package yet — same rule as Komble vs the
-                            // in-shell AppStore.
+                            // settings gear → Globals.openSettings(): the
+                            // standalone hypr-settings app, with the in-shell
+                            // panel only as a fallback while the binary is absent.
                             Rectangle {
                                 id: gearBtn
                                 anchors.verticalCenter: parent.verticalCenter
@@ -588,8 +575,7 @@ Scope {
                                     anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
                                     onClicked: {
                                         Globals.quickSettingsOpen = false
-                                        if (root.settingsAppInstalled) Quickshell.execDetached(["hypr-settings"])
-                                        else Globals.settingsOpen = true
+                                        Globals.openSettings()
                                     }
                                 }
                             }

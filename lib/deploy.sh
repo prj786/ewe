@@ -39,6 +39,7 @@ seed_state() {
     for f in "$DOTREPO/dotfiles/quickshell/user-theme.json" \
              "$DOTREPO/dotfiles/quickshell/pinned-apps.json" \
              "$DOTREPO/dotfiles/quickshell/places.json" \
+             "$DOTREPO/dotfiles/quickshell/startup-apps.json" \
              "$DOTREPO/dotfiles/hypr/generated/user.lua"; do
         [ -e "$f" ] && continue
         [ -e "$f.default" ] || continue

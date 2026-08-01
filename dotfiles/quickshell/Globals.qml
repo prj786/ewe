@@ -41,6 +41,35 @@ QtObject {
     property real clipAnchorX: 40           // screen-local x of the scissors icon (clipboard opens under it)
     property real appAnchorX: 40            // screen-local x of the move-to button (its dropdown opens under it)
 
+    // ── Standalone first-party apps ───────────────────────────────────────────
+    // Komble (the software manager) and hypr-settings (the Settings app) are
+    // separate Tauri binaries installed by phase 20. When present they ARE the
+    // store/settings UX — every entry point routes through openStore()/
+    // openSettings() below — and the QML panels are only the fallback for a
+    // machine where the build failed, so the desktop is never unconfigurable.
+    // Probed once at startup: an install/removal is followed by a shell restart
+    // (hypr-shell.service) anyway, so a per-click probe would only add latency.
+    property bool kombleInstalled: false
+    property bool settingsAppInstalled: false
+    function openSettings() {
+        if (g.settingsAppInstalled) Quickshell.execDetached(["hypr-settings"])
+        else g.settingsOpen = true
+    }
+    function openStore() {
+        if (g.kombleInstalled) Quickshell.execDetached(["komble"])
+        else g.storeOpen = true
+    }
+    property Process _standaloneProbe: Process {
+        running: true
+        command: ["sh", "-c", "command -v komble >/dev/null && printf k; command -v hypr-settings >/dev/null && printf s"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                g.kombleInstalled = this.text.indexOf("k") >= 0
+                g.settingsAppInstalled = this.text.indexOf("s") >= 0
+            }
+        }
+    }
+
     // ── Shell look ────────────────────────────────────────────────────────────
     // Which palette Theme.qml renders: "graphite" (the original) or "ambiance"
     // (Unity 7). Every Theme token switches on this; nothing else needs to know.

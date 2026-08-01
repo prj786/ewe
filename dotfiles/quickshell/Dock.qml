@@ -138,7 +138,9 @@ Scope {
 
                 DockBtn { id: launchBtn; kind: "launcher"; activeState: Globals.launcherOpen; anchors.verticalCenter: parent.verticalCenter; onGo: { Globals.launcherAnchorX = launchBtn.mapToItem(null, launchBtn.width / 2, 0).x; Globals.storeOpen = false; Globals.placesOpen = false; Globals.launcherOpen = !Globals.launcherOpen } }
                 DockBtn { kind: "overview"; anchors.verticalCenter: parent.verticalCenter; onGo: Quickshell.execDetached(["qs", "ipc", "call", "overview", "toggle"]) }
-                DockBtn { id: storeBtn; kind: "store"; activeState: Globals.storeOpen; anchors.verticalCenter: parent.verticalCenter; onGo: { Globals.storeAnchorX = storeBtn.mapToItem(null, storeBtn.width / 2, 0).x; Globals.launcherOpen = false; Globals.placesOpen = false; Globals.storeOpen = !Globals.storeOpen } }
+                // store button → Komble (the software manager) when installed;
+                // the in-shell quick-installer panel is only the fallback.
+                DockBtn { id: storeBtn; kind: "store"; activeState: Globals.storeOpen; anchors.verticalCenter: parent.verticalCenter; onGo: { if (Globals.kombleInstalled) { Quickshell.execDetached(["komble"]) } else { Globals.storeAnchorX = storeBtn.mapToItem(null, storeBtn.width / 2, 0).x; Globals.launcherOpen = false; Globals.placesOpen = false; Globals.storeOpen = !Globals.storeOpen } } }
                 DockBtn { id: placesBtn; kind: "places"; activeState: Globals.placesOpen; anchors.verticalCenter: parent.verticalCenter; onGo: { Globals.placesAnchorX = placesBtn.mapToItem(null, placesBtn.width / 2, 0).x; Globals.launcherOpen = false; Globals.storeOpen = false; Globals.placesOpen = !Globals.placesOpen } }
 
                 Rectangle { anchors.verticalCenter: parent.verticalCenter; width: 1; height: 40; color: Theme.stroke }

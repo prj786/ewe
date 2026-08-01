@@ -26,10 +26,10 @@ Scope {
 
     // ── one background operation at a time (gated by the single password prompt) ──
     property string busyId: ""          // pkg id currently being installed/removed ("" = idle)
-    // Komble is the STANDALONE store (repos + AUR + AppImages + updates). This
-    // panel stays the quick installer on the dock; when Komble is present we
-    // offer a way through to it rather than duplicating what it does.
-    property bool kombleInstalled: false
+    // Komble (Globals.kombleInstalled) is THE software manager (repos + AUR +
+    // AppImages + updates); when present, every store entry point launches it
+    // and this panel never opens. It survives only as the fallback quick
+    // installer for a machine where the Komble build failed.
     property string busyKind: ""        // "install" | "remove"
     property real   busyPct: -1         // 0..1 step progress (-1 = indeterminate, e.g. AUR build)
     property string busyStat: ""        // live status line parsed from pacman/paru output
@@ -120,8 +120,11 @@ Scope {
 
     IpcHandler {
         target: "store"
-        function toggle(): void { Globals.launcherOpen = false; Globals.placesOpen = false; Globals.storeOpen = !Globals.storeOpen }
-        function show(): void { Globals.storeOpen = true }
+        function toggle(): void {
+            if (Globals.kombleInstalled) { Globals.openStore(); return }
+            Globals.launcherOpen = false; Globals.placesOpen = false; Globals.storeOpen = !Globals.storeOpen
+        }
+        function show(): void { Globals.openStore() }
         function hide(): void { Globals.storeOpen = false }
     }
 
@@ -219,13 +222,6 @@ Scope {
         MouseArea { anchors.fill: parent; onClicked: Globals.storeOpen = false }
 
         // small reusable spinner
-        Process {
-            id: kombleProbe
-            running: true
-            command: ["sh", "-c", "command -v komble >/dev/null && echo yes || echo no"]
-            stdout: StdioCollector { onStreamFinished: root.kombleInstalled = this.text.trim() === "yes" }
-        }
-
         component Spinner: Item {
             id: sp
             property color ring: Theme.stroke
@@ -273,7 +269,7 @@ Scope {
                         anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; spacing: 8
                         // through to the full store — only when it is actually installed
                         Item {
-                            visible: root.kombleInstalled
+                            visible: Globals.kombleInstalled
                             anchors.verticalCenter: parent.verticalCenter
                             width: kombleLbl.implicitWidth + 16; height: 18
                             Rectangle {

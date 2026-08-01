@@ -71,7 +71,7 @@ phase_packages() {
         off=("${keep[@]}")
     fi
 
-    info "${#off[@]} official packages + ${#aur[@]} AUR packages + 2 source themes (Reversal, Mocu)"
+    info "${#off[@]} official packages + ${#aur[@]} AUR packages + 2 first-party apps (Komble, hypr-shell-settings) + 2 source themes (Reversal, Mocu)"
     [ "${DEV:-0}" = "1" ] && info "+ ${#dev[@]} optional dev packages (--dev)"
     [ "${GAMING:-0}" = "1" ] && info "+ ${#game[@]} optional gaming packages (--gaming)"
     if [ "${DRY_RUN:-0}" = "1" ]; then
@@ -80,6 +80,7 @@ phase_packages() {
         [ "${DEV:-0}" = "1" ] && printf '%s   dev:%s    %s\n' "$C_DIM" "$C_0" "${dev[*]}"
         [ "${GAMING:-0}" = "1" ] && printf '%s   gaming:%s %s\n' "$C_DIM" "$C_0" "${game[*]}"
         printf '%s   source:%s Reversal-icon-theme (all variants), mocu-xcursor → /usr/share/icons\n' "$C_DIM" "$C_0"
+        printf '%s   releases:%s komble-arch (the software manager), hypr-shell-settings (the Settings app) — prebuilt GitHub release, source-build fallback\n' "$C_DIM" "$C_0"
         return 0
     fi
 
@@ -109,25 +110,18 @@ phase_packages() {
         ask_yes "Build & install ${#aur[@]} AUR packages now? (compiles from source)" \
             && install_aur "${aur[@]}" || warn "skipped AUR packages"
     fi
-    # Komble — the standalone app store (pacman + AUR + AppImages). It
-    # COMPLEMENTS the shell's built-in App Store rather than replacing it: the
-    # in-shell one is a quick installer on the dock, Komble is the full browser
-    # with AppImages and an update view. Not on the AUR yet, so it is built from
-    # its own PKGBUILD; move it to packages/aur.list once it is published.
-    if ask_yes "Build & install Komble, the standalone app store? (compiles from source)"; then
-        install_git_pkgbuild komble-arch https://github.com/prj786/komble-arch.git
-    else
-        warn "skipped Komble"
-    fi
-    # Settings — the standalone app, which is replacing the in-shell panel. Also
-    # not on the AUR yet. Skipping it is safe: the Quick Settings gear falls back
-    # to the in-shell Settings whenever the binary is absent, so the desktop is
-    # fully configurable either way.
-    if ask_yes "Build & install the standalone Settings app? (compiles from source)"; then
-        install_git_pkgbuild hypr-shell-settings https://github.com/prj786/hypr-shell-settings.git
-    else
-        warn "skipped the standalone Settings app"
-    fi
+    # Komble — THE software manager of the DE (repos + AUR + AppImages +
+    # updates). The dock's store button and `qs ipc call store` launch it; the
+    # shell's built-in quick installer is only a fallback while the binary is
+    # absent. Not on the AUR yet: installed from the prebuilt GitHub release
+    # (its release.yml builds the .pkg.tar.zst), source build as fallback —
+    # resilient either way. Move to packages/aur.list once published.
+    install_release_pkg komble-arch prj786/komble-arch https://github.com/prj786/komble-arch.git
+    # hypr-shell-settings — THE Settings app. Every settings entry point
+    # (Super+comma, the Quick Settings gear, `qs ipc call settings`) launches
+    # it; the in-shell panel remains only as a fallback when the binary is
+    # absent, so a failed build can never leave the desktop unconfigurable.
+    install_release_pkg hypr-shell-settings prj786/hypr-shell-settings https://github.com/prj786/hypr-shell-settings.git
     _install_themes
     ok "package phase done"
 }

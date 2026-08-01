@@ -5,6 +5,20 @@
 # Hyprland backend), the toolkit theming env, and a software-render escape
 # hatch for the brand-new Lunar Lake iGPU, then exec's Hyprland.
 
+# ── Session stdout/stderr → a log file, not the VT ───────────────────────────
+# greetd leaves the session's stdio pointed at the virtual terminal, so every
+# line Hyprland prints before hyprland.lua's `debug.enable_stdout_logs = 0`
+# takes effect — the rlimit lines, the scheduling warning, the "launched
+# without start-hyprland" warning, the Creating-the-*Manager dump — flashed
+# raw over the screen on every login. Hyprland's full log already lands in
+# $XDG_RUNTIME_DIR/hypr/<sig>/hyprland.log; this file catches only that
+# pre-config chatter plus any wrapper-level failure. Truncated each login, so
+# the last session is always available for post-mortem. If the redirect ever
+# fails, bash keeps the old stdout (the VT) and login proceeds — verified: a
+# failed bare `exec >` does not exit a non-interactive bash.
+_hs_log_dir="${XDG_STATE_HOME:-$HOME/.local/state}/hypr-shell"
+mkdir -p "$_hs_log_dir" 2>/dev/null && exec >"$_hs_log_dir/session.log" 2>&1
+
 export XDG_SESSION_TYPE=wayland
 export XDG_CURRENT_DESKTOP=Hyprland
 export XDG_SESSION_DESKTOP=Hyprland

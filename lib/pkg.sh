@@ -41,6 +41,61 @@ install_aur() {
     return 0
 }
 
+# install_release_pkg <pkgname> <owner/repo> <git-url> — install a first-party
+# app from its latest GitHub release's prebuilt .pkg.tar.zst (built by the
+# repo's release.yml in an Arch container), so the user's machine never spends
+# ~10 minutes compiling a Rust/Tauri app. Version-aware: upgrades when the
+# release is newer than the installed package (vercmp), no-ops when current.
+# Falls back to install_git_pkgbuild (source build) whenever the release, the
+# download, or the pacman -U fails. Same contract as everything else here:
+# warn-and-continue, ALWAYS returns 0.
+install_release_pkg() {
+    local name="$1" repo="$2" giturl="$3"
+    if [ "${DRY_RUN:-0}" = "1" ]; then
+        printf '%s   would run:%s install %s from latest GitHub release of %s (fallback: makepkg from source)\n' "$C_DIM" "$C_0" "$name" "$repo"
+        return 0
+    fi
+    command -v curl >/dev/null 2>&1 || { install_git_pkgbuild "$name" "$giturl"; return 0; }
+
+    local json tag ver url cur
+    json="$(curl -fsSL --max-time 15 "https://api.github.com/repos/$repo/releases/latest" 2>/dev/null)" || json=""
+    tag="$(printf '%s' "$json" | grep -m1 '"tag_name"' | sed 's/.*: *"//; s/".*//')"
+    ver="${tag#v}"
+    # first non-debug package asset for this machine's architecture
+    url="$(printf '%s' "$json" \
+        | grep -o '"browser_download_url": *"[^"]*\.pkg\.tar\.zst"' \
+        | sed 's/.*"\(https[^"]*\)"/\1/' \
+        | grep -v -- '-debug-' | grep -m1 -e "$(uname -m)" -e '-any\.pkg')"
+    if [ -z "$ver" ] || [ -z "$url" ]; then
+        info "$name: no prebuilt release found — building from source"
+        install_git_pkgbuild "$name" "$giturl"
+        return 0
+    fi
+
+    if pkg_present "$name"; then
+        cur="$(pacman -Q "$name" 2>/dev/null | awk '{print $2}')"; cur="${cur%-*}"
+        if [ "$(vercmp "$cur" "$ver" 2>/dev/null || echo 1)" -ge 0 ]; then
+            ok "$name $cur is current (latest release: $ver)"
+            return 0
+        fi
+        info "updating $name $cur → $ver (prebuilt release)"
+    else
+        info "installing $name $ver (prebuilt release)"
+    fi
+
+    local tmp
+    tmp="$(mktemp -d)" || { install_git_pkgbuild "$name" "$giturl"; return 0; }
+    if curl -fL --max-time 300 -o "$tmp/$name.pkg.tar.zst" "$url" \
+        && sudo_run pacman -U --noconfirm "$tmp/$name.pkg.tar.zst"; then
+        ok "installed $name $ver from the GitHub release"
+    else
+        warn "$name: release download/install failed — falling back to a source build"
+        install_git_pkgbuild "$name" "$giturl"
+    fi
+    rm -rf "$tmp"
+    return 0
+}
+
 # install_git_pkgbuild <pkgname> <git-url> — build and install a PKGBUILD that
 # lives in a git repo rather than the AUR. Same resilience contract as
 # install_aur: it warns and returns 0 no matter what, because a first-party tool
