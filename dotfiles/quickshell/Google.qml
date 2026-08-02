@@ -45,6 +45,28 @@ QtObject {
         function syncNow(): void { goo.syncNow() }
         function refresh(): void { goo.refresh() }
         function setAutoSync(on: bool): void { goo.setAutoSync(on) }
+        // Komble's "For you" view: fetch the cloud bundle and drop its PACKAGE
+        // lists (never settings/avatar/ssh — Komble has no business with those)
+        // into a JSON file Komble reads. Async by nature, so the reply is
+        // "started" and the file is the result.
+        function fetchPackages(): string {
+            if (!goo.signedIn) return "not-signed-in"
+            goo.checkCloud(function (ok) {
+                var doc = { fetchedAt: new Date().toISOString(), ok: ok }
+                var b = ok ? goo.getCloudBundle() : null
+                if (b && b.apps) {
+                    doc.updatedAt = b.updatedAt || ""
+                    doc.device = b.device || ""
+                    doc.explicit = b.apps.explicit || []
+                    doc.foreign = b.apps.foreign || []
+                    doc.desktopApps = b.apps.desktopApps || []
+                }
+                HyprMon.atomicWrite(goo._pkgCacheWriter,
+                    Quickshell.env("HOME") + "/.config/quickshell/google-restore-packages.json",
+                    JSON.stringify(doc, null, 2))
+            })
+            return "started"
+        }
         function status(): string {
             return JSON.stringify({
                 probed: goo.probed, configured: goo.configured, keyringOk: goo.keyringOk,
@@ -55,6 +77,8 @@ QtObject {
             })
         }
     }
+
+    property Process _pkgCacheWriter: Process {}
 
     property Process _statusProc: Process {
         running: true

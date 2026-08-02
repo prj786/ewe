@@ -92,10 +92,13 @@ is_video() { case "${1##*.}" in mp4|webm|mkv|mov|avi|m4v|MP4|WEBM|MKV|MOV|AVI|M4
 is_gif()   { case "${1##*.}" in gif|GIF) return 0 ;; *) return 1 ;; esac }
 
 # ── resolve what each connected output should show ────────────────────────────
-# (grep keeps this jq-free; if the query fails we fall back to '*'-style groups)
+# Parse the PLAIN listing ("Monitor eDP-1 (ID 0):"), not -j: the JSON carries a
+# "name" key inside every monitor's activeWorkspace too, and grepping those in
+# handed workspace names ("1", "2") to swww as outputs — which it rightly
+# rejected with "none of the requested outputs are valid" on every re-apply.
 OUTPUTS=()
 while IFS= read -r n; do [ -n "$n" ] && OUTPUTS+=("$n"); done \
-    < <(hyprctl monitors -j 2>/dev/null | grep -oP '"name": *"\K[^"]+')
+    < <(hyprctl monitors 2>/dev/null | awk '/^Monitor /{print $2}')
 
 declare -A SHOW=()   # output → file
 if [ "${#OUTPUTS[@]}" -gt 0 ]; then

@@ -147,6 +147,19 @@ def cmd_collect():
         "explicit": pacman_list(["-Qqen"]),
         "foreign": pacman_list(["-Qqem"]),
     }
+    # Which of those are APPLICATIONS (own a .desktop entry)? Komble's
+    # "For you" view offers only these — a backup restore that suggests
+    # kernels, firmware and library packages is noise, not help. Recorded at
+    # collect time because only the source machine can answer the question.
+    try:
+        import glob
+        desktop_files = glob.glob("/usr/share/applications/*.desktop")
+        r = subprocess.run(["pacman", "-Qqo", *desktop_files],
+                           capture_output=True, text=True, timeout=60)
+        owners = set(l.strip() for l in r.stdout.split("\n") if l.strip())
+        apps["desktopApps"] = sorted(owners & set(apps["explicit"] + apps["foreign"]))
+    except (OSError, subprocess.TimeoutExpired):
+        pass
     # stable content hash (settings + apps only — not updatedAt/device) so the
     # shell can skip pushes when nothing actually changed
     payload = json.dumps({"settings": settings, "apps": apps}, sort_keys=True)
