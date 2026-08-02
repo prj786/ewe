@@ -33,6 +33,29 @@ QtObject {
 
     function refresh() { _statusProc.running = false; _statusProc.running = true }
 
+    // ── IPC for the standalone Settings app ───────────────────────────────────
+    // hypr-settings drives the account from out of process: verbs in, a JSON
+    // status snapshot out. Tokens never cross this boundary — sign-in runs the
+    // same in-shell flow (browser + keyring) it always has. Public API like the
+    // `settings` verbs: a shipped binary depends on these names.
+    property IpcHandler _ipc: IpcHandler {
+        target: "google"
+        function signIn(): void { goo.signIn() }
+        function signOut(): void { goo.signOut() }
+        function syncNow(): void { goo.syncNow() }
+        function refresh(): void { goo.refresh() }
+        function setAutoSync(on: bool): void { goo.setAutoSync(on) }
+        function status(): string {
+            return JSON.stringify({
+                probed: goo.probed, configured: goo.configured, keyringOk: goo.keyringOk,
+                signedIn: goo.signedIn, busy: goo.busy, error: goo.error,
+                syncState: goo.syncState, syncError: goo.syncError,
+                lastSync: goo.lastSync, autoSync: goo.autoSync,
+                profile: goo.profile
+            })
+        }
+    }
+
     property Process _statusProc: Process {
         running: true
         command: ["python3", goo.helper, "status"]

@@ -96,7 +96,7 @@ firefox
 # ── desktop utilities ────────────────────────────────────────────────────────
 swaybg
 awww       # swww's Arch package name — animated GIF wallpapers + transitions
-mpvpaper   # video wallpapers (Settings → Wallpaper maps file type → backend)
+gpu-screen-recorder   # GPU-encoded capture + replay buffer — moved here from the AUR
 grim
 slurp
 satty
