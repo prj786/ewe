@@ -22,7 +22,6 @@ Auth 1.0 Auth.qml
 Clipboard 1.0 Clipboard.qml
 ScreenshotPreview 1.0 ScreenshotPreview.qml
 AppMenu 1.0 AppMenu.qml
-UnityIcon 1.0 UnityIcon.qml
 InvertedCorner 1.0 InvertedCorner.qml
 Lock 1.0 Lock.qml
 Caffeine 1.0 Caffeine.qml

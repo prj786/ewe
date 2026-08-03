@@ -1,6 +1,5 @@
 import QtQuick
 import QtQuick.Effects
-import QtQuick.Shapes
 import Quickshell
 import Quickshell.Wayland
 import Quickshell.Hyprland
@@ -88,45 +87,25 @@ Scope {
             layer.enabled: true
             layer.effect: MultiEffect { shadowEnabled: true; shadowColor: Theme.shadow; shadowOpacity: 0.5; shadowBlur: 1.0; shadowVerticalOffset: 6; blurMax: 40 }
 
-            // a square dock button with custom-drawn glyph
+            // a square dock button — Phosphor glyph, same quiet-hover treatment
+            // as the bar's StatusItems so bar and dock read as one system
             component DockBtn: Rectangle {
                 id: db
-                property string kind: "launcher"   // launcher | overview | store | places
+                property string glyph: ""
                 property bool activeState: false
                 signal go()
                 width: 46; height: 46; radius: 13
-                color: (dbMa.containsMouse || activeState) ? Theme.hover : Theme.elevated
-                Behavior on color { ColorAnimation { duration: 120 } }
-                readonly property color fg: (dbMa.containsMouse || activeState) ? Theme.accent : Theme.fg
-                // launcher: 2×2 grid of squares
-                Grid {
-                    visible: db.kind === "launcher"
-                    anchors.centerIn: parent; columns: 2; rowSpacing: 4; columnSpacing: 4
-                    Repeater { model: 4; delegate: Rectangle { width: 9; height: 9; radius: 2.5; color: db.fg } }
-                }
-                // overview: three offset rounded rects (spread windows)
-                Item {
-                    visible: db.kind === "overview"
-                    anchors.centerIn: parent; width: 24; height: 24
-                    Rectangle { x: 0;  y: 1;  width: 12; height: 9; radius: 2.5; color: db.fg }
-                    Rectangle { x: 13; y: 4;  width: 11; height: 8; radius: 2.5; color: db.fg; opacity: 0.85 }
-                    Rectangle { x: 5;  y: 13; width: 14; height: 9; radius: 2.5; color: db.fg; opacity: 0.7 }
-                }
-                // store: download arrow into a tray
-                Item {
-                    visible: db.kind === "store"
-                    anchors.centerIn: parent; width: 24; height: 24
-                    Rectangle { anchors.horizontalCenter: parent.horizontalCenter; y: 2; width: 4; height: 8; radius: 2; color: db.fg }
-                    Shape { anchors.horizontalCenter: parent.horizontalCenter; y: 8; width: 14; height: 7; antialiasing: true
-                        ShapePath { strokeWidth: 0; fillColor: db.fg; startX: 0; startY: 0; PathLine { x: 14; y: 0 } PathLine { x: 7; y: 7 } PathLine { x: 0; y: 0 } } }
-                    Rectangle { anchors.horizontalCenter: parent.horizontalCenter; anchors.bottom: parent.bottom; anchors.bottomMargin: 2; width: 18; height: 4; radius: 2; color: db.fg }
-                }
-                // places: a folder (body + tab)
-                Item {
-                    visible: db.kind === "places"
-                    anchors.centerIn: parent; width: 24; height: 24
-                    Rectangle { x: 2; y: 5;  width: 9;  height: 5;  radius: 2; color: db.fg }
-                    Rectangle { x: 2; y: 8;  width: 20; height: 13; radius: 3; color: db.fg }
+                color: activeState ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.16)
+                     : dbMa.containsMouse ? Theme.hover : "transparent"
+                border.color: activeState ? Theme.accent : "transparent"
+                border.width: activeState ? 1 : 0
+                Behavior on color { ColorAnimation { duration: Theme.durFast } }
+                Text {
+                    anchors.centerIn: parent
+                    text: db.glyph
+                    font.family: Theme.fontIcons; font.pixelSize: 22
+                    color: db.activeState ? Theme.accent : (dbMa.containsMouse ? Theme.fg : Theme.fgSecondary)
+                    Behavior on color { ColorAnimation { duration: Theme.durFast } }
                 }
                 MouseArea { id: dbMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: db.go() }
             }
@@ -136,12 +115,12 @@ Scope {
                 anchors.centerIn: parent
                 spacing: 8
 
-                DockBtn { id: launchBtn; kind: "launcher"; activeState: Globals.launcherOpen; anchors.verticalCenter: parent.verticalCenter; onGo: { Globals.launcherAnchorX = launchBtn.mapToItem(null, launchBtn.width / 2, 0).x; Globals.storeOpen = false; Globals.placesOpen = false; Globals.launcherOpen = !Globals.launcherOpen } }
-                DockBtn { kind: "overview"; anchors.verticalCenter: parent.verticalCenter; onGo: Quickshell.execDetached(["qs", "ipc", "call", "overview", "toggle"]) }
+                DockBtn { id: launchBtn; glyph: Theme.icApps; activeState: Globals.launcherOpen; anchors.verticalCenter: parent.verticalCenter; onGo: { Globals.launcherAnchorX = launchBtn.mapToItem(null, launchBtn.width / 2, 0).x; Globals.storeOpen = false; Globals.placesOpen = false; Globals.launcherOpen = !Globals.launcherOpen } }
+                DockBtn { glyph: Theme.icStack; anchors.verticalCenter: parent.verticalCenter; onGo: Quickshell.execDetached(["qs", "ipc", "call", "overview", "toggle"]) }
                 // store button → Komble (the software manager) when installed;
                 // the in-shell quick-installer panel is only the fallback.
-                DockBtn { id: storeBtn; kind: "store"; activeState: Globals.storeOpen; anchors.verticalCenter: parent.verticalCenter; onGo: { if (Globals.kombleInstalled) { Quickshell.execDetached(["komble"]) } else { Globals.storeAnchorX = storeBtn.mapToItem(null, storeBtn.width / 2, 0).x; Globals.launcherOpen = false; Globals.placesOpen = false; Globals.storeOpen = !Globals.storeOpen } } }
-                DockBtn { id: placesBtn; kind: "places"; activeState: Globals.placesOpen; anchors.verticalCenter: parent.verticalCenter; onGo: { Globals.placesAnchorX = placesBtn.mapToItem(null, placesBtn.width / 2, 0).x; Globals.launcherOpen = false; Globals.storeOpen = false; Globals.placesOpen = !Globals.placesOpen } }
+                DockBtn { id: storeBtn; glyph: Theme.icDownload; activeState: Globals.storeOpen; anchors.verticalCenter: parent.verticalCenter; onGo: { if (Globals.kombleInstalled) { Quickshell.execDetached(["komble"]) } else { Globals.storeAnchorX = storeBtn.mapToItem(null, storeBtn.width / 2, 0).x; Globals.launcherOpen = false; Globals.placesOpen = false; Globals.storeOpen = !Globals.storeOpen } } }
+                DockBtn { id: placesBtn; glyph: Theme.icFolder; activeState: Globals.placesOpen; anchors.verticalCenter: parent.verticalCenter; onGo: { Globals.placesAnchorX = placesBtn.mapToItem(null, placesBtn.width / 2, 0).x; Globals.launcherOpen = false; Globals.storeOpen = false; Globals.placesOpen = !Globals.placesOpen } }
 
                 Rectangle { anchors.verticalCenter: parent.verticalCenter; width: 1; height: 40; color: Theme.stroke }
 

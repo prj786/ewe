@@ -175,10 +175,9 @@ phase_userconfig() {
     fi
 
     # ── prompt: oh-my-posh, themed to match the shell ────────────────────────
-    # The snippet picks its theme by reading themeName out of user-theme.json, so
-    # switching look in Settings → Theme carries into the next shell with no
-    # extra wiring. Written once and guarded by a grep so re-running the
-    # installer never duplicates it.
+    # One look (flock), one theme file. Written once and guarded by a grep so
+    # re-running the installer never duplicates it. (graphite.omp.json remains
+    # on disk only so snippets written by older installs keep resolving.)
     if command -v oh-my-posh >/dev/null 2>&1; then
         local rcf sh_name
         for rcf in "$HOME/.bashrc" "$HOME/.zshrc"; do
@@ -189,13 +188,9 @@ phase_userconfig() {
             if [ "${DRY_RUN:-0}" != "1" ]; then
                 cat >> "$rcf" <<RC
 
-# hypr-shell: oh-my-posh prompt (theme follows Settings → Theme)
+# hypr-shell: oh-my-posh prompt (flock theme)
 if command -v oh-my-posh >/dev/null 2>&1; then
-    _hs_omp=graphite
-    grep -q '"themeName"[[:space:]]*:[[:space:]]*"ambiance"' \
-        "\$HOME/.config/quickshell/user-theme.json" 2>/dev/null && _hs_omp=ambiance
-    eval "\$(oh-my-posh init $sh_name --config "\$HOME/.config/oh-my-posh/\$_hs_omp.omp.json")"
-    unset _hs_omp
+    eval "\$(oh-my-posh init $sh_name --config "\$HOME/.config/oh-my-posh/flock.omp.json")"
 fi
 RC
             fi

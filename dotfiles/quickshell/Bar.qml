@@ -190,22 +190,19 @@ Scope {
         signal scrolled(real dy)
         implicitWidth: lbl.implicitWidth + 18
         height: parent ? parent.height : Theme.barHeight
-        // Ambiance highlights every indicator, full panel height and square.
-        // Graphite left these bare (only the control-centre group had a block),
-        // so the token is what decides — not a per-item decision.
         Rectangle {
             anchors.centerIn: parent
             width: parent.width; height: Theme.barItemHeight
             radius: Theme.barItemRadius
             color: si.active ? Theme.barActive : (ma.containsMouse ? Theme.barHover : "transparent")
-            visible: Theme.ambiance || si.active
+            visible: si.active
         }
         Text {
             id: lbl
             anchors.centerIn: parent
             text: si.glyph
             color: si.fg
-            font.family: Theme.fontMono
+            font.family: Theme.fontIcons
             font.pixelSize: si.fontPx
         }
         MouseArea {
@@ -274,11 +271,8 @@ Scope {
 
             Rectangle {
                 anchors.fill: parent
-                // A subtle vertical gradient is Ambiance's most recognisable
-                // trait. Graphite sets both stops to the same colour, so this one
-                // node renders flat there and there is no conditional to get
-                // wrong. Static either way, so it paints once and never fights
-                // panel self-refresh.
+                // barTop == barBottom today, so this renders flat; a future
+                // look can reintroduce a real gradient via those two tokens.
                 gradient: Gradient {
                     GradientStop { position: 0.0; color: Theme.barTop }
                     GradientStop { position: 1.0; color: Theme.barBottom }
@@ -306,7 +300,7 @@ Scope {
                         anchors.verticalCenter: parent.verticalCenter
                         width: 22; height: Theme.barItemHeight; radius: Theme.barItemRadius
                         color: wsMa.containsMouse ? Theme.barHover : "transparent"
-                        border.color: Theme.stroke; border.width: Theme.ambiance ? 0 : 1
+                        border.color: Theme.stroke; border.width: 1
                         Text {
                             anchors.centerIn: parent
                             text: Hyprland.focusedWorkspace ? Hyprland.focusedWorkspace.id : 1
@@ -376,7 +370,7 @@ Scope {
                             anchors.centerIn: parent
                             spacing: 4
                             Text { anchors.verticalCenter: parent.verticalCenter; text: "Move"; color: (mvMa.containsMouse || Globals.appMenuOpen) ? Theme.fg : Theme.fgSecondary; font.family: Theme.fontText; font.pixelSize: 12; font.weight: Font.DemiBold }
-                            Text { anchors.verticalCenter: parent.verticalCenter; text: Theme.icChevronDown; font.family: Theme.fontMono; font.pixelSize: 7; color: Theme.fgSecondary }
+                            Text { anchors.verticalCenter: parent.verticalCenter; text: Theme.icChevronDown; font.family: Theme.fontIcons; font.pixelSize: 7; color: Theme.fgSecondary }
                         }
                         MouseArea {
                             id: mvMa
@@ -398,7 +392,7 @@ Scope {
                             anchors.centerIn: parent
                             text: Theme.icClose
                             color: clMa.containsMouse ? Theme.accentText : Theme.fgSecondary
-                            font.family: Theme.fontMono
+                            font.family: Theme.fontIcons
                             font.pixelSize: 13
                         }
                         MouseArea {
@@ -548,27 +542,17 @@ Scope {
                             Text {
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: Theme.icEthernet        // mdi-ethernet
-                                font.family: Theme.fontMono; font.pixelSize: 13
+                                font.family: Theme.fontIcons; font.pixelSize: 13
                                 color: Theme.fgSecondary
-                                visible: !Theme.ambiance && bar.wiredUp && !bar.wifiUp
-                            }
-                            UnityIcon {
-                                visible: Theme.ambiance && bar.wiredUp && !bar.wifiUp
-                                anchors.verticalCenter: parent.verticalCenter
-                                kind: "wired"; tint: Theme.fgSecondary
+                                visible: bar.wiredUp && !bar.wifiUp
                             }
                             // Wi-Fi (only when connected)
                             Text {
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: Theme.icWifi
-                                font.family: Theme.fontMono; font.pixelSize: 13
+                                font.family: Theme.fontIcons; font.pixelSize: 13
                                 color: Theme.fgSecondary
-                                visible: !Theme.ambiance && bar.wifiUp
-                            }
-                            UnityIcon {
-                                visible: Theme.ambiance && bar.wifiUp
-                                anchors.verticalCenter: parent.verticalCenter
-                                kind: "wifi"; tint: Theme.fgSecondary
+                                visible: bar.wifiUp
                             }
                             // Bluetooth (only when adapter on); blue when a device is connected
                             Text {
@@ -581,35 +565,17 @@ Scope {
                                 }
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: conn > 0 ? Theme.icBluetoothOn : Theme.icBluetooth
-                                font.family: Theme.fontMono; font.pixelSize: 13
+                                font.family: Theme.fontIcons; font.pixelSize: 13
                                 color: conn > 0 ? Theme.accent : Theme.fgSecondary
-                                visible: !Theme.ambiance && adapter && adapter.enabled
-                            }
-                            UnityIcon {
-                                property var adapter2: Bluetooth.defaultAdapter
-                                property int conn2: {
-                                    if (!Bluetooth.devices) return 0
-                                    var d = Bluetooth.devices.values, n = 0
-                                    for (var i = 0; i < d.length; i++) if (d[i].connected) n++
-                                    return n
-                                }
-                                visible: Theme.ambiance && adapter2 && adapter2.enabled
-                                anchors.verticalCenter: parent.verticalCenter
-                                kind: "bluetooth"
-                                tint: conn2 > 0 ? Theme.accent : Theme.fgSecondary
+                                visible: adapter && adapter.enabled
                             }
                             // VPN (only when active) — key glyph, accent colour
                             Text {
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: Theme.icVpn
-                                font.family: Theme.fontMono; font.pixelSize: 14
+                                font.family: Theme.fontIcons; font.pixelSize: 14
                                 color: Theme.accent
-                                visible: !Theme.ambiance && Globals.vpnActive
-                            }
-                            UnityIcon {
-                                visible: Theme.ambiance && Globals.vpnActive
-                                anchors.verticalCenter: parent.verticalCenter
-                                kind: "vpn"; tint: Theme.accent
+                                visible: Globals.vpnActive
                             }
                             // SSH tunnel (only when one of the Quick Settings
                             // port-forward tunnels is up) — console glyph, accent
@@ -617,7 +583,7 @@ Scope {
                                 visible: Globals.sshTunnelUp
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: Theme.icSsh
-                                font.family: Theme.fontMono; font.pixelSize: 13
+                                font.family: Theme.fontIcons; font.pixelSize: 13
                                 color: Theme.accent
                             }
                             // Insomnia / keep-awake (only when on) — eye glyph, matches
@@ -626,7 +592,7 @@ Scope {
                                 visible: Globals.caffeine
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: Theme.icEye
-                                font.family: Theme.fontMono; font.pixelSize: 13
+                                font.family: Theme.fontIcons; font.pixelSize: 13
                                 color: Theme.accent
                             }
                             // Phone (KDE Connect) — only when paired + reachable;
@@ -641,7 +607,7 @@ Scope {
                                     Text {
                                         id: phGlyph
                                         text: Theme.icPhone
-                                        font.family: Theme.fontMono; font.pixelSize: 13
+                                        font.family: Theme.fontIcons; font.pixelSize: 13
                                         color: Theme.fgSecondary
                                     }
                                     Rectangle {
@@ -668,7 +634,7 @@ Scope {
                                 Text {
                                     anchors.verticalCenter: parent.verticalCenter
                                     text: Theme.icMail
-                                    font.family: Theme.fontMono; font.pixelSize: 13
+                                    font.family: Theme.fontIcons; font.pixelSize: 13
                                     color: Theme.accent
                                 }
                                 Text {
@@ -684,7 +650,7 @@ Scope {
                                 text: PowerProfiles.profile === PowerProfile.PowerSaver ? Theme.icLeaf
                                     : PowerProfiles.profile === PowerProfile.Performance ? Theme.icSpeed
                                     : Theme.icBalance
-                                font.family: Theme.fontMono; font.pixelSize: 13
+                                font.family: Theme.fontIcons; font.pixelSize: 13
                                 color: PowerProfiles.profile === PowerProfile.Performance ? Theme.warning
                                      : PowerProfiles.profile === PowerProfile.PowerSaver ? Theme.success
                                      : Theme.fgSecondary
@@ -705,7 +671,7 @@ Scope {
                                         : parent.pct >= 40 ? Theme.icBatt50
                                         : parent.pct >= 20 ? Theme.icBatt20
                                         : Theme.icBattEmpty
-                                    font.family: Theme.fontMono; font.pixelSize: 13
+                                    font.family: Theme.fontIcons; font.pixelSize: 13
                                     color: parent.charging ? Theme.success : (parent.pct <= 10 ? Theme.danger : (parent.pct <= 20 ? Theme.warning : Theme.fgSecondary))
                                 }
                                 Text {

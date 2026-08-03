@@ -65,7 +65,7 @@ Scope {
                     visible: rr.icon === ""
                     anchors.fill: parent; radius: 7
                     color: Qt.rgba(1, 1, 1, 0.10)
-                    Text { anchors.centerIn: parent; text: rr.glyph; font.family: Theme.fontMono; font.pixelSize: 15; color: Theme.fgSecondary }
+                    Text { anchors.centerIn: parent; text: rr.glyph; font.family: Theme.fontIcons; font.pixelSize: 15; color: Theme.fgSecondary }
                 }
             }
             Column {
@@ -471,7 +471,7 @@ Scope {
                                 Text {
                                     anchors.fill: parent
                                     horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
-                                    text: Theme.icClose; font.family: Theme.fontMono; font.pixelSize: 14
+                                    text: Theme.icClose; font.family: Theme.fontIcons; font.pixelSize: 14
                                     color: closeMa.containsMouse ? Theme.accentText : Theme.accent
                                 }
                                 MouseArea { id: closeMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.killWin(dragArea.modelData) }
@@ -522,7 +522,7 @@ Scope {
                     anchors.fill: parent
                     anchors.leftMargin: 20; anchors.rightMargin: 20
                     spacing: 12
-                    Text { anchors.verticalCenter: parent.verticalCenter; text: Theme.icSearch; font.family: Theme.fontMono; font.pixelSize: 16; color: Theme.fgDim }
+                    Text { anchors.verticalCenter: parent.verticalCenter; text: Theme.icSearch; font.family: Theme.fontIcons; font.pixelSize: 16; color: Theme.fgDim }
                     TextInput {
                         id: search
                         width: parent.width - 40
@@ -615,7 +615,7 @@ Scope {
                                 required property int index
                                 width: resCol.width
                                 seld: root.appResults.length + root.winResults.length + index === root.sel
-                                glyph: root.g(0xF0224)   // file-outline
+                                glyph: Theme.icFile
                                 title: modelData.name
                                 tag: modelData.dir
                                 onGo: root.openFile(modelData)
@@ -628,7 +628,7 @@ Scope {
                             width: resCol.width; height: 46
                             Row {
                                 anchors.centerIn: parent; spacing: 10
-                                Text { anchors.verticalCenter: parent.verticalCenter; text: Theme.icSearchOff; font.family: Theme.fontMono; font.pixelSize: 16; color: Theme.fgDim }
+                                Text { anchors.verticalCenter: parent.verticalCenter; text: Theme.icSearchOff; font.family: Theme.fontIcons; font.pixelSize: 16; color: Theme.fgDim }
                                 Text { anchors.verticalCenter: parent.verticalCenter; text: "Nothing matches “" + root.query + "”"; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsBody }
                             }
                         }

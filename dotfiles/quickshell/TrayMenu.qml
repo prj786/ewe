@@ -56,8 +56,8 @@ Scope {
             Text {
                 anchors.left: parent.left; anchors.leftMargin: 8; anchors.verticalCenter: parent.verticalCenter
                 visible: row.entry && row.entry.checkState === Qt.Checked
-                text: root.glyph(0xF012C)            // check
-                font.family: Theme.fontMono; font.pixelSize: 13; color: Theme.accent
+                text: Theme.icCheck
+                font.family: Theme.fontIcons; font.pixelSize: 13; color: Theme.accent
             }
             Text {
                 anchors.left: parent.left; anchors.leftMargin: 26
@@ -72,8 +72,8 @@ Scope {
             Text {
                 anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter
                 visible: row.entry && row.entry.hasChildren
-                text: root.glyph(0xF0142)            // chevron-right
-                font.family: Theme.fontMono; font.pixelSize: 13; color: Theme.fgDim
+                text: Theme.icChevronRight
+                font.family: Theme.fontIcons; font.pixelSize: 13; color: Theme.fgDim
             }
 
             MouseArea {

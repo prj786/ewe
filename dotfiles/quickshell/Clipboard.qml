@@ -137,7 +137,7 @@ Scope {
                     width: parent.width
                     spacing: 8
                     Repeater {
-                        model: [{ ic: 0xF0EA, label: "Clipboard" }, { ic: 0xF118, label: "Emoji" }]
+                        model: [{ ic: 0xE198, label: "Clipboard" }, { ic: 0xE436, label: "Emoji" }]
                         delegate: Rectangle {
                             required property var modelData
                             required property int index
@@ -147,7 +147,7 @@ Scope {
                             color: root.tab === index ? Theme.accent : Theme.elevated
                             Row {
                                 anchors.centerIn: parent; spacing: 8
-                                Text { anchors.verticalCenter: parent.verticalCenter; text: root.g(modelData.ic); font.family: Theme.fontMono; font.pixelSize: 14; color: root.tab === index ? Theme.accentText : Theme.fg }
+                                Text { anchors.verticalCenter: parent.verticalCenter; text: root.g(modelData.ic); font.family: Theme.fontIcons; font.pixelSize: 14; color: root.tab === index ? Theme.accentText : Theme.fg }
                                 Text { anchors.verticalCenter: parent.verticalCenter; text: modelData.label; color: root.tab === index ? Theme.accentText : Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold }
                             }
                             MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.tab = index }
@@ -162,7 +162,7 @@ Scope {
                         anchors.left: parent.left; anchors.right: clearBtn.left; anchors.rightMargin: 8
                         height: parent.height; radius: Theme.radiusInner
                         color: Theme.bg; border.color: searchField.activeFocus ? Theme.accent : Theme.stroke; border.width: 1
-                        Text { anchors.left: parent.left; anchors.leftMargin: 10; anchors.verticalCenter: parent.verticalCenter; text: Theme.icSearch; font.family: Theme.fontMono; font.pixelSize: 12; color: Theme.fgDim }
+                        Text { anchors.left: parent.left; anchors.leftMargin: 10; anchors.verticalCenter: parent.verticalCenter; text: Theme.icSearch; font.family: Theme.fontIcons; font.pixelSize: 12; color: Theme.fgDim }
                         TextInput {
                             id: searchField
                             anchors.fill: parent; anchors.leftMargin: 30; anchors.rightMargin: 10; verticalAlignment: TextInput.AlignVCenter
@@ -177,7 +177,7 @@ Scope {
                         anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
                         width: 34; height: 34; radius: Theme.radiusInner
                         color: clearMa.containsMouse ? Qt.rgba(Theme.danger.r, Theme.danger.g, Theme.danger.b, 0.2) : Theme.elevated
-                        Text { anchors.centerIn: parent; text: Theme.icTrash; font.family: Theme.fontMono; font.pixelSize: 13; color: clearMa.containsMouse ? Theme.danger : Theme.fgDim }
+                        Text { anchors.centerIn: parent; text: Theme.icTrash; font.family: Theme.fontIcons; font.pixelSize: 13; color: clearMa.containsMouse ? Theme.danger : Theme.fgDim }
                         MouseArea { id: clearMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.clearClips() }
                     }
                 }

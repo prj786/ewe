@@ -230,8 +230,8 @@ Scope {
                             spacing: 14
                             Text {
                                 anchors.verticalCenter: parent.verticalCenter
-                                text: ""                       // magnifier glyph
-                                font.family: Theme.fontMono
+                                text: Theme.icSearch
+                                font.family: Theme.fontIcons
                                 font.pixelSize: 18
                                 color: Theme.fgDim
                             }

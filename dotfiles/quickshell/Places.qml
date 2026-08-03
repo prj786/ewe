@@ -154,7 +154,7 @@ Scope {
                 width: 28; height: 28; radius: 8
                 color: ibMa.containsMouse && enabledState ? Theme.hover : "transparent"
                 opacity: enabledState ? 1 : 0.35
-                Text { anchors.centerIn: parent; text: parent.glyph; font.family: Theme.fontMono; font.pixelSize: 15; color: Theme.fg }
+                Text { anchors.centerIn: parent; text: parent.glyph; font.family: Theme.fontIcons; font.pixelSize: 15; color: Theme.fg }
                 MouseArea { id: ibMa; anchors.fill: parent; hoverEnabled: true; enabled: parent.enabledState; cursorShape: Qt.PointingHandCursor; onClicked: parent.act() }
             }
 
@@ -198,11 +198,11 @@ Scope {
                     id: rightBtns
                     anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter; spacing: 4
                     // folder hint chevron (browse entries)
-                    Text { visible: fr.rIsDir && !fr.rPinned; anchors.verticalCenter: parent.verticalCenter; text: Theme.icChevronRight; font.family: Theme.fontMono; font.pixelSize: 13; color: Theme.fgDim }
+                    Text { visible: fr.rIsDir && !fr.rPinned; anchors.verticalCenter: parent.verticalCenter; text: Theme.icChevronRight; font.family: Theme.fontIcons; font.pixelSize: 13; color: Theme.fgDim }
                     // unpin ✕ (pinned items)
                     Rectangle { visible: fr.rPinned; width: 20; height: 20; radius: 10; anchors.verticalCenter: parent.verticalCenter
                         color: upMa.containsMouse ? Theme.danger : Qt.rgba(0, 0, 0, 0.35)
-                        Text { anchors.centerIn: parent; text: Theme.icClose; font.family: Theme.fontMono; font.pixelSize: 12; color: Theme.fg }
+                        Text { anchors.centerIn: parent; text: Theme.icClose; font.family: Theme.fontIcons; font.pixelSize: 12; color: Theme.fg }
                         MouseArea { id: upMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: Globals.togglePinPlace(fr.rPath) }
                     }
                 }
@@ -214,8 +214,8 @@ Scope {
                 // ── address bar: back · home · path · pin-current ──
                 Row {
                     width: parent.width; height: 30; spacing: 4
-                    IconBtn { glyph: root.g(0xF004D); enabledState: root.cwd !== "/" && root.cwd !== ""; anchors.verticalCenter: parent.verticalCenter; onAct: root.enter(root.parentOf(root.cwd)) }
-                    IconBtn { glyph: root.g(0xF02DC); anchors.verticalCenter: parent.verticalCenter; onAct: root.enter(root.home) }
+                    IconBtn { glyph: Theme.icBack; enabledState: root.cwd !== "/" && root.cwd !== ""; anchors.verticalCenter: parent.verticalCenter; onAct: root.enter(root.parentOf(root.cwd)) }
+                    IconBtn { glyph: Theme.icHome; anchors.verticalCenter: parent.verticalCenter; onAct: root.enter(root.home) }
                     Rectangle {
                         width: parent.width - 28*3 - 4*3; height: 30; radius: Theme.radiusInner
                         anchors.verticalCenter: parent.verticalCenter
@@ -223,7 +223,7 @@ Scope {
                         Text { anchors.left: parent.left; anchors.right: parent.right; anchors.leftMargin: 10; anchors.rightMargin: 10; anchors.verticalCenter: parent.verticalCenter
                             text: root.tilde(root.cwd); color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; elide: Text.ElideLeft }
                     }
-                    IconBtn { glyph: root.g(Globals.isPinnedPlace(root.cwd) ? 0xF04CE : 0xF04D2); enabledState: root.cwd !== ""; anchors.verticalCenter: parent.verticalCenter; onAct: Globals.togglePinPlace(root.cwd) }
+                    IconBtn { glyph: (Globals.isPinnedPlace(root.cwd) ? Theme.icStar : Theme.icPin); enabledState: root.cwd !== ""; anchors.verticalCenter: parent.verticalCenter; onAct: Globals.togglePinPlace(root.cwd) }
                 }
 
                 Flickable {

@@ -307,7 +307,7 @@ Scope {
                                 Text { id: ttT; anchors.centerIn: parent; text: (root.busyKind === "remove" ? "Removing " : "Installing ") + root.busyId + "…"; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: 10 }
                             }
                         }
-                        Text { anchors.verticalCenter: parent.verticalCenter; text: root.g(root.helper !== "" ? 0xF012C : 0xF0159); font.family: Theme.fontMono; font.pixelSize: 12; color: root.helper !== "" ? Theme.accent : Theme.fgDim }
+                        Text { anchors.verticalCenter: parent.verticalCenter; text: (root.helper !== "" ? Theme.icCheck : Theme.icClose); font.family: Theme.fontIcons; font.pixelSize: 12; color: root.helper !== "" ? Theme.accent : Theme.fgDim }
                         Text { anchors.verticalCenter: parent.verticalCenter; text: root.helper !== "" ? ("AUR · " + root.helper) : "Official repos only"; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 10 }
                     }
                 }
@@ -359,7 +359,7 @@ Scope {
                 Rectangle {
                     width: parent.width; height: 36; radius: Theme.radiusInner
                     color: Theme.bg; border.color: storeIn.activeFocus ? Theme.accent : Theme.stroke; border.width: 1
-                    Text { anchors.left: parent.left; anchors.leftMargin: 11; anchors.verticalCenter: parent.verticalCenter; text: Theme.icSearch; font.family: Theme.fontMono; font.pixelSize: 14; color: Theme.fgDim }
+                    Text { anchors.left: parent.left; anchors.leftMargin: 11; anchors.verticalCenter: parent.verticalCenter; text: Theme.icSearch; font.family: Theme.fontIcons; font.pixelSize: 14; color: Theme.fgDim }
                     TextInput {
                         id: storeIn
                         anchors.fill: parent; anchors.leftMargin: 34; anchors.rightMargin: 12; verticalAlignment: TextInput.AlignVCenter

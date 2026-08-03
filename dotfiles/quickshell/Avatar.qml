@@ -27,9 +27,9 @@ Item {
         Text {
             anchors.centerIn: parent
             visible: !img.visible
-            text: av.initial !== "" ? av.initial : String.fromCodePoint(0xF0004)
+            text: av.initial !== "" ? av.initial : Theme.icUser
             color: av.initial !== "" ? Theme.fg : Theme.fgDim
-            font.family: av.initial !== "" ? Theme.fontDisplay : Theme.fontMono
+            font.family: av.initial !== "" ? Theme.fontDisplay : Theme.fontIcons
             font.pixelSize: Math.round(av.size * 0.45)
             font.weight: Font.Bold
         }

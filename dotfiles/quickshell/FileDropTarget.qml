@@ -39,7 +39,7 @@ Rectangle {
 
     Row {
         anchors.centerIn: parent; spacing: 9
-        Text { anchors.verticalCenter: parent.verticalCenter; text: Theme.ic(0xF0552); font.family: Theme.fontMono; font.pixelSize: 15; color: root.hovering ? Theme.accent : Theme.fgDim }
+        Text { anchors.verticalCenter: parent.verticalCenter; text: Theme.icDownload; font.family: Theme.fontIcons; font.pixelSize: 15; color: root.hovering ? Theme.accent : Theme.fgDim }
         Text { anchors.verticalCenter: parent.verticalCenter; text: root.label; color: root.hovering ? Theme.fg : Theme.fgSecondary; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
     }
     MouseArea { id: zoneMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.browse() }

@@ -71,15 +71,14 @@ QtObject {
     }
 
     // ── Shell look ────────────────────────────────────────────────────────────
-    // Which palette Theme.qml renders: "graphite" (the original) or "ambiance"
-    // (Unity 7). Every Theme token switches on this; nothing else needs to know.
-    property string themeName: "graphite"
+    // ONE look: "flock". Kept as a property because user-theme.json carries the
+    // key and the standalone Settings app reads it back; nothing switches on it.
+    property string themeName: "flock"
 
     // ── User-chosen accent colour ─────────────────────────────────────────────
     // Single mutable source the Settings → Theme pane writes; Theme.accent binds to
     // it so the whole shell recolours live. Persisted to ~/.config/quickshell/
     // user-theme.json and re-read here at startup (default = system blue).
-    // Ignored under Ambiance, which fixes the accent to Ubuntu orange.
     property color accentColor: "#0a84ff"
     property bool tintBorders: false        // mirror window border colour to the accent
     // false → fully opaque windows (decoration inactive_opacity forced to 1.0);
@@ -104,9 +103,6 @@ QtObject {
     property string colorScheme: "dark"
     property Process _csApply: Process {}
     function applyColorScheme() {
-        // Theme.accent, not accentColor: under Ambiance the effective accent is
-        // forced to Ubuntu orange, and GTK/Qt apps must match the shell rather
-        // than the hue stored for the Graphite look.
         var acc = String(Theme.accent).replace("#", "")
         g._csApply.command = ["sh", "-c", "\"$HOME/.config/quickshell/scripts/colorscheme.sh\" " + g.colorScheme + " " + acc]
         g._csApply.running = false; g._csApply.running = true
@@ -265,7 +261,8 @@ QtObject {
                 try {
                     var j = JSON.parse(this.text)
                     if (j && typeof j === "object" && !Array.isArray(j)) g.prefsRaw = j
-                    if (j && j.themeName) g.themeName = j.themeName
+                    // themeName in the file is legacy (graphite/ambiance) — the
+                    // look is always "flock" now, so it is not read back
                     if (j && j.accent) g.accentColor = j.accent
                     if (j && j.tintBorders !== undefined) g.tintBorders = j.tintBorders
                     if (j && j.windowTransparency !== undefined) g.windowTransparency = j.windowTransparency

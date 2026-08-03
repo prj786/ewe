@@ -121,7 +121,7 @@ Scope {
                     text: root.mode === "brightness" ? Theme.icSun
                         : root.muted ? Theme.icVolLow
                         : Theme.icVolHigh
-                    font.family: Theme.fontMono; font.pixelSize: 19
+                    font.family: Theme.fontIcons; font.pixelSize: 19
                     color: root.muted ? Theme.fgDim : Theme.fg
                 }
                 Rectangle {

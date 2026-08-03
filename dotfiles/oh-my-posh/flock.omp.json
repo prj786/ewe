@@ -12,22 +12,23 @@
           "type": "path",
           "style": "powerline",
           "powerline_symbol": "",
-          "background": "#E95420",
-          "foreground": "#2C001E",
+          "background": "#0a84ff",
+          "foreground": "#ffffff",
           "properties": { "style": "agnoster_short", "max_depth": 3, "home_icon": "~" }
         },
         {
           "type": "git",
           "style": "powerline",
           "powerline_symbol": "",
-          "background": "#77216F",
-          "foreground": "#DFDBD2",
+          "background": "#2c2c2e",
+          "foreground": "#aeaeb2",
           "background_templates": [
-            "{{ if or (.Working.Changed) (.Staging.Changed) }}#E95420{{ end }}",
-            "{{ if gt .Ahead 0 }}#5E2750{{ end }}"
+            "{{ if or (.Working.Changed) (.Staging.Changed) }}#ff9f0a{{ end }}",
+            "{{ if gt .Ahead 0 }}#30d158{{ end }}"
           ],
           "foreground_templates": [
-            "{{ if or (.Working.Changed) (.Staging.Changed) }}#2C001E{{ end }}"
+            "{{ if or (.Working.Changed) (.Staging.Changed) }}#1c1c1e{{ end }}",
+            "{{ if gt .Ahead 0 }}#1c1c1e{{ end }}"
           ],
           "template": " {{ .HEAD }}{{ if .Working.Changed }}  {{ .Working.String }}{{ end }}{{ if .Staging.Changed }}  {{ .Staging.String }}{{ end }} ",
           "properties": { "fetch_status": true, "branch_icon": " " }
@@ -36,8 +37,8 @@
           "type": "status",
           "style": "powerline",
           "powerline_symbol": "",
-          "background": "#C7162B",
-          "foreground": "#DFDBD2",
+          "background": "#ff453a",
+          "foreground": "#ffffff",
           "template": "  {{ .Code }} ",
           "properties": { "always_enabled": false }
         }
@@ -51,7 +52,7 @@
         {
           "type": "text",
           "style": "plain",
-          "foreground": "#E95420",
+          "foreground": "#0a84ff",
           "template": "❯"
         }
       ]

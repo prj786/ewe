@@ -100,7 +100,7 @@ Scope {
                 Rectangle {
                     width: parent.width; height: 36; radius: Theme.radiusInner
                     color: Theme.bg; border.color: searchIn.activeFocus ? Theme.accent : Theme.stroke; border.width: 1
-                    Text { anchors.left: parent.left; anchors.leftMargin: 11; anchors.verticalCenter: parent.verticalCenter; text: Theme.icSearch; font.family: Theme.fontMono; font.pixelSize: 14; color: Theme.fgDim }
+                    Text { anchors.left: parent.left; anchors.leftMargin: 11; anchors.verticalCenter: parent.verticalCenter; text: Theme.icSearch; font.family: Theme.fontIcons; font.pixelSize: 14; color: Theme.fgDim }
                     TextInput {
                         id: searchIn
                         anchors.fill: parent; anchors.leftMargin: 34; anchors.rightMargin: 12; verticalAlignment: TextInput.AlignVCenter
@@ -154,7 +154,7 @@ Scope {
                                     width: 20; height: 20; radius: 10
                                     visible: tMa.containsMouse || pMa.containsMouse || Globals.isPinned(tile.did)
                                     color: Globals.isPinned(tile.did) ? Theme.accent : Qt.rgba(0, 0, 0, 0.35)
-                                    Text { anchors.centerIn: parent; text: root.g(0xF0403); font.family: Theme.fontMono; font.pixelSize: 11; color: Globals.isPinned(tile.did) ? Theme.accentText : Theme.fg }
+                                    Text { anchors.centerIn: parent; text: Theme.icPin; font.family: Theme.fontIcons; font.pixelSize: 11; color: Globals.isPinned(tile.did) ? Theme.accentText : Theme.fg }
                                     MouseArea { id: pMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: Globals.togglePin(tile.did) }
                                 }
                             }
