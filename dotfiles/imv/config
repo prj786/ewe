@@ -1,0 +1,12 @@
+# imv — the DE's image viewer, matched to the flock palette. imv has no
+# include mechanism, so this stays static: the background is the shell's bg
+# and the (toggle with `o`) overlay is panel-on-dark in the DE type.
+
+[options]
+background = 1c1c1e
+overlay = false
+overlay_font = SF Pro Text:10
+overlay_text_color = f2f2f7
+overlay_background_color = 1d1d1f
+overlay_background_alpha = e6
+title_text = imv - ${imv_current_file}
