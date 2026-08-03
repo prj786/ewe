@@ -53,6 +53,9 @@ alsa-utils              # alsactl (restore mixer @ boot) + alsamixer / aplay -l 
 
 # ── network / bluetooth / power ──────────────────────────────────────────────
 networkmanager
+networkmanager-openvpn  # OpenVPN profiles (the most common VPN type)
+networkmanager-l2tp     # L2TP/IPsec profiles (needs strongswan below)
+strongswan              # IPsec for networkmanager-l2tp
 iwd
 bluez
 bluez-utils
