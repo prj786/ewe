@@ -149,7 +149,8 @@ QtObject {
     readonly property string icLock:        ic(0xF033E)  // lock
     readonly property string icPower:       ic(0xF0425)  // power
     readonly property string icCog:         ic(0xF0493)  // cog
-    readonly property string icTiling:      ic(0xF056E)  // view-grid (tiling on/off)
+    readonly property string icTiling:      ic(0xF056E)  // view-grid (tiling on)
+    readonly property string icFloating:    ic(0xF05B1)  // window-restore (windows float)
     readonly property string icCheck:       ic(0xF012C)  // check
     readonly property string icPhone:       ic(0xF011C)  // cellphone (mobile connection)
     readonly property string icMessage:     ic(0xF0361)  // message (SMS)

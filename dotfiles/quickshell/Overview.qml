@@ -1,25 +1,29 @@
 import QtQuick
+import QtQuick.Effects
 import Quickshell
+import Quickshell.Io
 import Quickshell.Wayland
 import Quickshell.Hyprland
 import Quickshell.Widgets
-import Quickshell.Io
 
-// Overview — GNOME-style activities view (redesigned per the user's mockup).
+// Overview — GNOME/macOS-style activities view (per the user's SVG mockup).
 //
-// Opened-apps state:
-//   · search pill top-centre (the workspace id lives in the topbar),
-//   · a row of workspace PILLS under the search (every active desktop + one
-//     empty trailing one; the current desktop is accented). Click a pill to
-//     switch desktop; DRAG a window card onto a pill to move it there.
-//   · the CURRENT desktop's windows as large cards (live preview, app-icon
-//     badge top-right, ✕ to close, click to focus).
-// Search state (anything typed):
-//   · "Apps" — launcher-style rows, click/Enter launches,
-//   · "Windows" — same rows for every matching open window on any desktop;
-//     click navigates to it, ✕ closes it.
-// Animation: GNOME-like zoom — the whole stage zooms out into view on open
-// and zooms back in on close (scale + fade only, driven by Theme.dur*).
+// The wallpaper stays visible under a light scrim, and the top bar / dock stay
+// on screen (normal exclusion): the overview reads as a MODE of the desktop,
+// not a separate screen.
+//
+//   · centre-top LAUNCHER: rounded search field; typing fuses a results panel
+//     under it — Apps ("Application"), open Windows ("Jump to", with their
+//     desktop), and a Files fallback (fd/find in $HOME, xdg-open). One list,
+//     one keyboard order: ↑/↓ + Enter.
+//   · the current desktop's windows stay as live-preview CARDS (soft shadow,
+//     hairline border, app badge, hover ✕). While searching they dim and
+//     ignore input — the launcher floats above them, mockup-style.
+//   · workspace DOTS bottom-centre (GNOME): current is a wide pill, others are
+//     dots; click switches. Dragging a card inflates every dot into a numbered
+//     chip — drop on one to move the window there.
+// Animation: GNOME-like zoom — the stage zooms out into view on open and back
+// in on close (scale + fade, Theme.dur*).
 //
 // Trigger: `qs ipc call overview toggle` (Super tap / 3-finger swipe up).
 Scope {
@@ -27,6 +31,62 @@ Scope {
 
     property string query: ""
     property int sel: 0
+    property bool dragActive: false      // a card is mid-drag (dots inflate)
+
+    // one shared launcher-row look: icon square, title(+sub), right type tag
+    component ResultRow: Item {
+        id: rr
+        property bool seld: false
+        property string icon: ""       // themed icon path ("" → glyph chip)
+        property string glyph: ""
+        property string title: ""
+        property string sub: ""
+        property string tag: ""
+        signal go()
+        height: rr.sub !== "" ? 54 : 46
+        Rectangle {
+            anchors.fill: parent; radius: 10
+            color: rr.seld ? Qt.rgba(1, 1, 1, 0.12) : (rrMa.containsMouse ? Qt.rgba(1, 1, 1, 0.06) : "transparent")
+        }
+        Row {
+            anchors.fill: parent; anchors.leftMargin: 12; anchors.rightMargin: 12
+            spacing: 13
+            Item {
+                width: 28; height: 28
+                anchors.verticalCenter: parent.verticalCenter
+                Image {
+                    visible: rr.icon !== ""
+                    anchors.fill: parent
+                    sourceSize.width: 56; sourceSize.height: 56
+                    source: rr.icon
+                }
+                Rectangle {
+                    visible: rr.icon === ""
+                    anchors.fill: parent; radius: 7
+                    color: Qt.rgba(1, 1, 1, 0.10)
+                    Text { anchors.centerIn: parent; text: rr.glyph; font.family: Theme.fontMono; font.pixelSize: 15; color: Theme.fgSecondary }
+                }
+            }
+            Column {
+                anchors.verticalCenter: parent.verticalCenter; spacing: 1
+                width: parent.width - 28 - 13 - tagLbl.implicitWidth - 8
+                Text { width: parent.width; text: rr.title; elide: Text.ElideRight; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsBody; font.weight: Font.Medium }
+                Text { visible: rr.sub !== ""; width: parent.width; text: rr.sub; elide: Text.ElideRight; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
+            }
+        }
+        Text {
+            id: tagLbl
+            anchors.right: parent.right; anchors.rightMargin: 14
+            anchors.verticalCenter: parent.verticalCenter
+            text: rr.tag
+            color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
+        }
+        MouseArea {
+            id: rrMa
+            anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+            onClicked: rr.go()
+        }
+    }
 
     function g(c) { return String.fromCodePoint(c) }
 
@@ -50,7 +110,7 @@ Scope {
         return Quickshell.iconPath(e && e.icon ? e.icon : cls, "application-x-executable")
     }
 
-    // ── workspace pills: 1 … max(used, focused), + one trailing empty, cap 10 ──
+    // ── workspaces: 1 … max(used, focused), + one trailing empty, cap 10 ──
     readonly property var wsPills: buildPills()
     function buildPills() {
         var byWs = {}, maxWs = 1
@@ -68,7 +128,7 @@ Scope {
         return out
     }
 
-    // ── current desktop's windows (opened-apps state) ──
+    // ── current desktop's windows ──
     readonly property var curWins: currentWins()
     function currentWins() {
         var out = []
@@ -77,7 +137,7 @@ Scope {
         return out
     }
 
-    // ── search: apps (like the launcher) + open windows on any desktop ──
+    // ── search: apps + open windows + files ──
     readonly property var appResults: suggestApps()
     function suggestApps() {
         var q = root.query.trim().toLowerCase()
@@ -92,7 +152,7 @@ Scope {
             if (hay.indexOf(q) < 0) continue
             if (name.indexOf(q) === 0) pre.push(a); else mid.push(a)   // name-prefix first
         }
-        return pre.concat(mid).slice(0, 6)
+        return pre.concat(mid).slice(0, 5)
     }
     readonly property var winResults: matchWins()
     function matchWins() {
@@ -108,12 +168,50 @@ Scope {
     }
     function appIcon(a) { return Quickshell.iconPath(a && a.icon ? a.icon : "", "application-x-executable") }
 
-    // keyboard-nav list: search → apps then windows; otherwise the current desktop's cards
-    readonly property int navCount: root.searching ? root.appResults.length + root.winResults.length : root.curWins.length
+    // files fallback — debounced fd/find in $HOME; the query rides as an
+    // argument ($1), never spliced into the script (no shell injection)
+    property var fileResults: []
+    property Process _fileProc: Process {
+        stdout: StdioCollector {
+            onStreamFinished: {
+                var lines = this.text.split("\n")
+                var home = Quickshell.env("HOME")
+                var out = []
+                for (var i = 0; i < lines.length && out.length < 5; i++) {
+                    var p = lines[i].trim()
+                    if (p === "") continue
+                    var slash = p.lastIndexOf("/")
+                    var dir = slash > 0 ? p.substring(0, slash) : "/"
+                    if (dir.indexOf(home) === 0) dir = "~" + dir.substring(home.length)
+                    out.push({ path: p, name: p.substring(slash + 1), dir: dir })
+                }
+                root.fileResults = out
+            }
+        }
+    }
+    property Timer _fileDebounce: Timer { interval: 220; onTriggered: root.runFileSearch() }
+    function runFileSearch() {
+        var q = root.query.trim()
+        if (q === "") return
+        root._fileProc.command = ["sh", "-c",
+            'if command -v fd >/dev/null 2>&1; then fd --ignore-case --max-results 5 --type f --fixed-strings -- "$1" "$HOME" 2>/dev/null; ' +
+            'else find "$HOME" -maxdepth 4 -type f -iname "*$1*" 2>/dev/null | head -5; fi',
+            "hs-files", q]
+        root._fileProc.running = false
+        root._fileProc.running = true
+    }
+    function openFile(f) { if (f) Quickshell.execDetached(["xdg-open", f.path]); root.close() }
+
+    // keyboard-nav list: search → apps, windows, files; otherwise the cards
+    readonly property int navCount: root.searching
+        ? root.appResults.length + root.winResults.length + root.fileResults.length
+        : root.curWins.length
     function activateSel() {
         if (root.searching) {
-            if (root.sel < root.appResults.length) root.launchApp(root.appResults[root.sel])
-            else if (root.winResults.length) root.jump(root.winResults[Math.min(root.sel - root.appResults.length, root.winResults.length - 1)])
+            var na = root.appResults.length, nw = root.winResults.length
+            if (root.sel < na) root.launchApp(root.appResults[root.sel])
+            else if (root.sel < na + nw) root.jump(root.winResults[root.sel - na])
+            else if (root.fileResults.length) root.openFile(root.fileResults[Math.min(root.sel - na - nw, root.fileResults.length - 1)])
         } else if (root.curWins.length) {
             root.jump(root.curWins[Math.min(root.sel, root.curWins.length - 1)])
         }
@@ -143,7 +241,11 @@ Scope {
     function gotoWs(ws) { if (ws !== root.focusedWs) Hyprland.dispatch("hl.dsp.focus({workspace=" + ws + "})") }
     function close() { Globals.overviewOpen = false }
 
-    onQueryChanged: root.sel = 0
+    onQueryChanged: {
+        root.sel = 0
+        root.fileResults = []
+        if (root.searching) root._fileDebounce.restart()
+    }
     onNavCountChanged: if (root.sel >= navCount) root.sel = Math.max(0, navCount - 1)
 
     IpcHandler {
@@ -151,6 +253,8 @@ Scope {
         function toggle(): void { Globals.overviewOpen = !Globals.overviewOpen }
         function show(): void { Globals.overviewOpen = true }
         function hide(): void { Globals.overviewOpen = false }
+        // open pre-filled (scripting / keybinds like "Super+F → find")
+        function find(q: string): void { Globals.overviewOpen = true; search.text = q }
     }
 
     Timer { id: closeTimer; interval: Math.max(1, Theme.durSlow) }
@@ -168,8 +272,9 @@ Scope {
             return null
         }
         color: "transparent"
-        exclusionMode: ExclusionMode.Ignore                 // span the whole screen, OVER the top bar
-        WlrLayershell.layer: WlrLayer.Overlay                // above the bar (Top layer)
+        // NORMAL exclusion: the bar and dock stay visible around the overview,
+        // so it reads as a mode of the desktop (mockup) rather than a takeover
+        WlrLayershell.layer: WlrLayer.Overlay
         WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
         WlrLayershell.namespace: "quickshell:overview"
         anchors { top: true; bottom: true; left: true; right: true }
@@ -180,10 +285,10 @@ Scope {
             function onOverviewOpenChanged() { if (Globals.overviewOpen) search.forceActiveFocus() }
         }
 
-        // dim scrim; click empty space to dismiss
+        // light scrim — the wallpaper stays part of the picture; click to dismiss
         Rectangle {
             anchors.fill: parent
-            color: Qt.rgba(Theme.bg.r, Theme.bg.g, Theme.bg.b, 0.88)
+            color: Qt.rgba(0, 0, 0, 0.45)
             opacity: Globals.overviewOpen ? 1 : 0
             Behavior on opacity { NumberAnimation { duration: Theme.durSlow; easing.type: Easing.OutCubic } }
             MouseArea { anchors.fill: parent; onClicked: root.close() }
@@ -200,110 +305,32 @@ Scope {
             Behavior on scale   { NumberAnimation { duration: Theme.durSlow; easing.type: Easing.OutCubic } }
 
             readonly property real monAR: (win.screen && win.screen.height > 0) ? (win.screen.width / win.screen.height) : 1.6
+            readonly property color glassBg: Qt.rgba(Theme.panel.r, Theme.panel.g, Theme.panel.b, 0.90)
+            readonly property color hairline: Qt.rgba(1, 1, 1, 0.16)
 
-            // ── search pill (top-centre) ──
-            Rectangle {
-                id: searchBox
-                anchors.horizontalCenter: parent.horizontalCenter
-                y: 36
-                width: 540; height: 48
-                radius: height / 2
-                color: Theme.elevated
-                border.color: Theme.accent; border.width: 2
-                Row {
-                    anchors.fill: parent
-                    anchors.leftMargin: 20; anchors.rightMargin: 20
-                    spacing: 12
-                    Text { anchors.verticalCenter: parent.verticalCenter; text: Theme.icSearch; font.family: Theme.fontMono; font.pixelSize: 17; color: Theme.fgDim }
-                    TextInput {
-                        id: search
-                        width: parent.width - 40
-                        anchors.verticalCenter: parent.verticalCenter
-                        color: Theme.fg; font.family: Theme.fontDisplay; font.pixelSize: Theme.fsLarge
-                        selectionColor: Theme.accent; selectByMouse: true; clip: true
-                        onTextChanged: root.query = text
-                        Text { visible: search.text.length === 0; anchors.verticalCenter: parent.verticalCenter; text: "Search apps and open windows…"; color: Theme.fgDim; font: search.font }
-                        Keys.onPressed: function (ev) {
-                            if (ev.key === Qt.Key_Escape) { root.close(); ev.accepted = true }
-                            else if (ev.key === Qt.Key_Return || ev.key === Qt.Key_Enter) { root.activateSel(); ev.accepted = true }
-                            else if (ev.key === Qt.Key_Left || ev.key === Qt.Key_Up) { root.sel = Math.max(0, root.sel - 1); ev.accepted = true }
-                            else if (ev.key === Qt.Key_Right || ev.key === Qt.Key_Down) { root.sel = Math.min(root.navCount - 1, root.sel + 1); ev.accepted = true }
-                        }
-                    }
-                }
-            }
-
-            // ══ OPENED-APPS STATE ══════════════════════════════════════════════
-            // workspace pills — active desktops + one empty; current is accented
-            Row {
-                id: pillRow
-                visible: !root.searching
-                anchors.horizontalCenter: parent.horizontalCenter
-                anchors.top: searchBox.bottom; anchors.topMargin: 26
-                spacing: 14
-                Repeater {
-                    model: root.wsPills
-                    delegate: Rectangle {
-                        id: pill
-                        required property var modelData
-                        readonly property int wsId: modelData.ws
-                        readonly property bool current: wsId === root.focusedWs
-                        width: 84; height: 52
-                        radius: 12
-                        color: pillDrop.containsDrag ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.25)
-                             : current ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.16)
-                             : Theme.elevated
-                        border.color: (current || pillDrop.containsDrag) ? Theme.accent : Theme.stroke
-                        border.width: current || pillDrop.containsDrag ? 2 : 1
-                        Behavior on color { ColorAnimation { duration: Theme.durFast } }
-                        DropArea { id: pillDrop; anchors.fill: parent; keys: ["overview-window"] }
-                        Text {
-                            anchors.centerIn: parent
-                            text: pill.wsId
-                            color: pill.current ? Theme.accent : Theme.fgSecondary
-                            font.family: Theme.fontDisplay; font.pixelSize: Theme.fsBody; font.weight: Font.DemiBold
-                        }
-                        // tiny window-count dots along the pill's bottom
-                        Row {
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            anchors.bottom: parent.bottom; anchors.bottomMargin: 7
-                            spacing: 3
-                            Repeater {
-                                model: Math.min(pill.modelData.count, 5)
-                                delegate: Rectangle { width: 4; height: 4; radius: 2; color: pill.current ? Theme.accent : Theme.fgDim }
-                            }
-                        }
-                        MouseArea {
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: root.gotoWs(pill.wsId)
-                        }
-                    }
-                }
-            }
-
-            // the current desktop's windows as large cards
+            // ══ WINDOW CARDS — always present; dim + freeze while searching ═══
             Flickable {
                 id: cardArea
-                visible: !root.searching
                 anchors.left: parent.left; anchors.right: parent.right
-                anchors.top: pillRow.bottom; anchors.topMargin: 30
-                anchors.bottom: parent.bottom; anchors.bottomMargin: 32
+                anchors.top: searchBox.bottom; anchors.topMargin: 34
+                anchors.bottom: dotsRow.top; anchors.bottomMargin: 18
                 clip: true
                 contentWidth: width
                 contentHeight: Math.max(height, cardFlow.implicitHeight)
                 boundsBehavior: Flickable.StopAtBounds
+                interactive: !root.searching
+                opacity: root.searching ? 0.35 : 1
+                Behavior on opacity { NumberAnimation { duration: Theme.dur; easing.type: Easing.OutCubic } }
                 // card size scales down as the desktop gets busier
                 readonly property real cardH: Math.round(height * (root.curWins.length <= 2 ? 0.52 : root.curWins.length <= 6 ? 0.40 : 0.30))
                 readonly property real cardW: Math.round(cardH * stage.monAR)
 
                 Flow {
                     id: cardFlow
-                    width: Math.min(cardArea.width - 80, (cardArea.cardW + 26) * Math.min(root.curWins.length, 3))
+                    width: Math.min(cardArea.width - 80, (cardArea.cardW + 30) * Math.min(Math.max(root.curWins.length, 1), 3))
                     anchors.horizontalCenter: parent.horizontalCenter
                     y: Math.max(0, (cardArea.height - implicitHeight) / 2)
-                    spacing: 26
+                    spacing: 30
 
                     Repeater {
                         model: root.curWins
@@ -311,24 +338,48 @@ Scope {
                             id: dragArea
                             required property var modelData
                             required property int index
-                            readonly property bool seld: index === root.sel
+                            readonly property bool seld: index === root.sel && !root.searching
                             width: cardArea.cardW; height: cardArea.cardH
+                            enabled: !root.searching
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
                             drag.target: cardContent
                             drag.smoothed: false
                             property bool didDrag: false
                             onPressed: didDrag = false
-                            onPositionChanged: { if (drag.active) didDrag = true; else root.sel = index }
+                            onPositionChanged: {
+                                if (drag.active) { didDrag = true; root.dragActive = true }
+                                else root.sel = index
+                            }
                             onClicked: root.jump(modelData)
-                            // Resolve the drop by hit-testing the pill row (ParentChange
+                            // Resolve the drop by hit-testing the dots row (ParentChange
                             // snaps the clone back the instant the drag ends, racing the
                             // DropArea's drop event).
                             onReleased: function (mouse) {
+                                root.dragActive = false
                                 if (!didDrag) return
-                                var p = dragArea.mapToItem(pillRow, mouse.x, mouse.y)
-                                var pi = pillRow.childAt(p.x, p.y)
+                                var p = dragArea.mapToItem(dotsRow, mouse.x, mouse.y)
+                                var pi = dotsRow.childAt(p.x, p.y)
                                 if (pi && pi.wsId !== undefined) root.moveWin(modelData, pi.wsId)
+                            }
+
+                            // soft drop shadow — a black silhouette behind the card;
+                            // the card covers its centre, only the blur spills out
+                            Rectangle {
+                                id: shadowProxy
+                                anchors.fill: cardContent
+                                radius: 14
+                                color: "black"
+                                visible: false
+                            }
+                            MultiEffect {
+                                anchors.fill: shadowProxy
+                                source: shadowProxy
+                                visible: !dragArea.drag.active
+                                shadowEnabled: true
+                                shadowBlur: 1.0
+                                shadowColor: Qt.rgba(0, 0, 0, 0.5)
+                                shadowVerticalOffset: 10
                             }
 
                             // ClippingRectangle: children (preview, chip) clip to the rounded border
@@ -336,9 +387,9 @@ Scope {
                                 id: cardContent
                                 width: dragArea.width
                                 height: dragArea.height
-                                radius: Theme.radius
+                                radius: 14
                                 color: Theme.panel
-                                border.color: dragArea.seld ? Theme.accent : Theme.stroke
+                                border.color: dragArea.seld ? Theme.accent : stage.hairline
                                 border.width: dragArea.seld ? 2 : 1
 
                                 Drag.active: dragArea.drag.active
@@ -377,6 +428,7 @@ Scope {
                                     Text {
                                         anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10
                                         verticalAlignment: Text.AlignVCenter
+                                        horizontalAlignment: Text.AlignHCenter
                                         text: root.titleOf(dragArea.modelData)
                                         color: dragArea.seld ? Theme.fg : Theme.fgSecondary
                                         font.family: Theme.fontText; font.pixelSize: 12
@@ -399,13 +451,11 @@ Scope {
                             }
 
                             // close (✕) — top-left on hover (badge owns the top-right corner).
-                            // Accent glyph on the dark chip (black-on-black was invisible) and
-                            // box-centred via alignment (centerIn drifts on glyph metrics).
                             Rectangle {
                                 anchors.top: parent.top; anchors.left: parent.left; anchors.margins: 10
                                 z: 50
                                 width: 24; height: 24; radius: 12
-                                visible: !dragArea.drag.active && (dragArea.containsMouse || closeMa.containsMouse)
+                                visible: !dragArea.drag.active && !root.searching && (dragArea.containsMouse || closeMa.containsMouse)
                                 color: closeMa.containsMouse ? Theme.danger : Qt.rgba(0, 0, 0, 0.6)
                                 border.color: closeMa.containsMouse ? Theme.danger : Theme.accent; border.width: 1
                                 Text {
@@ -423,109 +473,218 @@ Scope {
                 // empty-desktop hint
                 Column {
                     anchors.centerIn: parent
-                    visible: root.curWins.length === 0
+                    visible: root.curWins.length === 0 && !root.searching
                     spacing: 12
                     Text { anchors.horizontalCenter: parent.horizontalCenter; text: Theme.icMonitorOff; font.family: Theme.fontMono; font.pixelSize: 40; color: Theme.fgDim }
                     Text { anchors.horizontalCenter: parent.horizontalCenter; text: "No windows on this desktop"; color: Theme.fgDim; font.family: Theme.fontDisplay; font.pixelSize: Theme.fsTitle }
                 }
             }
 
-            // ══ SEARCH STATE — Apps + Windows, launcher-style rows ═══════════════
-            Flickable {
-                visible: root.searching
-                anchors.left: parent.left; anchors.right: parent.right
-                anchors.top: searchBox.bottom; anchors.topMargin: 28
-                anchors.bottom: parent.bottom; anchors.bottomMargin: 32
-                clip: true
-                contentWidth: width
-                contentHeight: resCol.implicitHeight
-                boundsBehavior: Flickable.StopAtBounds
+            // ══ LAUNCHER — search field + fused results panel (above the cards) ══
+            Rectangle {
+                id: searchShadowProxy
+                anchors.fill: searchBox
+                radius: 16
+                color: "black"
+                visible: false
+            }
+            MultiEffect {
+                anchors.fill: searchShadowProxy
+                source: searchShadowProxy
+                shadowEnabled: true
+                shadowBlur: 1.0
+                shadowColor: Qt.rgba(0, 0, 0, 0.45)
+                shadowVerticalOffset: 12
+            }
+            Rectangle {
+                id: searchBox
+                anchors.horizontalCenter: parent.horizontalCenter
+                y: 30
+                width: 560; height: 52
+                radius: 16
+                color: stage.glassBg
+                border.color: search.activeFocus ? Qt.rgba(1, 1, 1, 0.24) : stage.hairline
+                border.width: 1
+                z: 10
 
-                Column {
-                    id: resCol
-                    width: Math.min(parent.width - 120, 640)
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    spacing: 6
-
-                    Text {
-                        visible: root.appResults.length > 0
-                        text: "Apps"
-                        color: Theme.fgSecondary; font.family: Theme.fontDisplay; font.pixelSize: Theme.fsBody; font.weight: Font.DemiBold
-                        topPadding: 4; bottomPadding: 2
-                    }
-                    Repeater {
-                        model: root.appResults
-                        delegate: Item {
-                            id: appRow
-                            required property var modelData
-                            required property int index
-                            readonly property bool seld: index === root.sel
-                            width: resCol.width; height: 54
-                            Rectangle { anchors.fill: parent; radius: Theme.radiusInner; color: appRow.seld ? Theme.accent : (arMa.containsMouse ? Theme.hover : "transparent") }
-                            Row {
-                                anchors.fill: parent; anchors.leftMargin: 14; anchors.rightMargin: 14; spacing: 14
-                                Image { anchors.verticalCenter: parent.verticalCenter; width: 34; height: 34; sourceSize.width: 68; sourceSize.height: 68; source: root.appIcon(appRow.modelData) }
-                                Column {
-                                    anchors.verticalCenter: parent.verticalCenter; spacing: 1
-                                    Text { text: appRow.modelData.name || ""; color: appRow.seld ? Theme.accentText : Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsBody; font.weight: Font.Medium }
-                                    Text { visible: !!appRow.modelData.genericName; text: appRow.modelData.genericName || ""; color: appRow.seld ? Theme.accentText : Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
-                                }
-                            }
-                            MouseArea { id: arMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onPositionChanged: root.sel = appRow.index; onClicked: root.launchApp(appRow.modelData) }
-                        }
-                    }
-
-                    Text {
-                        visible: root.winResults.length > 0
-                        text: "Windows"
-                        color: Theme.fgSecondary; font.family: Theme.fontDisplay; font.pixelSize: Theme.fsBody; font.weight: Font.DemiBold
-                        topPadding: 12; bottomPadding: 2
-                    }
-                    Repeater {
-                        model: root.winResults
-                        delegate: Item {
-                            id: winRow
-                            required property var modelData
-                            required property int index
-                            readonly property int navIdx: root.appResults.length + index
-                            readonly property bool seld: navIdx === root.sel
-                            width: resCol.width; height: 54
-                            Rectangle { anchors.fill: parent; radius: Theme.radiusInner; color: winRow.seld ? Theme.accent : (wrMa.containsMouse ? Theme.hover : "transparent") }
-                            Row {
-                                anchors.fill: parent; anchors.leftMargin: 14; anchors.rightMargin: 48; spacing: 14
-                                Image { anchors.verticalCenter: parent.verticalCenter; width: 34; height: 34; sourceSize.width: 68; sourceSize.height: 68; source: root.iconFor(winRow.modelData) }
-                                Column {
-                                    anchors.verticalCenter: parent.verticalCenter; spacing: 1
-                                    Text { width: resCol.width - 130; text: root.titleOf(winRow.modelData); elide: Text.ElideRight; color: winRow.seld ? Theme.accentText : Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsBody; font.weight: Font.Medium }
-                                    Text { text: "Desktop " + root.wsOf(winRow.modelData); color: winRow.seld ? Theme.accentText : Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
-                                }
-                            }
-                            MouseArea { id: wrMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onPositionChanged: root.sel = winRow.navIdx; onClicked: root.jump(winRow.modelData) }
-                            // close this window right from the results — accent ✕, box-centred
-                            Rectangle {
-                                anchors.right: parent.right; anchors.rightMargin: 12; anchors.verticalCenter: parent.verticalCenter
-                                width: 24; height: 24; radius: 12
-                                visible: wrMa.containsMouse || wxMa.containsMouse || winRow.seld
-                                color: wxMa.containsMouse ? Theme.danger : Qt.rgba(0, 0, 0, 0.35)
-                                border.color: wxMa.containsMouse ? Theme.danger : Theme.accent; border.width: 1
-                                Text {
-                                    anchors.fill: parent
-                                    horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
-                                    text: Theme.icClose; font.family: Theme.fontMono; font.pixelSize: 14
-                                    color: (winRow.seld || wxMa.containsMouse) ? Theme.accentText : Theme.accent
-                                }
-                                MouseArea { id: wxMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.killWin(winRow.modelData) }
+                Row {
+                    anchors.fill: parent
+                    anchors.leftMargin: 20; anchors.rightMargin: 20
+                    spacing: 12
+                    Text { anchors.verticalCenter: parent.verticalCenter; text: Theme.icSearch; font.family: Theme.fontMono; font.pixelSize: 16; color: Theme.fgDim }
+                    TextInput {
+                        id: search
+                        width: parent.width - 40
+                        anchors.verticalCenter: parent.verticalCenter
+                        color: Theme.fg; font.family: Theme.fontDisplay; font.pixelSize: Theme.fsLarge
+                        selectionColor: Theme.accent; selectByMouse: true; clip: true
+                        // accent caret, macOS-style blink
+                        cursorDelegate: Rectangle {
+                            width: 2; radius: 1
+                            height: search.cursorRectangle.height
+                            color: Theme.accent
+                            SequentialAnimation on opacity {
+                                loops: Animation.Infinite; running: search.activeFocus
+                                NumberAnimation { from: 1; to: 1; duration: 520 }
+                                NumberAnimation { from: 1; to: 0; duration: 60 }
+                                NumberAnimation { from: 0; to: 0; duration: 380 }
+                                NumberAnimation { from: 0; to: 1; duration: 60 }
                             }
                         }
+                        onTextChanged: root.query = text
+                        Text { visible: search.text.length === 0; anchors.verticalCenter: parent.verticalCenter; text: "Search apps, windows and files…"; color: Theme.fgDim; font: search.font }
+                        Keys.onPressed: function (ev) {
+                            if (ev.key === Qt.Key_Escape) { root.close(); ev.accepted = true }
+                            else if (ev.key === Qt.Key_Return || ev.key === Qt.Key_Enter) { root.activateSel(); ev.accepted = true }
+                            else if (ev.key === Qt.Key_Left || ev.key === Qt.Key_Up) { root.sel = Math.max(0, root.sel - 1); ev.accepted = true }
+                            else if (ev.key === Qt.Key_Right || ev.key === Qt.Key_Down) { root.sel = Math.min(root.navCount - 1, root.sel + 1); ev.accepted = true }
+                        }
                     }
+                }
+            }
 
-                    // dead-end state
+            // results panel — fused 8 px under the field, one list: apps,
+            // windows, files, each row with a right-side type tag (mockup)
+            Rectangle {
+                id: resultsPanel
+                visible: root.searching && Globals.overviewOpen
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.top: searchBox.bottom; anchors.topMargin: 8
+                width: searchBox.width
+                height: Math.min(resCol.implicitHeight + 16, stage.height - searchBox.y - searchBox.height - 60)
+                radius: 16
+                color: stage.glassBg
+                border.color: stage.hairline; border.width: 1
+                z: 10
+
+                Flickable {
+                    anchors.fill: parent
+                    anchors.margins: 8
+                    clip: true
+                    contentWidth: width
+                    contentHeight: resCol.implicitHeight
+                    boundsBehavior: Flickable.StopAtBounds
+
                     Column {
+                        id: resCol
                         width: parent.width
-                        visible: root.appResults.length === 0 && root.winResults.length === 0
-                        spacing: 10
-                        Text { anchors.horizontalCenter: parent.horizontalCenter; topPadding: 40; text: Theme.icSearch; font.family: Theme.fontMono; font.pixelSize: 36; color: Theme.fgDim }
-                        Text { anchors.horizontalCenter: parent.horizontalCenter; text: "Nothing matches “" + root.query + "”"; color: Theme.fgDim; font.family: Theme.fontDisplay; font.pixelSize: Theme.fsTitle }
+                        spacing: 2
+
+                        Repeater {
+                            model: root.appResults
+                            delegate: ResultRow {
+                                required property var modelData
+                                required property int index
+                                width: resCol.width
+                                seld: index === root.sel
+                                icon: root.appIcon(modelData)
+                                title: modelData.name || ""
+                                tag: "Application"
+                                onGo: root.launchApp(modelData)
+                            }
+                        }
+                        Repeater {
+                            model: root.winResults
+                            delegate: ResultRow {
+                                required property var modelData
+                                required property int index
+                                width: resCol.width
+                                seld: root.appResults.length + index === root.sel
+                                icon: root.iconFor(modelData)
+                                title: root.titleOf(modelData)
+                                sub: "Open window on Desktop " + root.wsOf(modelData)
+                                tag: "Jump to"
+                                onGo: root.jump(modelData)
+                            }
+                        }
+                        Repeater {
+                            model: root.fileResults
+                            delegate: ResultRow {
+                                required property var modelData
+                                required property int index
+                                width: resCol.width
+                                seld: root.appResults.length + root.winResults.length + index === root.sel
+                                glyph: root.g(0xF0224)   // file-outline
+                                title: modelData.name
+                                tag: modelData.dir
+                                onGo: root.openFile(modelData)
+                            }
+                        }
+
+                        // dead-end state
+                        Item {
+                            visible: root.navCount === 0
+                            width: resCol.width; height: 46
+                            Row {
+                                anchors.centerIn: parent; spacing: 10
+                                Text { anchors.verticalCenter: parent.verticalCenter; text: Theme.icSearchOff; font.family: Theme.fontMono; font.pixelSize: 16; color: Theme.fgDim }
+                                Text { anchors.verticalCenter: parent.verticalCenter; text: "Nothing matches “" + root.query + "”"; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsBody }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ══ workspace dots — bottom-centre; drop targets while dragging ═══
+            Row {
+                id: dotsRow
+                anchors.horizontalCenter: parent.horizontalCenter
+                // clear of the dock, which draws above the overview in the same
+                // layer (dockH + its 8 px float + breathing room)
+                anchors.bottom: parent.bottom; anchors.bottomMargin: 96
+                spacing: 10
+                opacity: root.searching ? 0.35 : 1
+                Behavior on opacity { NumberAnimation { duration: Theme.dur; easing.type: Easing.OutCubic } }
+                Repeater {
+                    model: root.wsPills
+                    delegate: Item {
+                        id: dot
+                        required property var modelData
+                        readonly property int wsId: modelData.ws
+                        readonly property bool current: wsId === root.focusedWs
+                        readonly property bool big: root.dragActive
+                        width: big ? 44 : (current ? 26 : 10)
+                        height: big ? 28 : 10
+                        Behavior on width  { NumberAnimation { duration: Theme.durFast; easing.type: Easing.OutCubic } }
+                        Behavior on height { NumberAnimation { duration: Theme.durFast; easing.type: Easing.OutCubic } }
+
+                        Rectangle {
+                            anchors.fill: parent
+                            radius: height / 2
+                            color: dotDrop.containsDrag ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.55)
+                                 : dot.big ? Qt.rgba(1, 1, 1, dot.current ? 0.30 : 0.14)
+                                 : dot.current ? Qt.rgba(1, 1, 1, 0.92)
+                                 : dotMa.containsMouse ? Qt.rgba(1, 1, 1, 0.55) : Qt.rgba(1, 1, 1, 0.30)
+                            border.color: dotDrop.containsDrag ? Theme.accent : "transparent"
+                            border.width: dotDrop.containsDrag ? 2 : 0
+                            Behavior on color { ColorAnimation { duration: Theme.durFast } }
+                            Text {
+                                anchors.centerIn: parent
+                                visible: dot.big
+                                text: dot.wsId
+                                color: dotDrop.containsDrag ? "#ffffff" : Theme.fgSecondary
+                                font.family: Theme.fontDisplay; font.pixelSize: 13; font.weight: Font.DemiBold
+                            }
+                        }
+                        // window-count dots under the chip while dragging
+                        Row {
+                            visible: dot.big && dot.modelData.count > 0
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            anchors.top: parent.bottom; anchors.topMargin: 4
+                            spacing: 3
+                            Repeater {
+                                model: Math.min(dot.modelData.count, 5)
+                                delegate: Rectangle { width: 4; height: 4; radius: 2; color: Qt.rgba(1, 1, 1, 0.5) }
+                            }
+                        }
+                        DropArea { id: dotDrop; anchors.fill: parent; keys: ["overview-window"] }
+                        MouseArea {
+                            id: dotMa
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.gotoWs(dot.wsId)
+                        }
                     }
                 }
             }

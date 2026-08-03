@@ -493,6 +493,17 @@ Scope {
                         onActivated: { Globals.clipAnchorX = scissorsItem.mapToItem(null, scissorsItem.width / 2, 0).x; Globals.clipboardOpen = !Globals.clipboardOpen }
                     }
 
+                    // tiling ⇄ floating — the icon IS the state (grid = tiling,
+                    // stacked windows = floating, accented so the non-default
+                    // mode is visible at a glance). Settings.qml owns persisting
+                    // the flip and reloading Hyprland.
+                    StatusItem {
+                        glyph: Globals.tilingEnabled ? Theme.icTiling : Theme.icFloating
+                        fg: Globals.tilingEnabled ? Theme.fgSecondary : Theme.accent
+                        fontPx: 14
+                        onActivated: Globals.tilingEnabled = !Globals.tilingEnabled
+                    }
+
                     // keyboard layout — plain text (US / GE); click cycles the layout
                     Item {
                         anchors.verticalCenter: parent.verticalCenter

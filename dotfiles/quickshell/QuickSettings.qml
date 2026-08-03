@@ -1571,19 +1571,7 @@ Scope {
                         }
                     }
 
-                    Row {
-                        width: parent.width; spacing: 10
-                        // Tiling off makes new windows open floating, for people who
-                        // want this to behave like a stacking desktop. Flipping the
-                        // Globals bool is the whole interaction — Settings.qml owns
-                        // persisting it and reloading Hyprland.
-                        Tile {
-                            width: parent.width
-                            ic: Theme.icTiling; label: "Tiling"; active: Globals.tilingEnabled
-                            sub: Globals.tilingEnabled ? "On" : "Windows float"
-                            onClicked: Globals.tilingEnabled = !Globals.tilingEnabled
-                        }
-                    }
+                    // (the tiling⇄floating toggle lives in the top bar now)
 
                     // ── sliders + audio output ──
                     Rectangle {
