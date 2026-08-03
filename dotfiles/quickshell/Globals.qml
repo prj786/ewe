@@ -17,10 +17,10 @@ QtObject {
     property bool lowPowerEnabled: true
     readonly property bool lowPower: onBattery && lowPowerEnabled
 
-    // Lid policy (Lid.qml). Default: suspend even with an external monitor
-    // connected — a laptop being closed is usually a laptop being carried.
-    // Turn off to keep working docked with just the built-in panel dark.
-    property bool lidDockedSuspend: true
+    // Lid policy (Lid.qml). Default: with an external monitor connected,
+    // closing the lid keeps the session running and just blanks the built-in
+    // panel — the Ubuntu/GNOME docked behaviour. Turn on to suspend anyway.
+    property bool lidDockedSuspend: false
 
     // Project version — the shell's runtime copy. Keep in sync with the repo-root
     // VERSION file (the canonical source used for git tags / releases). Semver, with

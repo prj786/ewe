@@ -66,6 +66,9 @@ QtObject {
     function _open() {
         Log.info("lid", "opened — re-enabling the built-in panel")
         lid._setInternal(true)
+        // belt-and-braces for the xe/PSR panel: a re-enabled output can come
+        // back powered but dark; dpms on is a no-op when it is already lit
+        Quickshell.execDetached(["hyprctl", "dispatch", 'hl.dsp.dpms("on")'])
         // HyprMon.setLid(false) has already armed its re-assert, which applies
         // the saved geometry on top of these safe defaults a moment later
     }

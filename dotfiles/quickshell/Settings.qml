@@ -2344,7 +2344,7 @@ Scope {
                             width: parent.width; height: 34
                             Column { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; spacing: 1
                                 Text { text: "Suspend even when docked"; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
-                                Text { text: "Off: with an external monitor connected, keep working and just blank the built-in panel."
+                                Text { text: "On: closing the lid always suspends. Off (default): with an external monitor, keep working with the panel dark."
                                        color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 10 }
                             }
                             Toggle {

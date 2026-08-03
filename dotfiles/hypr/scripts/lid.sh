@@ -22,11 +22,14 @@
 
 set -u
 
+# timeout: a WEDGED shell (hung, not crashed) would leave `qs ipc` blocking
+# forever — on close that must still fall through to suspend, and on open it
+# must never leave a stuck process behind the bind.
 case "${1:-}" in
   close)
-    qs ipc call display lid close >/dev/null 2>&1 || systemctl suspend
+    timeout 3 qs ipc call display lid close >/dev/null 2>&1 || systemctl suspend
     ;;
   open)
-    qs ipc call display lid open >/dev/null 2>&1 || true
+    timeout 3 qs ipc call display lid open >/dev/null 2>&1 || true
     ;;
 esac
