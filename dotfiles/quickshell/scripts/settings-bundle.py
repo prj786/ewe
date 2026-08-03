@@ -255,17 +255,22 @@ def cmd_collect():
         "explicit": pacman_list(["-Qqen"]),
         "foreign": pacman_list(["-Qqem"]),
     }
-    # Which of those are APPLICATIONS (own a .desktop entry)? Komble's
-    # "For you" view offers only these — a backup restore that suggests
-    # kernels, firmware and library packages is noise, not help. Recorded at
-    # collect time because only the source machine can answer the question.
+    # Which of those are APPLICATIONS (own a .desktop entry)? The bundle keeps
+    # ONLY these — kernels, firmware and libraries are not "your apps" and must
+    # not appear anywhere, not even as inert backup data (user decision). If the
+    # ownership query fails the lists stay unfiltered rather than empty, and the
+    # consumers' heuristics take over.
     try:
         import glob
         desktop_files = glob.glob("/usr/share/applications/*.desktop")
         r = subprocess.run(["pacman", "-Qqo", *desktop_files],
                            capture_output=True, text=True, timeout=60)
         owners = set(l.strip() for l in r.stdout.split("\n") if l.strip())
-        apps["desktopApps"] = sorted(owners & set(apps["explicit"] + apps["foreign"]))
+        desk = sorted(owners & set(apps["explicit"] + apps["foreign"]))
+        apps["desktopApps"] = desk
+        dset = set(desk)
+        apps["explicit"] = [p for p in apps["explicit"] if p in dset]
+        apps["foreign"] = [p for p in apps["foreign"] if p in dset]
     except (OSError, subprocess.TimeoutExpired):
         pass
     # stable content hash (settings + apps only — not updatedAt/device) so the
