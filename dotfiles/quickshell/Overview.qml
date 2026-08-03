@@ -480,13 +480,14 @@ Scope {
                     }
                 }
 
-                // empty-desktop hint
-                Column {
+                // empty desktop — one quiet line, nothing to look at on purpose
+                Text {
                     anchors.centerIn: parent
                     visible: root.curWins.length === 0 && !root.searching
-                    spacing: 12
-                    Text { anchors.horizontalCenter: parent.horizontalCenter; text: Theme.icMonitorOff; font.family: Theme.fontMono; font.pixelSize: 40; color: Theme.fgDim }
-                    Text { anchors.horizontalCenter: parent.horizontalCenter; text: "No windows on this desktop"; color: Theme.fgDim; font.family: Theme.fontDisplay; font.pixelSize: Theme.fsTitle }
+                    text: "No active windows"
+                    color: Theme.fg
+                    opacity: 0.35
+                    font.family: Theme.fontDisplay; font.pixelSize: Theme.fsTitle
                 }
             }
 
