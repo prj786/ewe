@@ -19,9 +19,10 @@ import Quickshell.Widgets
 //   · the current desktop's windows stay as live-preview CARDS (soft shadow,
 //     hairline border, app badge, hover ✕). While searching they dim and
 //     ignore input — the launcher floats above them, mockup-style.
-//   · workspace DOTS bottom-centre (GNOME): current is a wide pill, others are
-//     dots; click switches. Dragging a card inflates every dot into a numbered
-//     chip — drop on one to move the window there.
+//   · workspace PAGER bottom-centre: each desktop is a miniature monitor-shaped
+//     glass box with a stylised layout of its windows ("desktop boxes",
+//     shrunk); current is accent-framed, the trailing empty one shows "+".
+//     Click switches; drop a dragged card on one to move the window there.
 // Animation: GNOME-like zoom — the stage zooms out into view on open and back
 // in on close (scale + fade, Theme.dur*).
 //
@@ -126,6 +127,15 @@ Scope {
         var out = []
         for (var ws = 1; ws <= top; ws++) out.push({ ws: ws, count: byWs[ws] || 0 })
         return out
+    }
+
+    // pager thumbs: window blocks as [x, y, w, h] fractions of the thumb
+    function miniLayout(n) {
+        if (n <= 0) return []
+        if (n === 1) return [[0.10, 0.14, 0.80, 0.72]]
+        if (n === 2) return [[0.09, 0.14, 0.39, 0.72], [0.52, 0.14, 0.39, 0.72]]
+        if (n === 3) return [[0.09, 0.14, 0.39, 0.72], [0.52, 0.14, 0.39, 0.33], [0.52, 0.53, 0.39, 0.33]]
+        return [[0.09, 0.14, 0.39, 0.33], [0.52, 0.14, 0.39, 0.33], [0.09, 0.53, 0.39, 0.33], [0.52, 0.53, 0.39, 0.33]]
     }
 
     // ── current desktop's windows ──
@@ -313,7 +323,7 @@ Scope {
                 id: cardArea
                 anchors.left: parent.left; anchors.right: parent.right
                 anchors.top: searchBox.bottom; anchors.topMargin: 34
-                anchors.bottom: dotsRow.top; anchors.bottomMargin: 18
+                anchors.bottom: pagerRow.top; anchors.bottomMargin: 18
                 clip: true
                 contentWidth: width
                 contentHeight: Math.max(height, cardFlow.implicitHeight)
@@ -358,8 +368,8 @@ Scope {
                             onReleased: function (mouse) {
                                 root.dragActive = false
                                 if (!didDrag) return
-                                var p = dragArea.mapToItem(dotsRow, mouse.x, mouse.y)
-                                var pi = dotsRow.childAt(p.x, p.y)
+                                var p = dragArea.mapToItem(pagerRow, mouse.x, mouse.y)
+                                var pi = pagerRow.childAt(p.x, p.y)
                                 if (pi && pi.wsId !== undefined) root.moveWin(modelData, pi.wsId)
                             }
 
@@ -625,65 +635,85 @@ Scope {
                 }
             }
 
-            // ══ workspace dots — bottom-centre; drop targets while dragging ═══
+            // ══ workspace pager — bottom-centre: each desktop is a miniature
+            // monitor-shaped glass box with a stylised layout of its windows
+            // (this DE's "desktop boxes", shrunk). Current = accent frame,
+            // trailing empty = "+", drag a card over one to move the window.
             Row {
-                id: dotsRow
+                id: pagerRow
                 anchors.horizontalCenter: parent.horizontalCenter
                 // clear of the dock, which draws above the overview in the same
                 // layer (dockH + its 8 px float + breathing room)
                 anchors.bottom: parent.bottom; anchors.bottomMargin: 96
-                spacing: 10
+                spacing: 12
                 opacity: root.searching ? 0.35 : 1
                 Behavior on opacity { NumberAnimation { duration: Theme.dur; easing.type: Easing.OutCubic } }
                 Repeater {
                     model: root.wsPills
                     delegate: Item {
-                        id: dot
+                        id: thumb
                         required property var modelData
                         readonly property int wsId: modelData.ws
                         readonly property bool current: wsId === root.focusedWs
-                        readonly property bool big: root.dragActive
-                        width: big ? 44 : (current ? 26 : 10)
-                        height: big ? 28 : 10
-                        Behavior on width  { NumberAnimation { duration: Theme.durFast; easing.type: Easing.OutCubic } }
-                        Behavior on height { NumberAnimation { duration: Theme.durFast; easing.type: Easing.OutCubic } }
+                        readonly property bool empty: modelData.count === 0
+                        width: 58; height: 38
+                        scale: thumbDrop.containsDrag ? 1.14 : (thumbMa.containsMouse ? 1.06 : 1)
+                        Behavior on scale { NumberAnimation { duration: Theme.durFast; easing.type: Easing.OutCubic } }
 
                         Rectangle {
+                            id: thumbBox
                             anchors.fill: parent
-                            radius: height / 2
-                            color: dotDrop.containsDrag ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.55)
-                                 : dot.big ? Qt.rgba(1, 1, 1, dot.current ? 0.30 : 0.14)
-                                 : dot.current ? Qt.rgba(1, 1, 1, 0.92)
-                                 : dotMa.containsMouse ? Qt.rgba(1, 1, 1, 0.55) : Qt.rgba(1, 1, 1, 0.30)
-                            border.color: dotDrop.containsDrag ? Theme.accent : "transparent"
-                            border.width: dotDrop.containsDrag ? 2 : 0
+                            radius: 9
+                            color: thumbDrop.containsDrag ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.30)
+                                 : thumb.current ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.16)
+                                 : Qt.rgba(1, 1, 1, thumbMa.containsMouse ? 0.13 : 0.07)
+                            border.color: (thumb.current || thumbDrop.containsDrag) ? Theme.accent : stage.hairline
+                            border.width: thumb.current || thumbDrop.containsDrag ? 2 : 1
                             Behavior on color { ColorAnimation { duration: Theme.durFast } }
+
+                            // stylised windows: 1 = full, 2 = split, 3 = master+stack,
+                            // 4+ = grid — a pager you can read at a glance
+                            Repeater {
+                                model: root.miniLayout(Math.min(thumb.modelData.count, 4))
+                                delegate: Rectangle {
+                                    required property var modelData
+                                    x: Math.round(thumbBox.width * modelData[0])
+                                    y: Math.round(thumbBox.height * modelData[1])
+                                    width: Math.round(thumbBox.width * modelData[2])
+                                    height: Math.round(thumbBox.height * modelData[3])
+                                    radius: 2.5
+                                    opacity: root.dragActive ? 0.25 : 1
+                                    color: thumb.current ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.75)
+                                                         : Qt.rgba(1, 1, 1, 0.40)
+                                    Behavior on opacity { NumberAnimation { duration: Theme.durFast } }
+                                }
+                            }
+
+                            // trailing empty desktop reads as "new one lives here"
                             Text {
                                 anchors.centerIn: parent
-                                visible: dot.big
-                                text: dot.wsId
-                                color: dotDrop.containsDrag ? "#ffffff" : Theme.fgSecondary
-                                font.family: Theme.fontDisplay; font.pixelSize: 13; font.weight: Font.DemiBold
+                                visible: thumb.empty && !thumb.current && !root.dragActive
+                                text: "+"
+                                color: Qt.rgba(1, 1, 1, 0.45)
+                                font.family: Theme.fontDisplay; font.pixelSize: 17; font.weight: Font.DemiBold
+                            }
+
+                            // while a card is being dragged, the number is the target
+                            Text {
+                                anchors.centerIn: parent
+                                visible: root.dragActive
+                                text: thumb.wsId
+                                color: thumbDrop.containsDrag ? "#ffffff" : Theme.fgSecondary
+                                font.family: Theme.fontDisplay; font.pixelSize: 14; font.weight: Font.DemiBold
                             }
                         }
-                        // window-count dots under the chip while dragging
-                        Row {
-                            visible: dot.big && dot.modelData.count > 0
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            anchors.top: parent.bottom; anchors.topMargin: 4
-                            spacing: 3
-                            Repeater {
-                                model: Math.min(dot.modelData.count, 5)
-                                delegate: Rectangle { width: 4; height: 4; radius: 2; color: Qt.rgba(1, 1, 1, 0.5) }
-                            }
-                        }
-                        DropArea { id: dotDrop; anchors.fill: parent; keys: ["overview-window"] }
+                        DropArea { id: thumbDrop; anchors.fill: parent; keys: ["overview-window"] }
                         MouseArea {
-                            id: dotMa
+                            id: thumbMa
                             anchors.fill: parent
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: root.gotoWs(dot.wsId)
+                            onClicked: root.gotoWs(thumb.wsId)
                         }
                     }
                 }
