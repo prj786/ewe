@@ -104,7 +104,8 @@ QtObject {
         L += ', mode = "' + s.mode + '", position = "' + s.x + "x" + s.y + '", scale = ' + s.scale
         if (s.transform) L += ", transform = " + s.transform
         L += ", vrr = " + (s.vrr ? 1 : 0)
-        if (s.bitdepth === 10) L += ", bitdepth = 10"
+        // always explicit: omitting bitdepth would leave a live 10-bit output at 10
+        L += ", bitdepth = " + (s.bitdepth === 10 ? 10 : 8)
         if (s.mirror !== "") L += ', mirror = "' + luaEsc(s.mirror) + '"'
         return L + " }"
     }

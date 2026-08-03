@@ -33,6 +33,10 @@ JSON_FILES = {
     "displayProfiles": QS + "/display-profiles.json",
     "inputDevices": QS + "/input-devices.json",
     "startupApps": QS + "/startup-apps.json",
+    # Komble's memory of what it installed (AppImages + tracked packages) —
+    # restoring it lets "For you" offer the same apps on a fresh machine
+    "kombleAppimages": HOME + "/.local/share/io.github.komble.arch/registry.json",
+    "komblePackages": HOME + "/.local/share/io.github.komble.arch/packages.json",
 }
 FACE = HOME + "/.face"
 FACE_MAX = 1024 * 1024   # avatars are ~100 KB; refuse to inflate the bundle past 1 MB
@@ -42,6 +46,9 @@ TEXT_FILES = {
     "hypr/generated/input.lua": HYPR + "/generated/input.lua",
     "hypr/generated/wallpapers.conf": HYPR + "/generated/wallpapers.conf",
     "hypr/generated/hypridle.conf": HYPR + "/generated/hypridle.conf",
+    # default applications — GIO reads this natively, so restoring the file IS
+    # restoring the "Default apps" pane
+    "mimeapps.list": HOME + "/.config/mimeapps.list",
 }
 KB_FLAG = HYPR + "/generated/kb-per-window.disabled"
 
@@ -83,6 +90,118 @@ def pacman_list(args):
         return []
 
 
+# ── NetworkManager profiles (Wi-Fi / VPN / WireGuard) ───────────────────────
+# Full profiles INCLUDING secrets travel in the bundle: NetworkManager grants
+# GetSecrets to the active console user (verified: polkit allow_active), and
+# the bundle only ever lands in the user's own private Drive appDataFolder.
+# Ethernet/loopback/bridges are machine-local plumbing and are not synced.
+NET_TYPES = {"802-11-wireless": "wifi", "vpn": "vpn", "wireguard": "wireguard"}
+NET_PROP_PREFIXES = ("connection.", "802-11-wireless.", "802-11-wireless-security.",
+                     "802-1x.", "vpn.", "wireguard.", "ipv4.", "ipv6.")
+NET_PROP_SKIP = {
+    # identity is carried at the top level / at `connection add` time
+    "connection.uuid", "connection.id", "connection.type",
+    # machine-local state, never portable
+    "connection.timestamp", "connection.read-only",
+    "802-11-wireless.seen-bssids", "802-11-wireless.mac-address",
+}
+
+
+def nmcli(args, timeout=20):
+    try:
+        r = subprocess.run(["nmcli", *args], capture_output=True, text=True, timeout=timeout)
+        return r.stdout if r.returncode == 0 else None
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+
+
+def nm_unesc(s):
+    """Undo nmcli terse-mode escaping (\\: and \\\\)."""
+    out, i = [], 0
+    while i < len(s):
+        if s[i] == "\\" and i + 1 < len(s):
+            out.append(s[i + 1])
+            i += 2
+        else:
+            out.append(s[i])
+            i += 1
+    return "".join(out)
+
+
+def nm_listing():
+    """[(uuid, type, name)] for every NM connection."""
+    res = []
+    for line in (nmcli(["-t", "-f", "UUID,TYPE,NAME", "connection", "show"]) or "").split("\n"):
+        parts = line.split(":", 2)  # uuid and type never contain ':'
+        if len(parts) == 3 and parts[0].strip():
+            res.append((parts[0], parts[1], nm_unesc(parts[2])))
+    return res
+
+
+def collect_networks():
+    nets = []
+    for uuid, ctype, name in nm_listing():
+        if ctype not in NET_TYPES:
+            continue
+        dump = nmcli(["--show-secrets", "-t", "connection", "show", "uuid", uuid])
+        if dump is None:
+            continue
+        props = {}
+        for pl in dump.split("\n"):
+            if ":" not in pl:
+                continue
+            k, v = pl.split(":", 1)
+            v = nm_unesc(v)
+            if not k.startswith(NET_PROP_PREFIXES) or k in NET_PROP_SKIP:
+                continue
+            if v in ("", "--"):
+                continue
+            props[k] = v
+        if ctype != "wireguard":  # wg keeps its ifname; others stay portable
+            props.pop("connection.interface-name", None)
+        nets.append({"uuid": uuid, "name": name, "type": ctype, "props": props})
+    return nets
+
+
+def apply_networks(nets):
+    """Recreate missing profiles; existing (by uuid or name+type) are left alone."""
+    have_uuid, have_name = set(), set()
+    for uuid, ctype, name in nm_listing():
+        have_uuid.add(uuid)
+        have_name.add((name, ctype))
+    added, failed = [], []
+    for n in nets:
+        if not isinstance(n, dict):
+            continue
+        uuid, name, ctype = str(n.get("uuid", "")), str(n.get("name", "?")), str(n.get("type", ""))
+        props = n.get("props") or {}
+        if ctype not in NET_TYPES or not uuid:
+            continue
+        if uuid in have_uuid or (name, ctype) in have_name:
+            continue
+        # add disabled first so a half-written profile can never auto-connect
+        add = ["connection", "add", "type", NET_TYPES[ctype], "con-name", name,
+               "connection.uuid", uuid, "connection.autoconnect", "no"]
+        if ctype == "802-11-wireless":
+            add += ["ssid", props.get("802-11-wireless.ssid", name)]
+        elif ctype == "vpn":
+            st = props.get("vpn.service-type", "")
+            if st:
+                add += ["vpn-type", st.rsplit(".", 1)[-1]]
+        elif ctype == "wireguard":
+            add += ["ifname", props.get("connection.interface-name", "wg0")]
+        if nmcli(add) is None:
+            failed.append(name)
+            continue
+        for k, v in sorted(props.items()):
+            nmcli(["connection", "modify", "uuid", uuid, k, v])  # per-prop: one
+            # unknown/read-only property must not sink the whole profile
+        nmcli(["connection", "modify", "uuid", uuid,
+               "connection.autoconnect", props.get("connection.autoconnect", "yes")])
+        added.append(name)
+    return added, failed
+
+
 def cmd_collect():
     settings = {}
     for key, path in JSON_FILES.items():
@@ -114,22 +233,11 @@ def cmd_collect():
                     browse[fn] = t
     if browse:
         settings["sshBrowse"] = browse
-    # vpn: names + types ONLY. The actual profiles live root-owned in /etc and
-    # can embed credentials — secrets never go into the cloud bundle. Restore
-    # lists these so the user knows what to re-import.
-    vpns = []
-    try:
-        r = subprocess.run(["nmcli", "-t", "-f", "NAME,TYPE", "connection", "show"],
-                           capture_output=True, text=True, timeout=15)
-        if r.returncode == 0:
-            for line in r.stdout.split("\n"):
-                parts = line.split(":")
-                if len(parts) >= 2 and parts[1] in ("vpn", "wireguard"):
-                    vpns.append({"name": parts[0], "type": parts[1]})
-    except (OSError, subprocess.TimeoutExpired):
-        pass
-    if vpns:
-        settings["vpnConnections"] = vpns
+    # network: full Wi-Fi/VPN/WireGuard profiles, secrets included — restore
+    # recreates them so a fresh install connects without retyping anything
+    nets = collect_networks()
+    if nets:
+        settings["networkProfiles"] = nets
 
     # avatar: ~/.face travels base64 so a fresh install gets the user icon back
     try:
@@ -236,18 +344,45 @@ def cmd_apply(path):
         except (ValueError, OSError, subprocess.TimeoutExpired):
             pass
 
-    # package lists → plain files for an opt-in reinstall; NEVER installed here
-    apps = bundle.get("apps") or {}
-    n_repo, n_aur = len(apps.get("explicit") or []), len(apps.get("foreign") or [])
-    if n_repo:
-        atomic_write(QS + "/google-restore-packages.txt", "\n".join(apps["explicit"]) + "\n")
-    if n_aur:
-        atomic_write(QS + "/google-restore-aur.txt", "\n".join(apps["foreign"]) + "\n")
+    # network profiles: recreate what is missing (never touches existing ones)
+    net_added, net_failed = [], []
+    if isinstance(settings.get("networkProfiles"), list):
+        net_added, net_failed = apply_networks(settings["networkProfiles"])
+        if net_added:
+            applied.append("networkProfiles")
 
+    # package lists → plain files for an opt-in reinstall; NEVER installed here.
+    # APPS ONLY: restoring kernels/firmware/libraries is noise — dependencies
+    # come back on their own when pacman installs the app that needs them.
+    apps = bundle.get("apps") or {}
+    explicit = [p for p in (apps.get("explicit") or []) if isinstance(p, str)]
+    foreign = [p for p in (apps.get("foreign") or []) if isinstance(p, str)]
+    desk = apps.get("desktopApps")
+    if isinstance(desk, list) and desk:
+        dset = set(desk)
+        repo_apps = [p for p in explicit if p in dset]
+        aur_apps = [p for p in foreign if p in dset]
+    else:
+        # older bundle without the app list — same heuristic Komble falls back to
+        def looks_app(p):
+            base = {"base", "base-devel", "grub", "efibootmgr", "mkinitcpio", "sudo"}
+            return (p not in base and not p.startswith(("linux", "lib"))
+                    and not p.endswith(("-firmware", "-ucode", "-headers", "-dkms")))
+        repo_apps = [p for p in explicit if looks_app(p)]
+        aur_apps = [p for p in foreign if looks_app(p)]
+    n_repo, n_aur = len(repo_apps), len(aur_apps)
+    if n_repo:
+        atomic_write(QS + "/google-restore-packages.txt", "\n".join(repo_apps) + "\n")
+    if n_aur:
+        atomic_write(QS + "/google-restore-aur.txt", "\n".join(aur_apps) + "\n")
+
+    # names-only VPN list from pre-networkProfiles bundles: still surfaced so
+    # the user knows what to re-import by hand
     vpns = [v.get("name", "?") for v in (settings.get("vpnConnections") or []) if isinstance(v, dict)]
     out({"ok": True, "applied": applied, "device": bundle.get("device", "?"),
          "updatedAt": bundle.get("updatedAt", "?"),
-         "packages": {"repo": n_repo, "aur": n_aur}, "vpn": vpns})
+         "packages": {"repo": n_repo, "aur": n_aur},
+         "network": {"added": net_added, "failed": net_failed}, "vpn": vpns})
 
 
 if __name__ == "__main__":

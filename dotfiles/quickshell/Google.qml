@@ -43,6 +43,9 @@ QtObject {
         function signIn(): void { goo.signIn() }
         function signOut(): void { goo.signOut() }
         function syncNow(): void { goo.syncNow() }
+        // debounced push — Komble and hypr-settings poke this after every
+        // install/remove/settings write, so changes sync without user action
+        function syncSoon(): void { goo.syncSoon() }
         function refresh(): void { goo.refresh() }
         function setAutoSync(on: bool): void { goo.setAutoSync(on) }
         // Komble's "For you" view: fetch the cloud bundle and drop its PACKAGE
@@ -246,7 +249,9 @@ QtObject {
     property string restoreSummary: ""   // success line after a restore
     property string lastSync: ""         // ISO — last successful push/restore from THIS device
     property string lastHash: ""         // content hash of the last pushed bundle (skip no-op pushes)
-    property bool autoSync: false
+    // on by default: "everything I change should be synced" is the product
+    // promise — the toggle in Settings/Komble is the opt-out
+    property bool autoSync: true
     property var cloudInfo: null         // { device, updatedAt } of the cloud copy
     property var pendingRestore: null    // downloaded bundle awaiting explicit confirmation
     property var _cloudBundle: null
@@ -280,7 +285,10 @@ QtObject {
 
     property Connections _sessionHooks: Connections {
         target: goo
-        function onSessionReady() { goo.checkCloud(); goo.fetchCalendar(); goo.fetchMail() }
+        // syncSoon at login catches changes made outside the apps since the
+        // last session (a VPN imported via nmcli, an edited ~/.ssh/config) —
+        // the content hash turns it into a no-op when nothing moved
+        function onSessionReady() { goo.checkCloud(); goo.fetchCalendar(); goo.fetchMail(); goo.syncSoon() }
         function onSessionClosed() {
             goo.cloudInfo = null; goo._cloudBundle = null; goo._cloudFileId = ""
             goo.pendingRestore = null; goo.syncState = "idle"; goo.syncError = ""; goo.restoreSummary = ""
@@ -371,6 +379,13 @@ QtObject {
             if (!Globals.settingsOpen && goo.autoSync && goo.signedIn) goo._autoPushTimer.restart()
         }
     }
+    /** Debounced "something changed, push when quiet" — the burst of writes a
+     *  Settings drag or a batch install produces collapses into one upload,
+     *  and the content hash still skips the push when nothing really changed. */
+    function syncSoon() {
+        if (!goo.autoSync || !goo.signedIn) return
+        goo._autoPushTimer.restart()
+    }
     property Timer _autoPushTimer: Timer {
         interval: 20000
         onTriggered: { if (goo.autoSync && goo.signedIn && goo.syncState !== "syncing") { goo._autoPushing = true; goo.syncNow() } }
@@ -403,8 +418,11 @@ QtObject {
                 }
                 goo.lastSync = j.updatedAt; goo.lastHash = ""; goo._saveSyncMeta()
                 goo.syncState = "idle"
+                var net = j.network || {}
                 goo.restoreSummary = "Restored " + j.applied.length + " sections from “" + j.device + "”."
-                    + (j.vpn && j.vpn.length ? " VPNs to re-import manually (profiles hold secrets and are never synced): " + j.vpn.join(", ") + "." : "")
+                    + (net.added && net.added.length ? " Networks restored: " + net.added.join(", ") + "." : "")
+                    + (net.failed && net.failed.length ? " Could not recreate: " + net.failed.join(", ") + "." : "")
+                    + (j.vpn && j.vpn.length ? " VPNs from an older backup to re-import manually: " + j.vpn.join(", ") + "." : "")
             }
         }
     }
