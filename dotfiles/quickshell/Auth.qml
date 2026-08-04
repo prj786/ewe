@@ -21,9 +21,9 @@ Scope {
         WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
         anchors { top: true; bottom: true; left: true; right: true }
 
-        // dim + click-to-cancel backdrop
+        // dim backdrop — swallows clicks; only the Cancel button (or Esc) dismisses
         Rectangle { anchors.fill: parent; color: Theme.shadow }
-        MouseArea { anchors.fill: parent; onClicked: if (agent.flow) agent.flow.cancelAuthenticationRequest() }
+        MouseArea { anchors.fill: parent }
 
         Connections {
             target: agent
