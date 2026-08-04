@@ -4,8 +4,8 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Services.Greetd
 
-// hypr-shell greeter — a Quickshell/QML login that matches the shell theme.
-// Launched by greetd as:  cage -s -- qs -c hyprshell-greeter  (see phase 30).
+// ewe greeter — a Quickshell/QML login that matches the shell theme.
+// Launched by greetd as:  cage -s -- qs -c ewe-greeter  (see phase 30).
 // Layout mirrors the agreed mockup: centred avatar + username + password,
 // clock bottom-left, session picker bottom-right, no power buttons.
 //
@@ -13,7 +13,7 @@ import Quickshell.Services.Greetd
 //   createSession(user) → authMessage(...) → respond(pw) → readyToLaunch() → launch(argv)
 FloatingWindow {
     id: win
-    title: "hypr-shell"
+    title: "ewe"
     implicitWidth: 1920
     implicitHeight: 1080
     color: pal.bg

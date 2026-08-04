@@ -382,7 +382,7 @@ hl.window_rule({
 -- centre it so it still opens like the old overlay.
 hl.window_rule({
     name   = "settings-window",
-    match  = { title = "^hypr-shell settings$" },
+    match  = { title = "^ewe settings$" },
     float  = true,
     center = true,
     size   = { 880, 620 },

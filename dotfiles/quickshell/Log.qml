@@ -21,7 +21,7 @@ import Quickshell
 // is a plain lowercase string (one per service — "google", "kdeconnect",
 // "display", "battery"), and a line comes out as:
 //
-//   hypr-shell W google: token refresh failed: network: timed out
+//   ewe W google: token refresh failed: network: timed out
 //
 // Levels are a guide, not a ceremony: error = the user lost a capability, warn =
 // something failed but we recovered or degraded, info = a state change worth
@@ -68,7 +68,7 @@ QtObject {
         if (!log.wants(module, lvl)) return
         var parts = []
         for (var i = 1; i < args.length; i++) parts.push(args[i])
-        var line = "hypr-shell " + tag + " " + module + ": " + parts.join(" ")
+        var line = "ewe " + tag + " " + module + ": " + parts.join(" ")
         // route through the matching console call so Qt's own category filtering
         // and journal severity still work
         if (lvl === log.levelError) console.error(line)

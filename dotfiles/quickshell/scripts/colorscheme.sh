@@ -83,7 +83,7 @@ done
 #    staying stock blue. Managed file: rewritten on every scheme apply. ──
 for v in 3.0 4.0; do
     cat > "$CFG/gtk-$v/gtk.css" <<EOF
-/* hypr-shell accent — managed by colorscheme.sh; edits here are overwritten */
+/* ewe accent — managed by colorscheme.sh; edits here are overwritten */
 @define-color accent_color #${ACC};
 @define-color accent_bg_color #${ACC};
 @define-color accent_fg_color #ffffff;

@@ -1,6 +1,6 @@
 # Installed to /etc/greetd/config.toml by phase 30. Fully Wayland: greetd runs
 # `cage` (a one-shot kiosk Wayland compositor) which hosts ReGreet, the graphical
-# greeter. No Xorg. After you pick "Hyprland (DE)" and log in, ReGreet exec's the
+# greeter. No Xorg. After you pick "Ewe" and log in, ReGreet exec's the
 # session's wrapper (start-hyprland.sh) — also pure Wayland.
 [terminal]
 # The VT the greeter owns. vt = "next" picks a free one automatically.
@@ -14,5 +14,5 @@ vt = "next"
 # `cage …` line: greetd word-splits this command, so an inline `env VAR=… `
 # prefix is mis-parsed ("cage: invalid option"). The wrapper sets the wlroots
 # env that fixes the inverted virtio / flaky `xe` cursor, then exec's cage.
-command = "/usr/local/bin/hypr-shell-greeter"
+command = "/usr/local/bin/ewe-greeter"
 user = "greeter"

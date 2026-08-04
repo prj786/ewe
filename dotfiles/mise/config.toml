@@ -1,4 +1,4 @@
-# mise global config — managed by hypr-shell.
+# mise global config — managed by ewe.
 # mise OWNS the Node toolchain (no system nodejs package). `mise install`
 # (run by phase 60) provisions Node LTS, pnpm, and the front-end language
 # servers + formatter as npm-backed tools. Their shims live in

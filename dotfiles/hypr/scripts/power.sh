@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# power.sh — session power actions for the hypr-shell Quick Settings.
+# power.sh — session power actions for the ewe Quick Settings.
 #
 # One tested path per action:
 #   • The Lua /dispatch quirk: Hyprland's IPC evaluates `hyprctl dispatch <arg>`
