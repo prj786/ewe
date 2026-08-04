@@ -52,7 +52,7 @@ Scope {
                     anchors.centerIn: parent
                     spacing: 8
 
-                    // brand mark (line-art shell), shipped in assets/logo.png
+                    // brand mark (the ewe sheep, white line art), shipped in assets/logo.png
                     Image {
                         anchors.horizontalCenter: parent.horizontalCenter
                         source: Qt.resolvedUrl("assets/logo.png")

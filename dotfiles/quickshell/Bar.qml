@@ -418,7 +418,7 @@ Scope {
                     // system tray
                     Row {
                         anchors.verticalCenter: parent.verticalCenter
-                        spacing: 11
+                        spacing: 9
                         Repeater {
                             model: SystemTray.items
                             delegate: Item {

@@ -39,7 +39,11 @@ Scope {
         // set to autohide (the Overview is a launch surface, so the dock belongs there).
         visible: Globals.dockEnabled || Globals.overviewOpen
         color: "transparent"
-        exclusionMode: ExclusionMode.Ignore
+        // Always-visible dock reserves its strip so windows tile/maximize ABOVE it
+        // instead of sliding underneath; intelligent-hide keeps zero reserve so
+        // windows get the full height and the dock overlays only when revealed.
+        exclusionMode: (Globals.dockEnabled && !Globals.dockAutohide) ? ExclusionMode.Normal : ExclusionMode.Ignore
+        exclusiveZone: dockH + 8
         // Jump to the Overlay layer while the Overview is open so the dock floats ABOVE
         // the Overview's dim scrim (which is itself on the Overlay layer); otherwise it
         // would be dimmed underneath. Back to Top the rest of the time.
@@ -47,7 +51,12 @@ Scope {
         WlrLayershell.namespace: "quickshell:dock"
         anchors { bottom: true; left: true; right: true }
 
-        readonly property int dockH: 62
+        // Settings → Dock → Icon size. `cell` is the button/box edge; everything
+        // else scales off `k` so the three sizes keep the same proportions.
+        readonly property int cell: Globals.dockIconSize === "small" ? 38
+                                  : Globals.dockIconSize === "large" ? 54 : 46
+        readonly property real k: cell / 46
+        readonly property int dockH: cell + 16
         readonly property int peek: 6
         implicitHeight: dockH + 18
 
@@ -94,7 +103,7 @@ Scope {
                 property string glyph: ""
                 property bool activeState: false
                 signal go()
-                width: 46; height: 46; radius: 13
+                width: win.cell; height: win.cell; radius: Math.round(13 * win.k)
                 color: activeState ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.16)
                      : dbMa.containsMouse ? Theme.hover : "transparent"
                 border.color: activeState ? Theme.accent : "transparent"
@@ -103,7 +112,7 @@ Scope {
                 Text {
                     anchors.centerIn: parent
                     text: db.glyph
-                    font.family: Theme.fontIcons; font.pixelSize: 22
+                    font.family: Theme.fontIcons; font.pixelSize: Math.round(22 * win.k)
                     color: db.activeState ? Theme.accent : (dbMa.containsMouse ? Theme.fg : Theme.fgSecondary)
                     Behavior on color { ColorAnimation { duration: Theme.durFast } }
                 }
@@ -122,7 +131,7 @@ Scope {
                 DockBtn { id: storeBtn; glyph: Theme.icDownload; activeState: Globals.storeOpen; anchors.verticalCenter: parent.verticalCenter; onGo: { if (Globals.kombleInstalled) { Quickshell.execDetached(["komble"]) } else { Globals.storeAnchorX = storeBtn.mapToItem(null, storeBtn.width / 2, 0).x; Globals.launcherOpen = false; Globals.placesOpen = false; Globals.storeOpen = !Globals.storeOpen } } }
                 DockBtn { id: placesBtn; glyph: Theme.icFolder; activeState: Globals.placesOpen; anchors.verticalCenter: parent.verticalCenter; onGo: { Globals.placesAnchorX = placesBtn.mapToItem(null, placesBtn.width / 2, 0).x; Globals.launcherOpen = false; Globals.storeOpen = false; Globals.placesOpen = !Globals.placesOpen } }
 
-                Rectangle { anchors.verticalCenter: parent.verticalCenter; width: 1; height: 40; color: Theme.stroke }
+                Rectangle { anchors.verticalCenter: parent.verticalCenter; width: 1; height: Math.round(40 * win.k); color: Theme.stroke }
 
                 // ── workspace boxes ──
                 Repeater {
@@ -132,8 +141,8 @@ Scope {
                         required property var modelData
                         readonly property bool focused: Hyprland.focusedWorkspace && Hyprland.focusedWorkspace.id === modelData.id
                         anchors.verticalCenter: parent.verticalCenter
-                        height: 46; radius: 13
-                        width: Math.max(46, wsRow.implicitWidth + 16)
+                        height: win.cell; radius: Math.round(13 * win.k)
+                        width: Math.max(win.cell, wsRow.implicitWidth + 16)
                         color: focused ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.16) : Theme.elevated
                         border.color: focused ? Theme.accent : Theme.stroke; border.width: 1
                         Behavior on color { ColorAnimation { duration: 150 } }
@@ -163,12 +172,12 @@ Scope {
                                 delegate: Rectangle {
                                     required property var modelData
                                     anchors.verticalCenter: parent.verticalCenter
-                                    width: 34; height: 30; radius: 8
+                                    width: Math.round(34 * win.k); height: Math.round(30 * win.k); radius: 8
                                     color: modelData.activated ? Theme.accent : Theme.hover
                                     Behavior on color { ColorAnimation { duration: 120 } }
                                     Image {
                                         anchors.centerIn: parent
-                                        width: 20; height: 20; sourceSize.width: 40; sourceSize.height: 40
+                                        width: Math.round(20 * win.k); height: Math.round(20 * win.k); sourceSize.width: 40; sourceSize.height: 40
                                         source: root.iconFor(modelData)
                                     }
                                     MouseArea {

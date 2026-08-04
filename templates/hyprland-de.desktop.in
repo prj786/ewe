@@ -3,8 +3,8 @@
 # ReGreet), which runs as the `greeter` user and never reads ~/.local/share,
 # lists it. @EXEC@ is replaced with the per-user path to start-hyprland.sh at
 # install time.
-Name=Hyprland (DE)
-Comment=Hyprland with the Quickshell desktop
+Name=Ewe
+Comment=The ewe desktop — Hyprland + Quickshell
 Exec=@EXEC@
 Type=Application
 DesktopNames=Hyprland

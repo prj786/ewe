@@ -291,6 +291,10 @@ Scope {
         function toggle(): void { Globals.quickSettingsOpen = !Globals.quickSettingsOpen }
         function show(): void { Globals.quickSettingsOpen = true }
         function hide(): void { Globals.quickSettingsOpen = false }
+        // Power-button press (XF86PowerOff bind in hyprland.lua; logind ignores
+        // the key so a stray tap can't hard-poweroff): open the panel with the
+        // shutdown confirmation already up.
+        function powerdialog(): void { Globals.quickSettingsOpen = true; root.askPower("poweroff", "Shut down this computer?", "Shut Down") }
     }
 
     Process {

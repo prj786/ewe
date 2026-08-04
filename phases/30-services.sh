@@ -31,6 +31,23 @@ phase_services() {
     _enable_system bluetooth.service
     _enable_system power-profiles-daemon.service
 
+    # ── time: NTP on + a real timezone ──
+    # A minimal Arch install often leaves NTP off and the clock in UTC — the
+    # desktop then shows the wrong time. timesyncd ships with systemd, so just
+    # turn it on; if the timezone was never set, take a best-effort GeoIP guess
+    # (the user can always change it: timedatectl set-timezone <Region/City>).
+    _enable_system systemd-timesyncd.service
+    sudo_run timedatectl set-ntp true 2>/dev/null || true
+    if [ "$(timedatectl show -p Timezone --value 2>/dev/null)" = "UTC" ]; then
+        local tz
+        tz=$(curl -fsSL --max-time 8 "http://ip-api.com/line/?fields=timezone" 2>/dev/null || true)
+        case "$tz" in
+            */*) sudo_run timedatectl set-timezone "$tz" && ok "timezone set from GeoIP: $tz" \
+                     || warn "could not set timezone '$tz' — set it manually: timedatectl set-timezone <Region/City>" ;;
+            *)   info "timezone is UTC and the GeoIP lookup failed — set it with: timedatectl set-timezone <Region/City>" ;;
+        esac
+    fi
+
     # ── persistent journal ──
     # journald's Storage=auto keeps logs across reboots only if /var/log/journal
     # exists. Without it a hard freeze + forced power-off leaves NOTHING to
@@ -125,8 +142,15 @@ phase_services() {
     sudo_run install -d /etc/systemd/logind.conf.d
     sudo_run install -m 644 "$DOTREPO/system/logind/10-hypr-shell-lid.conf" /etc/systemd/logind.conf.d/10-hypr-shell-lid.conf \
         && ok "installed logind lid drop-in (Hyprland owns the lid switch)"
-    # logind only reads its config at start; a restart is session-safe on systemd ≥ 254
-    sudo_run systemctl restart systemd-logind || warn "could not restart systemd-logind — lid config applies after reboot"
+    # logind only reads its config at start — but restarting it under a LIVE
+    # Wayland session can yank the compositor's session/DRM handle and black-
+    # screen the desktop (observed when re-running install.sh inside the DE).
+    # Only restart from a TTY/headless run; in-session it applies on reboot.
+    if [ -z "${WAYLAND_DISPLAY:-}${DISPLAY:-}" ]; then
+        sudo_run systemctl restart systemd-logind || warn "could not restart systemd-logind — lid/power-key config applies after reboot"
+    else
+        info "graphical session active — skipping logind restart (lid/power-key config applies on next reboot)"
+    fi
 
     # ── Battery charge ceiling: hand that ONE sysfs attribute to the wheel
     # group so Settings → Power can set it without a root prompt. Skipped on

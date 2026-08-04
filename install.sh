@@ -148,7 +148,7 @@ if [ "$COEXIST" = "1" ]; then
 cat <<EOF
   Next (coexist — your existing WM/DM is untouched):
     1. Log OUT of your current session (no reboot needed).
-    2. In your login manager, pick the 'Hyprland (DE)' session (listed next to
+    2. In your login manager, pick the 'Ewe' session (listed next to
        your existing one).
     3. First keys:  Super+Return (terminal) · Super+D (apps) · Super+, (Settings)
        Full list in ~/.config/hypr/SHORTCUTS.md
@@ -161,8 +161,8 @@ else
 cat <<EOF
   Next:
     1. Reboot (or restart your display manager) so the greeter picks up the
-       'Hyprland (DE)' session entry.
-    2. Pick 'Hyprland (DE)' at login.
+       'Ewe' session entry.
+    2. Pick 'Ewe' at login.
     3. First keys:  Super+Return (terminal) · Super+D (apps) · Super+, (Settings)
        Full list in ~/.config/hypr/SHORTCUTS.md
     4. Re-run the checklist any time:  bash install.sh --check-only

@@ -212,6 +212,7 @@ Scope {
         o.windowTransparency = Globals.windowTransparency
         o.dockEnabled = Globals.dockEnabled
         o.dockAutohide = Globals.dockAutohide
+        o.dockIconSize = Globals.dockIconSize
         o.animationSpeed = Number(Globals.animationSpeed)
         o.colorScheme = Globals.colorScheme
         o.avatarShape = Globals.avatarShape
@@ -2143,7 +2144,9 @@ Scope {
                         Row {
                             width: parent.width; spacing: 8
                             Repeater {
-                                model: [{ n: "Off", m: 0 }, { n: "Smooth", m: 0.7 }, { n: "Normal", m: 1 }, { n: "Fast", m: 1.6 }]
+                                // m divides the base speeds (windows base = 500 ms):
+                                // Normal 500 ms · Snappy ≈350 ms · Fast 200 ms
+                                model: [{ n: "Off", m: 0 }, { n: "Normal", m: 1 }, { n: "Snappy", m: 1.43 }, { n: "Fast", m: 2.5 }]
                                 delegate: Rectangle {
                                     required property var modelData
                                     readonly property bool sel: Math.abs(Globals.animationSpeed - modelData.m) < 0.001
@@ -2156,7 +2159,7 @@ Scope {
                             }
                         }
                     }
-                    Text { width: parent.width; text: "Animation speed drives window + shell motion; applies live and persists to user-theme.json + generated/user.lua."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
+                    Text { width: parent.width; text: "Animation speed drives window + shell motion (Normal ≈ 500 ms window animations, Snappy ≈ 350 ms, Fast ≈ 200 ms); applies live and persists to user-theme.json + generated/user.lua."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
                     Text { width: parent.width; text: "Accent recolours the whole shell instantly and persists in user-theme.json."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
                     Item { width: 1; height: 8 }
                 }
@@ -2502,6 +2505,30 @@ Scope {
                                 Text { text: "Auto-hide; reveal by moving the cursor to the bottom edge."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 10 }
                             }
                             Toggle { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; on: Globals.dockAutohide; onToggled: { if (Globals.dockEnabled) { Globals.dockAutohide = !Globals.dockAutohide; root.writePrefs() } } }
+                        }
+                        Rectangle { width: parent.width; height: 1; color: Theme.stroke; opacity: 0.5 }
+                        Item {
+                            width: parent.width; height: 30
+                            opacity: Globals.dockEnabled ? 1 : 0.4
+                            Column { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; spacing: 1
+                                Text { text: "Icon size"; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
+                                Text { text: "How big the dock buttons and workspace boxes are."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 10 }
+                            }
+                            Row {
+                                anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; spacing: 6
+                                Repeater {
+                                    model: [{ n: "Small", v: "small" }, { n: "Normal", v: "normal" }, { n: "Large", v: "large" }]
+                                    delegate: Rectangle {
+                                        required property var modelData
+                                        readonly property bool sel: Globals.dockIconSize === modelData.v
+                                        width: 60; height: 26; radius: Theme.radiusPill
+                                        color: sel ? Theme.accent : Theme.panel
+                                        border.color: sel ? Theme.accent : Theme.stroke; border.width: 1
+                                        Text { anchors.centerIn: parent; text: modelData.n; color: parent.sel ? Theme.accentText : Theme.fg; font.family: Theme.fontText; font.pixelSize: 11; font.weight: Font.DemiBold }
+                                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { if (Globals.dockEnabled) { Globals.dockIconSize = modelData.v; root.writePrefs() } } }
+                                    }
+                                }
+                            }
                         }
                     }
                     Text { width: parent.width; text: "The dock replaces the workspace row that used to be in the top bar."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }

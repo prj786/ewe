@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# phase 35 — Plymouth boot splash: a graphical Arch-logo + spinner from early boot
+# phase 35 — Plymouth boot splash: the ewe sheep mark + spinner from early boot
 # to the greeter, hiding the kernel/systemd [OK] text. Three parts, all idempotent
 # and best-effort (a missing piece warns, never aborts):
-#   1. install our theme (stock spinner frames + our Arch watermark + colours)
+#   1. install our theme (stock spinner frames + the ewe watermark + colours)
 #   2. add the `plymouth` mkinitcpio hook + regenerate the initramfs
 #   3. add `quiet splash …` to the kernel cmdline (systemd-boot AND/OR GRUB)
 # The after-LOGIN "Welcome <user>" splash is the Quickshell Splash.qml component,
@@ -11,7 +11,10 @@
 # Kernel params that actually silence the boot. Order doesn't matter; appended
 # (never reordered) to whatever cmdline already exists. `splash` is a no-op flag
 # if plymouth is ever absent, so adding these is safe.
-_QUIET_PARAMS="quiet splash loglevel=3 rd.udev.log_level=3 vt.global_cursor_default=0"
+#   systemd.show_status=auto (+rd. for the initramfs) — no "[ OK ] Started …"
+#     lines on the console (they still appear if boot actually degrades/errors)
+#   udev.log_level=3 — udev after the initramfs handoff (rd.* only covers early boot)
+_QUIET_PARAMS="quiet splash loglevel=3 rd.udev.log_level=3 udev.log_level=3 systemd.show_status=auto rd.systemd.show_status=auto vt.global_cursor_default=0"
 
 phase_bootsplash() {
     step "35 · boot splash (plymouth)"
@@ -23,18 +26,20 @@ phase_bootsplash() {
     command -v systemctl >/dev/null 2>&1 || { warn "no systemd — skipping plymouth boot splash."; return 0; }
 
     # ── 1. install the theme ────────────────────────────────────────────────
-    local src="$DOTREPO/system/plymouth/hypr-shell" dst=/usr/share/plymouth/themes/hypr-shell
+    local src="$DOTREPO/system/plymouth/ewe" dst=/usr/share/plymouth/themes/ewe
     sudo_run install -d "$dst"
     # Reuse the stock "spinner" theme's throbber/animation frames so we don't ship
-    # ~60 PNGs; we only override the watermark (our Arch logo) and the .plymouth.
+    # ~60 PNGs; we only override the watermark (the ewe sheep) and the .plymouth.
     if [ -d /usr/share/plymouth/themes/spinner ]; then
         sudo_run sh -c "cp -f /usr/share/plymouth/themes/spinner/*.png '$dst'/"
     else
         warn "stock 'spinner' theme missing — splash will show the logo without a spinner."
     fi
-    sudo_run install -m 644 "$src/watermark.png"      "$dst/watermark.png"
-    sudo_run install -m 644 "$src/hypr-shell.plymouth" "$dst/hypr-shell.plymouth"
-    ok "installed plymouth theme: hypr-shell"
+    sudo_run install -m 644 "$src/watermark.png" "$dst/watermark.png"
+    sudo_run install -m 644 "$src/ewe.plymouth"  "$dst/ewe.plymouth"
+    # migrate: drop the pre-rename theme so it doesn't linger in the picker
+    [ -d /usr/share/plymouth/themes/hypr-shell ] && sudo_run rm -rf /usr/share/plymouth/themes/hypr-shell
+    ok "installed plymouth theme: ewe"
 
     # ── 2. mkinitcpio hook ──────────────────────────────────────────────────
     # plymouth must sit right after the `udev` (or `systemd`) hook so it starts
@@ -57,7 +62,7 @@ phase_bootsplash() {
     fi
 
     # ── set theme + regenerate initramfs (this runs mkinitcpio -P / dracut) ──
-    sudo_run plymouth-set-default-theme -R hypr-shell && ok "set default plymouth theme + regenerated initramfs" \
+    sudo_run plymouth-set-default-theme -R ewe && ok "set default plymouth theme + regenerated initramfs" \
         || warn "plymouth-set-default-theme -R failed — check the initramfs generator output."
 
     # ── 3. quiet kernel cmdline (systemd-boot entries, /etc/kernel/cmdline, GRUB) ──

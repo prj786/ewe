@@ -328,6 +328,11 @@ hl.bind("XF86AudioRaiseVolume",  hl.dsp.exec_cmd("wpctl set-volume -l 1.0 @DEFAU
 hl.bind("XF86AudioLowerVolume",  hl.dsp.exec_cmd("wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-"),        { locked = true, repeating = true })
 hl.bind("XF86AudioMute",         hl.dsp.exec_cmd("wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle"),       { locked = true })
 hl.bind("XF86AudioMicMute",      hl.dsp.exec_cmd("wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle"),     { locked = true })
+-- Power button: logind ignores a short press (system/logind drop-in) so a stray
+-- tap can't hard-poweroff; show the shutdown confirmation instead. Not `locked`
+-- on purpose — while the session is locked the tap does nothing (long press
+-- still powers off via logind).
+hl.bind("XF86PowerOff",          hl.dsp.exec_cmd("qs ipc call quicksettings powerdialog"))
 hl.bind("XF86MonBrightnessUp",   hl.dsp.exec_cmd("brightnessctl -e4 -n2 set 5%+ && qs ipc call osd brightness"), { locked = true, repeating = true })
 hl.bind("XF86MonBrightnessDown", hl.dsp.exec_cmd("brightnessctl -e4 -n2 set 5%- && qs ipc call osd brightness"), { locked = true, repeating = true })
 -- Keyboard backlight (0-3 on ASUS). The shell writes it through logind's

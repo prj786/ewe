@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ╔══════════════════════════════════════════════════════════════════════════╗
-# ║  hypr-shell update — the repo is the single source of truth.             ║
+# ║  ewe update — the repo is the single source of truth.                    ║
 # ║                                                                          ║
 # ║      ./update.sh              pull latest + converge this machine        ║
 # ║      ./update.sh --check      is an update available? change nothing     ║
@@ -81,7 +81,7 @@ print(json.dumps({k: coerce(v) for k, v in
     case "$ev" in
         phase) printf '  %-8s %s%s\n' "$name" "$status" "${msg:+ — $msg}" ;;
         error) printf 'error: %s\n' "${msg:-unknown}" >&2 ;;
-        done)  printf '\nhypr-shell updated\n' ;;
+        done)  printf '\newe updated\n' ;;
         *)     [ -n "$msg" ] && printf '%s\n' "$msg" ;;
     esac
 }

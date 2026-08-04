@@ -1,16 +1,16 @@
 [Plymouth Theme]
-Name=hypr-shell
-Description=hypr-shell boot splash — Arch logo + spinner on a dark background
+Name=ewe
+Description=ewe boot splash — the sheep mark + spinner on a dark background
 ModuleName=two-step
 
 [two-step]
 # The throbber/animation frames are copied from the stock "spinner" theme at
-# install time (phase 35); only the watermark (our Arch logo) and the colours
+# install time (phase 35); only the watermark (the ewe sheep) and the colours
 # below are ours. ImageDir is the installed theme dir.
-ImageDir=/usr/share/plymouth/themes/hypr-shell
+ImageDir=/usr/share/plymouth/themes/ewe
 Font=Cantarell 12
 TitleFont=Cantarell Light 28
-# Spinner (throbber) just above centre; the Arch logo watermark sits above it.
+# Spinner (throbber) just above centre; the sheep watermark sits above it.
 HorizontalAlignment=.5
 VerticalAlignment=.62
 WatermarkHorizontalAlignment=.5

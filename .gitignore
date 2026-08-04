@@ -35,3 +35,6 @@ dotfiles/fresh/init.ts
 
 # python bytecode from syntax checks
 __pycache__/
+
+# release artefacts built by release.sh
+dist/

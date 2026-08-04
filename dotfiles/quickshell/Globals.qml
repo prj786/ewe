@@ -25,7 +25,7 @@ QtObject {
     // Project version — the shell's runtime copy. Keep in sync with the repo-root
     // VERSION file (the canonical source used for git tags / releases). Semver, with
     // an -alpha/-beta pre-release suffix until the first stable cut.
-    readonly property string version: "0.4.0-alpha"
+    readonly property string version: "0.5.0-beta"
 
     property bool quickSettingsOpen: false  // the Quick Settings panel
     property bool dnd: false               // Do Not Disturb (suppresses toasts)
@@ -111,6 +111,7 @@ QtObject {
     // ── Dock prefs (bottom dock; persisted in user-theme.json) ─────────────────
     property bool dockEnabled: true
     property bool dockAutohide: false       // intelligent hide: slide away, reveal on bottom-edge hover
+    property string dockIconSize: "normal"  // dock icon size: "small" | "normal" | "large"
 
     // ── Screensaver (persisted in user-theme.json; hypridle owns the timing via
     // the generated hypridle.conf — see Settings.writeIdleConf) ────────────────
@@ -268,6 +269,7 @@ QtObject {
                     if (j && j.windowTransparency !== undefined) g.windowTransparency = j.windowTransparency
                     if (j && j.dockEnabled !== undefined) g.dockEnabled = j.dockEnabled
                     if (j && j.dockAutohide !== undefined) g.dockAutohide = j.dockAutohide
+                    if (j && j.dockIconSize) g.dockIconSize = j.dockIconSize
                     if (j && j.animationSpeed !== undefined) g.animationSpeed = j.animationSpeed
                     if (j && j.colorScheme) g.colorScheme = j.colorScheme
                     if (j && j.avatarShape) g.avatarShape = j.avatarShape

@@ -35,7 +35,7 @@ QtObject {
     readonly property color barActive:   hover
     readonly property int barItemRadius: 6
     readonly property int barItemHeight: 22
-    readonly property int barItemSpacing: 16
+    readonly property int barItemSpacing: 12
 
     // Accent — whatever Settings → Theme wrote into user-theme.json.
     readonly property color accent:      Globals.accentColor

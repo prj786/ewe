@@ -4,7 +4,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-`hypr-shell` is an installable, **Arch-Linux-only**, clean dark desktop
+**ewe** (as in the sheep; repo `prj786/ewe`, formerly `hypr-shell` — old URLs
+redirect) is an installable, **Arch-Linux-only**, clean dark desktop
 environment: **Hyprland** (Wayland compositor, configured in Lua) + **Quickshell**
 (a QML shell — bar, dock, launcher, notifications, quick settings, settings,
 app store, lock, OSD). `install.sh` turns a minimal Arch install into the full DE.
@@ -13,6 +14,18 @@ project is **Arch-only** end to end — no Fedora/COPR/`dnf`/GDM paths remain.
 
 There is **no application source to compile and no test suite.** "Building" means
 running the installer; "testing" means the verification commands below.
+
+**Branding vs. plumbing:** the user-facing name is **ewe** (README, session
+entry "Ewe", plymouth theme `ewe`, the sheep line-art logos in
+`system/branding/ewe-logo-{dark,light}.png` + `dotfiles/quickshell/assets/logo.png`
++ `system/plymouth/ewe/watermark.png` — all transparent-background, regenerate
+from source art with an ink-extraction script, alpha = darkness). Remaining
+on-disk identifiers — the dev-host repo dir, `hypr-shell.service`,
+`~/.local/state/hypr-shell` — are still hypr-shell-era. Don't rename those
+piecemeal; a deep rename is a separate coordinated change. Distribution:
+`get.sh` (curl bootstrap → `~/.local/share/ewe`) installs the
+`ewe-<version>.tar.zst` artefact built by `release.sh` (`--publish` creates the
+GitHub release).
 
 ## Development workflow (critical)
 
