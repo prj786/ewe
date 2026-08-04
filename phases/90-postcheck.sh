@@ -20,9 +20,9 @@ phase_postcheck() {
     # charge), so only verify the greeter stack when greetd was actually installed.
     if pkg_present greetd; then
         _check "greeter: greetd + regreet + cage"     sh -c 'pacman -Qq greetd && pacman -Qq greetd-regreet && pacman -Qq cage'
-        _check "greeter: Quickshell config installed"  test -r /etc/xdg/quickshell/hyprshell-greeter/shell.qml
+        _check "greeter: Quickshell config installed"  test -r /etc/xdg/quickshell/ewe-greeter/shell.qml
     else
-        _note "greeter: not installed (coexist — your login manager lists 'Hyprland (DE)')"
+        _note "greeter: not installed (coexist — your login manager lists 'Ewe')"
     fi
     _check "fully Wayland: no xorg-server"         sh -c '! pacman -Qq xorg-server 2>/dev/null'
     _check "apps: file manager (nemo)"             sh -c 'command -v nemo'

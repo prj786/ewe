@@ -131,7 +131,7 @@ phase_services() {
         # screen — refuse to enable and say how to finish.
         if command -v qs >/dev/null 2>&1 || command -v quickshell >/dev/null 2>&1 || command -v regreet >/dev/null 2>&1 || pkg_present quickshell; then
             _enable_system greetd.service
-            info "greetd → cage → Quickshell greeter (regreet fallback), lists 'Hyprland (DE)'. Disable any other display-manager.service first."
+            info "greetd → cage → Quickshell greeter (regreet fallback), lists 'Ewe'. Disable any other display-manager.service first."
         else
             warn "no greeter found (quickshell/regreet) — NOT enabling greetd.service to avoid a broken boot."
             warn "Install with:  sudo pacman -S quickshell greetd-regreet  &&  sudo systemctl enable greetd.service"
