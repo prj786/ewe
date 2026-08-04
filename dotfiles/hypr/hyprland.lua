@@ -106,6 +106,11 @@ hl.config({
     misc = {
         disable_hyprland_logo   = true,
         force_default_wallpaper = 0,
+        -- Normal-DE wake semantics: if an output ever IS dpms-off (clamshell
+        -- lid.sh, manual dpms), moving the mouse or pressing a key lights it —
+        -- both default to false in Hyprland, which reads as a dead black screen.
+        mouse_move_enables_dpms = true,
+        key_press_enables_dpms  = true,
         -- Silence "Hyprland was started without start-hyprland." We launch via our
         -- own session wrapper (start-hyprland.sh) from greetd and propagate the
         -- systemd/DBus activation env in scripts/autostart.sh, so Hyprland's own

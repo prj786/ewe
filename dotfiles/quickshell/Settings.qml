@@ -268,7 +268,7 @@ Scope {
         } else {
             parts.push("lock at " + mins(5) + " min")
         }
-        parts.push("suspend at " + mins(15) + " min on battery")
+        parts.push("suspend at 15 min on battery")
         parts.push("no display power-off")
         return parts.join(" · ") + (Globals.lowPower ? "   (battery timeline)" : "")
     }
@@ -308,8 +308,11 @@ Scope {
             s += "listener {\n    timeout    = " + root.idleAt(300) + "\n    on-timeout = " + lockCmd + "\n    on-resume  = " + undim + "\n}\n"
         }
         // idle-suspend.sh still checks AC itself — belt and braces, because this
-        // file can be stale for the moments between a plug event and the restart
-        s += "listener {\n    timeout    = " + root.idleAt(900) + "\n    on-timeout = ~/.config/hypr/scripts/idle-suspend.sh\n}\n"
+        // file can be stale for the moments between a plug event and the restart.
+        // Deliberately NOT battery-shortened: suspend is the one stage the user
+        // walks into blind (black screen, mouse can't wake s2idle — only keys
+        // can), so it stays at the documented 15 min instead of a surprise 7.5.
+        s += "listener {\n    timeout    = 900\n    on-timeout = ~/.config/hypr/scripts/idle-suspend.sh\n}\n"
         root.atomicWrite(idleWriter, root.home + "/.config/hypr/generated/hypridle.conf", s)
         if (!HyprMon.virtualSession)
             // the small sleep lets the atomic temp+rename land before hypridle reads it

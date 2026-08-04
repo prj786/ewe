@@ -78,12 +78,14 @@ QtObject {
         // 3. displays — the dock state can have changed while asleep, which no
         //    hotplug event will tell us about because we were not running to
         //    hear it. reassert(false) re-queries first and only corrects real
-        //    drift, so this is cheap when nothing moved. The dpms("on") first is
-        //    insurance for the xe/PSR wake path, where a resume can otherwise
-        //    leave the panel powered but dark — exactly the "opened the lid to a
-        //    black screen" failure; a no-op when the outputs are already lit.
+        //    drift, so this is cheap when nothing moved. Wake is GUARDED
+        //    (wakeIfAsleep: dpms-on only for outputs reporting dpms-off) — the
+        //    old unconditional dpms("on") here cycled already-lit panels and
+        //    produced a visible blink on every keyboard wake. The lid-open
+        //    "powered but dark" xe failure keeps its unconditional insurance in
+        //    Lid.qml, which is the path where that failure actually occurs.
         Log.info("resume", "3/6 displays")
-        Quickshell.execDetached(["hyprctl", "dispatch", 'hl.dsp.dpms("on")'])
+        HyprMon.wakeIfAsleep()
         HyprMon.reassert(false)
 
         // 4. bridges — a helper whose bus connection died does not necessarily
