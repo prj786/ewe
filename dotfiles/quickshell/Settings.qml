@@ -2079,9 +2079,24 @@ Scope {
                     spacing: 14
                     SectionTitle { text: "SHELL STYLE" }
                     Card {
+                        Row {
+                            width: parent.width; spacing: 8
+                            Repeater {
+                                model: [{ n: "Flock", m: "flock" }, { n: "Black Sheep", m: "blacksheep" }]
+                                delegate: Rectangle {
+                                    required property var modelData
+                                    readonly property bool sel: Globals.themeName === modelData.m
+                                    width: (parent.width - 8) / 2; height: 38; radius: Theme.radiusInner
+                                    color: sel ? Theme.accent : Theme.panel
+                                    border.color: sel ? Theme.accent : Theme.stroke; border.width: 1
+                                    Text { anchors.centerIn: parent; text: modelData.n; color: parent.sel ? Theme.accentText : Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold }
+                                    MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { Globals.themeName = modelData.m; root.writePrefs() } }
+                                }
+                            }
+                        }
                         Text {
                             width: parent.width; wrapMode: Text.Wrap
-                            text: "Flock — the ewe look: solid dark surfaces, rounded corners, Phosphor icons, and the accent colour you pick below."
+                            text: "Flock — the ewe look in soft dark greys. Black Sheep — the same look on absolute black (#020202) surfaces: bar, dock, panels. Shape, icons and your accent stay identical; applies instantly."
                             color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11
                         }
                     }
@@ -2119,7 +2134,8 @@ Scope {
                                     width: 46; height: 46; radius: 23; color: modelData.hex
                                     readonly property bool sel: root.hex6(Globals.accentColor).toLowerCase() === root.hex6(modelData.hex).toLowerCase()
                                     border.color: sel ? Theme.fg : Qt.rgba(1, 1, 1, 0.15); border.width: sel ? 3 : 1
-                                    Text { anchors.centerIn: parent; visible: parent.sel; text: Theme.icCheck; font.family: Theme.fontIcons; font.pixelSize: 18; color: "white" }
+                                    // accentText, not white: a white check vanishes on yellow/light swatches
+                                    Text { anchors.centerIn: parent; visible: parent.sel; text: Theme.icCheck; font.family: Theme.fontIcons; font.pixelSize: 18; color: Theme.accentText }
                                     MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.setAccent(modelData.hex) }
                                 }
                             }

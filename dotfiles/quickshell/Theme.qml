@@ -4,20 +4,22 @@ import QtQuick
 // Theme — single source of truth for colour, type, metrics and icons.
 // Imported as `Theme.*`; components must never define their own.
 //
-// ONE look: "flock" — dark neutral greys, rounded, solid surfaces, a
-// user-picked accent, and Phosphor Fill icons everywhere. The old second
-// theme (Unity 7 "Ambiance") is gone; the shape/colour tokens it needed
-// (barTop/barBottom, barItem*) remain as plain constants so no consumer
-// had to change.
+// TWO looks that share every token except the neutral surfaces:
+//   "flock"      — dark neutral greys (the default)
+//   "blacksheep" — absolute black (#020202 surfaces) for OLED / pure-dark fans
+// Both: rounded, solid surfaces, a user-picked accent, Phosphor Fill icons.
+// The old second theme (Unity 7 "Ambiance") is gone; the shape/colour tokens
+// it needed (barTop/barBottom, barItem*) remain as plain constants.
 QtObject {
     id: t
 
     // ── Palette ───────────────────────────────────────────────────────────
-    readonly property color bg:          "#1c1c1e"   // desktop / app base
-    readonly property color panel:       "#1d1d1f"   // popup / panel surface
-    readonly property color elevated:    "#2c2c2e"   // cards / rows on a panel
-    readonly property color hover:       "#3a3a3c"
-    readonly property color stroke:      "#38383a"   // hairline border
+    readonly property bool pitchBlack:   Globals.themeName === "blacksheep"
+    readonly property color bg:          pitchBlack ? "#020202" : "#1c1c1e"   // desktop / app base
+    readonly property color panel:       pitchBlack ? "#020202" : "#1d1d1f"   // popup / panel surface
+    readonly property color elevated:    pitchBlack ? "#101012" : "#2c2c2e"   // cards / rows on a panel
+    readonly property color hover:       pitchBlack ? "#1a1a1c" : "#3a3a3c"
+    readonly property color stroke:      pitchBlack ? "#222225" : "#38383a"   // hairline border
     readonly property color shadow:      Qt.rgba(0, 0, 0, 0.45)
 
     readonly property color fg:          "#f2f2f7"   // warm off-white, never pure white

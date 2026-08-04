@@ -262,8 +262,10 @@ QtObject {
                 try {
                     var j = JSON.parse(this.text)
                     if (j && typeof j === "object" && !Array.isArray(j)) g.prefsRaw = j
-                    // themeName in the file is legacy (graphite/ambiance) — the
-                    // look is always "flock" now, so it is not read back
+                    // themeName: only the known looks are read back — anything
+                    // else in the file is legacy (graphite/ambiance) and falls
+                    // through to the "flock" default
+                    if (j && (j.themeName === "flock" || j.themeName === "blacksheep")) g.themeName = j.themeName
                     if (j && j.accent) g.accentColor = j.accent
                     if (j && j.tintBorders !== undefined) g.tintBorders = j.tintBorders
                     if (j && j.windowTransparency !== undefined) g.windowTransparency = j.windowTransparency
