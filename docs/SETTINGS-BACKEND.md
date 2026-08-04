@@ -70,7 +70,7 @@ and hotplug re-apply (HyprMon) call `wallpaper.sh --reapply`.
 The Settings app is a real **xdg-toplevel** (`FloatingWindow`), not a layer
 surface — required for the XDG portal file chooser to have a valid parent and
 for file drag-and-drop to route to it. A `hyprland.lua` windowrule floats and
-centres it (match: title `hypr-shell settings`). All image/video input goes
+centres it (match: title `ewe settings`). All image/video input goes
 through the shared `FileDropTarget` component (portal chooser + drop zone).
 
 ## Google account (User tab) — native OAuth

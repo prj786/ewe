@@ -27,7 +27,7 @@ Scope {
     property int armed: 101
 
     function notify(urgency, title, body) {
-        Quickshell.execDetached(["notify-send", "-a", "hypr-shell", "-u", urgency,
+        Quickshell.execDetached(["notify-send", "-a", "ewe", "-u", urgency,
                                  "-h", "string:x-canonical-private-synchronous:hypr-battery",
                                  title, body])
     }

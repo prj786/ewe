@@ -107,7 +107,7 @@ phase_userconfig() {
         local tbroot="${XDG_STATE_HOME:-$HOME/.local/state}/hypr-shell"
         local tb="$tbroot/theme-backup.$RUN_STAMP"
         if compgen -G "$tbroot/theme-backup.*" >/dev/null 2>&1; then
-            info "pre-hypr-shell theme snapshot already exists under $tbroot — keeping it."
+            info "pre-ewe theme snapshot already exists under $tbroot — keeping it."
         elif [ "${DRY_RUN:-0}" = "1" ]; then
             info "would back up current GTK/gsettings theme to $tb/ (with restore.sh)"
         else
@@ -115,7 +115,7 @@ phase_userconfig() {
             [ -r "$HOME/.config/gtk-3.0/settings.ini" ] && cp -f "$HOME/.config/gtk-3.0/settings.ini" "$tb/gtk-3.0-settings.ini"
             [ -r "$HOME/.config/gtk-4.0/settings.ini" ] && cp -f "$HOME/.config/gtk-4.0/settings.ini" "$tb/gtk-4.0-settings.ini"
             {
-                printf '#!/usr/bin/env bash\n# Restore the GTK/gsettings theme that was active before hypr-shell (coexist mode).\nset -u\n'
+                printf '#!/usr/bin/env bash\n# Restore the GTK/gsettings theme that was active before ewe (coexist mode).\nset -u\n'
                 if command -v gsettings >/dev/null 2>&1; then
                     local k v
                     for k in gtk-theme icon-theme cursor-theme color-scheme font-name; do
@@ -126,7 +126,7 @@ phase_userconfig() {
                 # $(dirname)-relative so the snapshot keeps working if the dir moves
                 [ -f "$tb/gtk-3.0-settings.ini" ] && printf 'cp -f "$(dirname "$0")/gtk-3.0-settings.ini" "$HOME/.config/gtk-3.0/settings.ini"\n'
                 [ -f "$tb/gtk-4.0-settings.ini" ] && printf 'cp -f "$(dirname "$0")/gtk-4.0-settings.ini" "$HOME/.config/gtk-4.0/settings.ini"\n'
-                printf 'echo "Restored the pre-hypr-shell GTK theme."\n'
+                printf 'echo "Restored the pre-ewe GTK theme."\n'
             } > "$tb/restore.sh"
             chmod +x "$tb/restore.sh"
             ok "backed up current GTK theme -> $tb/restore.sh"
@@ -143,8 +143,8 @@ phase_userconfig() {
     # EDITOR/VISUAL for the user shell (idempotent: only append once)
     local rc="$HOME/.profile"
     if [ -w "$rc" ] || [ ! -e "$rc" ]; then
-        if ! grep -q 'hypr-shell: default editor' "$rc" 2>/dev/null; then
-            run sh -c "printf '\n# hypr-shell: default editor\nexport EDITOR=fresh VISUAL=fresh\n' >> '$rc'"
+        if ! grep -q 'hypr-shell: default editor\|ewe: default editor' "$rc" 2>/dev/null; then
+            run sh -c "printf '\n# ewe: default editor\nexport EDITOR=fresh VISUAL=fresh\n' >> '$rc'"
         fi
     fi
 
@@ -168,7 +168,7 @@ phase_userconfig() {
             [ -e "$rcf" ] || continue
             local sh_name; sh_name="$(basename "$rcf" | sed 's/^\.//; s/rc$//')"   # bashrc→bash, zshrc→zsh
             grep -q 'mise activate' "$rcf" 2>/dev/null || \
-                run sh -c "printf '\n# hypr-shell: mise (node toolchain)\neval \"\$(mise activate %s)\"\n' '$sh_name' >> '$rcf'"
+                run sh -c "printf '\n# ewe: mise (node toolchain)\neval \"\$(mise activate %s)\"\n' '$sh_name' >> '$rcf'"
         done
     else
         warn "mise not installed — Node toolchain not provisioned (install mise, then 'mise install')."
@@ -188,7 +188,7 @@ phase_userconfig() {
             if [ "${DRY_RUN:-0}" != "1" ]; then
                 cat >> "$rcf" <<RC
 
-# hypr-shell: oh-my-posh prompt (flock theme)
+# ewe: oh-my-posh prompt (flock theme)
 if command -v oh-my-posh >/dev/null 2>&1; then
     eval "\$(oh-my-posh init $sh_name --config "\$HOME/.config/oh-my-posh/flock.omp.json")"
 fi

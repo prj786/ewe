@@ -127,7 +127,7 @@ install_git_pkgbuild() {
         warn "$name needs ~6 GB to build; $build_root has ${avail_mb} MB — skipping"
         return 0
     fi
-    tmp="$(mktemp -d -p "$build_root" "hypr-shell-$name.XXXXXX")" \
+    tmp="$(mktemp -d -p "$build_root" "ewe-$name.XXXXXX")" \
         || { warn "no build dir — skipping $name"; return 0; }
     if git clone --depth 1 "$url" "$tmp/$name" >/dev/null 2>&1; then
         # makepkg refuses to run as root and escalates only for the final install

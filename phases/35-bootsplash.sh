@@ -72,7 +72,7 @@ phase_bootsplash() {
     # splash → greeter transition doesn't flash a TTY or fight over the DRM master ─
     if systemctl list-unit-files greetd.service >/dev/null 2>&1; then
         sudo_run install -d /etc/systemd/system/greetd.service.d
-        sudo_run sh -c 'printf "[Unit]\n# hypr-shell: hand off cleanly from the plymouth splash.\nAfter=plymouth-quit-wait.service\n" > /etc/systemd/system/greetd.service.d/plymouth.conf' \
+        sudo_run sh -c 'printf "[Unit]\n# ewe: hand off cleanly from the plymouth splash.\nAfter=plymouth-quit-wait.service\n" > /etc/systemd/system/greetd.service.d/plymouth.conf' \
             && ok "ordered greetd after the plymouth splash"
         run systemctl daemon-reload 2>/dev/null || true
     fi
