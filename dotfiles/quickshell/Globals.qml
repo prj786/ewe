@@ -42,17 +42,20 @@ QtObject {
     property real appAnchorX: 40            // screen-local x of the move-to button (its dropdown opens under it)
 
     // ── Standalone first-party apps ───────────────────────────────────────────
-    // Komble (the software manager) and hypr-settings (the Settings app) are
+    // Komble (the software manager) and ewe-settings (the Settings app) are
     // separate Tauri binaries installed by phase 20. When present they ARE the
     // store/settings UX — every entry point routes through openStore()/
     // openSettings() below — and the QML panels are only the fallback for a
     // machine where the build failed, so the desktop is never unconfigurable.
     // Probed once at startup: an install/removal is followed by a shell restart
     // (hypr-shell.service) anyway, so a per-click probe would only add latency.
+    // The settings binary was `hypr-settings` before the rename; keep launching
+    // it on machines that still have the old package.
     property bool kombleInstalled: false
     property bool settingsAppInstalled: false
+    property string settingsAppBin: "ewe-settings"
     function openSettings() {
-        if (g.settingsAppInstalled) Quickshell.execDetached(["hypr-settings"])
+        if (g.settingsAppInstalled) Quickshell.execDetached([g.settingsAppBin])
         else g.settingsOpen = true
     }
     function openStore() {
@@ -61,11 +64,12 @@ QtObject {
     }
     property Process _standaloneProbe: Process {
         running: true
-        command: ["sh", "-c", "command -v komble >/dev/null && printf k; command -v hypr-settings >/dev/null && printf s"]
+        command: ["sh", "-c", "command -v komble >/dev/null && printf k; command -v ewe-settings >/dev/null && printf s; command -v hypr-settings >/dev/null && printf o"]
         stdout: StdioCollector {
             onStreamFinished: {
                 g.kombleInstalled = this.text.indexOf("k") >= 0
-                g.settingsAppInstalled = this.text.indexOf("s") >= 0
+                g.settingsAppInstalled = this.text.indexOf("s") >= 0 || this.text.indexOf("o") >= 0
+                if (this.text.indexOf("s") < 0 && this.text.indexOf("o") >= 0) g.settingsAppBin = "hypr-settings"
             }
         }
     }

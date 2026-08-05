@@ -71,7 +71,7 @@ phase_packages() {
         off=("${keep[@]}")
     fi
 
-    info "${#off[@]} official packages + ${#aur[@]} AUR packages + 2 first-party apps (Komble, hypr-shell-settings) + 2 source themes (Reversal, Mocu)"
+    info "${#off[@]} official packages + ${#aur[@]} AUR packages + 2 first-party apps (Komble, ewe-settings) + 2 source themes (Reversal, Mocu)"
     [ "${DEV:-0}" = "1" ] && info "+ ${#dev[@]} optional dev packages (--dev)"
     [ "${GAMING:-0}" = "1" ] && info "+ ${#game[@]} optional gaming packages (--gaming)"
     if [ "${DRY_RUN:-0}" = "1" ]; then
@@ -80,7 +80,7 @@ phase_packages() {
         [ "${DEV:-0}" = "1" ] && printf '%s   dev:%s    %s\n' "$C_DIM" "$C_0" "${dev[*]}"
         [ "${GAMING:-0}" = "1" ] && printf '%s   gaming:%s %s\n' "$C_DIM" "$C_0" "${game[*]}"
         printf '%s   source:%s Reversal-icon-theme (all variants), mocu-xcursor → /usr/share/icons\n' "$C_DIM" "$C_0"
-        printf '%s   releases:%s komble-arch (the software manager), hypr-shell-settings (the Settings app) — prebuilt GitHub release, source-build fallback\n' "$C_DIM" "$C_0"
+        printf '%s   releases:%s komble-arch (the software manager), ewe-settings (the Settings app) — prebuilt GitHub release, source-build fallback\n' "$C_DIM" "$C_0"
         return 0
     fi
 
@@ -117,11 +117,13 @@ phase_packages() {
     # (its release.yml builds the .pkg.tar.zst), source build as fallback —
     # resilient either way. Move to packages/aur.list once published.
     install_release_pkg komble-arch prj786/komble-arch https://github.com/prj786/komble-arch.git
-    # hypr-shell-settings — THE Settings app. Every settings entry point
-    # (Super+comma, the Quick Settings gear, `qs ipc call settings`) launches
-    # it; the in-shell panel remains only as a fallback when the binary is
-    # absent, so a failed build can never leave the desktop unconfigurable.
-    install_release_pkg hypr-shell-settings prj786/hypr-shell-settings https://github.com/prj786/hypr-shell-settings.git
+    # ewe-settings — THE Settings app (formerly hypr-shell-settings; the new
+    # package provides/replaces the old name, so pacman upgrades in place).
+    # Every settings entry point (Super+comma, the Quick Settings gear,
+    # `qs ipc call settings`) launches it; the in-shell panel remains only as a
+    # fallback when the binary is absent, so a failed build can never leave the
+    # desktop unconfigurable.
+    install_release_pkg ewe-settings prj786/ewe-settings https://github.com/prj786/ewe-settings.git
     _install_themes
     ok "package phase done"
 }

@@ -126,10 +126,11 @@ registered in `qmldir`. Two singletons tie everything together:
 
 Two first-party apps live in their own repos and are installed by phase 20 from
 prebuilt GitHub releases: **Komble** (`prj786/komble-arch` — THE software
-manager: pacman + AUR + AppImages) and **hypr-settings**
-(`prj786/hypr-shell-settings` — THE settings UI). When their binaries are
+manager: pacman + AUR + AppImages) and **ewe-settings**
+(`prj786/ewe-settings` — THE settings UI; binary `ewe-settings`, with a
+`hypr-settings` compat symlink). When their binaries are
 present every entry point launches them (`Globals.openStore()/openSettings()`);
-the in-shell AppStore/Settings panels remain only as fallbacks. hypr-settings
+the in-shell AppStore/Settings panels remain only as fallbacks. ewe-settings
 writes the same generated files as the in-shell panel (see
 `docs/SETTINGS-BACKEND.md`) and pokes `qs ipc call settings reload`.
 

@@ -25,7 +25,7 @@
 **ewe** *(the sheep, [juː])* is an opinionated, installable desktop: **Hyprland**
 (Wayland compositor, Lua-configured) with a **Quickshell** QML shell — bar, dock,
 launcher, notifications, Quick Settings, lock, OSD, clipboard history — plus the
-**Komble** software manager (pacman + AUR + AppImages), the **hypr-settings**
+**Komble** software manager (pacman + AUR + AppImages), the **ewe-settings**
 app, a themed greeter and a silent Plymouth boot. One flock theme, one icon
 language, everything matching.
 
@@ -84,7 +84,7 @@ https://github.com/user-attachments/assets/a2ffb2e1-2482-46c7-911d-c94bb8413434
   Qt strays, icons and cursor; accent changes apply live.
 - **Curated GTK app set** — Nemo, Engrampa, imv, Zathura, mpv, kitty: borderless
   under Hyprland, defaults managed in one `mimeapps.list`.
-- **Komble + hypr-settings** — first-party software manager and settings app.
+- **Komble + ewe-settings** — first-party software manager and settings app.
 - **Optional Google account** — calendar, Gmail unread + notifications, and
   settings sync to Drive; native OAuth, no GNOME Online Accounts.
 - **Optional phone link** — KDE Connect daemon driven from the shell: phone

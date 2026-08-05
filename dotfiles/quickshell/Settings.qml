@@ -558,7 +558,7 @@ Scope {
     IpcHandler {
         target: "settings"
         // Every "open" verb routes through Globals.openSettings(): the
-        // standalone hypr-settings app is THE settings UI when installed, and
+        // standalone ewe-settings app is THE settings UI when installed, and
         // this in-shell window exists only as a fallback while the binary is
         // absent. (An external app can't be toggled or deep-linked from here,
         // so toggle/pane/pickWallpaper degrade to a plain launch.)
@@ -582,7 +582,7 @@ Scope {
         }
 
         // ── the contract with the out-of-process Settings app ──────────────────
-        // hypr-settings (a separate Tauri app) cannot touch Globals, so it writes
+        // ewe-settings (a separate Tauri app) cannot touch Globals, so it writes
         // the same user-theme.json the shell reads and then calls `reload`. These
         // three verbs are that contract — changing them breaks a shipped binary,
         // so treat them as public API.
@@ -591,11 +591,11 @@ Scope {
         // the shell (GTK/Qt colours, the Hyprland border) do not follow from a
         // property change the way the QML does, so they are re-applied — but only
         // once the file has actually been parsed, hence the signal.
-        // Display profiles are re-read too: hypr-settings commits display
+        // Display profiles are re-read too: ewe-settings commits display
         // changes to display-profiles.json, and HyprMon's hotplug/AC re-assert
         // must never act on a stale in-memory copy of that file.
         function reload(): void { Globals.reloadUserState(); HyprMon.reloadProfiles() }
-        // Liveness probe: hypr-settings greys out controls when the shell is not
+        // Liveness probe: ewe-settings greys out controls when the shell is not
         // running, since a write would then only take effect at next login.
         function ping(): string { return "pong" }
         // Fallback for the version footer, used when the repo checkout is absent.

@@ -34,7 +34,7 @@ QtObject {
     function refresh() { _statusProc.running = false; _statusProc.running = true }
 
     // ── IPC for the standalone Settings app ───────────────────────────────────
-    // hypr-settings drives the account from out of process: verbs in, a JSON
+    // ewe-settings drives the account from out of process: verbs in, a JSON
     // status snapshot out. Tokens never cross this boundary — sign-in runs the
     // same in-shell flow (browser + keyring) it always has. Public API like the
     // `settings` verbs: a shipped binary depends on these names.
@@ -43,7 +43,7 @@ QtObject {
         function signIn(): void { goo.signIn() }
         function signOut(): void { goo.signOut() }
         function syncNow(): void { goo.syncNow() }
-        // debounced push — Komble and hypr-settings poke this after every
+        // debounced push — Komble and ewe-settings poke this after every
         // install/remove/settings write, so changes sync without user action
         function syncSoon(): void { goo.syncSoon() }
         function refresh(): void { goo.refresh() }

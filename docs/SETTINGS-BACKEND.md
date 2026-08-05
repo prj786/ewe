@@ -3,7 +3,7 @@
 How the Settings app writes through to Hyprland, what files it owns, and what
 it can (and honestly cannot) fix.
 
-Two implementations follow this contract: the standalone **hypr-settings**
+Two implementations follow this contract: the standalone **ewe-settings**
 (Tauri, its own repo — THE settings UI when installed) and the in-shell
 Quickshell panel (the fallback while the binary is absent). Both write the
 same files with the same generators — byte-identical output — and the

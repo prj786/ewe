@@ -565,7 +565,7 @@ Scope {
                                 Text { anchors.verticalCenter: parent.verticalCenter; text: parent.charging ? Theme.icBolt : (parent.pct >= 60 ? Theme.icBattFull : parent.pct >= 30 ? Theme.icBatt50 : Theme.icBattEmpty); font.family: Theme.fontIcons; font.pixelSize: 13; color: parent.charging ? Theme.success : (parent.pct <= 15 ? Theme.danger : Theme.fgDim) }
                             }
                             // settings gear → Globals.openSettings(): the
-                            // standalone hypr-settings app, with the in-shell
+                            // standalone ewe-settings app, with the in-shell
                             // panel only as a fallback while the binary is absent.
                             Rectangle {
                                 id: gearBtn
