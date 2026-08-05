@@ -88,6 +88,14 @@ QtObject {
         if (!out.some(function (s) { return s.primary }) && out.length) out[0].primary = true
         return out
     }
+    // Name of the primary output (a shell concept — see snapshot()). The dock
+    // pins itself to this screen. Re-evaluates when monitors/profiles change.
+    readonly property string primaryName: {
+        var s = snapshot()
+        for (var i = 0; i < s.length; i++) if (s[i].primary && !s[i].disabled) return s[i].name
+        return s.length ? s[0].name : ""
+    }
+
     function matchId(s) { return s.desc !== "" ? s.desc : s.name }
     function keyFor(specs) { return specs.map(matchId).sort().join(" || ") }
     function currentKey() { return keyFor((monitors || []).map(specFromMonitor)) }

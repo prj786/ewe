@@ -131,7 +131,8 @@ noto-fonts-emoji
 ttf-jetbrains-mono-nerd
 ttf-nerd-fonts-symbols-mono
 inter-font
-ttf-ubuntu-font-family  # Settings → Theme → Ambiance (Unity look); harmless otherwise
+ttf-ubuntu-font-family  # THE DE face (Theme.fontText/Display + GTK font); Georgian
+                        # falls back to Noto Sans Georgian via dotfiles/fontconfig
 
 # ── version control (always) ─────────────────────────────────────────────────
 # The front-end dev toolchain (git-delta, lazygit, github-cli, mise + the Node/LSP

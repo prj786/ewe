@@ -30,7 +30,6 @@ ShellRoot {
     Auth {}
     Clipboard {}
     ScreenshotPreview {}
-    AppMenu {}
     Lock {}
     Caffeine {}
     Screensaver {}

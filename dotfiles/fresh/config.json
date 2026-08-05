@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "theme": "hyprshell.json",
+  "theme": "ewe.json",
   "editor": {
     "tab_size": 2,
     "line_numbers": true,

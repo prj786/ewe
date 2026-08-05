@@ -37,13 +37,15 @@ QtObject {
     readonly property color barActive:   hover
     readonly property int barItemRadius: 6
     readonly property int barItemHeight: 22
-    readonly property int barItemSpacing: 12
+    readonly property int barItemSpacing: 6
 
     // Accent — whatever Settings → Theme wrote into user-theme.json.
     readonly property color accent:      Globals.accentColor
     // accentText auto-contrasts with the accent (white on dark accents, ink on
     // light ones) so foreground text on accent fills stays legible at any hue.
-    readonly property color accentText:  (0.299 * accent.r + 0.587 * accent.g + 0.114 * accent.b) > 0.6 ? "#1c1c1e" : "#ffffff"
+    // 0.55, not 0.6: mid-luminance accents (the system green) already lose
+    // white text — tip to ink earlier.
+    readonly property color accentText:  (0.299 * accent.r + 0.587 * accent.g + 0.114 * accent.b) > 0.55 ? "#1c1c1e" : "#ffffff"
 
     // status cues (battery / vpn / connectivity / profile)
     readonly property color success:     "#30d158"   // charging · connected · power-saver
@@ -51,9 +53,12 @@ QtObject {
     readonly property color danger:      "#ff453a"   // critical / low battery
 
     // ── Type ──────────────────────────────────────────────────────────────
-    // SF Pro Text for body, SF Pro Display for titles (the optical-size split).
-    readonly property string fontText:    "SF Pro Text"
-    readonly property string fontDisplay: "SF Pro Display"
+    // Ubuntu for body AND titles — one humanist face that reads equally well
+    // in Latin and (via the fontconfig fallback to Noto Sans Georgian, see
+    // dotfiles/fontconfig/) Georgian. SF Pro was never installed, so text
+    // actually rendered through whatever fc-match picked.
+    readonly property string fontText:    "Ubuntu"
+    readonly property string fontDisplay: "Ubuntu"
     // real monospace TEXT (clipboard entries, kb hints) — ttf-jetbrains-mono-nerd
     readonly property string fontMono:    "JetBrainsMono Nerd Font"
     // icon glyphs — Phosphor Fill (vendored in fonts/, MIT). Icons are ALWAYS
@@ -77,11 +82,13 @@ QtObject {
 
     // ── Motion (ms) — quick, ease-out. Scaled by the global
     //    animation-speed setting (>1 faster, 0 = instant) so the whole shell
-    //    tracks the Settings → Theme → Animations control. ──────────────────
+    //    tracks the Settings → Theme → Animations control. The presets are
+    //    Off/Fast/Normal/Slow = m 0/2/1/0.6, i.e. durBase 0/150/300/500 ms —
+    //    far enough apart that each step is actually FELT. ───────────────────
     readonly property real _animMul: Globals.animationSpeed
-    readonly property int durFast:   _animMul <= 0 ? 0 : Math.round(120 / _animMul)
-    readonly property int durBase:   _animMul <= 0 ? 0 : Math.round(180 / _animMul)
-    readonly property int durSlow:   _animMul <= 0 ? 0 : Math.round(260 / _animMul)
+    readonly property int durFast:   _animMul <= 0 ? 0 : Math.round(150 / _animMul)
+    readonly property int durBase:   _animMul <= 0 ? 0 : Math.round(300 / _animMul)
+    readonly property int durSlow:   _animMul <= 0 ? 0 : Math.round(420 / _animMul)
 
     // ── Icons — the SINGLE glyph table (Phosphor Fill ONLY). Every component
     //    pulls its glyphs from here with font.family: Theme.fontIcons, so the
@@ -140,6 +147,8 @@ QtObject {
     readonly property string icMessage:     ic(0xE168)  // chat-circle (SMS)
     readonly property string icSend:        ic(0xE398)  // paper-plane-tilt
     readonly property string icBellRing:    ic(0xE5E8)  // bell-ringing (find my phone / mail notify)
+    readonly property string icBell:        ic(0xE0CE)  // bell (bar: notification history)
+    readonly property string icCalendar:    ic(0xE108)  // calendar (bar: an event is near)
     readonly property string icRefresh:     ic(0xE094)  // arrows-clockwise
     readonly property string icBack:        ic(0xE058)  // arrow-left
     readonly property string icMail:        ic(0xE214)  // envelope (Gmail)

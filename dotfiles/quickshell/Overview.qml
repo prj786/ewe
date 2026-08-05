@@ -263,24 +263,24 @@ Scope {
         function toggle(): void { Globals.overviewOpen = !Globals.overviewOpen }
         function show(): void { Globals.overviewOpen = true }
         function hide(): void { Globals.overviewOpen = false }
-        // open pre-filled (scripting / keybinds like "Super+F → find")
-        function find(q: string): void { Globals.overviewOpen = true; search.text = q }
+        // open pre-filled (scripting / keybinds like "Super+F → find") — sets
+        // root.query; each window's search box mirrors it (Connections below)
+        function find(q: string): void { Globals.overviewOpen = true; root.query = q }
     }
 
     Timer { id: closeTimer; interval: Math.max(1, Theme.durSlow) }
     Connections { target: Globals; function onOverviewOpenChanged() { if (!Globals.overviewOpen) closeTimer.restart() } }
 
+    // ── one overview per monitor: each screen shows ITS active workspace's
+    //    windows; the search UI lives on the focused screen only ──
+    Variants {
+        model: Quickshell.screens
+
     PanelWindow {
         id: win
+        required property var modelData
+        screen: modelData
         visible: Globals.overviewOpen || closeTimer.running
-        // open on whichever monitor is focused (dual-monitor: follow the active screen)
-        screen: {
-            var fm = Hyprland.focusedMonitor
-            if (!fm) return null
-            var ss = Quickshell.screens
-            for (var i = 0; i < ss.length; i++) if (ss[i].name === fm.name) return ss[i]
-            return null
-        }
         color: "transparent"
         // NORMAL exclusion: the bar and dock stay visible around the overview,
         // so it reads as a mode of the desktop (mockup) rather than a takeover
@@ -289,10 +289,26 @@ Scope {
         WlrLayershell.namespace: "quickshell:overview"
         anchors { top: true; bottom: true; left: true; right: true }
 
-        onVisibleChanged: if (visible) Qt.callLater(function () { search.text = ""; search.forceActiveFocus() })
+        // this screen's Hyprland monitor + its active workspace and windows
+        readonly property var hyMon: Hyprland.monitorFor(win.screen)
+        readonly property int winWs: hyMon && hyMon.activeWorkspace ? hyMon.activeWorkspace.id : root.focusedWs
+        readonly property bool isFocused: win.winWs === root.focusedWs
+        readonly property var winWins: {
+            var out = []
+            for (var i = 0; i < root.allWins.length; i++)
+                if (root.wsOf(root.allWins[i]) === win.winWs) out.push(root.allWins[i])
+            return out
+        }
+
+        onVisibleChanged: if (visible) Qt.callLater(function () { search.text = ""; root.query = ""; if (win.isFocused) search.forceActiveFocus() })
         Connections {
             target: Globals
-            function onOverviewOpenChanged() { if (Globals.overviewOpen) search.forceActiveFocus() }
+            function onOverviewOpenChanged() { if (Globals.overviewOpen && win.isFocused) search.forceActiveFocus() }
+        }
+        // mirror an externally-set query (IPC find) into this window's box
+        Connections {
+            target: root
+            function onQueryChanged() { if (search.text !== root.query) search.text = root.query }
         }
 
         // light scrim — the wallpaper stays part of the picture; click to dismiss
@@ -330,25 +346,25 @@ Scope {
                 boundsBehavior: Flickable.StopAtBounds
                 interactive: !root.searching
                 opacity: root.searching ? 0.35 : 1
-                Behavior on opacity { NumberAnimation { duration: Theme.dur; easing.type: Easing.OutCubic } }
+                Behavior on opacity { NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutCubic } }
                 // card size scales down as the desktop gets busier
-                readonly property real cardH: Math.round(height * (root.curWins.length <= 2 ? 0.52 : root.curWins.length <= 6 ? 0.40 : 0.30))
+                readonly property real cardH: Math.round(height * (win.winWins.length <= 2 ? 0.52 : win.winWins.length <= 6 ? 0.40 : 0.30))
                 readonly property real cardW: Math.round(cardH * stage.monAR)
 
                 Flow {
                     id: cardFlow
-                    width: Math.min(cardArea.width - 80, (cardArea.cardW + 30) * Math.min(Math.max(root.curWins.length, 1), 3))
+                    width: Math.min(cardArea.width - 80, (cardArea.cardW + 30) * Math.min(Math.max(win.winWins.length, 1), 3))
                     anchors.horizontalCenter: parent.horizontalCenter
                     y: Math.max(0, (cardArea.height - implicitHeight) / 2)
                     spacing: 30
 
                     Repeater {
-                        model: root.curWins
+                        model: win.winWins
                         delegate: MouseArea {
                             id: dragArea
                             required property var modelData
                             required property int index
-                            readonly property bool seld: index === root.sel && !root.searching
+                            readonly property bool seld: win.isFocused && index === root.sel && !root.searching
                             width: cardArea.cardW; height: cardArea.cardH
                             enabled: !root.searching
                             hoverEnabled: true
@@ -483,7 +499,7 @@ Scope {
                 // empty desktop — one quiet line, nothing to look at on purpose
                 Text {
                     anchors.centerIn: parent
-                    visible: root.curWins.length === 0 && !root.searching
+                    visible: win.winWins.length === 0 && !root.searching
                     text: "No active windows"
                     color: Theme.fg
                     opacity: 0.35
@@ -509,6 +525,9 @@ Scope {
             }
             Rectangle {
                 id: searchBox
+                // the launcher UI follows the focused screen; the other monitors
+                // show only their cards + the shared pager
+                visible: win.isFocused
                 anchors.horizontalCenter: parent.horizontalCenter
                 y: 30
                 width: 560; height: 52
@@ -558,7 +577,7 @@ Scope {
             // windows, files, each row with a right-side type tag (mockup)
             Rectangle {
                 id: resultsPanel
-                visible: root.searching && Globals.overviewOpen
+                visible: root.searching && Globals.overviewOpen && win.isFocused
                 anchors.horizontalCenter: parent.horizontalCenter
                 anchors.top: searchBox.bottom; anchors.topMargin: 8
                 width: searchBox.width
@@ -648,7 +667,7 @@ Scope {
                 anchors.bottom: parent.bottom; anchors.bottomMargin: 96
                 spacing: 12
                 opacity: root.searching ? 0.35 : 1
-                Behavior on opacity { NumberAnimation { duration: Theme.dur; easing.type: Easing.OutCubic } }
+                Behavior on opacity { NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutCubic } }
                 Repeater {
                     model: root.wsPills
                     delegate: Item {
@@ -723,5 +742,6 @@ Scope {
             // floating layer the dragged card reparents into (so it isn't clipped)
             Item { id: dragLayer; anchors.fill: parent; z: 2000 }
         }
+    }
     }
 }

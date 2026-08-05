@@ -333,12 +333,6 @@ Scope {
         Quickshell.execDetached(["sh", "-c", "\"" + root.home + "/.config/quickshell/scripts/colorscheme.sh\" "
             + Globals.colorScheme + " " + String(Theme.accent).replace("#", "")])
     }
-    // light/dark for external GTK + Qt apps (the shell itself is always dark)
-    function setColorScheme(mode) {
-        Globals.colorScheme = mode
-        root.writePrefs()
-        root.applyAppColors()
-    }
     function applyBorder() {
         if (Globals.tintBorders)
             Quickshell.execDetached(["hyprctl", "eval",
@@ -2100,29 +2094,8 @@ Scope {
                             color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11
                         }
                     }
-                    SectionTitle { text: "APP APPEARANCE" }
-                    Card {
-                        Row {
-                            width: parent.width; spacing: 8
-                            Repeater {
-                                model: [{ n: "Light", m: "light", ic: 0xE472 }, { n: "Dark", m: "dark", ic: 0xE330 }]
-                                delegate: Rectangle {
-                                    required property var modelData
-                                    readonly property bool sel: Globals.colorScheme === modelData.m
-                                    width: (parent.width - 8) / 2; height: 38; radius: Theme.radiusInner
-                                    color: sel ? Theme.accent : Theme.panel
-                                    border.color: sel ? Theme.accent : Theme.stroke; border.width: 1
-                                    Row {
-                                        anchors.centerIn: parent; spacing: 7
-                                        Text { anchors.verticalCenter: parent.verticalCenter; text: root.g(modelData.ic); font.family: Theme.fontIcons; font.pixelSize: 15; color: parent.parent.sel ? Theme.accentText : Theme.fg }
-                                        Text { anchors.verticalCenter: parent.verticalCenter; text: modelData.n; color: parent.parent.sel ? Theme.accentText : Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold }
-                                    }
-                                    MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.setColorScheme(modelData.m) }
-                                }
-                            }
-                        }
-                    }
-                    Text { width: parent.width; text: "Light/dark + accent applies to GTK apps (Nemo, Engrampa, Zathura, Firefox…) and any Qt app via the qt6ct fallback. The shell stays dark. Open apps may need a relaunch to fully recolour."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
+                    // (Light mode is parked until it is actually fully light —
+                    // the DE is dark-only for now, so no Light/Dark toggle.)
                     SectionTitle { text: "ACCENT COLOUR" }
                     Card {
                         Flow {
@@ -2171,9 +2144,10 @@ Scope {
                         Row {
                             width: parent.width; spacing: 8
                             Repeater {
-                                // m divides the base speeds (windows base = 500 ms):
-                                // Normal 500 ms · Snappy ≈350 ms · Fast 200 ms
-                                model: [{ n: "Off", m: 0 }, { n: "Normal", m: 1 }, { n: "Snappy", m: 1.43 }, { n: "Fast", m: 2.5 }]
+                                // m divides the base durations (shell base = 300 ms):
+                                // Off 0 · Fast 150 ms · Normal 300 ms · Slow 500 ms —
+                                // steps far enough apart to actually feel different
+                                model: [{ n: "Off", m: 0 }, { n: "Fast", m: 2 }, { n: "Normal", m: 1 }, { n: "Slow", m: 0.6 }]
                                 delegate: Rectangle {
                                     required property var modelData
                                     readonly property bool sel: Math.abs(Globals.animationSpeed - modelData.m) < 0.001
@@ -2186,7 +2160,7 @@ Scope {
                             }
                         }
                     }
-                    Text { width: parent.width; text: "Animation speed drives window + shell motion (Normal ≈ 500 ms window animations, Snappy ≈ 350 ms, Fast ≈ 200 ms); applies live and persists to user-theme.json + generated/user.lua."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
+                    Text { width: parent.width; text: "Animation speed drives window + shell motion (shell: Fast 150 ms · Normal 300 ms · Slow 500 ms; window animations scale along); applies live and persists to user-theme.json + generated/user.lua."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
                     Text { width: parent.width; text: "Accent recolours the whole shell instantly and persists in user-theme.json."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
                     Item { width: 1; height: 8 }
                 }

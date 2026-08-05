@@ -34,7 +34,16 @@ Scope {
 
     PanelWindow {
         id: win
-        screen: { var fm = Hyprland.focusedMonitor; if (!fm) return null; var ss = Quickshell.screens; for (var i = 0; i < ss.length; i++) if (ss[i].name === fm.name) return ss[i]; return null }
+        // the dock lives ONLY on the primary display (HyprMon's primary flag);
+        // fall back to the focused monitor when no primary is known yet
+        screen: {
+            var ss = Quickshell.screens
+            for (var i = 0; i < ss.length; i++) if (ss[i].name === HyprMon.primaryName) return ss[i]
+            var fm = Hyprland.focusedMonitor
+            if (!fm) return null
+            for (var j = 0; j < ss.length; j++) if (ss[j].name === fm.name) return ss[j]
+            return null
+        }
         // Always shown while the Overview is open — even if the dock is disabled or
         // set to autohide (the Overview is a launch surface, so the dock belongs there).
         visible: Globals.dockEnabled || Globals.overviewOpen

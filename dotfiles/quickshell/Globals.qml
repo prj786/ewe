@@ -36,11 +36,9 @@ QtObject {
     property bool caffeine: false          // keep-awake: holds a wayland idle inhibitor (no lock/blank/sleep)
     property bool overviewOpen: false      // GNOME-style window overview (Super tapped alone)
     property bool clipboardOpen: false     // the clipboard-history / emoji popup (scissors icon)
-    property bool appMenuOpen: false       // the move-to-workspace dropdown (→ button in the bar's window actions)
     property bool settingsOpen: false      // the Quickshell Settings window (Super+, or the CC gear)
     property string openDd: ""             // ddId of the one open DropRow, shell-wide ("" = none)
     property real clipAnchorX: 40           // screen-local x of the scissors icon (clipboard opens under it)
-    property real appAnchorX: 40            // screen-local x of the move-to button (its dropdown opens under it)
 
     // ── Standalone first-party apps ───────────────────────────────────────────
     // Komble (the software manager) and ewe-settings (the Settings app) are
@@ -105,10 +103,11 @@ QtObject {
     // 1.0 = default; >1 faster; 0 = animations off. Persisted in user-theme.json.
     property real animationSpeed: 1.0
 
-    // ── App appearance (GTK + Qt light/dark) ───────────────────────────────────
-    // "dark" | "light". The shell itself is always dark; this drives external
-    // GTK/Qt apps via scripts/colorscheme.sh. Persisted in user-theme.json and
-    // re-applied at every startup so gsettings stays in sync with the choice.
+    // ── App appearance (GTK + Qt) ──────────────────────────────────────────────
+    // Dark only for now: light mode is parked until it is actually fully light,
+    // so the Settings toggle is gone and a persisted "light" is ignored on load.
+    // The property (and the colorscheme.sh mode arg) stay so bringing light
+    // back later is a UI change, not plumbing.
     property string colorScheme: "dark"
     property Process _csApply: Process {}
     function applyColorScheme() {
@@ -282,7 +281,7 @@ QtObject {
                     if (j && j.dockAutohide !== undefined) g.dockAutohide = j.dockAutohide
                     if (j && j.dockIconSize) g.dockIconSize = j.dockIconSize
                     if (j && j.animationSpeed !== undefined) g.animationSpeed = j.animationSpeed
-                    if (j && j.colorScheme) g.colorScheme = j.colorScheme
+                    // dark-only: ignore a persisted "light" (parked feature)
                     if (j && j.avatarShape) g.avatarShape = j.avatarShape
                     if (j && j.lidDockedSuspend !== undefined) g.lidDockedSuspend = j.lidDockedSuspend
                     if (j && j.lowPowerEnabled !== undefined) g.lowPowerEnabled = j.lowPowerEnabled

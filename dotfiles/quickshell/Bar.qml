@@ -38,12 +38,23 @@ Scope {
         var e = DesktopEntries.heuristicLookup(bar.appClass())
         return (e && e.icon) ? Quickshell.iconPath(e.icon, true) : ""
     }
-    // Lua config: /dispatch evaluates its arg as Lua, so we pass typed
-    // hl.dsp.* dispatcher expressions (a plain "fullscreen 0" would be invalid Lua).
-    function act(expr) { Hyprland.dispatch(expr) }
-    function newWindow() {
-        var e = DesktopEntries.heuristicLookup(bar.appClass())
-        if (e) e.execute()
+    // ── calendar "something is near": a timed event starts within the hour
+    //    (or is running right now). Re-checked on every clock tick — a binding
+    //    with `new Date()` inside would never re-evaluate on its own. ────────
+    readonly property var calSrc: Google.events.length > 0 ? Google.events : (Accounts.events || [])
+    onCalSrcChanged: bar.updateCalSoon()
+    property bool calSoon: false
+    function updateCalSoon() {
+        var now = Date.now(), soon = false
+        for (var i = 0; i < bar.calSrc.length; i++) {
+            var ev = bar.calSrc[i]
+            if (!ev || ev.allDay) continue
+            var st = new Date(ev.start).getTime()
+            var en = new Date(ev.end || ev.start).getTime()
+            if (isNaN(st)) continue
+            if (st - now <= 3600000 && now < Math.max(en, st + 60000)) { soon = true; break }
+        }
+        bar.calSoon = soon
     }
 
     // ── IPC: Super+Shift+B → qs ipc call bar toggle ───────────────────────
@@ -56,7 +67,10 @@ Scope {
 
     // ── clock (shared, 12-hour like the old waybar) ───────────────────────
     property string clockText: ""
-    function updateClock() { bar.clockText = Qt.formatDateTime(new Date(), "ddd dd MMM   hh:mm AP") }
+    function updateClock() {
+        bar.clockText = Qt.formatDateTime(new Date(), "ddd dd MMM   hh:mm AP")
+        bar.updateCalSoon()
+    }
     // Tick on the minute, not every second — the format only shows minutes, so a
     // 1 s timer was 86,400 wakeups a day for the 1,440 that change anything. Each
     // tick re-aims at the next minute boundary, so it stays in step with the
@@ -188,7 +202,7 @@ Scope {
         signal secondary()
         signal tertiary()
         signal scrolled(real dy)
-        implicitWidth: lbl.implicitWidth + 18
+        implicitWidth: lbl.implicitWidth + 14
         height: parent ? parent.height : Theme.barHeight
         Rectangle {
             anchors.centerIn: parent
@@ -224,38 +238,6 @@ Scope {
                 if (m.button === Qt.MiddleButton) si.tertiary()
             }
             onWheel: function (w) { si.scrolled(w.angleDelta.y) }
-        }
-    }
-
-    // ── an inline window-action button (left cluster): a short WORD, not a
-    //    glyph (only Close stays an icon — see the row in the bar). ──
-    component ActionBtn: Item {
-        id: ab
-        property string label: ""
-        signal triggered()
-        width: abLbl.implicitWidth + 16
-        height: parent ? parent.height : Theme.barHeight
-        Rectangle {
-            anchors.centerIn: parent; width: parent.width; height: Theme.barItemHeight; radius: Theme.barItemRadius
-            color: abMa.containsMouse ? Theme.barHover : "transparent"
-            Behavior on color { ColorAnimation { duration: Theme.durFast } }
-        }
-        Text {
-            id: abLbl
-            anchors.centerIn: parent
-            text: ab.label
-            color: abMa.containsMouse ? Theme.fg : Theme.fgSecondary
-            font.family: Theme.fontText
-            font.pixelSize: 12
-            font.weight: Font.DemiBold
-            Behavior on color { ColorAnimation { duration: Theme.durFast } }
-        }
-        MouseArea {
-            id: abMa
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
-            onClicked: ab.triggered()
         }
     }
 
@@ -297,28 +279,33 @@ Scope {
                     color: Theme.barBorder
                 }
 
-                // ── LEFT: workspace chip, then the focused app: icon (falls back
-                //    to the bold name when the desktop entry has no icon) + window
-                //    title + the inline window actions New · Float · Move⌄ · ✕
-                //    (move-to is the one dropdown left — AppMenu.qml). ──
+                // ── LEFT: workspace chip, then the focused app's icon + name —
+                //    just identity, no window actions (those live on the window
+                //    itself / keybinds now). ──
                 Row {
                     anchors.left: parent.left
                     anchors.leftMargin: 10
                     anchors.verticalCenter: parent.verticalCenter
-                    spacing: 8
+                    spacing: 10
 
-                    // current workspace id — always shown; click opens the overview
+                    // current workspace id — borderless, an accent underline marks
+                    // it instead of a box; click opens the overview
                     Rectangle {
                         anchors.verticalCenter: parent.verticalCenter
                         width: 22; height: Theme.barItemHeight; radius: Theme.barItemRadius
                         color: wsMa.containsMouse ? Theme.barHover : "transparent"
-                        border.color: Theme.stroke; border.width: 1
                         Behavior on color { ColorAnimation { duration: Theme.durFast } }
                         Text {
                             anchors.centerIn: parent
                             text: Hyprland.focusedWorkspace ? Hyprland.focusedWorkspace.id : 1
-                            color: Theme.accent
+                            color: Theme.fg
                             font.family: Theme.fontText; font.pixelSize: 12; font.weight: Font.Bold
+                        }
+                        Rectangle {
+                            anchors.bottom: parent.bottom
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            width: parent.width - 6; height: 2; radius: 1
+                            color: Theme.accent
                         }
                         MouseArea {
                             id: wsMa
@@ -329,94 +316,24 @@ Scope {
                         }
                     }
 
-                    // everything window-related hides on a bare desktop
+                    // focused app — hidden on a bare desktop
                     Row {
-                    spacing: 8
-                    height: parent.height
-                    visible: bar.appName() !== ""
-
-                    // app icon — or the bold name when no icon exists
-                    Item {
-                        anchors.verticalCenter: parent.verticalCenter
-                        width: bar.appIcon() !== "" ? 20 : nameLbl.implicitWidth
+                        spacing: 7
                         height: parent.height
+                        visible: bar.appName() !== ""
                         Image {
-                            anchors.centerIn: parent
+                            anchors.verticalCenter: parent.verticalCenter
                             visible: bar.appIcon() !== ""
                             width: 18; height: 18
                             source: bar.appIcon()
                             sourceSize.width: 36; sourceSize.height: 36; mipmap: true
                         }
                         Text {
-                            id: nameLbl
                             anchors.verticalCenter: parent.verticalCenter
-                            visible: bar.appIcon() === ""
                             text: bar.appName()
-                            color: Theme.fg
+                            color: Theme.accent
                             font.family: Theme.fontText; font.pixelSize: 13; font.weight: Font.Bold
                         }
-                    }
-                    // window title (dim, secondary)
-                    Text {
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: Hyprland.activeToplevel && Hyprland.activeToplevel.title ? Hyprland.activeToplevel.title : ""
-                        color: Theme.fgDim
-                        font.family: Theme.fontText
-                        font.pixelSize: 12
-                        elide: Text.ElideRight
-                        width: Math.min(implicitWidth, 420)
-                    }
-                    // thin separator before the actions
-                    Rectangle { anchors.verticalCenter: parent.verticalCenter; width: 1; height: 13; color: Theme.fgSecondary; opacity: 0.25 }
-
-                    ActionBtn { label: "New";   onTriggered: bar.newWindow() }
-                    ActionBtn { label: "Float"; onTriggered: bar.act('hl.dsp.window.float({action="toggle"})') }
-                    // move to workspace — opens the workspace dropdown under itself
-                    Item {
-                        id: moveToBtn
-                        anchors.verticalCenter: parent.verticalCenter
-                        width: mvRow.implicitWidth + 16
-                        height: parent.height
-                        Rectangle { anchors.centerIn: parent; width: parent.width; height: Theme.barItemHeight; radius: Theme.barItemRadius; color: Globals.appMenuOpen ? Theme.barActive : (mvMa.containsMouse ? Theme.barHover : "transparent") }
-                        Row {
-                            id: mvRow
-                            anchors.centerIn: parent
-                            spacing: 4
-                            Text { anchors.verticalCenter: parent.verticalCenter; text: "Move"; color: (mvMa.containsMouse || Globals.appMenuOpen) ? Theme.fg : Theme.fgSecondary; font.family: Theme.fontText; font.pixelSize: 12; font.weight: Font.DemiBold }
-                            Text { anchors.verticalCenter: parent.verticalCenter; text: Theme.icChevronDown; font.family: Theme.fontIcons; font.pixelSize: 7; color: Theme.fgSecondary }
-                        }
-                        MouseArea {
-                            id: mvMa
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: { Globals.appAnchorX = moveToBtn.mapToItem(null, 0, 0).x; Globals.appMenuOpen = !Globals.appMenuOpen }
-                        }
-                    }
-                    // close — the one icon in the group, at its right end
-                    Item {
-                        width: 26
-                        height: parent.height
-                        Rectangle {
-                            anchors.centerIn: parent; width: 24; height: Theme.barItemHeight; radius: Theme.barItemRadius
-                            color: clMa.containsMouse ? Theme.danger : "transparent"
-                            Behavior on color { ColorAnimation { duration: Theme.durFast } }
-                        }
-                        Text {
-                            anchors.centerIn: parent
-                            text: Theme.icClose
-                            color: clMa.containsMouse ? Theme.accentText : Theme.fgSecondary
-                            font.family: Theme.fontIcons
-                            font.pixelSize: 13
-                        }
-                        MouseArea {
-                            id: clMa
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: bar.act("hl.dsp.window.close()")
-                        }
-                    }
                     }
                 }
 
@@ -557,6 +474,33 @@ Scope {
                             Spinner {
                                 visible: Globals.netBusy !== ""
                                 anchors.verticalCenter: parent.verticalCenter
+                            }
+                            // Notifications — bell + count while the history
+                            // (control centre list) holds anything
+                            Row {
+                                visible: Globals.server && Globals.server.trackedNotifications.values.length > 0
+                                anchors.verticalCenter: parent.verticalCenter
+                                spacing: 3
+                                Text {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: Theme.icBell
+                                    font.family: Theme.fontIcons; font.pixelSize: 13
+                                    color: Theme.accent
+                                }
+                                Text {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: Globals.server ? String(Globals.server.trackedNotifications.values.length) : ""
+                                    font.family: Theme.fontText; font.pixelSize: 11; font.weight: Font.DemiBold
+                                    color: Theme.fgSecondary
+                                }
+                            }
+                            // Calendar — an event is running or starts within the hour
+                            Text {
+                                visible: bar.calSoon
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: Theme.icCalendar
+                                font.family: Theme.fontIcons; font.pixelSize: 13
+                                color: Theme.accent
                             }
                             // VPN (only when active) — key glyph, accent colour
                             Text {

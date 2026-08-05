@@ -99,7 +99,6 @@ QtObject {
         Globals.storeOpen = false
         Globals.placesOpen = false
         Globals.clipboardOpen = false
-        Globals.appMenuOpen = false
         Globals.launcherOpen = false
         Globals.trayMenuOpen = false
         Globals.overviewOpen = false
