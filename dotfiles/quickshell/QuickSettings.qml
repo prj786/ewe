@@ -1234,7 +1234,7 @@ Scope {
                                                                     width: 18; height: 18
                                                                     visible: knRow.modelData.iconPath !== ""
                                                                     source: knRow.modelData.iconPath !== "" ? "file://" + knRow.modelData.iconPath : ""
-                                                                    sourceSize.width: 36; sourceSize.height: 36
+                                                                    sourceSize.width: 36; sourceSize.height: 36; mipmap: true
                                                                 }
                                                                 Text {
                                                                     visible: knRow.modelData.iconPath === ""
@@ -1817,7 +1817,7 @@ Scope {
                                 Row {
                                     width: parent.width; spacing: 10
                                     Image {
-                                        width: 32; height: 32; sourceSize.width: 64; sourceSize.height: 64; visible: source != ""
+                                        width: 32; height: 32; sourceSize.width: 64; sourceSize.height: 64; mipmap: true; visible: source != ""
                                         source: root.noteIcon(nGroup.modelData.latest)
                                     }
                                     Column {

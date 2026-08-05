@@ -141,7 +141,7 @@ Scope {
                             spacing: 12
                             Image {
                                 width: 38; height: 38
-                                sourceSize.width: 76; sourceSize.height: 76
+                                sourceSize.width: 76; sourceSize.height: 76; mipmap: true
                                 visible: source != ""
                                 source: {
                                     var n = groupItem.latest

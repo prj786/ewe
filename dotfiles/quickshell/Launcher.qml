@@ -296,7 +296,7 @@ Scope {
                                 Image {
                                     anchors.verticalCenter: parent.verticalCenter
                                     width: 34; height: 34
-                                    sourceSize.width: 68; sourceSize.height: 68
+                                    sourceSize.width: 68; sourceSize.height: 68; mipmap: true
                                     source: row.modelData.iconSource || Quickshell.iconPath("application-x-executable")
                                 }
                                 Column {

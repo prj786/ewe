@@ -345,7 +345,7 @@ Scope {
                             visible: bar.appIcon() !== ""
                             width: 18; height: 18
                             source: bar.appIcon()
-                            sourceSize.width: 36; sourceSize.height: 36
+                            sourceSize.width: 36; sourceSize.height: 36; mipmap: true
                         }
                         Text {
                             id: nameLbl
@@ -443,7 +443,7 @@ Scope {
                                     anchors.centerIn: parent
                                     width: 16; height: 16
                                     source: modelData.icon
-                                    sourceSize.width: 32; sourceSize.height: 32
+                                    sourceSize.width: 32; sourceSize.height: 32; mipmap: true
                                 }
                                 // Open the app's context menu (SNI DBusMenu) in our own
                                 // themed popup (TrayMenu.qml), anchored under the icon.

@@ -174,7 +174,7 @@ Scope {
                     anchors.left: parent.left; anchors.leftMargin: 8; anchors.right: rightBtns.left; anchors.rightMargin: 6
                     anchors.verticalCenter: parent.verticalCenter; spacing: 9
                     Image {
-                        anchors.verticalCenter: parent.verticalCenter; width: 22; height: 22; sourceSize.width: 44; sourceSize.height: 44
+                        anchors.verticalCenter: parent.verticalCenter; width: 22; height: 22; sourceSize.width: 44; sourceSize.height: 44; mipmap: true
                         source: Quickshell.iconPath(fr.rIsDir ? "folder" : "text-x-generic", fr.rIsDir ? "folder" : "application-x-zerosize")
                     }
                     Text { anchors.verticalCenter: parent.verticalCenter; text: fr.rName; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsBody; elide: Text.ElideRight; width: Math.min(implicitWidth, fr.width - 90) }

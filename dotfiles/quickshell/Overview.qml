@@ -58,7 +58,7 @@ Scope {
                 Image {
                     visible: rr.icon !== ""
                     anchors.fill: parent
-                    sourceSize.width: 56; sourceSize.height: 56
+                    sourceSize.width: 56; sourceSize.height: 56; mipmap: true
                     source: rr.icon
                 }
                 Rectangle {
@@ -426,7 +426,7 @@ Scope {
                                 }
                                 Image {
                                     anchors.centerIn: parent; visible: !sc.visible
-                                    width: 56; height: 56; sourceSize.width: 112; sourceSize.height: 112
+                                    width: 56; height: 56; sourceSize.width: 112; sourceSize.height: 112; mipmap: true
                                     source: root.iconFor(dragArea.modelData)
                                 }
 
@@ -454,7 +454,7 @@ Scope {
                                     color: Qt.rgba(0, 0, 0, 0.55)
                                     Image {
                                         anchors.centerIn: parent
-                                        width: 22; height: 22; sourceSize.width: 44; sourceSize.height: 44
+                                        width: 22; height: 22; sourceSize.width: 44; sourceSize.height: 44; mipmap: true
                                         source: root.iconFor(dragArea.modelData)
                                     }
                                 }

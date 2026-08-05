@@ -416,7 +416,7 @@ Scope {
                                 width: resCol.width; height: 56; radius: Theme.radiusInner; color: Theme.elevated
                                 Row {
                                     anchors.left: parent.left; anchors.leftMargin: 10; anchors.right: actions.left; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter; spacing: 10
-                                    Image { anchors.verticalCenter: parent.verticalCenter; width: 30; height: 30; sourceSize.width: 60; sourceSize.height: 60; source: Quickshell.iconPath(modelData.name, "application-x-executable") }
+                                    Image { anchors.verticalCenter: parent.verticalCenter; width: 30; height: 30; sourceSize.width: 60; sourceSize.height: 60; mipmap: true; source: Quickshell.iconPath(modelData.name, "application-x-executable") }
                                     Column {
                                         anchors.verticalCenter: parent.verticalCenter; spacing: 1; width: 230
                                         Row { spacing: 6

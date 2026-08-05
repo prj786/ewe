@@ -1747,7 +1747,7 @@ Scope {
                                         width: parent.width; height: 32; radius: 6; color: eMa.containsMouse ? Theme.hover : "transparent"
                                         Row {
                                             anchors.left: parent.left; anchors.leftMargin: 8; anchors.verticalCenter: parent.verticalCenter; spacing: 9
-                                            Image { anchors.verticalCenter: parent.verticalCenter; width: 18; height: 18; sourceSize.width: 36; sourceSize.height: 36; source: parent.parent.entry && parent.parent.entry.icon ? Quickshell.iconPath(parent.parent.entry.icon, "application-x-executable") : Quickshell.iconPath("application-x-executable") }
+                                            Image { anchors.verticalCenter: parent.verticalCenter; width: 18; height: 18; sourceSize.width: 36; sourceSize.height: 36; mipmap: true; source: parent.parent.entry && parent.parent.entry.icon ? Quickshell.iconPath(parent.parent.entry.icon, "application-x-executable") : Quickshell.iconPath("application-x-executable") }
                                             Text { anchors.verticalCenter: parent.verticalCenter; text: parent.parent.entry ? (parent.parent.entry.name || modelData) : modelData; color: parent.parent.isCur ? Theme.accent : Theme.fg; font.family: Theme.fontText; font.pixelSize: 11; font.weight: parent.parent.isCur ? Font.DemiBold : Font.Normal }
                                         }
                                         Text { anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter; visible: parent.isCur; text: Theme.icCheck; font.family: Theme.fontIcons; font.pixelSize: 11; color: Theme.accent }
@@ -2591,7 +2591,7 @@ Scope {
                                     width: 20; height: 20
                                     visible: source !== ""
                                     source: saRow.modelData.icon ? Quickshell.iconPath(saRow.modelData.icon, true) : ""
-                                    sourceSize.width: 40; sourceSize.height: 40
+                                    sourceSize.width: 40; sourceSize.height: 40; mipmap: true
                                 }
                                 Column {
                                     anchors.left: parent.left; anchors.leftMargin: 30
@@ -2657,7 +2657,7 @@ Scope {
                                         anchors.left: parent.left; anchors.leftMargin: 4; anchors.verticalCenter: parent.verticalCenter
                                         width: 18; height: 18
                                         source: saRes.modelData.icon ? Quickshell.iconPath(saRes.modelData.icon, true) : ""
-                                        sourceSize.width: 36; sourceSize.height: 36
+                                        sourceSize.width: 36; sourceSize.height: 36; mipmap: true
                                     }
                                     Text {
                                         anchors.left: parent.left; anchors.leftMargin: 30; anchors.right: parent.right; anchors.rightMargin: 60

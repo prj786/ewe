@@ -78,7 +78,11 @@ QtObject {
     // ── Shell look ────────────────────────────────────────────────────────────
     // "flock" (soft dark greys) or "blacksheep" (absolute-black surfaces) —
     // Theme.pitchBlack switches the five neutral surface tokens on this.
+    // GTK apps follow too: any change re-runs colorscheme.sh, which reads
+    // themeName back out of user-theme.json (covers the in-shell chips AND
+    // ewe-settings, whose write lands here via the settings-reload poke).
     property string themeName: "flock"
+    onThemeNameChanged: g.applyColorScheme()
 
     // ── User-chosen accent colour ─────────────────────────────────────────────
     // Single mutable source the Settings → Theme pane writes; Theme.accent binds to

@@ -144,7 +144,7 @@ Scope {
                                 Rectangle { anchors.fill: parent; anchors.margins: 3; radius: 12; color: tMa.containsMouse ? Theme.hover : "transparent" }
                                 Column {
                                     anchors.centerIn: parent; spacing: 6
-                                    Image { anchors.horizontalCenter: parent.horizontalCenter; width: 40; height: 40; sourceSize.width: 64; sourceSize.height: 64; source: modelData.icon ? Quickshell.iconPath(modelData.icon, "application-x-executable") : "" }
+                                    Image { anchors.horizontalCenter: parent.horizontalCenter; width: 40; height: 40; sourceSize.width: 64; sourceSize.height: 64; mipmap: true; source: modelData.icon ? Quickshell.iconPath(modelData.icon, "application-x-executable") : "" }
                                     Text { width: tile.width - 10; horizontalAlignment: Text.AlignHCenter; text: modelData.name || ""; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: 11; elide: Text.ElideRight; maximumLineCount: 1 }
                                 }
                                 MouseArea { id: tMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.launch(tile.modelData) }

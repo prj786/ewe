@@ -183,7 +183,7 @@ Scope {
                                     Behavior on scale { NumberAnimation { duration: Theme.durFast; easing.type: Easing.OutBack; easing.overshoot: 2 } }
                                     Image {
                                         anchors.centerIn: parent
-                                        width: Math.round(20 * win.k); height: Math.round(20 * win.k); sourceSize.width: 40; sourceSize.height: 40
+                                        width: Math.round(20 * win.k); height: Math.round(20 * win.k); sourceSize.width: 40; sourceSize.height: 40; mipmap: true
                                         source: root.iconFor(modelData)
                                     }
                                     MouseArea {

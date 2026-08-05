@@ -56,6 +56,11 @@ fi
 
 CFG="${XDG_CONFIG_HOME:-$HOME/.config}"
 
+# Shell style — read from user-theme.json (the single source both the shell
+# and ewe-settings write) so every caller stays two-arg. "blacksheep" remaps
+# the GTK neutrals below to the DE's absolute-black surface tokens.
+STYLE="$(sed -n 's/.*"themeName": *"\([a-z]*\)".*/\1/p' "$CFG/quickshell/user-theme.json" 2>/dev/null | head -n1)"
+
 # ── universal cursor: ~/.icons/default is the fallback every toolkit reads ──
 mkdir -p "$HOME/.icons/default"
 cat > "$HOME/.icons/default/index.theme" <<EOF
@@ -81,12 +86,34 @@ done
 # ── GTK accent — adw-gtk3 and libadwaita both read these named colors from
 #    gtk.css, so Nemo/Engrampa selections follow the shell accent instead of
 #    staying stock blue. Managed file: rewritten on every scheme apply. ──
+# accent_fg follows luminance like the shell's Theme.accentText — white text
+# on a yellow selection is unreadable.
+if [ $(( (AR * 299 + AG * 587 + AB * 114) / 1000 )) -gt 153 ]; then ACC_FG="1c1c1e"; else ACC_FG="ffffff"; fi
+# Black Sheep — absolute-black surfaces (mirrors the shell's Theme.pitchBlack).
+# libadwaita and adw-gtk3 both read these named colors; flock leaves them stock.
+BS_CSS=""
+if [ "$MODE" = "dark" ] && [ "$STYLE" = "blacksheep" ]; then
+    BS_CSS='
+/* Black Sheep surfaces */
+@define-color window_bg_color #020202;
+@define-color headerbar_bg_color #020202;
+@define-color headerbar_backdrop_color #020202;
+@define-color view_bg_color #0a0a0c;
+@define-color sidebar_bg_color #060607;
+@define-color sidebar_backdrop_color #040405;
+@define-color secondary_sidebar_bg_color #040405;
+@define-color secondary_sidebar_backdrop_color #030304;
+@define-color card_bg_color rgba(255, 255, 255, 0.04);
+@define-color dialog_bg_color #101012;
+@define-color popover_bg_color #101012;
+@define-color thumbnail_bg_color #101012;'
+fi
 for v in 3.0 4.0; do
     cat > "$CFG/gtk-$v/gtk.css" <<EOF
 /* ewe accent — managed by colorscheme.sh; edits here are overwritten */
 @define-color accent_color #${ACC};
 @define-color accent_bg_color #${ACC};
-@define-color accent_fg_color #ffffff;
+@define-color accent_fg_color #${ACC_FG};${BS_CSS}
 EOF
 done
 
