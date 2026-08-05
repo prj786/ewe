@@ -88,6 +88,13 @@ Scope {
             anchors.topMargin: 5   // hugs the bar: the layer already sits below its exclusive zone
             anchors.rightMargin: 10
             spacing: 8
+            add: Transition {
+                NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.durBase; easing.type: Easing.OutCubic }
+                NumberAnimation { property: "scale"; from: 0.92; to: 1; duration: Theme.durBase; easing.type: Easing.OutBack; easing.overshoot: 1.2 }
+            }
+            move: Transition {
+                NumberAnimation { properties: "x,y"; duration: Theme.durBase; easing.type: Easing.OutCubic }
+            }
 
             Repeater {
                 model: root.groups
@@ -126,6 +133,7 @@ Scope {
                         border.width: 1
                         layer.enabled: true
                         layer.effect: Elevation {}
+                        Sheen { radius: parent.radius }
 
                         Row {
                             anchors.fill: parent

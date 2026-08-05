@@ -196,6 +196,7 @@ Scope {
             radius: Theme.barItemRadius
             color: si.active ? Theme.barActive : (ma.containsMouse ? Theme.barHover : "transparent")
             visible: si.active
+            Behavior on color { ColorAnimation { duration: Theme.durFast } }
         }
         Text {
             id: lbl
@@ -204,6 +205,8 @@ Scope {
             color: si.fg
             font.family: Theme.fontIcons
             font.pixelSize: si.fontPx
+            scale: ma.containsMouse ? 1.12 : 1.0
+            Behavior on scale { NumberAnimation { duration: Theme.durFast; easing.type: Easing.OutBack; easing.overshoot: 2 } }
         }
         MouseArea {
             id: ma
@@ -235,6 +238,7 @@ Scope {
         Rectangle {
             anchors.centerIn: parent; width: parent.width; height: Theme.barItemHeight; radius: Theme.barItemRadius
             color: abMa.containsMouse ? Theme.barHover : "transparent"
+            Behavior on color { ColorAnimation { duration: Theme.durFast } }
         }
         Text {
             id: abLbl
@@ -244,6 +248,7 @@ Scope {
             font.family: Theme.fontText
             font.pixelSize: 12
             font.weight: Font.DemiBold
+            Behavior on color { ColorAnimation { duration: Theme.durFast } }
         }
         MouseArea {
             id: abMa
@@ -308,6 +313,7 @@ Scope {
                         width: 22; height: Theme.barItemHeight; radius: Theme.barItemRadius
                         color: wsMa.containsMouse ? Theme.barHover : "transparent"
                         border.color: Theme.stroke; border.width: 1
+                        Behavior on color { ColorAnimation { duration: Theme.durFast } }
                         Text {
                             anchors.centerIn: parent
                             text: Hyprland.focusedWorkspace ? Hyprland.focusedWorkspace.id : 1
@@ -394,6 +400,7 @@ Scope {
                         Rectangle {
                             anchors.centerIn: parent; width: 24; height: Theme.barItemHeight; radius: Theme.barItemRadius
                             color: clMa.containsMouse ? Theme.danger : "transparent"
+                            Behavior on color { ColorAnimation { duration: Theme.durFast } }
                         }
                         Text {
                             anchors.centerIn: parent
@@ -538,6 +545,7 @@ Scope {
                         radius: Theme.barItemRadius
                         width: ctlRow.implicitWidth + 18
                         color: Globals.quickSettingsOpen ? Theme.barActive : (ctlMa.containsMouse ? Theme.barHover : "transparent")
+                        Behavior on color { ColorAnimation { duration: Theme.durFast } }
 
                         Row {
                             id: ctlRow

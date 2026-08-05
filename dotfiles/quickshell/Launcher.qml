@@ -192,7 +192,7 @@ Scope {
             opacity: root.opened ? 1 : 0
             scale: root.opened ? 1 : 0.97
             Behavior on opacity { NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutCubic } }
-            Behavior on scale   { NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutCubic } }
+            Behavior on scale   { NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutBack; easing.overshoot: 1.2 } }
 
 
             Rectangle {
@@ -205,6 +205,7 @@ Scope {
                 border.width: 1
                 layer.enabled: true
                 layer.effect: Elevation {}
+                Sheen { radius: parent.radius }
 
                 // swallow clicks inside the panel so they don't dismiss it
                 MouseArea { anchors.fill: parent }

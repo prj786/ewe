@@ -468,6 +468,7 @@ Scope {
             clip: true
             layer.enabled: true
             layer.effect: Elevation {}
+            Sheen { radius: parent.radius }
             property real off: Globals.quickSettingsOpen ? 0 : (width + 60)
             x: parent.width - width - 10 + off
             Behavior on off { NumberAnimation { duration: Theme.durSlow; easing.type: Easing.OutCubic } }

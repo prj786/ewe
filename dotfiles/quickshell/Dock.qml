@@ -95,6 +95,7 @@ Scope {
             HoverHandler { id: dockHov }
             layer.enabled: true
             layer.effect: Elevation {}
+            Sheen { radius: parent.radius }
 
             // a square dock button — Phosphor glyph, same quiet-hover treatment
             // as the bar's StatusItems so bar and dock read as one system
@@ -109,6 +110,8 @@ Scope {
                 border.color: activeState ? Theme.accent : "transparent"
                 border.width: activeState ? 1 : 0
                 Behavior on color { ColorAnimation { duration: Theme.durFast } }
+                scale: dbMa.pressed ? 0.9 : (dbMa.containsMouse ? 1.08 : 1.0)
+                Behavior on scale { NumberAnimation { duration: Theme.durFast; easing.type: Easing.OutBack; easing.overshoot: 2 } }
                 Text {
                     anchors.centerIn: parent
                     text: db.glyph
@@ -143,12 +146,13 @@ Scope {
                         anchors.verticalCenter: parent.verticalCenter
                         height: win.cell; radius: Math.round(13 * win.k)
                         width: Math.max(win.cell, wsRow.implicitWidth + 16)
-                        color: focused ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.16) : Theme.elevated
+                        color: focused ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.16)
+                             : wsMa.containsMouse ? Theme.hover : Theme.elevated
                         border.color: focused ? Theme.accent : Theme.stroke; border.width: 1
                         Behavior on color { ColorAnimation { duration: 150 } }
 
                         // background click → switch workspace (window tiles sit on top)
-                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.goWorkspace(wsBox.modelData.id) }
+                        MouseArea { id: wsMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.goWorkspace(wsBox.modelData.id) }
 
                         Row {
                             id: wsRow
@@ -175,12 +179,15 @@ Scope {
                                     width: Math.round(34 * win.k); height: Math.round(30 * win.k); radius: 8
                                     color: modelData.activated ? Theme.accent : Theme.hover
                                     Behavior on color { ColorAnimation { duration: 120 } }
+                                    scale: tileMa.containsMouse ? 1.1 : 1.0
+                                    Behavior on scale { NumberAnimation { duration: Theme.durFast; easing.type: Easing.OutBack; easing.overshoot: 2 } }
                                     Image {
                                         anchors.centerIn: parent
                                         width: Math.round(20 * win.k); height: Math.round(20 * win.k); sourceSize.width: 40; sourceSize.height: 40
                                         source: root.iconFor(modelData)
                                     }
                                     MouseArea {
+                                        id: tileMa
                                         anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
                                         onClicked: { if (modelData.wayland) modelData.wayland.activate() }
                                     }

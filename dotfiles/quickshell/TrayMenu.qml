@@ -127,9 +127,10 @@ Scope {
             scale: Globals.trayMenuOpen ? 1 : 0.97
             transformOrigin: Item.Top
             Behavior on opacity { NumberAnimation { duration: Theme.durFast; easing.type: Easing.OutCubic } }
-            Behavior on scale { NumberAnimation { duration: Theme.durFast; easing.type: Easing.OutCubic } }
+            Behavior on scale { NumberAnimation { duration: Theme.durFast; easing.type: Easing.OutBack; easing.overshoot: 1.2 } }
             layer.enabled: true
             layer.effect: Elevation {}
+            Sheen { radius: parent.radius }
             MouseArea { anchors.fill: parent }   // swallow clicks inside the box
             Column {
                 id: mainCol

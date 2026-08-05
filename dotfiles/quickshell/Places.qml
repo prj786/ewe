@@ -126,11 +126,12 @@ Scope {
             width: 400; height: 470
             radius: Theme.radius; color: Theme.panel
             border.color: Theme.stroke; border.width: 1
+            Sheen { radius: parent.radius }
             opacity: Globals.placesOpen ? 1 : 0
             scale: Globals.placesOpen ? 1 : 0.96
             transformOrigin: Item.BottomLeft
             Behavior on opacity { NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutCubic } }
-            Behavior on scale { NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutCubic } }
+            Behavior on scale { NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutBack; easing.overshoot: 1.2 } }
             layer.enabled: true
             layer.effect: Elevation {}
 

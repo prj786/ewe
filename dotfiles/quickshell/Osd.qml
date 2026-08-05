@@ -94,12 +94,13 @@ Scope {
             border.color: Theme.stroke; border.width: 1
             layer.enabled: true
             layer.effect: Elevation {}
+            Sheen { radius: parent.radius }
 
             opacity: root.shown ? 1 : 0
             scale: root.shown ? 1 : 0.94
             visible: opacity > 0.01
             Behavior on opacity { NumberAnimation { duration: Theme.durFast; easing.type: Easing.OutCubic } }
-            Behavior on scale { NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutCubic } }
+            Behavior on scale { NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutBack; easing.overshoot: 1.35 } }
 
 
             Row {
