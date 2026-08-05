@@ -117,12 +117,18 @@ phase_packages() {
     # (its release.yml builds the .pkg.tar.zst), source build as fallback —
     # resilient either way. Move to packages/aur.list once published.
     install_release_pkg komble-arch prj786/komble-arch https://github.com/prj786/komble-arch.git
-    # ewe-settings — THE Settings app (formerly hypr-shell-settings; the new
-    # package provides/replaces the old name, so pacman upgrades in place).
-    # Every settings entry point (Super+comma, the Quick Settings gear,
+    # ewe-settings — THE Settings app (formerly hypr-shell-settings). Every
+    # settings entry point (Super+comma, the Quick Settings gear,
     # `qs ipc call settings`) launches it; the in-shell panel remains only as a
     # fallback when the binary is absent, so a failed build can never leave the
     # desktop unconfigurable.
+    # Migration: the new package conflicts/replaces the old name, but
+    # `pacman -U --noconfirm` answers NO to the conflict-removal question, so
+    # the old package must go first or the install errors out.
+    if pkg_present hypr-shell-settings; then
+        info "migrating hypr-shell-settings → ewe-settings"
+        sudo_run pacman -R --noconfirm hypr-shell-settings
+    fi
     install_release_pkg ewe-settings prj786/ewe-settings https://github.com/prj786/ewe-settings.git
     _install_themes
     ok "package phase done"
