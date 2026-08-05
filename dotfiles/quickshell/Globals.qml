@@ -31,6 +31,7 @@ QtObject {
     property bool dnd: false               // Do Not Disturb (suppresses toasts)
     property var server: null              // set by Notifications.qml (the live NotificationServer)
     property bool vpnActive: false         // any VPN connection up (bar shows a VPN glyph)
+    property string netBusy: ""            // "wifi" | "vpn" while a connection attempt runs (bar spinner)
     property bool sshTunnelUp: false       // any background ssh -f -N tunnel from Quick Settings is up (bar shows a console glyph)
     property bool caffeine: false          // keep-awake: holds a wayland idle inhibitor (no lock/blank/sleep)
     property bool overviewOpen: false      // GNOME-style window overview (Super tapped alone)
@@ -75,8 +76,8 @@ QtObject {
     }
 
     // ── Shell look ────────────────────────────────────────────────────────────
-    // ONE look: "flock". Kept as a property because user-theme.json carries the
-    // key and the standalone Settings app reads it back; nothing switches on it.
+    // "flock" (soft dark greys) or "blacksheep" (absolute-black surfaces) —
+    // Theme.pitchBlack switches the five neutral surface tokens on this.
     property string themeName: "flock"
 
     // ── User-chosen accent colour ─────────────────────────────────────────────

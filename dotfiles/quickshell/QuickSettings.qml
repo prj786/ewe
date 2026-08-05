@@ -181,6 +181,7 @@ Scope {
         var v = items.slice()
         for (var i = 0; i < v.length; i++) v[i].dismiss()
     }
+    property string wifiPending: ""   // SSID being joined — its row + the bar show a spinner
     function connectWifi(ssid, sec) {
         if (sec && sec !== "" && root.pwText === "") {
             root.pwTarget = (root.pwTarget === ssid) ? "" : ssid   // toggle the password field
@@ -188,7 +189,13 @@ Scope {
         }
         var cmd = ["nmcli", "device", "wifi", "connect", ssid]
         if (root.pwText !== "") cmd = cmd.concat(["password", root.pwText])
-        Quickshell.execDetached(cmd); root.pwTarget = ""; root.pwText = ""; rescanTimer.restart()
+        // through a tracked Process, not execDetached: joining can take seconds
+        // and used to look like nothing was happening until the list refreshed
+        root.wifiPending = ssid
+        Globals.netBusy = "wifi"
+        wifiConnProc.command = cmd
+        wifiConnProc.running = true
+        root.pwTarget = ""; root.pwText = ""
     }
     // ── ssh actions ──
     // Open a terminal already ssh'd into the host (kitty runs the command directly).
@@ -253,8 +260,11 @@ Scope {
     }
 
     property string vpnPending: ""
+    property string vpnBusyName: ""   // connection being brought up/down — its row + the bar spin
     function toggleVpn(name, up) {
         root.vpnPending = (up ? "Connecting to " : "Disconnecting from ") + name
+        root.vpnBusyName = name
+        Globals.netBusy = "vpn"
         vpnUpProc.command = ["nmcli", "connection", up ? "up" : "down", name]
         vpnUpProc.running = true
     }
@@ -405,10 +415,27 @@ Scope {
         id: vpnUpProc
         stderr: StdioCollector { id: vpnErr }
         onExited: function (exitCode, exitStatus) {
+            root.vpnBusyName = ""
+            Globals.netBusy = ""
             vpnRescan.restart()
             if (exitCode !== 0) {
                 var msg = (vpnErr.text || "").trim()
                 Quickshell.execDetached(["notify-send", "-u", "critical", "-a", "VPN", root.vpnPending + " failed", msg !== "" ? msg : ("nmcli exited with code " + exitCode)])
+            }
+        }
+    }
+    // joins a Wi-Fi network; same deal — spinner while running, notify on failure
+    Process {
+        id: wifiConnProc
+        stderr: StdioCollector { id: wifiConnErr }
+        onExited: function (exitCode, exitStatus) {
+            var failed = root.wifiPending
+            root.wifiPending = ""
+            Globals.netBusy = ""
+            rescanTimer.restart()
+            if (exitCode !== 0) {
+                var msg = (wifiConnErr.text || "").trim()
+                Quickshell.execDetached(["notify-send", "-u", "critical", "-a", "Wi-Fi", "Joining " + failed + " failed", msg !== "" ? msg : ("nmcli exited with code " + exitCode)])
             }
         }
     }
@@ -439,6 +466,8 @@ Scope {
             border.color: Theme.stroke
             border.width: 1
             clip: true
+            layer.enabled: true
+            layer.effect: Elevation {}
             property real off: Globals.quickSettingsOpen ? 0 : (width + 60)
             x: parent.width - width - 10 + off
             Behavior on off { NumberAnimation { duration: Theme.durSlow; easing.type: Easing.OutCubic } }
@@ -665,7 +694,8 @@ Scope {
                                             Text { anchors.left: parent.left; anchors.leftMargin: 8; anchors.verticalCenter: parent.verticalCenter; text: modelData.signal >= 66 ? Theme.icWifi : (modelData.signal >= 33 ? Theme.icWifiMed : Theme.icWifiLow); font.family: Theme.fontIcons; font.pixelSize: 13; color: modelData.active ? Theme.accent : Theme.fgDim }
                                             Text { anchors.left: parent.left; anchors.leftMargin: 32; anchors.right: parent.right; anchors.rightMargin: 40; anchors.verticalCenter: parent.verticalCenter; text: modelData.ssid; color: modelData.active ? Theme.accent : Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: modelData.active ? Font.DemiBold : Font.Normal; elide: Text.ElideRight }
                                             Text { anchors.right: parent.right; anchors.rightMargin: modelData.active ? 26 : 8; anchors.verticalCenter: parent.verticalCenter; visible: modelData.sec !== ""; text: Theme.icLock; font.family: Theme.fontIcons; font.pixelSize: 10; color: Theme.fgDim }
-                                            Text { anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter; visible: modelData.active; text: Theme.icCheck; font.family: Theme.fontIcons; font.pixelSize: 11; color: Theme.accent }
+                                            Text { anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter; visible: modelData.active && root.wifiPending !== modelData.ssid; text: Theme.icCheck; font.family: Theme.fontIcons; font.pixelSize: 11; color: Theme.accent }
+                                            Spinner { anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter; visible: root.wifiPending === modelData.ssid; font.pixelSize: 12 }
                                             MouseArea { id: wMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.connectWifi(modelData.ssid, modelData.sec) }
                                         }
                                         Item {
@@ -741,7 +771,7 @@ Scope {
                         width: parent.width; spacing: 10
                         Tile {
                             ic: Theme.icVpn; label: "VPN"; active: Globals.vpnActive || root.expanded === "vpn"
-                            sub: Globals.vpnActive ? "On" : "Off"
+                            sub: root.vpnBusyName !== "" ? "Connecting…" : (Globals.vpnActive ? "On" : "Off")
                             onClicked: { root.expanded = root.expanded === "vpn" ? "" : "vpn"; if (root.expanded === "vpn") vpnScan.running = true }
                         }
                         Tile {
@@ -787,7 +817,8 @@ Scope {
                                                 Rectangle { anchors.fill: parent; radius: 6; color: vMa.containsMouse ? Theme.hover : "transparent" }
                                                 Text { anchors.left: parent.left; anchors.leftMargin: 8; anchors.verticalCenter: parent.verticalCenter; text: Theme.icVpn; font.family: Theme.fontIcons; font.pixelSize: 12; color: modelData.active ? Theme.accent : Theme.fgDim }
                                                 Text { anchors.left: parent.left; anchors.leftMargin: 30; anchors.right: parent.right; anchors.rightMargin: 26; anchors.verticalCenter: parent.verticalCenter; text: modelData.name; color: modelData.active ? Theme.accent : Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: modelData.active ? Font.DemiBold : Font.Normal; elide: Text.ElideRight }
-                                                Text { anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter; visible: modelData.active; text: Theme.icCheck; font.family: Theme.fontIcons; font.pixelSize: 11; color: Theme.accent }
+                                                Text { anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter; visible: modelData.active && root.vpnBusyName !== modelData.name; text: Theme.icCheck; font.family: Theme.fontIcons; font.pixelSize: 11; color: Theme.accent }
+                                                Spinner { anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter; visible: root.vpnBusyName === modelData.name; font.pixelSize: 12 }
                                                 MouseArea { id: vMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.toggleVpn(modelData.name, !modelData.active) }
                                             }
                                         }

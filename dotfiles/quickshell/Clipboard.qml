@@ -125,6 +125,8 @@ Scope {
                 bottomRightRadius: Theme.radius
                 color: Theme.panel
                 border.width: 0
+                layer.enabled: true
+                layer.effect: Elevation {}
                 MouseArea { anchors.fill: parent }   // swallow
 
             Column {

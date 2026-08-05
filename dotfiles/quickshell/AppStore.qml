@@ -248,7 +248,7 @@ Scope {
             Behavior on opacity { NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutCubic } }
             Behavior on scale { NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutCubic } }
             layer.enabled: true
-            layer.effect: MultiEffect { shadowEnabled: true; shadowColor: Theme.shadow; shadowOpacity: 0.5; shadowBlur: 1.0; shadowVerticalOffset: 8; blurMax: 48 }
+            layer.effect: Elevation {}
 
             MouseArea { anchors.fill: parent }
             Keys.onEscapePressed: { if (root.pwOpen) root.cancelAsk(); else Globals.storeOpen = false }

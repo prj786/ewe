@@ -89,12 +89,12 @@ Scope {
             Behavior on y { NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutCubic } }
             height: win.dockH
             width: row.implicitWidth + 16
-            radius: 18
+            radius: Theme.radius
             color: Theme.panel
             border.color: Theme.stroke; border.width: 1
             HoverHandler { id: dockHov }
             layer.enabled: true
-            layer.effect: MultiEffect { shadowEnabled: true; shadowColor: Theme.shadow; shadowOpacity: 0.5; shadowBlur: 1.0; shadowVerticalOffset: 6; blurMax: 40 }
+            layer.effect: Elevation {}
 
             // a square dock button — Phosphor glyph, same quiet-hover treatment
             // as the bar's StatusItems so bar and dock read as one system

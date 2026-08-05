@@ -124,6 +124,8 @@ Scope {
                         color: Theme.panel
                         border.color: Theme.stroke
                         border.width: 1
+                        layer.enabled: true
+                        layer.effect: Elevation {}
 
                         Row {
                             anchors.fill: parent

@@ -264,13 +264,20 @@ Scope {
             screen: modelData
             visible: bar.barVisible
             color: "transparent"
-            implicitHeight: Theme.barHeight
+            // 12px taller than the bar strip so its drop shadow has room to
+            // render; the mask keeps clicks in that strip passing through.
+            implicitHeight: Theme.barHeight + 12
             exclusiveZone: bar.barVisible ? Theme.barHeight : 0
+            mask: Region { x: 0; y: 0; width: win.width; height: Theme.barHeight }
             WlrLayershell.namespace: "quickshell:bar"
             anchors { top: true; left: true; right: true }
 
             Rectangle {
-                anchors.fill: parent
+                anchors { top: parent.top; left: parent.left; right: parent.right }
+                height: Theme.barHeight
+                layer.enabled: true
+                // shallower than the floating panels — the bar is anchored, not floating
+                layer.effect: Elevation { shadowOpacity: 0.38; shadowVerticalOffset: 3 }
                 // barTop == barBottom today, so this renders flat; a future
                 // look can reintroduce a real gradient via those two tokens.
                 gradient: Gradient {
@@ -424,7 +431,7 @@ Scope {
                             delegate: Item {
                                 id: trayDelegate
                                 required property var modelData
-                                width: 18; height: win.height
+                                width: 18; height: Theme.barHeight
                                 Image {
                                     anchors.centerIn: parent
                                     width: 16; height: 16
@@ -537,37 +544,11 @@ Scope {
                             anchors.centerIn: parent
                             spacing: 9
 
-                            // Wired / ethernet (shown when a wired link is up and
-                            // Wi-Fi isn't — the common case in VMs and on docks)
-                            Text {
+                            // connecting… — spins while a Wi-Fi/VPN attempt
+                            // is in flight (Quick Settings drives Globals.netBusy)
+                            Spinner {
+                                visible: Globals.netBusy !== ""
                                 anchors.verticalCenter: parent.verticalCenter
-                                text: Theme.icEthernet        // mdi-ethernet
-                                font.family: Theme.fontIcons; font.pixelSize: 13
-                                color: Theme.fgSecondary
-                                visible: bar.wiredUp && !bar.wifiUp
-                            }
-                            // Wi-Fi (only when connected)
-                            Text {
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: Theme.icWifi
-                                font.family: Theme.fontIcons; font.pixelSize: 13
-                                color: Theme.fgSecondary
-                                visible: bar.wifiUp
-                            }
-                            // Bluetooth (only when adapter on); blue when a device is connected
-                            Text {
-                                property var adapter: Bluetooth.defaultAdapter
-                                property int conn: {
-                                    if (!Bluetooth.devices) return 0
-                                    var d = Bluetooth.devices.values, n = 0
-                                    for (var i = 0; i < d.length; i++) if (d[i].connected) n++
-                                    return n
-                                }
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: conn > 0 ? Theme.icBluetoothOn : Theme.icBluetooth
-                                font.family: Theme.fontIcons; font.pixelSize: 13
-                                color: conn > 0 ? Theme.accent : Theme.fgSecondary
-                                visible: adapter && adapter.enabled
                             }
                             // VPN (only when active) — key glyph, accent colour
                             Text {
@@ -643,6 +624,38 @@ Scope {
                                     font.family: Theme.fontText; font.pixelSize: 11; font.weight: Font.DemiBold
                                     color: Theme.fgSecondary
                                 }
+                            }
+                            // Wired / ethernet (shown when a wired link is up and
+                            // Wi-Fi isn't — the common case in VMs and on docks)
+                            Text {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: Theme.icEthernet        // mdi-ethernet
+                                font.family: Theme.fontIcons; font.pixelSize: 13
+                                color: Theme.fgSecondary
+                                visible: bar.wiredUp && !bar.wifiUp
+                            }
+                            // Wi-Fi (only when connected)
+                            Text {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: Theme.icWifi
+                                font.family: Theme.fontIcons; font.pixelSize: 13
+                                color: Theme.fgSecondary
+                                visible: bar.wifiUp
+                            }
+                            // Bluetooth (only when adapter on); blue when a device is connected
+                            Text {
+                                property var adapter: Bluetooth.defaultAdapter
+                                property int conn: {
+                                    if (!Bluetooth.devices) return 0
+                                    var d = Bluetooth.devices.values, n = 0
+                                    for (var i = 0; i < d.length; i++) if (d[i].connected) n++
+                                    return n
+                                }
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: conn > 0 ? Theme.icBluetoothOn : Theme.icBluetooth
+                                font.family: Theme.fontIcons; font.pixelSize: 13
+                                color: conn > 0 ? Theme.accent : Theme.fgSecondary
+                                visible: adapter && adapter.enabled
                             }
                             // Power profile (leaf · balance · speedometer) — reflects tuned profile
                             Text {

@@ -68,8 +68,8 @@ QtObject {
     readonly property int fsTitle:  22
 
     // ── Metrics ───────────────────────────────────────────────────────────
-    readonly property int radius:       14    // panels / launcher
-    readonly property int radiusInner:  10    // rows, input field
+    readonly property int radius:       18    // panels / launcher
+    readonly property int radiusInner:  12    // rows, input field
     readonly property int radiusPill:   8
     readonly property int pad:          12
     readonly property int gap:          8

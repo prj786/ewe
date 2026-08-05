@@ -194,14 +194,6 @@ Scope {
             Behavior on opacity { NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutCubic } }
             Behavior on scale   { NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutCubic } }
 
-            layer.enabled: true
-            layer.effect: MultiEffect {
-                shadowEnabled: true
-                shadowColor: Theme.shadow
-                shadowBlur: 0.9
-                shadowVerticalOffset: 10
-                shadowOpacity: 0.5
-            }
 
             Rectangle {
                 id: panel
@@ -211,6 +203,8 @@ Scope {
                 color: Theme.panel
                 border.color: Theme.stroke
                 border.width: 1
+                layer.enabled: true
+                layer.effect: Elevation {}
 
                 // swallow clicks inside the panel so they don't dismiss it
                 MouseArea { anchors.fill: parent }
