@@ -32,21 +32,29 @@ Scope {
         return out
     }
 
+    // One window per screen, visible only on the primary — NOT a single window
+    // with a screen: binding. Rebinding screen mid-hotplug (the primary name
+    // going stale while the output detaches) could resolve to null and destroy
+    // the window for good; per-screen windows are created/destroyed by the
+    // screen model itself, so the dock always lands on whatever remains.
+    Variants {
+        model: Quickshell.screens
+
     PanelWindow {
         id: win
-        // the dock lives ONLY on the primary display (HyprMon's primary flag);
-        // fall back to the focused monitor when no primary is known yet
-        screen: {
+        required property var modelData
+        screen: modelData
+        // primary = HyprMon's primary flag; if no connected screen carries that
+        // name (mid-hotplug, stale profile), fall back to the first screen
+        readonly property bool isPrimary: {
             var ss = Quickshell.screens
-            for (var i = 0; i < ss.length; i++) if (ss[i].name === HyprMon.primaryName) return ss[i]
-            var fm = Hyprland.focusedMonitor
-            if (!fm) return null
-            for (var j = 0; j < ss.length; j++) if (ss[j].name === fm.name) return ss[j]
-            return null
+            for (var i = 0; i < ss.length; i++)
+                if (ss[i].name === HyprMon.primaryName) return win.modelData.name === HyprMon.primaryName
+            return ss.length > 0 && win.modelData === ss[0]
         }
         // Always shown while the Overview is open — even if the dock is disabled or
         // set to autohide (the Overview is a launch surface, so the dock belongs there).
-        visible: Globals.dockEnabled || Globals.overviewOpen
+        visible: win.isPrimary && (Globals.dockEnabled || Globals.overviewOpen)
         color: "transparent"
         // Always-visible dock reserves its strip so windows tile/maximize ABOVE it
         // instead of sliding underneath; intelligent-hide keeps zero reserve so
@@ -207,5 +215,6 @@ Scope {
                 }
             }
         }
+    }
     }
 }

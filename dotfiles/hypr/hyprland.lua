@@ -383,6 +383,23 @@ hl.window_rule({
     pin   = true,
 })
 
+-- App popups that must NOT be tiled — forced into a layout slot they draw
+-- wrong (Slack's huddle window loses part of its UI). Floating lets them
+-- open at their own requested size, like proper popups. Extend this list as
+-- more misbehaving popups show up; Super+V toggles float on any window.
+hl.window_rule({
+    name  = "slack-huddle",
+    match = { class = "slack", title = "[Hh]uddle" },
+    float = true,
+})
+-- portal file choosers (GTK portal opens them as plain toplevels)
+hl.window_rule({
+    name   = "portal-file-chooser",
+    match  = { class = "xdg-desktop-portal-gtk" },
+    float  = true,
+    center = true,
+})
+
 -- The shell's Settings app is a real toplevel (so portals/DnD work) — float and
 -- centre it so it still opens like the old overlay.
 hl.window_rule({
