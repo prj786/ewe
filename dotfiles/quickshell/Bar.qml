@@ -13,7 +13,8 @@ import Quickshell.Bluetooth
 Scope {
     id: bar
 
-    property bool barVisible: true
+    // bar visibility lives in Globals.barVisible so full-screen surfaces
+    // (Overview) can reserve space for the bar only while it is shown
 
     // Colours & fonts come entirely from Theme.qml (single source of truth).
     function g(code) { return String.fromCodePoint(code) }   // Nerd Font glyph (handles MDI > U+FFFF)
@@ -60,9 +61,9 @@ Scope {
     // ── IPC: Super+Shift+B → qs ipc call bar toggle ───────────────────────
     IpcHandler {
         target: "bar"
-        function toggle(): void { bar.barVisible = !bar.barVisible }
-        function show(): void { bar.barVisible = true }
-        function hide(): void { bar.barVisible = false }
+        function toggle(): void { Globals.barVisible = !Globals.barVisible }
+        function show(): void { Globals.barVisible = true }
+        function hide(): void { Globals.barVisible = false }
     }
 
     // ── clock (shared, 12-hour like the old waybar) ───────────────────────
@@ -249,12 +250,12 @@ Scope {
             id: win
             required property var modelData
             screen: modelData
-            visible: bar.barVisible
+            visible: Globals.barVisible
             color: "transparent"
             // 12px taller than the bar strip so its drop shadow has room to
             // render; the mask keeps clicks in that strip passing through.
             implicitHeight: Theme.barHeight + 12
-            exclusiveZone: bar.barVisible ? Theme.barHeight : 0
+            exclusiveZone: Globals.barVisible ? Theme.barHeight : 0
             mask: Region { x: 0; y: 0; width: win.width; height: Theme.barHeight }
             WlrLayershell.namespace: "quickshell:bar"
             anchors { top: true; left: true; right: true }

@@ -15,7 +15,9 @@ Scope {
         id: win
         visible: agent.isActive && agent.flow !== null
         color: "transparent"
-        exclusiveZone: 0
+        // a modal: the dim backdrop covers the WHOLE screen, dock and bar
+        // included — reserved strips would leave undimmed bands around it
+        exclusionMode: ExclusionMode.Ignore
         WlrLayershell.namespace: "quickshell:auth"
         WlrLayershell.layer: WlrLayer.Overlay
         WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
@@ -93,19 +95,22 @@ Scope {
                     font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; wrapMode: Text.Wrap
                 }
 
-                // buttons
+                // buttons — the pair spans exactly the password field's width,
+                // so their outer edges line up with the input above
                 Row {
-                    anchors.horizontalCenter: parent.horizontalCenter
+                    width: parent.width
                     spacing: 10
                     Rectangle {
-                        width: 150; height: 36; radius: 9
+                        width: (parent.width - 10) / 2; height: 36; radius: 9
                         color: cancelMa.containsMouse ? Theme.hover : Theme.elevated
+                        Behavior on color { ColorAnimation { duration: Theme.durFast } }
                         Text { anchors.centerIn: parent; text: "Cancel"; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsBody }
                         MouseArea { id: cancelMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: if (agent.flow) agent.flow.cancelAuthenticationRequest() }
                     }
                     Rectangle {
-                        width: 150; height: 36; radius: 9
+                        width: (parent.width - 10) / 2; height: 36; radius: 9
                         color: okMa.containsMouse ? Qt.lighter(Theme.accent, 1.12) : Theme.accent
+                        Behavior on color { ColorAnimation { duration: Theme.durFast } }
                         Text { anchors.centerIn: parent; text: "Authenticate"; color: Theme.accentText; font.family: Theme.fontText; font.pixelSize: Theme.fsBody; font.weight: Font.DemiBold }
                         MouseArea { id: okMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: if (agent.flow) { agent.flow.submit(pwField.text); pwField.text = "" } }
                     }

@@ -282,8 +282,12 @@ Scope {
         screen: modelData
         visible: Globals.overviewOpen || closeTimer.running
         color: "transparent"
-        // NORMAL exclusion: the bar and dock stay visible around the overview,
-        // so it reads as a mode of the desktop (mockup) rather than a takeover
+        // IGNORE exclusive zones so the scrim runs under the dock (the dock
+        // jumps to the Overlay layer while the overview is open and draws on
+        // top) — an always-visible dock's reserved strip used to cut the
+        // backdrop off above it. Only the bar keeps its space, via a margin.
+        exclusionMode: ExclusionMode.Ignore
+        margins.top: Globals.barVisible ? Theme.barHeight : 0
         WlrLayershell.layer: WlrLayer.Overlay
         WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
         WlrLayershell.namespace: "quickshell:overview"

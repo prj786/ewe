@@ -27,6 +27,7 @@ QtObject {
     // an -alpha/-beta pre-release suffix until the first stable cut.
     readonly property string version: "0.5.0-beta"
 
+    property bool barVisible: true          // the top bar (Super+Shift+B toggles)
     property bool quickSettingsOpen: false  // the Quick Settings panel
     property bool dnd: false               // Do Not Disturb (suppresses toasts)
     property var server: null              // set by Notifications.qml (the live NotificationServer)
