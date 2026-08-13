@@ -3,8 +3,11 @@ import Quickshell
 import Quickshell.Services.UPower
 
 // Battery — low/critical battery safety. While discharging it warns at 20% and
-// 10% (once each), and at ≤5% suspends to protect unsaved work (hypridle locks
-// before sleep). Devices without a laptop battery (desktops) are ignored.
+// 10% (once each), and at ≤5% hibernates to protect unsaved work (hypridle
+// locks before sleep). Hibernate, not suspend: at 5% there is no charge left to
+// pay for s2idle's drain — suspend here just postpones dying with work unsaved.
+// zzz.sh falls back to suspend where hibernation isn't set up. Devices without
+// a laptop battery (desktops) are ignored.
 // notify-send routes the toast through our own Quickshell notification server.
 Scope {
     id: root
@@ -45,9 +48,9 @@ Scope {
         if (!discharging) { armed = 101; return }          // charging/full → re-arm
         if (pct <= 5 && armed > 5) {
             armed = 5
-            Log.info("battery", "critical at", pct + "% — suspending")
-            notify("critical", "Battery critically low", pct + "% — suspending to protect your work.")
-            Quickshell.execDetached(["systemctl", "suspend"])
+            Log.info("battery", "critical at", pct + "% — hibernating (zzz.sh falls back to suspend)")
+            notify("critical", "Battery critically low", pct + "% — sleeping to protect your work.")
+            Quickshell.execDetached(["sh", "-c", "exec \"$HOME/.config/hypr/scripts/zzz.sh\" hibernate"])
         } else if (pct <= 10 && armed > 10) {
             armed = 10
             notify("critical", "Battery low", pct + "% left — plug in soon.")

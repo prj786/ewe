@@ -11,13 +11,23 @@ import Quickshell
 // second panel), a jq dependency whose failure fell through to "suspend", and
 // nothing the user could configure.
 //
-//   lid closed, laptop alone       → suspend
-//   lid closed, external connected → Globals.lidDockedSuspend decides: suspend
-//                                    (the default — a laptop being closed is
-//                                    usually a laptop being carried), or blank
-//                                    just the panel and keep working docked
+//   lid closed, laptop alone       → sleep (zzz.sh: suspend-then-hibernate)
+//   lid closed, docked, ON AC      → Globals.lidDockedSuspend decides: blank
+//                                    just the panel and keep working (the
+//                                    default — that's what a dock is for), or
+//                                    sleep anyway
+//   lid closed, docked, ON BATTERY → sleep, always. A hub that lights a monitor
+//                                    but doesn't feed the laptop kept machines
+//                                    awake in a bag all night (2026-08-08:
+//                                    23:33 close → 10:09 open, zero suspends,
+//                                    battery gone by morning). No display setup
+//                                    is worth a cooked battery.
 //   lid opened                     → re-enable the panel; HyprMon's re-assert
 //                                    lands the saved mode/scale/position on top
+//
+// The keep-working choice is also NOT final: while the lid stays closed, losing
+// AC or losing the last lit external re-runs the policy (with a short grace so
+// a dock re-enumeration blip doesn't sleep the machine mid-flap).
 //
 // Locking is deliberately NOT done here. Suspending raises PrepareForSleep, and
 // the logind delay inhibitor (Logind.qml) locks the session before the machine
@@ -38,26 +48,58 @@ QtObject {
     }
     readonly property bool docked: externals > 0
 
+    // The one sleep decision, asked at close time AND re-asked while closed.
+    readonly property bool shouldSleep: !docked || Globals.lidDockedSuspend || Globals.onBattery
+
     property Connections _watch: Connections {
         target: HyprMon
         function onLidClosedChanged() { lid.apply() }
     }
 
+    // While closed and kept awake, the world can change under us: the charger
+    // gets pulled (docked → carried), or the dock/monitor goes away and the
+    // machine is running blind with no display at all. Either way re-run the
+    // policy — after a grace period, because USB-C docks re-enumerate on their
+    // own and a two-second monitor flap must not sleep the machine.
+    onExternalsChanged: _recheck()
+    property Connections _power: Connections {
+        target: Globals
+        function onOnBatteryChanged() { lid._recheck() }
+    }
+
+    function _recheck() {
+        if (lid.closed && lid.shouldSleep) lid._grace.restart()
+    }
+
+    property Timer _grace: Timer {
+        interval: 8000
+        onTriggered: {
+            if (!lid.closed || !lid.shouldSleep) return   // recovered or reopened
+            Log.info("lid", "still closed and", lid.docked ? "now on battery" : "no external left", "— going to sleep")
+            lid._sleep()
+        }
+    }
+
+    function _sleep() {
+        // zzz.sh = suspend-then-hibernate with a plain-suspend fallback, so a
+        // lid left shut for days ends in zero-drain hibernate, not a dead cell.
+        Quickshell.execDetached(["sh", "-c", "exec \"$HOME/.config/hypr/scripts/zzz.sh\""])
+    }
+
     function apply() {
         if (lid.closed) lid._close()
-        else lid._open()
+        else { lid._grace.stop(); lid._open() }
     }
 
     function _close() {
-        var suspend = !lid.docked || Globals.lidDockedSuspend
-        Log.info("lid", "closed —", lid.docked ? "docked (" + lid.externals + " external)" : "laptop alone",
-                 "→", suspend ? "suspend" : "blank the panel, keep working")
+        Log.info("lid", "closed —", lid.docked ? "docked (" + lid.externals + " external" + (Globals.onBattery ? ", on battery" : ", on AC") + ")" : "laptop alone",
+                 "→", lid.shouldSleep ? "sleep" : "blank the panel, keep working")
         // Retract transient surfaces either way. Popups latch their output when
         // they open and have no migration path, so one sitting on the panel that
         // is about to go dark would be stranded on a screen that no longer exists.
         lid.retract()
-        if (suspend) {
-            Quickshell.execDetached(["systemctl", "suspend"])
+        if (lid.shouldSleep) {
+            lid._sleep()
             return
         }
         lid._setInternal(false)

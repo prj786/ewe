@@ -1,0 +1,8 @@
+# Realtek USB LAN adapters (r8152/r8153/r8156 — the NIC in most USB-C docks)
+# ship with Wake-on-LAN armed and USB wakeup enabled; after a poweroff they can
+# power the machine straight back on (observed on the Zenbook S14: poweroff at
+# 00:21:14, self-boot the same second). A laptop shell has no WoL use case —
+# strip their wake permission at plug-in.
+ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="0bda", ATTR{idProduct}=="8153", ATTR{power/wakeup}="disabled"
+ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="0bda", ATTR{idProduct}=="8152", ATTR{power/wakeup}="disabled"
+ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="0bda", ATTR{idProduct}=="8156", ATTR{power/wakeup}="disabled"

@@ -62,6 +62,8 @@ bluez-utils
 blueman
 power-profiles-daemon
 upower                  # battery/AC state for the bar, control centre and display re-asserts
+fwupd                   # firmware/BIOS updates from Linux (LVFS) — stale vendor BIOS is the
+                        # root cause behind ACPI poweroff/suspend bugs on thin laptops
 
 # ── terminal (single, fast, GPU-accelerated) ─────────────────────────────────
 # kitty is the one terminal (foot/ghostty dropped). No multiplexer: the prompt
@@ -157,3 +159,5 @@ zram-generator
 # base-devel is required by makepkg/paru. cmake/meson moved to dev.list (--dev) —
 # paru pulls them as makedepends on demand for any AUR build that needs them.
 base-devel
+pacman-contrib          # checkupdates — the only safe update listing (Komble Updates view needs it)
+expac                   # fast sync-DB dump — Komble's Browse descriptions come from it

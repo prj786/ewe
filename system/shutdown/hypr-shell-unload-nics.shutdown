@@ -1,0 +1,18 @@
+#!/bin/sh
+# Runs from systemd-shutdown after every service is stopped and filesystems are
+# read-only, right before the final reboot(2) syscall — the last point where the
+# kernel can still talk to drivers.
+#
+# Why: on Lunar Lake (Zenbook S14 UX5406SA, Intel BE200 Wi-Fi) the iwlwifi
+# ->shutdown handler can wedge the card in a bad low-power state and the ACPI
+# S5 transition never completes — userspace logs "Reached target System Power
+# Off" but the machine sits powered on until the button is held down. Unloading
+# the driver takes the PCI *remove* path instead, which fully quiesces the
+# device. r8152 (USB-C dock LAN) is unloaded too: its shutdown handler arms
+# Wake-on-LAN, which can power the box straight back on.
+#
+# Poweroff only — reboots have always worked and stay untouched.
+[ "$1" = "poweroff" ] || exit 0
+rmmod iwlmld iwlmvm iwlwifi 2>/dev/null
+rmmod r8152 2>/dev/null
+exit 0

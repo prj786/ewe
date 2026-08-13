@@ -27,7 +27,7 @@ set -u
 # must never leave a stuck process behind the bind.
 case "${1:-}" in
   close)
-    timeout 3 qs ipc call display lid close >/dev/null 2>&1 || systemctl suspend
+    timeout 3 qs ipc call display lid close >/dev/null 2>&1 || "$(dirname "$0")/zzz.sh"
     ;;
   open)
     timeout 3 qs ipc call display lid open >/dev/null 2>&1 || true

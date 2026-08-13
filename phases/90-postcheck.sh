@@ -119,6 +119,21 @@ phase_postcheck() {
 
         _check "laptop: hypridle (idle timing)"        sh -c 'command -v hypridle'
         _check "laptop: checkupdates (safe updates)"   sh -c 'command -v checkupdates'
+
+        # Sleep that can actually survive a day in a bag: zzz.sh asks for
+        # suspend-then-hibernate; without a resumable swapfile it silently (and
+        # safely) degrades to s2idle-only, which drains for real. Surface that.
+        if grep -q 'resume=' /proc/cmdline 2>/dev/null; then
+            _check "laptop: hibernate backing (resume=)" true
+        else
+            _note "laptop: hibernate not active yet (phase 32 sets it up; needs one reboot) — long sleeps stay on s2idle"
+        fi
+
+        # A 2024/2025 thin laptop on launch-day BIOS is where poweroff hangs and
+        # sleep drain live. fwupd can often fix that from Linux; say so.
+        if command -v fwupdmgr >/dev/null 2>&1; then
+            _note "laptop: BIOS $(cat /sys/class/dmi/id/bios_version 2>/dev/null) ($(cat /sys/class/dmi/id/bios_date 2>/dev/null)) — check for updates: fwupdmgr refresh && fwupdmgr get-updates"
+        fi
     fi
 
     echo

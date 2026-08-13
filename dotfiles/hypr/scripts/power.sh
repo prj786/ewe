@@ -28,7 +28,10 @@ case "${1:-}" in
         pkill -x Hyprland
         ;;
     suspend)
-        exec systemctl suspend
+        # zzz.sh = suspend-then-hibernate (falls back to plain suspend), so a
+        # machine sent to sleep and then forgotten hibernates instead of
+        # draining flat.
+        exec "$here/zzz.sh"
         ;;
     reboot)
         exec systemctl reboot

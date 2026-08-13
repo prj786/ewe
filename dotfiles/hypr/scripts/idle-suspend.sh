@@ -4,7 +4,8 @@
 # surprises a desktop or a plugged-in laptop (e.g. mid-download):
 #   • plugged in (any AC adapter online) → do nothing
 #   • no battery present (desktop)       → do nothing
-#   • on battery                         → suspend (hypridle locks first via
+#   • on battery                         → sleep via zzz.sh (suspend-then-
+#                                          hibernate; hypridle locks first via
 #                                          before_sleep_cmd)
 set -u
 
@@ -17,4 +18,4 @@ done
 # A battery must exist (i.e. this is a laptop) before we ever auto-suspend.
 [ -e /sys/class/power_supply/BAT0/status ] || [ -e /sys/class/power_supply/BAT1/status ] || exit 0
 
-exec systemctl suspend
+exec "$(dirname "$0")/zzz.sh"

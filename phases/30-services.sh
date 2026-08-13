@@ -169,6 +169,22 @@ phase_services() {
         ok "no battery charge-ceiling attribute on this machine — skipping the udev rule"
     fi
 
+    # ── Poweroff reliability ──
+    # 1. USB-dock Realtek LAN adapters must not be wake sources — their armed
+    #    Wake-on-LAN can power the machine straight back on after poweroff.
+    sudo_run install -d /etc/udev/rules.d
+    sudo_run install -m 644 "$DOTREPO/system/udev/99-hypr-shell-usb-lan-no-wake.rules" \
+        /etc/udev/rules.d/99-hypr-shell-usb-lan-no-wake.rules \
+        && ok "installed udev rule (USB LAN adapters can't wake / power on the machine)"
+    sudo_run udevadm control --reload || true
+    # 2. Unload NIC drivers at the very end of poweroff — iwlwifi's shutdown
+    #    path can hang the final ACPI power-off on Lunar Lake (BE200); the
+    #    driver-remove path quiesces the hardware properly.
+    sudo_run install -d /usr/lib/systemd/system-shutdown
+    sudo_run install -m 755 "$DOTREPO/system/shutdown/hypr-shell-unload-nics.shutdown" \
+        /usr/lib/systemd/system-shutdown/hypr-shell-unload-nics.shutdown \
+        && ok "installed poweroff hook (unloads Wi-Fi/dock-LAN drivers before ACPI S5)"
+
     # ── plocate index for the launcher's file search (Super+D → files) ──
     if pkg_present plocate; then
         _enable_system plocate-updatedb.timer
