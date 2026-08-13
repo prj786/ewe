@@ -38,6 +38,8 @@ QtObject {
     readonly property int barItemRadius: 6
     readonly property int barItemHeight: 22
     readonly property int barItemSpacing: 6
+    // every glyph on the bar renders at this size — no per-site literals
+    readonly property int barIconPx:     14
 
     // Accent — whatever Settings → Theme wrote into user-theme.json.
     readonly property color accent:      Globals.accentColor
@@ -142,7 +144,12 @@ QtObject {
     readonly property string icCog:         ic(0xE270)  // gear
     readonly property string icTiling:      ic(0xE464)  // squares-four (tiling on)
     readonly property string icFloating:    ic(0xE0F6)  // browsers (windows float)
-    readonly property string icCheck:       ic(0xE182)  // check
+    // check-fat, not plain check: Phosphor's Fill weight has no bare form for
+    // stroke-only icons, so `check` (0xE182) draws as a filled badge with the
+    // tick knocked out — indistinguishable from check-square, and wrong inside
+    // the swatches/rows that already draw their own background. check-fat is
+    // the bare tick. (Same limitation hits `x`/`plus`; they have no fat form.)
+    readonly property string icCheck:       ic(0xEBA6)  // check-fat
     readonly property string icPhone:       ic(0xE1E0)  // device-mobile (mobile connection)
     readonly property string icMessage:     ic(0xE168)  // chat-circle (SMS)
     readonly property string icSend:        ic(0xE398)  // paper-plane-tilt

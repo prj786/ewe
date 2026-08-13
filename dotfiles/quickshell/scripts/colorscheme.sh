@@ -93,6 +93,7 @@ gtk-font-name=Ubuntu 11
 gtk-application-prefer-dark-theme=$PREFER_DARK
 gtk-cursor-theme-name=$CURSOR
 gtk-cursor-theme-size=$CURSOR_SIZE
+gtk-decoration-layout=:
 EOF
 done
 
@@ -259,6 +260,10 @@ if command -v gsettings >/dev/null 2>&1; then
     gsettings set org.gnome.desktop.interface cursor-size  "$CURSOR_SIZE" 2>/dev/null || true
     gsettings set org.gnome.desktop.interface font-name    "Ubuntu 11"  2>/dev/null || true
     gsettings set org.gnome.desktop.interface document-font-name "Ubuntu 11" 2>/dev/null || true
+    # no close/min/max buttons in headerbars — Hyprland has no titlebars and
+    # windows close via Super+Q; GTK3 reads gtk-decoration-layout from
+    # settings.ini, GTK4/libadwaita follows this key
+    gsettings set org.gnome.desktop.wm.preferences button-layout ':' 2>/dev/null || true
 fi
 
 # ── Qt (qt6ct + qt5ct) — dark Fusion palette for any stray Qt app ──

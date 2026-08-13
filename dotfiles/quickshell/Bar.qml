@@ -197,7 +197,7 @@ Scope {
         id: si
         property string glyph: ""
         property color fg: Theme.fgSecondary
-        property int fontPx: 15
+        property int fontPx: Theme.barIconPx
         property bool active: false      // its popup is open
         signal activated()
         signal secondary()
@@ -403,7 +403,6 @@ Scope {
                     // screenshot (camera) — Left: region · Right: whole screen · Middle: a window
                     StatusItem {
                         glyph: Theme.icCamera        // camera
-                        fontPx: 14
                         onActivated: Quickshell.execDetached(["sh", "-c", "\"$HOME/.config/hypr/scripts/screenshot.sh\" region"])
                         onSecondary: Quickshell.execDetached(["sh", "-c", "\"$HOME/.config/hypr/scripts/screenshot.sh\" full"])
                         onTertiary:  Quickshell.execDetached(["sh", "-c", "\"$HOME/.config/hypr/scripts/screenshot.sh\" activewindow"])
@@ -415,18 +414,14 @@ Scope {
                         glyph: Theme.icClipboard        // scissors
                         fg: Globals.clipboardOpen ? Theme.fg : Theme.fgSecondary
                         active: Globals.clipboardOpen
-                        fontPx: 14
                         onActivated: { Globals.clipAnchorX = scissorsItem.mapToItem(null, scissorsItem.width / 2, 0).x; Globals.clipboardOpen = !Globals.clipboardOpen }
                     }
 
                     // tiling ⇄ floating — the icon IS the state (grid = tiling,
-                    // stacked windows = floating, accented so the non-default
-                    // mode is visible at a glance). Settings.qml owns persisting
+                    // stacked windows = floating). Settings.qml owns persisting
                     // the flip and reloading Hyprland.
                     StatusItem {
                         glyph: Globals.tilingEnabled ? Theme.icTiling : Theme.icFloating
-                        fg: Globals.tilingEnabled ? Theme.fgSecondary : Theme.accent
-                        fontPx: 14
                         onActivated: Globals.tilingEnabled = !Globals.tilingEnabled
                     }
 
@@ -485,7 +480,7 @@ Scope {
                                 Text {
                                     anchors.verticalCenter: parent.verticalCenter
                                     text: Theme.icBell
-                                    font.family: Theme.fontIcons; font.pixelSize: 13
+                                    font.family: Theme.fontIcons; font.pixelSize: Theme.barIconPx
                                     color: Theme.accent
                                 }
                                 Text {
@@ -500,34 +495,34 @@ Scope {
                                 visible: bar.calSoon
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: Theme.icCalendar
-                                font.family: Theme.fontIcons; font.pixelSize: 13
-                                color: Theme.accent
+                                font.family: Theme.fontIcons; font.pixelSize: Theme.barIconPx
+                                color: Theme.fgSecondary
                             }
-                            // VPN (only when active) — key glyph, accent colour
+                            // VPN (only when active) — key glyph
                             Text {
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: Theme.icVpn
-                                font.family: Theme.fontIcons; font.pixelSize: 14
-                                color: Theme.accent
+                                font.family: Theme.fontIcons; font.pixelSize: Theme.barIconPx
+                                color: Theme.fgSecondary
                                 visible: Globals.vpnActive
                             }
                             // SSH tunnel (only when one of the Quick Settings
-                            // port-forward tunnels is up) — console glyph, accent
+                            // port-forward tunnels is up) — console glyph
                             Text {
                                 visible: Globals.sshTunnelUp
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: Theme.icSsh
-                                font.family: Theme.fontIcons; font.pixelSize: 13
-                                color: Theme.accent
+                                font.family: Theme.fontIcons; font.pixelSize: Theme.barIconPx
+                                color: Theme.fgSecondary
                             }
                             // Insomnia / keep-awake (only when on) — eye glyph, matches
-                            // the control-centre toggle; accent colour
+                            // the control-centre toggle
                             Text {
                                 visible: Globals.caffeine
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: Theme.icEye
-                                font.family: Theme.fontIcons; font.pixelSize: 13
-                                color: Theme.accent
+                                font.family: Theme.fontIcons; font.pixelSize: Theme.barIconPx
+                                color: Theme.fgSecondary
                             }
                             // Phone (KDE Connect) — only when paired + reachable;
                             // battery % and an accent dot for unread phone notifications
@@ -541,7 +536,7 @@ Scope {
                                     Text {
                                         id: phGlyph
                                         text: Theme.icPhone
-                                        font.family: Theme.fontIcons; font.pixelSize: 13
+                                        font.family: Theme.fontIcons; font.pixelSize: Theme.barIconPx
                                         color: Theme.fgSecondary
                                     }
                                     Rectangle {
@@ -568,8 +563,8 @@ Scope {
                                 Text {
                                     anchors.verticalCenter: parent.verticalCenter
                                     text: Theme.icMail
-                                    font.family: Theme.fontIcons; font.pixelSize: 13
-                                    color: Theme.accent
+                                    font.family: Theme.fontIcons; font.pixelSize: Theme.barIconPx
+                                    color: Theme.fgSecondary
                                 }
                                 Text {
                                     anchors.verticalCenter: parent.verticalCenter
@@ -582,8 +577,8 @@ Scope {
                             // Wi-Fi isn't — the common case in VMs and on docks)
                             Text {
                                 anchors.verticalCenter: parent.verticalCenter
-                                text: Theme.icEthernet        // mdi-ethernet
-                                font.family: Theme.fontIcons; font.pixelSize: 13
+                                text: Theme.icEthernet
+                                font.family: Theme.fontIcons; font.pixelSize: Theme.barIconPx
                                 color: Theme.fgSecondary
                                 visible: bar.wiredUp && !bar.wifiUp
                             }
@@ -591,11 +586,11 @@ Scope {
                             Text {
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: Theme.icWifi
-                                font.family: Theme.fontIcons; font.pixelSize: 13
+                                font.family: Theme.fontIcons; font.pixelSize: Theme.barIconPx
                                 color: Theme.fgSecondary
                                 visible: bar.wifiUp
                             }
-                            // Bluetooth (only when adapter on); blue when a device is connected
+                            // Bluetooth (only when adapter on); filled glyph when a device is connected
                             Text {
                                 property var adapter: Bluetooth.defaultAdapter
                                 property int conn: {
@@ -606,8 +601,8 @@ Scope {
                                 }
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: conn > 0 ? Theme.icBluetoothOn : Theme.icBluetooth
-                                font.family: Theme.fontIcons; font.pixelSize: 13
-                                color: conn > 0 ? Theme.accent : Theme.fgSecondary
+                                font.family: Theme.fontIcons; font.pixelSize: Theme.barIconPx
+                                color: Theme.fgSecondary
                                 visible: adapter && adapter.enabled
                             }
                             // Power profile (leaf · balance · speedometer) — reflects tuned profile
@@ -616,10 +611,8 @@ Scope {
                                 text: PowerProfiles.profile === PowerProfile.PowerSaver ? Theme.icLeaf
                                     : PowerProfiles.profile === PowerProfile.Performance ? Theme.icSpeed
                                     : Theme.icBalance
-                                font.family: Theme.fontIcons; font.pixelSize: 13
-                                color: PowerProfiles.profile === PowerProfile.Performance ? Theme.warning
-                                     : PowerProfiles.profile === PowerProfile.PowerSaver ? Theme.success
-                                     : Theme.fgSecondary
+                                font.family: Theme.fontIcons; font.pixelSize: Theme.barIconPx
+                                color: Theme.fgSecondary
                             }
                             // Battery — icon + always-on percentage
                             Row {
@@ -637,8 +630,12 @@ Scope {
                                         : parent.pct >= 40 ? Theme.icBatt50
                                         : parent.pct >= 20 ? Theme.icBatt20
                                         : Theme.icBattEmpty
-                                    font.family: Theme.fontIcons; font.pixelSize: 13
-                                    color: parent.charging ? Theme.success : (parent.pct <= 10 ? Theme.danger : (parent.pct <= 20 ? Theme.warning : Theme.fgSecondary))
+                                    font.family: Theme.fontIcons; font.pixelSize: Theme.barIconPx
+                                    // low battery keeps its alert colours; the bolt glyph
+                                    // alone signals charging
+                                    color: parent.pct <= 10 && !parent.charging ? Theme.danger
+                                         : parent.pct <= 20 && !parent.charging ? Theme.warning
+                                         : Theme.fgSecondary
                                 }
                                 Text {
                                     anchors.verticalCenter: parent.verticalCenter
