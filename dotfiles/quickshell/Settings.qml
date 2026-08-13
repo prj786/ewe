@@ -314,9 +314,13 @@ Scope {
         // can), so it stays at the documented 15 min instead of a surprise 7.5.
         s += "listener {\n    timeout    = 900\n    on-timeout = ~/.config/hypr/scripts/idle-suspend.sh\n}\n"
         root.atomicWrite(idleWriter, root.home + "/.config/hypr/generated/hypridle.conf", s)
-        if (!HyprMon.virtualSession)
+        if (!HyprMon.virtualSession) {
+            // restarting hypridle orphans any dim it fired (the new instance
+            // never sends that on-resume) — clear it or the overlay sticks
+            Globals.saverDimming = false
             // the small sleep lets the atomic temp+rename land before hypridle reads it
             Quickshell.execDetached(["sh", "-c", 'pkill -x hypridle; sleep 0.6; hypridle -c "$HOME/.config/hypr/generated/hypridle.conf" >/dev/null 2>&1'])
+        }
     }
     Process { id: idleWriter }
     function saverChanged() { root.writePrefs(); root.writeIdleConf() }

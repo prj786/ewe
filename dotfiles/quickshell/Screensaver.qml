@@ -31,6 +31,36 @@ Scope {
     // cancel it. hypridle's on-resume is what clears it — the overlay is purely
     // something to look at. Fades in slowly enough to read as a warning, out
     // quickly enough to feel like a wake.
+    //
+    // But that on-resume can be LOST: a Settings apply restarts hypridle
+    // (pkill + relaunch) and the new instance knows nothing about a dim the old
+    // one fired; the IPC can also land on a dying shell. A lost undim used to
+    // leave this 55%-black overlay up permanently — at 100% backlight the panel
+    // reads "dim and no brightness key fixes it" (observed live 2026-08-13).
+    // Backstops, cheapest-first: unlocking proves presence → undim; waking from
+    // sleep → undim (hypridle re-dims if idle genuinely continues); and a
+    // watchdog — dim is a ~20 s grace before the lock stage, so if two minutes
+    // pass with neither lock nor saver arriving, the idle pipeline stalled and
+    // the warning no longer means anything → clear it.
+    Connections {
+        target: Globals
+        function onLockedChanged() { if (!Globals.locked) Globals.saverDimming = false }
+        function onSaverDimmingChanged() { Globals.saverDimming ? dimWatchdog.restart() : dimWatchdog.stop() }
+    }
+    Connections {
+        target: Resume
+        function onResyncPower() { Globals.saverDimming = false }
+    }
+    Timer {
+        id: dimWatchdog
+        interval: 120000
+        onTriggered: {
+            if (Globals.saverDimming && !Globals.locked && !Globals.saverActive) {
+                Log.warn("saver", "dim overlay up 2 min with no lock/saver following — clearing (missed hypridle on-resume)")
+                Globals.saverDimming = false
+            }
+        }
+    }
     Variants {
         model: Quickshell.screens
         PanelWindow {

@@ -412,6 +412,7 @@ QtObject {
                 Globals.reloadUserState()
                 HyprMon.reloadProfiles()
                 if (!HyprMon.virtualSession) {
+                    Globals.saverDimming = false   // hypridle restart orphans any active dim
                     Quickshell.execDetached(["sh", "-c",
                         'hyprctl reload >/dev/null 2>&1; "$HOME/.config/hypr/scripts/wallpaper.sh" --reapply >/dev/null 2>&1; pkill -x hypridle; sleep 0.6; hypridle -c "$HOME/.config/hypr/generated/hypridle.conf" >/dev/null 2>&1'])
                     Wallpaper.reapplied()   // the restore respawned mpvpaper unpaused
