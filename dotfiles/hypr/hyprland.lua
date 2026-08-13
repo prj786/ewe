@@ -371,9 +371,20 @@ for _, klass in ipairs({
     "pavucontrol", "org.pulseaudio.pavucontrol",
     "nm-connection-editor", "blueman-manager",
     "org.gnome.Calculator", "engrampa",
+    "jetbrains-toolbox",
 }) do
-    hl.window_rule({ name = "float-" .. klass, match = { class = klass }, float = true })
+    hl.window_rule({ name = "float-" .. klass, match = { class = klass }, float = true, center = true })
 end
+
+-- Anything that opens floating spawns centred — floaters that place themselves
+-- at 0,0 or off-screen (JetBrains Toolbox and friends) are otherwise easy to
+-- lose. Applies at open only; moving a window afterwards works normally.
+-- class = ".+" keeps the classless XWayland drag ghosts (rule below) out.
+hl.window_rule({
+    name   = "center-floating",
+    match  = { float = true, class = ".+" },
+    center = true,
+})
 
 -- Firefox / browser picture-in-picture: small floating, pinned across spaces.
 hl.window_rule({
@@ -448,7 +459,10 @@ pcall(dofile, home .. "/.config/hypr/generated/user.lua")
 -- One generated file per Settings domain, each atomically rewritten by the app
 -- that owns it (never touch these by hand). Sourced after user.lua so the
 -- dedicated files win over any stale lines an older user.lua may still carry.
---   input.lua    — Settings → Keyboard & Mouse (input{} + per-device blocks)
---   monitors.lua — Settings → Displays (per-monitor-set profiles, desc:-matched)
+--   input.lua       — Settings → Keyboard & Mouse (input{} + per-device blocks)
+--   monitors.lua     — Settings → Displays (per-monitor-set profiles, desc:-matched)
+--   windowrules.lua — Settings → Window Rules (per-app: open on workspace N,
+--                     force float/tile — written by ewe-settings)
 pcall(dofile, home .. "/.config/hypr/generated/input.lua")
 pcall(dofile, home .. "/.config/hypr/generated/monitors.lua")
+pcall(dofile, home .. "/.config/hypr/generated/windowrules.lua")

@@ -37,15 +37,18 @@ configuration is restored automatically.
 | `~/.config/hypr/generated/user.lua` | Layout / Theme | gaps, border, corner radius, accent border, window transparency, animation overrides |
 | `~/.config/hypr/generated/hypridle.conf` | Screensaver | full hypridle config: saver/lock listeners + battery idle-suspend; `autostart.sh` prefers it over the shipped default and Settings restarts hypridle on change |
 | `~/.config/hypr/generated/kb-per-window.disabled` | Keyboard & Mouse | flag file: presence tells `autostart.sh` not to start the per-window-layout daemon |
+| `~/.config/hypr/generated/windowrules.lua` | Window Rules *(standalone app only — no in-shell fallback pane)* | per-app `hl.window_rule{}` lines: open on workspace N, force float/tile; applied live via `hyprctl reload` (named rules, so reloads are idempotent) |
+| `~/.config/quickshell/window-rules.json` | Window Rules | source of truth for the rules list (app name, window class, workspace, float/tile) |
 | `~/.config/quickshell/display-profiles.json` | Displays | source of truth for the display profiles (below) |
 | `~/.config/quickshell/input-devices.json` | Keyboard & Mouse | per-device pointer overrides (mirrors the `hl.device{}` lines) |
 | `~/.config/quickshell/google-*` | User (Google) | OAuth client config + non-secret caches (profile, events, mail cursor/list, sync meta, restore bundle/package lists) — all gitignored; the refresh token is in the keyring only |
 | `~/.config/quickshell/kdeconnect-state.json` | Mobile card | seen phone-notification ids (unread badge) + chosen device — pairing keys stay in kdeconnectd |
 | `~/.config/quickshell/startup-apps.json` | Startup | user startup applications; `autostart.sh` launches the enabled entries via `jq` at login |
 
-`hyprland.lua` sources `user.lua`, then `input.lua`, then `monitors.lua`
-(missing files are a no-op), so the dedicated files win over any stale lines an
-older `user.lua` may still carry. All of these are gitignored user state.
+`hyprland.lua` sources `user.lua`, then `input.lua`, then `monitors.lua`, then
+`windowrules.lua` (missing files are a no-op), so the dedicated files win over
+any stale lines an older `user.lua` may still carry. All of these are
+gitignored user state.
 
 ## Wallpaper backends (per file type)
 

@@ -5,10 +5,23 @@ phase_userconfig() {
     step "60 · user config"
 
     # default applications (writes ~/.config/mimeapps.list — no Hyprland involvement)
+    #
+    # SEED, never clobber: these run on every re-run of the installer, and the
+    # user's own choices (browser set to Zen, a different image viewer…) must
+    # survive. A default is only written when the current handler is unset or
+    # points at a desktop file that no longer exists (a dead default = the link/
+    # double-click opens nothing, which is worse than re-seeding).
+    _desktop_ok() { [ -n "$1" ] && { [ -r "/usr/share/applications/$1" ] || [ -r "$HOME/.local/share/applications/$1" ]; }; }
     if command -v xdg-settings >/dev/null 2>&1; then
-        for b in firefox.desktop firefox-esr.desktop org.mozilla.firefox.desktop; do
-            [ -r "/usr/share/applications/$b" ] && { run xdg-settings set default-web-browser "$b" && break; }
-        done
+        local cur_browser
+        cur_browser="$(xdg-settings get default-web-browser 2>/dev/null)"
+        if _desktop_ok "$cur_browser"; then
+            info "default browser: keeping your choice ($cur_browser)"
+        else
+            for b in firefox.desktop firefox-esr.desktop org.mozilla.firefox.desktop; do
+                [ -r "/usr/share/applications/$b" ] && { run xdg-settings set default-web-browser "$b" && break; }
+            done
+        fi
     fi
     # Install our Fresh launcher (runs `fresh` inside kitty) so it can be the GUI
     # default text/code editor. Shipped in the repo; copied to the user apps dir.
@@ -23,13 +36,26 @@ phase_userconfig() {
     # id would otherwise leave the *previous* default in place (e.g. an uninstalled
     # KDE app from an earlier install), and a dead default = double-click in the
     # file manager opens nothing. The warning surfaces the bad id in the log.
+    # Seed-only, same rule as the browser above: a mime the user has explicitly
+    # set (in ~/.config/mimeapps.list) to a WORKING desktop file is their choice
+    # — leave it. NOT `xdg-mime query default`, which falls back to the
+    # mimeinfo cache's first claimant when nothing was chosen — that fallback
+    # must not count as a choice, or fresh installs would never get seeded.
+    _user_default() {
+        awk -F= -v m="$1" '/^\[/{s=($0=="[Default Applications]")} s && $1==m {sub(/;.*/,"",$2); print $2; exit}' \
+            "$HOME/.config/mimeapps.list" 2>/dev/null
+    }
     _mime() {
         local d="$1"; shift
         if [ ! -r "/usr/share/applications/$d" ] && [ ! -r "$HOME/.local/share/applications/$d" ]; then
             warn "default-apps: $d not installed — no handler set for: $*"
             return 0
         fi
-        local m; for m in "$@"; do run xdg-mime default "$d" "$m"; done
+        local m cur; for m in "$@"; do
+            cur="$(_user_default "$m")"
+            if _desktop_ok "$cur"; then continue; fi
+            run xdg-mime default "$d" "$m"
+        done
     }
     if command -v xdg-mime >/dev/null 2>&1; then
         _mime nemo.desktop             inode/directory
@@ -43,6 +69,10 @@ phase_userconfig() {
         _mime mpv.desktop              video/mp4 video/x-matroska video/webm video/quicktime audio/mpeg audio/flac
         _mime engrampa.desktop         application/zip application/x-tar application/gzip application/x-xz \
               application/x-bzip2 application/x-7z-compressed application/x-rar application/zstd application/x-compressed-tar
+        # Double-clicking a downloaded .AppImage opens Komble's install flow
+        # (shared-mime-info tags type-2 AppImages as vnd.appimage, type-1 as
+        # x-iso9660-appimage; x-appimage covers older tag variants).
+        _mime komble.desktop           application/vnd.appimage application/x-iso9660-appimage application/x-appimage
     fi
 
     # GTK/GIO reads ~/.config/mimeapps.list directly — there is no KDE ksycoca cache
