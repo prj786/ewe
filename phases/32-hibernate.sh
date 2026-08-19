@@ -23,9 +23,11 @@ phase_hibernate() {
     # ── the sleep policy drop-in goes in unconditionally: with no swap it is
     #    inert (zzz.sh falls back to suspend), with swap it is the 2 h timer ──
     sudo_run install -d /etc/systemd/sleep.conf.d
-    sudo_run install -m 644 "$DOTREPO/system/sleep/10-hypr-shell-sleep.conf" \
-        /etc/systemd/sleep.conf.d/10-hypr-shell-sleep.conf \
+    sudo_run install -m 644 "$DOTREPO/system/sleep/10-ewe-sleep.conf" \
+        /etc/systemd/sleep.conf.d/10-ewe-sleep.conf \
         && ok "installed sleep drop-in (s2idle 2 h → hibernate)"
+    # migrate: pre-rename drop-in
+    [ -f /etc/systemd/sleep.conf.d/10-hypr-shell-sleep.conf ] && sudo_run rm -f /etc/systemd/sleep.conf.d/10-hypr-shell-sleep.conf
 
     if ! ls /sys/class/power_supply/BAT* >/dev/null 2>&1; then
         info "no battery — desktop; skipping the swapfile/resume setup."
@@ -41,8 +43,8 @@ phase_hibernate() {
     #    the machine that hit this. read-only is all logind needs. ──
     if mountpoint -q /home; then
         sudo_run install -d /etc/systemd/system/systemd-logind.service.d
-        sudo_run install -m 644 "$DOTREPO/system/logind/10-hypr-shell-hibernate.conf" \
-            /etc/systemd/system/systemd-logind.service.d/10-hypr-shell-hibernate.conf \
+        sudo_run install -m 644 "$DOTREPO/system/logind/10-ewe-hibernate.conf" \
+            /etc/systemd/system/systemd-logind.service.d/10-ewe-hibernate.conf \
             && ok "installed logind drop-in (swapfile under /home stays visible to CanHibernate)"
         sudo_run systemctl daemon-reload
         if [ -z "${XDG_CURRENT_DESKTOP:-}" ] && [ -z "${WAYLAND_DISPLAY:-}" ]; then

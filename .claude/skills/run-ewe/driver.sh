@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# hypr-shell driver — launch & drive the Quickshell shell WITHOUT installing to
+# ewe driver — launch & drive the Quickshell shell WITHOUT installing to
 # the live session. It nests a throwaway Hyprland compositor on its own Wayland
 # socket (aquamarine's Wayland backend), runs `qs -p dotfiles/quickshell` inside
 # it, and screenshots that virtual output with grim. Nothing touches the host's

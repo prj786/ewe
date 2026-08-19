@@ -6,7 +6,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for testing hypr-shell (**alpha**). Please skim the **Known limitations**
+        Thanks for testing ewe (**alpha**). Please skim the **Known limitations**
         in the README first — some behaviour is intentional (the screen stays on while
         idle on the `xe` GPU, idle-suspend only on battery, low-battery auto-suspend).
   - type: textarea
@@ -48,8 +48,8 @@ body:
   - type: input
     id: version
     attributes:
-      label: hypr-shell version
-      description: "Settings → sidebar, or `cat ~/hypr-shell/VERSION`"
+      label: ewe version
+      description: "Settings → sidebar, or `cat ~/.local/share/ewe/VERSION`"
       placeholder: "0.2.0-alpha"
   - type: textarea
     id: check
@@ -60,5 +60,5 @@ body:
     id: logs
     attributes:
       label: Relevant logs
-      description: "e.g. `journalctl --user -u hypr-shell.service -b`, the shell's `qs log`, or `hyprctl` output"
+      description: "e.g. `journalctl --user -u ewe.service -b`, the shell's `qs log`, or `hyprctl` output"
       render: shell

@@ -1,6 +1,6 @@
-# Hyprland config (Lua) — hypr-shell
+# Hyprland config (Lua) — ewe
 
-The **Hyprland** half of [hypr-shell](../../README.md): a Wayland compositor
+The **Hyprland** half of [ewe](../../README.md): a Wayland compositor
 configured in **Lua**, paired with the **Quickshell** QML shell (bar, dock,
 launcher, notifications, Quick Settings, settings, lock, OSD) that lives in
 [`../quickshell/`](../quickshell/). Clean dark aesthetic, Super-based keybinds.

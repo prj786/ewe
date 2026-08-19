@@ -95,7 +95,7 @@ phase_postcheck() {
     # keyboard backlight key that does nothing.
     if [ "$CHASSIS" = "laptop" ]; then
         echo
-        _check "laptop: logind lid drop-in installed"  test -r /etc/systemd/logind.conf.d/10-hypr-shell-lid.conf
+        _check "laptop: logind lid drop-in installed"  test -r /etc/systemd/logind.conf.d/10-ewe-lid.conf
         _check "laptop: panel backlight present"       sh -c 'ls /sys/class/backlight/*/brightness >/dev/null 2>&1'
         # The bridge is what locks BEFORE suspend and makes loginctl lock-session
         # work; without it those silently do nothing.

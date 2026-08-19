@@ -1,21 +1,21 @@
 ---
-name: run-hypr-shell
-description: Run, drive, and screenshot the hypr-shell Quickshell desktop shell (top bar, Settings app, App Store, Quick Settings, dock) and syntax-check the Hyprland Lua config — without installing to the live session. Use when asked to launch, start, test, screenshot, or verify a change to the hypr-shell DE, its Quickshell QML, or hyprland.lua.
+name: run-ewe
+description: Run, drive, and screenshot the ewe Quickshell desktop shell (top bar, Settings app, App Store, Quick Settings, dock) and syntax-check the Hyprland Lua config — without installing to the live session. Use when asked to launch, start, test, screenshot, or verify a change to the ewe DE, its Quickshell QML, or hyprland.lua.
 ---
 
-# Running hypr-shell
+# Running ewe
 
-`hypr-shell` is an Arch-only, clean dark Hyprland + Quickshell desktop
+`ewe` is an Arch-only, clean dark Hyprland + Quickshell desktop
 environment. The part that changes most (top **Bar**, **Settings** app,
 **App Store**, **Quick Settings**, **Dock**) is the Quickshell QML shell in
-`dotfiles/quickshell/`. You drive it with **`.claude/skills/run-hypr-shell/driver.sh`**,
+`dotfiles/quickshell/`. You drive it with **`.claude/skills/run-ewe/driver.sh`**,
 which nests a throwaway Hyprland compositor on its own Wayland socket, runs
 `qs -p dotfiles/quickshell` inside it, and screenshots that virtual output with
 `grim`. **Nothing touches the host's real screen** and the host's own running
 shell is left alone.
 
-All paths below are relative to the repo root (`hypr-shell/`). The driver lives
-at `.claude/skills/run-hypr-shell/driver.sh`.
+All paths below are relative to the repo root (`ewe/`). The driver lives
+at `.claude/skills/run-ewe/driver.sh`.
 
 ## Prerequisites
 
@@ -36,15 +36,15 @@ sudo pacman -S --needed hyprland quickshell grim wlr-randr lua
 ## Run (agent path) — the driver
 
 ```bash
-.claude/skills/run-hypr-shell/driver.sh up              # nested compositor + shell, waits for "Configuration Loaded"
-.claude/skills/run-hypr-shell/driver.sh open settings   # toggle a surface + screenshot -> /tmp/hs-driver/settings.png
-.claude/skills/run-hypr-shell/driver.sh open store       # the App Store
-.claude/skills/run-hypr-shell/driver.sh open quicksettings   # the Quick Settings
-.claude/skills/run-hypr-shell/driver.sh shot bar.png     # screenshot whatever is on the nested output now (the bar+dock)
-.claude/skills/run-hypr-shell/driver.sh targets          # list every IpcHandler target + function
-.claude/skills/run-hypr-shell/driver.sh ipc settings toggle   # raw IpcHandler call (target + function)
-.claude/skills/run-hypr-shell/driver.sh log              # tail the shell's qs log
-.claude/skills/run-hypr-shell/driver.sh down             # tear it all down
+.claude/skills/run-ewe/driver.sh up              # nested compositor + shell, waits for "Configuration Loaded"
+.claude/skills/run-ewe/driver.sh open settings   # toggle a surface + screenshot -> /tmp/hs-driver/settings.png
+.claude/skills/run-ewe/driver.sh open store       # the App Store
+.claude/skills/run-ewe/driver.sh open quicksettings   # the Quick Settings
+.claude/skills/run-ewe/driver.sh shot bar.png     # screenshot whatever is on the nested output now (the bar+dock)
+.claude/skills/run-ewe/driver.sh targets          # list every IpcHandler target + function
+.claude/skills/run-ewe/driver.sh ipc settings toggle   # raw IpcHandler call (target + function)
+.claude/skills/run-ewe/driver.sh log              # tail the shell's qs log
+.claude/skills/run-ewe/driver.sh down             # tear it all down
 ```
 
 Screenshots land in `/tmp/hs-driver/` (override with `HS_OUT=/somewhere`).
@@ -65,7 +65,7 @@ The Hyprland side is Lua (`dotfiles/hypr/hyprland.lua` + `colors.lua`). Static
 syntax check (no compositor needed):
 
 ```bash
-.claude/skills/run-hypr-shell/driver.sh check     # luac -p hyprland.lua colors.lua  ->  "lua config: syntax OK"
+.claude/skills/run-ewe/driver.sh check     # luac -p hyprland.lua colors.lua  ->  "lua config: syntax OK"
 ```
 
 The driver deliberately hosts the shell under a *minimal* compositor config, **not**

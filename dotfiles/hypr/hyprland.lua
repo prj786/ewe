@@ -300,7 +300,7 @@ hl.bind(mainMod .. " + ALT + L",   hl.dsp.exec_cmd("qs ipc call lock lock"))  --
 -- Laptop lid (clamshell via lid.sh). While the shell runs it holds a
 -- handle-lid-switch block inhibitor (logind-bridge.py), so logind stands down
 -- and this bind owns the lid; with no shell (greeter/TTY/crash) logind's
--- HandleLidSwitch=suspend fallback takes over (10-hypr-shell-lid.conf, phase 30)
+-- HandleLidSwitch=suspend fallback takes over (10-ewe-lid.conf, phase 30)
 -- so the two suspend paths never race. `l` flag = fire even while locked.
 hl.bind("switch:on:Lid Switch",  hl.dsp.exec_cmd(scripts .. "/lid.sh close"), { locked = true })
 hl.bind("switch:off:Lid Switch", hl.dsp.exec_cmd(scripts .. "/lid.sh open"),  { locked = true })

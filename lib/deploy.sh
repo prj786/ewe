@@ -69,7 +69,13 @@ deploy_dotfiles() {
     # and `daemon-reload` is cheap.
     run mkdir -p "$HOME/.config/systemd/user"
     run cp -f "$DOTREPO/systemd/hyprland-session.target" "$HOME/.config/systemd/user/"
-    run cp -f "$DOTREPO/systemd/hypr-shell.service"      "$HOME/.config/systemd/user/"
+    run cp -f "$DOTREPO/systemd/ewe.service"      "$HOME/.config/systemd/user/"
+    # migrate: the unit was called hypr-shell.service before the ewe rename —
+    # a stale copy would keep a second shell respawn loop alive
+    if [ -f "$HOME/.config/systemd/user/hypr-shell.service" ]; then
+        run systemctl --user disable --now hypr-shell.service 2>/dev/null || true
+        run rm -f "$HOME/.config/systemd/user/hypr-shell.service"
+    fi
     run systemctl --user daemon-reload 2>/dev/null || true
-    ok "installed hyprland-session.target + hypr-shell.service (shell respawn)"
+    ok "installed hyprland-session.target + ewe.service (shell respawn)"
 }

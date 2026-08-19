@@ -106,7 +106,7 @@ phase_userconfig() {
     # run would keep reverting the user's own choice. gsettings needs a session
     # DBus — best-effort here; autostart.sh runs the identical seed at login to
     # cover an install done from a bare TTY.
-    local nemo_stamp="${XDG_STATE_HOME:-$HOME/.local/state}/hypr-shell/nemo-chrome.seeded"
+    local nemo_stamp="${XDG_STATE_HOME:-$HOME/.local/state}/ewe/nemo-chrome.seeded"
     if command -v gsettings >/dev/null 2>&1 && command -v nemo >/dev/null 2>&1 && [ ! -e "$nemo_stamp" ]; then
         if run gsettings set org.nemo.window-state start-with-sidebar false 2>/dev/null; then
             run gsettings set org.nemo.window-state start-with-menu-bar false 2>/dev/null || true
@@ -134,7 +134,7 @@ phase_userconfig() {
     # Only the FIRST run snapshots: a re-run would capture the already-recoloured
     # theme — restoring that is exactly what this backup exists to undo.
     if [ "${COEXIST:-0}" = "1" ]; then
-        local tbroot="${XDG_STATE_HOME:-$HOME/.local/state}/hypr-shell"
+        local tbroot="${XDG_STATE_HOME:-$HOME/.local/state}/ewe"
         local tb="$tbroot/theme-backup.$RUN_STAMP"
         if compgen -G "$tbroot/theme-backup.*" >/dev/null 2>&1; then
             info "pre-ewe theme snapshot already exists under $tbroot — keeping it."

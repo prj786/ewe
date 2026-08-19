@@ -143,8 +143,10 @@ phase_services() {
     # ── Lid ownership: Hyprland's lid.sh does clamshell (panel off when docked,
     # lock+suspend when alone) — logind must not ALSO suspend on lid close.
     sudo_run install -d /etc/systemd/logind.conf.d
-    sudo_run install -m 644 "$DOTREPO/system/logind/10-hypr-shell-lid.conf" /etc/systemd/logind.conf.d/10-hypr-shell-lid.conf \
+    sudo_run install -m 644 "$DOTREPO/system/logind/10-ewe-lid.conf" /etc/systemd/logind.conf.d/10-ewe-lid.conf \
         && ok "installed logind lid drop-in (Hyprland owns the lid switch)"
+    # migrate: pre-rename drop-in — two files would both feed logind
+    [ -f /etc/systemd/logind.conf.d/10-hypr-shell-lid.conf ] && sudo_run rm -f /etc/systemd/logind.conf.d/10-hypr-shell-lid.conf
     # logind only reads its config at start — but restarting it under a LIVE
     # Wayland session can yank the compositor's session/DRM handle and black-
     # screen the desktop (observed when re-running install.sh inside the DE).
@@ -160,9 +162,10 @@ phase_services() {
     # machines whose battery has no such attribute (desktops, most non-ASUS).
     if compgen -G "/sys/class/power_supply/BAT*/charge_control_end_threshold" >/dev/null 2>&1; then
         sudo_run install -d /etc/udev/rules.d
-        sudo_run install -m 644 "$DOTREPO/system/udev/99-hypr-shell-charge-threshold.rules" \
-            /etc/udev/rules.d/99-hypr-shell-charge-threshold.rules \
+        sudo_run install -m 644 "$DOTREPO/system/udev/99-ewe-charge-threshold.rules" \
+            /etc/udev/rules.d/99-ewe-charge-threshold.rules \
             && ok "installed udev rule (battery charge ceiling settable from Settings)"
+        [ -f /etc/udev/rules.d/99-hypr-shell-charge-threshold.rules ] && sudo_run rm -f /etc/udev/rules.d/99-hypr-shell-charge-threshold.rules
         sudo_run udevadm control --reload || warn "udevadm reload failed — the charge ceiling applies after reboot"
         sudo_run udevadm trigger --subsystem-match=power_supply || true
     else
@@ -173,17 +176,19 @@ phase_services() {
     # 1. USB-dock Realtek LAN adapters must not be wake sources — their armed
     #    Wake-on-LAN can power the machine straight back on after poweroff.
     sudo_run install -d /etc/udev/rules.d
-    sudo_run install -m 644 "$DOTREPO/system/udev/99-hypr-shell-usb-lan-no-wake.rules" \
-        /etc/udev/rules.d/99-hypr-shell-usb-lan-no-wake.rules \
+    sudo_run install -m 644 "$DOTREPO/system/udev/99-ewe-usb-lan-no-wake.rules" \
+        /etc/udev/rules.d/99-ewe-usb-lan-no-wake.rules \
         && ok "installed udev rule (USB LAN adapters can't wake / power on the machine)"
+    [ -f /etc/udev/rules.d/99-hypr-shell-usb-lan-no-wake.rules ] && sudo_run rm -f /etc/udev/rules.d/99-hypr-shell-usb-lan-no-wake.rules
     sudo_run udevadm control --reload || true
     # 2. Unload NIC drivers at the very end of poweroff — iwlwifi's shutdown
     #    path can hang the final ACPI power-off on Lunar Lake (BE200); the
     #    driver-remove path quiesces the hardware properly.
     sudo_run install -d /usr/lib/systemd/system-shutdown
-    sudo_run install -m 755 "$DOTREPO/system/shutdown/hypr-shell-unload-nics.shutdown" \
-        /usr/lib/systemd/system-shutdown/hypr-shell-unload-nics.shutdown \
+    sudo_run install -m 755 "$DOTREPO/system/shutdown/ewe-unload-nics.shutdown" \
+        /usr/lib/systemd/system-shutdown/ewe-unload-nics.shutdown \
         && ok "installed poweroff hook (unloads Wi-Fi/dock-LAN drivers before ACPI S5)"
+    [ -f /usr/lib/systemd/system-shutdown/hypr-shell-unload-nics.shutdown ] && sudo_run rm -f /usr/lib/systemd/system-shutdown/hypr-shell-unload-nics.shutdown
 
     # ── plocate index for the launcher's file search (Super+D → files) ──
     if pkg_present plocate; then

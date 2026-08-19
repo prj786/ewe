@@ -1,6 +1,6 @@
-# Contributing to hypr-shell
+# Contributing to ewe
 
-Thanks for helping! hypr-shell is an **Arch-only**, opinionated Hyprland +
+Thanks for helping! ewe is an **Arch-only**, opinionated Hyprland +
 Quickshell desktop. A few things make contributing here smooth.
 
 ## Ground rules
@@ -17,7 +17,7 @@ Quickshell desktop. A few things make contributing here smooth.
 
 You don't need to wreck your own session to iterate:
 
-- **Shell (QML) + Hyprland config:** use the driver in `.claude/skills/run-hypr-shell/`
+- **Shell (QML) + Hyprland config:** use the driver in `.claude/skills/run-ewe/`
   — it nests a throwaway Hyprland on its own Wayland socket and screenshots it; your
   real session is untouched. `driver.sh up` / `open <surface>` / `down`, and
   `driver.sh check` for `luac -p` on the Lua config. QML has no live reload there —
@@ -31,7 +31,7 @@ See [`CLAUDE.md`](CLAUDE.md) for the architecture (install pipeline + `run()`/
 ## Before you open a PR
 
 - `bash install.sh --dry-run` if you touched the installer.
-- `.claude/skills/run-hypr-shell/driver.sh check` if you touched `hyprland.lua`.
+- `.claude/skills/run-ewe/driver.sh check` if you touched `hyprland.lua`.
 - Bring the shell up with no QML errors if you touched `dotfiles/quickshell/`.
 - CI runs shellcheck (errors), `luac -p`, and a `qmldir` consistency check.
 

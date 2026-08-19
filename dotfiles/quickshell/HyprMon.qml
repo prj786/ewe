@@ -303,7 +303,7 @@ QtObject {
             "hyprmon", path]
         proc.running = false; proc.running = true
     }
-    // a nested/headless test compositor (run-hypr-shell driver) exposes virtual
+    // a nested/headless test compositor (run-ewe driver) exposes virtual
     // outputs — never let that session write the real user's config
     readonly property bool virtualSession: (monitors || []).some(function (m) { return /^(WAYLAND|HEADLESS)-/.test(m.name || "") })
     function _virtualSession() { return virtualSession }

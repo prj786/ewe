@@ -47,7 +47,7 @@ LEDS_DIR = "/sys/class/leds"
 INHIBIT_WHAT = "sleep:shutdown"
 
 # held in BLOCK mode for the whole session: logind's lid fallback is
-# HandleLidSwitch=suspend (10-hypr-shell-lid.conf), which must only fire where
+# HandleLidSwitch=suspend (10-ewe-lid.conf), which must only fire where
 # the shell is NOT running (greeter, TTY, crashed shell). While we are alive,
 # clamshell policy is Lid.qml's — this lock is how logind knows to stand down.
 LID_INHIBIT_WHAT = "handle-lid-switch"
@@ -215,7 +215,7 @@ class Bridge:
         if self.fd is not None:
             return
         try:
-            r = self.manager().Inhibit(INHIBIT_WHAT, "hypr-shell",
+            r = self.manager().Inhibit(INHIBIT_WHAT, "ewe",
                                        "Lock the session before sleep", "delay")
             # dbus-python hands back a UnixFd wrapper; .take() transfers the fd
             self.fd = r.take() if hasattr(r, "take") else int(r)
@@ -230,7 +230,7 @@ class Bridge:
         if self.lid_fd is not None:
             return
         try:
-            r = self.manager().Inhibit(LID_INHIBIT_WHAT, "hypr-shell",
+            r = self.manager().Inhibit(LID_INHIBIT_WHAT, "ewe",
                                        "Shell owns clamshell policy (Lid.qml)", "block")
             self.lid_fd = r.take() if hasattr(r, "take") else int(r)
         except dbus.DBusException as e:

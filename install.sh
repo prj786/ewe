@@ -155,7 +155,7 @@ cat <<EOF
        Full list in ~/.config/hypr/SHORTCUTS.md
     4. Re-run the checklist any time:  bash install.sh --check-only
   Nothing was removed and your login manager was not changed.
-  GTK theme backup (revert your other session's look): ~/.local/state/hypr-shell/theme-backup.*/restore.sh
+  GTK theme backup (revert your other session's look): ~/.local/state/ewe/theme-backup.*/restore.sh
   Config backups (if any) are at ~/.config/<name>.bak.$RUN_STAMP
 EOF
 else

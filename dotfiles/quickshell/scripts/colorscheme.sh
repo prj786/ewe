@@ -272,19 +272,21 @@ fi
 # (QT_QPA_PLATFORMTHEME=qt6ct is set in start-hyprland.sh).
 COLORS="$CFG/qt6ct/colors"
 mkdir -p "$COLORS"
-cat > "$COLORS/hyprshell-dark.conf" <<EOF
+cat > "$COLORS/ewe-dark.conf" <<EOF
 [ColorScheme]
 active_colors=#ffdcdcdc, #ff2d2d2d, #ff3a3a3a, #ff333333, #ff1a1a1a, #ff262626, #ffdcdcdc, #ffffffff, #ffdcdcdc, #ff1e1e1e, #ff2a2a2a, #ff000000, #ff${ACC}, #ffffffff, #ff${ACC}, #ffb38aff, #ff242424, #ff2d2d2d, #ffdcdcdc, #ff7f7f7f
 inactive_colors=#ffdcdcdc, #ff2d2d2d, #ff3a3a3a, #ff333333, #ff1a1a1a, #ff262626, #ffdcdcdc, #ffffffff, #ffdcdcdc, #ff1e1e1e, #ff2a2a2a, #ff000000, #ff3a3a3a, #ffdcdcdc, #ff${ACC}, #ffb38aff, #ff242424, #ff2d2d2d, #ffdcdcdc, #ff7f7f7f
 disabled_colors=#ff6f6f6f, #ff2d2d2d, #ff3a3a3a, #ff333333, #ff1a1a1a, #ff262626, #ff6f6f6f, #ffffffff, #ff6f6f6f, #ff1e1e1e, #ff2a2a2a, #ff000000, #ff3a3a3a, #ff9f9f9f, #ff${ACC}, #ffb38aff, #ff242424, #ff2d2d2d, #ff6f6f6f, #ff5f5f5f
 EOF
-cat > "$COLORS/hyprshell-light.conf" <<EOF
+cat > "$COLORS/ewe-light.conf" <<EOF
 [ColorScheme]
 active_colors=#ff1a1a1a, #ffefefef, #ffffffff, #fff5f5f5, #ffb0b0b0, #ffc8c8c8, #ff1a1a1a, #ffffffff, #ff1a1a1a, #ffffffff, #ffefefef, #ff000000, #ff${ACC}, #ffffffff, #ff${ACC}, #ff6f42c1, #fff7f7f7, #ffffffdc, #ff1a1a1a, #ff808080
 inactive_colors=#ff1a1a1a, #ffefefef, #ffffffff, #fff5f5f5, #ffb0b0b0, #ffc8c8c8, #ff1a1a1a, #ffffffff, #ff1a1a1a, #ffffffff, #ffefefef, #ff000000, #ff${ACC}, #ffffffff, #ff${ACC}, #ff6f42c1, #fff7f7f7, #ffffffdc, #ff1a1a1a, #ff808080
 disabled_colors=#ffa0a0a0, #ffefefef, #ffffffff, #fff5f5f5, #ffb0b0b0, #ffc8c8c8, #ffa0a0a0, #ffffffff, #ffa0a0a0, #ffffffff, #ffefefef, #ff000000, #ff${ACC}, #ffe0e0e0, #ff${ACC}, #ff6f42c1, #fff7f7f7, #ffffffdc, #ffa0a0a0, #ffb0b0b0
 EOF
-SCHEME="$COLORS/hyprshell-$MODE.conf"
+SCHEME="$COLORS/ewe-$MODE.conf"
+# migrate: drop the pre-rename scheme files so qt6ct never lists both
+rm -f "$COLORS/hyprshell-dark.conf" "$COLORS/hyprshell-light.conf" 2>/dev/null
 for q in qt6ct qt5ct; do
     mkdir -p "$CFG/$q"
     cat > "$CFG/$q/$q.conf" <<EOF
@@ -328,7 +330,7 @@ DecorationHover=$A
 EOF
 }
 {
-    echo "[General]";  echo "ColorScheme=HyprShell"; echo
+    echo "[General]";  echo "ColorScheme=Ewe"; echo
     echo "[KDE]";      echo "widgetStyle=Fusion";    echo
     echo "[Icons]";    echo "Theme=$ICONS";          echo
     echo "[Colors:Window]";        _cgroup "$C_WIN"  "$C_WINA";  echo

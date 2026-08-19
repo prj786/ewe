@@ -48,7 +48,7 @@ QtObject {
     // openSettings() below — and the QML panels are only the fallback for a
     // machine where the build failed, so the desktop is never unconfigurable.
     // Probed once at startup: an install/removal is followed by a shell restart
-    // (hypr-shell.service) anyway, so a per-click probe would only add latency.
+    // (ewe.service) anyway, so a per-click probe would only add latency.
     // The settings binary was `hypr-settings` before the rename; keep launching
     // it on machines that still have the old package.
     property bool kombleInstalled: false

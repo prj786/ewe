@@ -169,10 +169,13 @@ emit event=phase name=install status=ok
 
 # ── 5. restart the shell ──────────────────────────────────────────────────────
 emit event=phase name=restart status=start
-if systemctl --user restart hypr-shell.service 2>/dev/null; then
+# migrate: a pre-rename session may still be running the shell under the old
+# unit name — stop it or two shells fight over the same sockets
+systemctl --user stop hypr-shell.service 2>/dev/null || true
+if systemctl --user restart ewe.service 2>/dev/null; then
     emit event=phase name=restart status=ok
 else
-    emit event=phase name=restart status=skipped message="hypr-shell.service not running"
+    emit event=phase name=restart status=skipped message="ewe.service not running"
 fi
 
 emit event=done status=ok version="$(cat VERSION 2>/dev/null || echo '?')" \

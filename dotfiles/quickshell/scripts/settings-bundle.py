@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""settings-bundle.py — collect/apply the hypr-shell settings-sync bundle.
+"""settings-bundle.py — collect/apply the ewe settings-sync bundle.
 
 `collect` serializes the shell's EXISTING user state (the same files the
 Settings pages write — nothing new is invented) into one schema-versioned

@@ -19,10 +19,13 @@ running the installer; "testing" means the verification commands below.
 entry "Ewe", plymouth theme `ewe`, the sheep line-art logos in
 `system/branding/ewe-logo-{dark,light}.png` + `dotfiles/quickshell/assets/logo.png`
 + `system/plymouth/ewe/watermark.png` — all transparent-background, regenerate
-from source art with an ink-extraction script, alpha = darkness). Remaining
-on-disk identifiers — the dev-host repo dir, `hypr-shell.service`,
-`~/.local/state/hypr-shell` — are still hypr-shell-era. Don't rename those
-piecemeal; a deep rename is a separate coordinated change. Distribution:
+from source art with an ink-extraction script, alpha = darkness). The deep
+rename landed 2026-08-19: the user unit is `ewe.service`, state lives in
+`~/.local/state/ewe`, and every system file is `*ewe*`-named. The old-name
+references that remain in phases 20/30/32/35 and the deploy/startup scripts
+are MIGRATIONS (remove old unit/drop-ins/state on upgrade) — leave them until
+a release or two has passed. The dev checkout may still sit in a directory
+called `hypr-shell`; that's outside the repo. Distribution:
 `get.sh` (curl bootstrap → `~/.local/share/ewe`) installs the
 `ewe-<version>.tar.zst` artefact built by `release.sh` (`--publish` creates the
 GitHub release).
@@ -41,17 +44,17 @@ GitHub release).
 ## Commands
 
 Iterate on the Quickshell QML and Hyprland Lua **without installing**, via the
-project skill `run-hypr-shell` (`.claude/skills/run-hypr-shell/driver.sh`), which
+project skill `run-ewe` (`.claude/skills/run-ewe/driver.sh`), which
 nests a throwaway Hyprland on its own Wayland socket and screenshots it with grim —
 the host's real session is untouched:
 
 ```bash
-.claude/skills/run-hypr-shell/driver.sh check          # luac -p on hyprland.lua + colors.lua
-.claude/skills/run-hypr-shell/driver.sh up             # launch nested compositor + shell; waits for "Configuration Loaded"
-.claude/skills/run-hypr-shell/driver.sh open settings  # toggle a surface + screenshot -> /tmp/hs-driver/<name>.png
-.claude/skills/run-hypr-shell/driver.sh targets        # list every IpcHandler target + function
-.claude/skills/run-hypr-shell/driver.sh log            # tail the shell's qs log (QML errors name file:line)
-.claude/skills/run-hypr-shell/driver.sh down           # tear down
+.claude/skills/run-ewe/driver.sh check          # luac -p on hyprland.lua + colors.lua
+.claude/skills/run-ewe/driver.sh up             # launch nested compositor + shell; waits for "Configuration Loaded"
+.claude/skills/run-ewe/driver.sh open settings  # toggle a surface + screenshot -> /tmp/hs-driver/<name>.png
+.claude/skills/run-ewe/driver.sh targets        # list every IpcHandler target + function
+.claude/skills/run-ewe/driver.sh log            # tail the shell's qs log (QML errors name file:line)
+.claude/skills/run-ewe/driver.sh down           # tear down
 ```
 
 - **QML has no live reload here** — after editing a `*.qml`, run `down && up`, then

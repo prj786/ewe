@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""google-auth.py — hypr-shell's Google OAuth helper (stdlib only).
+"""google-auth.py — ewe's Google OAuth helper (stdlib only).
 
 The QML shell can't host a TCP loopback server, so this helper owns the
 OAuth 2.0 installed-app flow (PKCE + loopback redirect — Google removed the
@@ -46,7 +46,10 @@ USERINFO_URL = "https://openidconnect.googleapis.com/v1/userinfo"
 # "In production" (unverified-app warning clickthrough) — see README
 SCOPES = "openid email profile https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/drive.appdata https://www.googleapis.com/auth/gmail.readonly"
 
-KEYRING_ARGS = ["service", "hypr-shell", "account", "google"]
+KEYRING_ARGS = ["service", "ewe", "account", "google"]
+# pre-rename installs stored the refresh token under this service name;
+# keyring_get() migrates it forward once so nobody has to re-authenticate
+OLD_KEYRING_ARGS = ["service", "hypr-shell", "account", "google"]
 LOGIN_TIMEOUT = 300  # seconds to wait for the browser round-trip
 
 
@@ -56,8 +59,8 @@ def out(obj):
 
 
 def read_client():
-    cid = os.environ.get("HYPRSHELL_GOOGLE_CLIENT_ID", "")
-    csec = os.environ.get("HYPRSHELL_GOOGLE_CLIENT_SECRET", "")
+    cid = os.environ.get("EWE_GOOGLE_CLIENT_ID", "") or os.environ.get("HYPRSHELL_GOOGLE_CLIENT_ID", "")
+    csec = os.environ.get("EWE_GOOGLE_CLIENT_SECRET", "") or os.environ.get("HYPRSHELL_GOOGLE_CLIENT_SECRET", "")
     if not cid:
         try:
             with open(CONFIG) as f:
@@ -78,13 +81,22 @@ def keyring_get():
     try:
         r = subprocess.run(["secret-tool", "lookup", *KEYRING_ARGS],
                            capture_output=True, text=True, timeout=10)
-        return r.stdout.strip() if r.returncode == 0 else ""
+        if r.returncode == 0 and r.stdout.strip():
+            return r.stdout.strip()
+        # one-time migration from the pre-rename service name
+        r = subprocess.run(["secret-tool", "lookup", *OLD_KEYRING_ARGS],
+                           capture_output=True, text=True, timeout=10)
+        tok = r.stdout.strip() if r.returncode == 0 else ""
+        if tok and keyring_set(tok):
+            subprocess.run(["secret-tool", "clear", *OLD_KEYRING_ARGS],
+                           capture_output=True, text=True, timeout=10)
+        return tok
     except (OSError, subprocess.TimeoutExpired):
         return ""
 
 
 def keyring_set(token):
-    r = subprocess.run(["secret-tool", "store", "--label=hypr-shell Google", *KEYRING_ARGS],
+    r = subprocess.run(["secret-tool", "store", "--label=ewe Google", *KEYRING_ARGS],
                        input=token, capture_output=True, text=True, timeout=10)
     return r.returncode == 0
 
@@ -151,7 +163,7 @@ def cmd_login():
     cid, csec = read_client()
     if not cid:
         out({"ok": False, "error": "not-configured"})
-    if not keyring_set("hypr-shell-keyring-probe"):
+    if not keyring_set("ewe-keyring-probe"):
         out({"ok": False, "error": "keyring-unavailable"})
     keyring_clear()
 
@@ -169,7 +181,7 @@ def cmd_login():
             q = urllib.parse.urlparse(self.path)
             params = dict(urllib.parse.parse_qsl(q.query))
             body = "<html><body style='background:#1d1d1d;color:#eee;font-family:sans-serif'>" \
-                   "<h2>hypr-shell</h2><p>%s</p></body></html>"
+                   "<h2>ewe</h2><p>%s</p></body></html>"
             if q.path != "/callback":
                 self.send_response(404); self.end_headers(); return
             if params.get("state") != state:

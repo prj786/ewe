@@ -1,6 +1,6 @@
 [Unit]
-Description=hypr-shell Quickshell desktop shell (bar, dock, launcher, notifications, lock, …)
-Documentation=https://github.com/prj786/hypr-shell
+Description=ewe Quickshell desktop shell (bar, dock, launcher, notifications, lock, …)
+Documentation=https://github.com/prj786/ewe
 # Tie to the Hyprland graphical session: started after it is up, stopped with it.
 PartOf=graphical-session.target
 After=graphical-session.target

@@ -1,6 +1,6 @@
 # Security policy
 
-hypr-shell is **alpha** software and ships security-relevant components — a polkit
+ewe is **alpha** software and ships security-relevant components — a polkit
 authentication agent (`Auth.qml`), a Wayland session lock (`Lock.qml`), and
 gnome-keyring PAM integration. Treat it accordingly until it stabilises.
 
@@ -14,7 +14,7 @@ reporting instead:
 2. open a **draft security advisory**.
 
 Include what you'd put in a bug report: affected component, repro, impact, and your
-environment (GPU/driver, distro, hypr-shell version).
+environment (GPU/driver, distro, ewe version).
 
 ## Scope
 

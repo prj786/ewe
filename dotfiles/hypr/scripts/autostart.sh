@@ -45,8 +45,8 @@ fi
 # WAYLAND_DISPLAY etc. `start` is idempotent (no-op if already active), so a
 # `hyprctl reload` re-run never double-spawns. Falls back to a bare `qs &` only
 # if the unit isn't installed yet (first run before the next relogin).
-if command -v systemctl >/dev/null 2>&1 && systemctl --user cat hypr-shell.service >/dev/null 2>&1; then
-    systemctl --user start hypr-shell.service >/dev/null 2>&1 || true
+if command -v systemctl >/dev/null 2>&1 && systemctl --user cat ewe.service >/dev/null 2>&1; then
+    systemctl --user start ewe.service >/dev/null 2>&1 || true
 elif command -v qs >/dev/null 2>&1 && ! pgrep -x qs >/dev/null 2>&1; then
     qs >/dev/null 2>&1 &
 fi
@@ -75,7 +75,7 @@ fi
 # menubar/toolbar/statusbar, pure folder view. Stamp-guarded so the user's own
 # View toggles (F9 sidebar, Alt menubar) stick afterwards instead of being
 # reverted at every login.
-NEMO_STAMP="${XDG_STATE_HOME:-$HOME/.local/state}/hypr-shell/nemo-chrome.seeded"
+NEMO_STAMP="${XDG_STATE_HOME:-$HOME/.local/state}/ewe/nemo-chrome.seeded"
 if command -v gsettings >/dev/null 2>&1 && command -v nemo >/dev/null 2>&1 && [ ! -e "$NEMO_STAMP" ]; then
     if gsettings set org.nemo.window-state start-with-sidebar false 2>/dev/null; then
         gsettings set org.nemo.window-state start-with-menu-bar false 2>/dev/null || true

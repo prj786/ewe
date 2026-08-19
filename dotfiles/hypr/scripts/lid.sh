@@ -19,7 +19,7 @@
 #
 # NOTE: logind no longer blanket-ignores the lid. The shell holds a
 # handle-lid-switch BLOCK inhibitor (logind-bridge.py) while it runs, which is
-# what keeps logind's HandleLidSwitch=suspend fallback (10-hypr-shell-lid.conf,
+# what keeps logind's HandleLidSwitch=suspend fallback (10-ewe-lid.conf,
 # phase 30) out of the way of this path. No shell → no inhibitor → logind
 # suspends, which is how the greeter and a crashed session stay safe.
 

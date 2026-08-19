@@ -16,7 +16,11 @@
 # the last session is always available for post-mortem. If the redirect ever
 # fails, bash keeps the old stdout (the VT) and login proceeds — verified: a
 # failed bare `exec >` does not exit a non-interactive bash.
-_hs_log_dir="${XDG_STATE_HOME:-$HOME/.local/state}/hypr-shell"
+_hs_log_dir="${XDG_STATE_HOME:-$HOME/.local/state}/ewe"
+# migrate: pre-rename installs kept state in .../hypr-shell (theme backups,
+# the nemo seed stamp, old session logs) — carry it over once, then forget
+_hs_old_dir="${XDG_STATE_HOME:-$HOME/.local/state}/hypr-shell"
+[ -d "$_hs_old_dir" ] && [ ! -e "$_hs_log_dir" ] && mv "$_hs_old_dir" "$_hs_log_dir" 2>/dev/null
 mkdir -p "$_hs_log_dir" 2>/dev/null && exec >"$_hs_log_dir/session.log" 2>&1
 
 export XDG_SESSION_TYPE=wayland

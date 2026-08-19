@@ -260,7 +260,10 @@ QtObject {
     readonly property string bundleHelper: Quickshell.env("HOME") + "/.config/quickshell/scripts/settings-bundle.py"
     readonly property string syncMetaPath: Quickshell.env("HOME") + "/.config/quickshell/google-sync.json"
     readonly property string restorePath: Quickshell.env("HOME") + "/.config/quickshell/google-restore.json"
-    readonly property string driveListUrl: "https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=" + encodeURIComponent("name='hypr-shell-settings.json'") + "&fields=" + encodeURIComponent("files(id,modifiedTime)")
+    // the old name is a migration: bundles uploaded before the ewe rename keep
+    // their cloud filename (appDataFolder is invisible), and matching both means
+    // an existing backup is found, PATCHed in place and never duplicated
+    readonly property string driveListUrl: "https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=" + encodeURIComponent("name='ewe-settings.json' or name='hypr-shell-settings.json'") + "&fields=" + encodeURIComponent("files(id,modifiedTime)")
 
     property Process _metaLoad: Process {
         running: true
@@ -351,7 +354,7 @@ QtObject {
                     { body: text, contentType: "application/json" }, done)
         } else {
             var b = "--hsbundle\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n"
-                  + JSON.stringify({ name: "hypr-shell-settings.json", parents: ["appDataFolder"] })
+                  + JSON.stringify({ name: "ewe-settings.json", parents: ["appDataFolder"] })
                   + "\r\n--hsbundle\r\nContent-Type: application/json\r\n\r\n" + text + "\r\n--hsbundle--"
             goo.api("POST", "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart",
                     { body: b, contentType: "multipart/related; boundary=hsbundle" },

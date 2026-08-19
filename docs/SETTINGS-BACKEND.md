@@ -97,7 +97,7 @@ through the shared `FileDropTarget` component (portal chooser + drop zone).
   **names/types only** (the profiles are root-owned and can embed secrets —
   those never enter the bundle; restore lists them for manual re-import),
   and `pacman -Qqe`/`-Qqm` package lists; Google.qml stores the bundle as
-  `hypr-shell-settings.json` in Drive's hidden `appDataFolder`. Restore is
+  `ewe-settings.json` in Drive's hidden `appDataFolder`. Restore is
   explicit (confirmation card, last-write-wins by `updatedAt`); after apply
   the shell re-reads its JSON state and reloads Hyprland/wallpaper/hypridle
   live. Auto-sync (off by default) pushes ~20 s after Settings closes when

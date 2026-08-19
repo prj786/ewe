@@ -3,7 +3,7 @@
 
 Quickshell has no generic QML D-Bus client, so this long-lived helper owns ALL
 KDE Connect D-Bus traffic (dbus-python + GLib main loop — both already shipped
-by hypr-shell's package set). The QML side (KdeConnect.qml) runs it as a
+by ewe's package set). The QML side (KdeConnect.qml) runs it as a
 Process and speaks newline-delimited JSON:
 
   stdout → events  {"event": "...", ...}   (state pushes, signal relays)
