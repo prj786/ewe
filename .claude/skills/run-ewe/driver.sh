@@ -88,8 +88,14 @@ except Exception: pass" 2>/dev/null)"
   done
   [ -n "$nestsig" ] || die "could not resolve nested Hyprland instance signature"
 
+  # HS_PRIVATE_BUS=1: run the shell on its OWN session D-Bus (dbus-run-session).
+  # The nested shell otherwise shares the host session bus + keyring, so panels
+  # fill with the real user's calendar/mail/MPRIS/tray — exactly what must NOT
+  # be in a README screenshot. A private bus renders every pane signed-out/empty.
+  local qs_wrap=()
+  [ "${HS_PRIVATE_BUS:-0}" = "1" ] && command -v dbus-run-session >/dev/null && qs_wrap=(dbus-run-session --)
   WAYLAND_DISPLAY="$nestwd" HYPRLAND_INSTANCE_SIGNATURE="$nestsig" QT_QPA_PLATFORM=wayland \
-    qs -p "$QSDIR" > "$WORK/qs.log" 2>&1 &
+    "${qs_wrap[@]}" qs -p "$QSDIR" > "$WORK/qs.log" 2>&1 &
   local qpid=$!
   for _ in $(seq 1 30); do
     sleep 0.3
@@ -97,7 +103,17 @@ except Exception: pass" 2>/dev/null)"
     kill -0 $qpid 2>/dev/null || die "qs died — see $WORK/qs.log"
   done
 
-  { echo "HYPR_PID=$hpid"; echo "QS_PID=$qpid"; echo "NEST_WD=$nestwd"; echo "NEST_SIG=$nestsig"; } > "$STATE"
+  # under dbus-run-session, $qpid is the wrapper — qs ipc needs the REAL qs pid
+  local qwrap=""
+  if [ ${#qs_wrap[@]} -gt 0 ]; then
+    qwrap=$qpid
+    for _ in $(seq 1 20); do
+      local real; real="$(pgrep -P "$qpid" -x qs 2>/dev/null | head -1)"
+      [ -n "$real" ] && { qpid=$real; break; }
+      sleep 0.2
+    done
+  fi
+  { echo "HYPR_PID=$hpid"; echo "QS_PID=$qpid"; echo "QS_WRAP_PID=$qwrap"; echo "NEST_WD=$nestwd"; echo "NEST_SIG=$nestsig"; } > "$STATE"
   echo "up: nested compositor on $nestwd (hypr pid $hpid, sig $nestsig), shell qs pid $qpid"
   echo "    config loaded — try: driver.sh open settings  |  driver.sh spawn foot"
 }
@@ -128,6 +144,7 @@ cmd_open() {
 
 cmd_down() {
   [ -f "$STATE" ] && . "$STATE"
+  [ -n "${QS_WRAP_PID:-}" ] && kill "$QS_WRAP_PID" 2>/dev/null
   [ -n "${QS_PID:-}" ]   && kill "$QS_PID"   2>/dev/null
   [ -n "${HYPR_PID:-}" ] && kill "$HYPR_PID" 2>/dev/null
   rm -f "$STATE"

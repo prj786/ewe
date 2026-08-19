@@ -70,8 +70,8 @@ https://github.com/user-attachments/assets/a2ffb2e1-2482-46c7-911d-c94bb8413434
 
 | | |
 |---|---|
-| **Tiling workflow**<br><img src="docs/media/2026-06-25_17-36-24.png" alt="Tiling workflow"> | **Launcher** — fuzzy app / file search<br><img src="docs/media/2026-06-25_17-37-21.png" alt="Launcher"> |
-| **Quick Settings**<br><img src="docs/media/2026-06-25_17-37-57.png" alt="Quick Settings"> | **Software manager** — pacman + AUR<br><img src="docs/media/2026-06-25_17-36-39.png" alt="App Store"> |
+| **Tiling workflow**<br><img src="docs/media/tiling.png" alt="Tiling workflow"> | **Launcher** — fuzzy app / file search<br><img src="docs/media/launcher.png" alt="Launcher"> |
+| **Quick Settings**<br><img src="docs/media/quick-settings.png" alt="Quick Settings"> | **Software manager** — pacman + AUR + AppImages<br><img src="docs/media/software-manager.png" alt="App Store"> |
 
 <sub>More in [`docs/media/`](docs/media). Accent and light/dark are yours to change — Settings → Theme recolours the whole desktop live.</sub>
 
