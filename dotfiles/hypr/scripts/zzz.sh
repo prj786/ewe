@@ -17,12 +17,17 @@
 # always safe: worst case it behaves exactly like `systemctl suspend` did.
 set -u
 
+# The fallback must never be SILENT: a refused suspend-then-hibernate is how
+# this machine s2idled a whole night (logind couldn't see /home/.swapfile past
+# ProtectHome=yes) while every log looked like sleep was working fine.
 case "${1:-}" in
     hibernate)
-        systemctl hibernate 2>/dev/null && exit 0
+        err=$(systemctl hibernate 2>&1) && exit 0
+        logger -t zzz "hibernate refused: ${err:-unknown} — falling back"
         ;;
     *)
-        systemctl suspend-then-hibernate 2>/dev/null && exit 0
+        err=$(systemctl suspend-then-hibernate 2>&1) && exit 0
+        logger -t zzz "suspend-then-hibernate refused: ${err:-unknown} — falling back to plain suspend (check: busctl call org.freedesktop.login1 /org/freedesktop/login1 org.freedesktop.login1.Manager CanHibernate)"
         ;;
 esac
 exec systemctl suspend

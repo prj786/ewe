@@ -32,6 +32,26 @@ phase_hibernate() {
         return 0
     fi
 
+    # ── logind must be able to SEE a swapfile under /home. It runs with
+    #    ProtectHome=yes, so /home/.swapfile stats as ENOENT inside its mount
+    #    namespace and every CanHibernate / suspend-then-hibernate request is
+    #    refused — zzz.sh then silently falls back to plain suspend and the
+    #    machine s2idles the whole night (observed 2026-08-15). This must run
+    #    BEFORE the resume=-already-set early return: that return is exactly
+    #    the machine that hit this. read-only is all logind needs. ──
+    if mountpoint -q /home; then
+        sudo_run install -d /etc/systemd/system/systemd-logind.service.d
+        sudo_run install -m 644 "$DOTREPO/system/logind/10-hypr-shell-hibernate.conf" \
+            /etc/systemd/system/systemd-logind.service.d/10-hypr-shell-hibernate.conf \
+            && ok "installed logind drop-in (swapfile under /home stays visible to CanHibernate)"
+        sudo_run systemctl daemon-reload
+        if [ -z "${XDG_CURRENT_DESKTOP:-}" ] && [ -z "${WAYLAND_DISPLAY:-}" ]; then
+            sudo_run systemctl restart systemd-logind || warn "could not restart systemd-logind — hibernate visibility applies after reboot"
+        else
+            info "graphical session active — skipping logind restart (hibernate visibility applies on next reboot)"
+        fi
+    fi
+
     # Already resumable? (a prior run, or the user set it up themselves)
     if grep -q 'resume=' /proc/cmdline 2>/dev/null; then
         info "resume= already on the kernel cmdline — hibernate is set up; nothing to do."

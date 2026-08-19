@@ -73,6 +73,31 @@ QtObject {
         if (lid.closed && lid.shouldSleep) lid._grace.restart()
     }
 
+    // A wake that arrives with the lid still SHUT and no dock was not a person
+    // opening the laptop — it is the Logitech receiver seeing a mouse jiggle,
+    // or any other stray wake source, reaching a machine in a bag. The lid
+    // switch never changes state across that wake, so no close event will ever
+    // re-fire; without this the machine sits awake in the dark until the cell
+    // is gone. 30 s of grace: a deliberate wake shows itself by the lid opening
+    // (or a dock appearing), either of which disarms the timer's condition.
+    property Connections _wake: Connections {
+        target: Logind
+        function onResumed() {
+            if (lid.closed && !lid.docked) {
+                Log.info("lid", "woke with the lid still closed and no dock — re-sleeping in 30 s unless it opens")
+                lid._wakeGrace.restart()
+            }
+        }
+    }
+    property Timer _wakeGrace: Timer {
+        interval: 30000
+        onTriggered: {
+            if (!lid.closed || !lid.shouldSleep) return
+            Log.info("lid", "still closed 30 s after an unexplained wake — going back to sleep")
+            lid._sleep()
+        }
+    }
+
     property Timer _grace: Timer {
         interval: 8000
         onTriggered: {
@@ -90,7 +115,7 @@ QtObject {
 
     function apply() {
         if (lid.closed) lid._close()
-        else { lid._grace.stop(); lid._open() }
+        else { lid._grace.stop(); lid._wakeGrace.stop(); lid._open() }
     }
 
     function _close() {
