@@ -49,7 +49,9 @@ QtObject {
     readonly property bool docked: externals > 0
 
     // The one sleep decision, asked at close time AND re-asked while closed.
-    readonly property bool shouldSleep: !docked || Globals.lidDockedSuspend || Globals.onBattery
+    // A LOCKED session always sleeps: nobody is working through that lid, and
+    // "locked + shut + awake" is exactly the shape of the bag-drain incidents.
+    readonly property bool shouldSleep: Globals.locked || !docked || Globals.lidDockedSuspend || Globals.onBattery
 
     property Connections _watch: Connections {
         target: HyprMon

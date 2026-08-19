@@ -17,8 +17,11 @@
 # PrepareForSleep, and the shell's logind delay inhibitor locks the session
 # before the machine goes down. That handshake replaced an unreliable `sleep 0.5`.
 #
-# NOTE: this only runs if systemd-logind ignores the lid — phase 30 installs
-# /etc/systemd/logind.conf.d/10-hypr-shell-lid.conf for exactly that.
+# NOTE: logind no longer blanket-ignores the lid. The shell holds a
+# handle-lid-switch BLOCK inhibitor (logind-bridge.py) while it runs, which is
+# what keeps logind's HandleLidSwitch=suspend fallback (10-hypr-shell-lid.conf,
+# phase 30) out of the way of this path. No shell → no inhibitor → logind
+# suspends, which is how the greeter and a crashed session stay safe.
 
 set -u
 

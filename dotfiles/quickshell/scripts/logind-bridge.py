@@ -43,9 +43,14 @@ PROPS = "org.freedesktop.DBus.Properties"
 BACKLIGHT_DIR = "/sys/class/backlight"
 LEDS_DIR = "/sys/class/leds"
 
-# what we hold a delay inhibitor for; "handle-*" locks are logind's business,
-# these two are ours
+# what we hold a delay inhibitor for (released on sleepReady, re-taken on resume)
 INHIBIT_WHAT = "sleep:shutdown"
+
+# held in BLOCK mode for the whole session: logind's lid fallback is
+# HandleLidSwitch=suspend (10-hypr-shell-lid.conf), which must only fire where
+# the shell is NOT running (greeter, TTY, crashed shell). While we are alive,
+# clamshell policy is Lid.qml's — this lock is how logind knows to stand down.
+LID_INHIBIT_WHAT = "handle-lid-switch"
 
 
 def emit(obj):
@@ -89,6 +94,7 @@ class Bridge:
             self.session_bus = None
         self.loop = GLib.MainLoop()
         self.fd = None                       # the delay inhibitor
+        self.lid_fd = None                   # the handle-lid-switch block
         self.release_timer = None
         self.session_path = self.find_session()
         self.delay_ms = self.read_delay_ms()
@@ -216,6 +222,20 @@ class Bridge:
         except dbus.DBusException as e:
             self.fd = None
             emit({"event": "error", "cmd": "inhibit", "error": e.get_dbus_message()})
+
+    def take_lid_inhibitor(self):
+        """Unlike the delay inhibitor this is never released mid-session: it is
+        the shell's claim on the lid switch, and only dropping the fd (process
+        exit, crash included) hands the lid back to logind's suspend fallback."""
+        if self.lid_fd is not None:
+            return
+        try:
+            r = self.manager().Inhibit(LID_INHIBIT_WHAT, "hypr-shell",
+                                       "Shell owns clamshell policy (Lid.qml)", "block")
+            self.lid_fd = r.take() if hasattr(r, "take") else int(r)
+        except dbus.DBusException as e:
+            self.lid_fd = None
+            emit({"event": "error", "cmd": "lidInhibit", "error": e.get_dbus_message()})
 
     def release_inhibitor(self):
         if self.release_timer is not None:
@@ -396,11 +416,18 @@ class Bridge:
             emit({"event": "fatal", "error": "no logind session for this process"})
             return
         self.take_inhibitor()
+        self.take_lid_inhibitor()
         self.push_hello()
         self.loop.run()
 
     def shutdown(self):
         self.release_inhibitor()
+        if self.lid_fd is not None:
+            try:
+                os.close(self.lid_fd)
+            except OSError:
+                pass
+            self.lid_fd = None
 
 
 if __name__ == "__main__":
