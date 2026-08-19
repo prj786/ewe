@@ -41,6 +41,16 @@ phase_bootsplash() {
     [ -d /usr/share/plymouth/themes/hypr-shell ] && sudo_run rm -rf /usr/share/plymouth/themes/hypr-shell
     ok "installed plymouth theme: ewe"
 
+    # ── 1b. quit with --retain-splash ───────────────────────────────────────
+    # Stock plymouth-quit drops the framebuffer back to the text console, so
+    # every boot line flashes up between the splash and the greeter (and again
+    # on the VT juggle after login). Retaining the last frame means the sheep
+    # stays up until cage draws — no console text is ever exposed.
+    sudo_run install -d /etc/systemd/system/plymouth-quit.service.d
+    sudo_run install -m 644 "$DOTREPO/system/plymouth/10-ewe-retain-splash.conf" \
+        /etc/systemd/system/plymouth-quit.service.d/10-ewe-retain-splash.conf \
+        && ok "plymouth-quit retains the splash frame (no console flash before the greeter)"
+
     # ── 2. mkinitcpio hook ──────────────────────────────────────────────────
     # plymouth must sit right after the `udev` (or `systemd`) hook so it starts
     # before the root device / encryption prompt.
