@@ -59,8 +59,11 @@ Scope {
         // Always-visible dock reserves its strip so windows tile/maximize ABOVE it
         // instead of sliding underneath; intelligent-hide keeps zero reserve so
         // windows get the full height and the dock overlays only when revealed.
-        exclusionMode: (Globals.dockEnabled && !Globals.dockAutohide) ? ExclusionMode.Normal : ExclusionMode.Ignore
-        exclusiveZone: dockH + 8
+        // The reserve is expressed through the NUMERIC zone, never by flipping
+        // exclusionMode at runtime — a live Normal→Ignore switch was not always
+        // recommitted to the compositor, leaving a ghost strip that windows
+        // refused to use until the dock was toggled off and on.
+        exclusiveZone: (Globals.dockEnabled && !Globals.dockAutohide) ? dockH + 8 : 0
         // Jump to the Overlay layer while the Overview is open so the dock floats ABOVE
         // the Overview's dim scrim (which is itself on the Overlay layer); otherwise it
         // would be dimmed underneath. Back to Top the rest of the time.

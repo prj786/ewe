@@ -360,21 +360,79 @@ Scope {
                 anchors.bottom: pagerRow.top; anchors.bottomMargin: 18
                 clip: true
                 contentWidth: width
-                contentHeight: Math.max(height, cardFlow.implicitHeight)
+                contentHeight: Math.max(height, cardLayout.blockH + 40)
                 boundsBehavior: Flickable.StopAtBounds
                 interactive: !root.searching
                 opacity: root.searching ? 0.35 : 1
                 Behavior on opacity { NumberAnimation { duration: Theme.durBase; easing.type: Theme.ease } }
-                // card size scales down as the desktop gets busier
-                readonly property real cardH: Math.round(height * (win.winWins.length <= 2 ? 0.52 : win.winWins.length <= 6 ? 0.40 : 0.30))
-                readonly property real cardW: Math.round(cardH * stage.monAR)
 
-                Flow {
-                    id: cardFlow
-                    width: Math.min(cardArea.width - 80, (cardArea.cardW + 30) * Math.min(Math.max(win.winWins.length, 1), 3))
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    y: Math.max(0, (cardArea.height - implicitHeight) / 2)
-                    spacing: 30
+                // ── GNOME-style organic packing ─────────────────────────────
+                // Every card keeps ITS OWN window's aspect ratio; a row shares
+                // one height and rows scale down as the desktop gets busier.
+                // Different window shapes → different card widths → the field
+                // reads natural instead of an arithmetic grid of identical
+                // monitor-shaped rectangles.
+                readonly property real fieldW: Math.max(1, width - 80)
+                readonly property real fieldH: Math.max(1, height - 20)
+                readonly property var cardLayout: computeLayout(win.winWins, fieldW, fieldH)
+                function computeLayout(wins, W, H) {
+                    var n = wins.length
+                    if (n === 0) return { rects: [], blockH: 0 }
+                    var gap = 26
+                    // window aspect from the real geometry; monitor aspect as
+                    // fallback; clamped so one extreme window can't starve a row
+                    var asp = []
+                    for (var i = 0; i < n; i++) {
+                        var o = wins[i].lastIpcObject
+                        var a = (o && o.size && o.size[1] > 0) ? o.size[0] / o.size[1] : stage.monAR
+                        asp.push(Math.max(0.5, Math.min(2.4, a)))
+                    }
+                    // try 1..4 rows of contiguous chunks; keep whichever uses
+                    // the most area (the classic shell-overview heuristic)
+                    var best = null
+                    for (var rows = 1; rows <= Math.min(n, 4); rows++) {
+                        var per = Math.ceil(n / rows)
+                        var rr = []
+                        for (var r = 0; r < rows; r++) {
+                            var chunk = asp.slice(r * per, (r + 1) * per)
+                            if (chunk.length) rr.push(chunk)
+                        }
+                        var h = (H - (rr.length - 1) * gap) / rr.length
+                        for (r = 0; r < rr.length; r++) {
+                            var sum = 0
+                            for (var k = 0; k < rr[r].length; k++) sum += rr[r][k]
+                            var hr = (W - (rr[r].length - 1) * gap) / sum
+                            if (hr < h) h = hr
+                        }
+                        h = Math.min(h, H * (n <= 2 ? 0.55 : 0.78))
+                        var area = 0
+                        for (r = 0; r < rr.length; r++)
+                            for (k = 0; k < rr[r].length; k++) area += rr[r][k] * h * h
+                        if (!best || area > best.area) best = { rr: rr, h: h, area: area }
+                    }
+                    var blockH = best.rr.length * best.h + (best.rr.length - 1) * gap
+                    var rects = []
+                    var y = 0
+                    for (r = 0; r < best.rr.length; r++) {
+                        var rowW = (best.rr[r].length - 1) * gap
+                        for (k = 0; k < best.rr[r].length; k++) rowW += best.rr[r][k] * best.h
+                        var x = (W - rowW) / 2
+                        for (k = 0; k < best.rr[r].length; k++) {
+                            var wpx = best.rr[r][k] * best.h
+                            rects.push({ x: Math.round(x), y: Math.round(y), w: Math.round(wpx), h: Math.round(best.h) })
+                            x += wpx + gap
+                        }
+                        y += best.h + gap
+                    }
+                    return { rects: rects, blockH: blockH }
+                }
+
+                Item {
+                    id: cardField
+                    x: 40
+                    y: Math.max(10, (cardArea.height - cardArea.cardLayout.blockH) / 2)
+                    width: cardArea.fieldW
+                    height: cardArea.cardLayout.blockH
 
                     Repeater {
                         model: win.winWins
@@ -383,7 +441,15 @@ Scope {
                             required property var modelData
                             required property int index
                             readonly property bool seld: win.isFocused && index === root.sel && !root.searching
-                            width: cardArea.cardW; height: cardArea.cardH
+                            readonly property var rect: index < cardArea.cardLayout.rects.length
+                                ? cardArea.cardLayout.rects[index] : { x: 0, y: 0, w: 200, h: 130 }
+                            x: rect.x; y: rect.y
+                            width: rect.w; height: rect.h
+                            // cards glide to their new spot when the set changes
+                            Behavior on x { NumberAnimation { duration: Theme.durBase; easing.type: Theme.ease } }
+                            Behavior on y { NumberAnimation { duration: Theme.durBase; easing.type: Theme.ease } }
+                            Behavior on width { NumberAnimation { duration: Theme.durBase; easing.type: Theme.ease } }
+                            Behavior on height { NumberAnimation { duration: Theme.durBase; easing.type: Theme.ease } }
                             enabled: !root.searching
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor

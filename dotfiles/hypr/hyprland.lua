@@ -145,9 +145,39 @@ hl.config({
 -- ╭───────────────────────────────────────────────────────────────╮
 -- │ WINDOW GROUPS (tabbed stacks) — themed to match Theme.qml       │
 -- ╰───────────────────────────────────────────────────────────────╯
--- Window grouping is intentionally unused in this DE — the Lua config doesn't
--- expose the merge dispatchers (moveintogroup/movewindoworgroup), so we removed
--- the group keybinds and chrome. Workspace navigation lives in the bottom dock.
+-- NATIVE Hyprland grouping, no shell chrome on top: the groupbar is the tab
+-- strip. The Lua API still lacks the group dispatchers, so the binds below go
+-- through `hyprctl dispatch` (exec_cmd) — same result, one extra process per
+-- keypress, which a human keybind never notices.
+--
+--   Super+G          make/dissolve a group on the focused window
+--   Super+Shift+G    pull the active window OUT of its group
+--   Super+[ / ]      previous / next tab inside the group
+--   Super+Shift+move MERGES into a neighbouring group (movewindoworgroup:
+--                    plain move when the neighbour isn't a group — a strict
+--                    superset of the old movewindow behaviour)
+--
+-- Flock-themed: accent frame on the active group, groupbar tabs as quiet
+-- translucent pills (no gradients, titles on).
+hl.config({
+    group = {
+        col = {
+            border_active   = c.rgba(c.t_accent, 0xee),
+            border_inactive = c.rgba(c.t_stroke, 0xaa),
+        },
+        groupbar = {
+            enabled       = true,
+            height        = 18,
+            font_size     = 11,
+            gradients     = false,
+            render_titles = true,
+            col = {
+                active   = c.rgba(c.t_accent, 0x55),
+                inactive = c.rgba(c.t_bg, 0x99),
+            },
+        },
+    },
+})
 
 
 -- ── Animations: short and sharp (the "Snappy" preset's values) ───────────────
@@ -266,14 +296,22 @@ hl.bind(mainMod .. " + up",    hl.dsp.focus({ direction = "up" }))
 -- Move the focused window (Shift + hjkl / Shift + arrows) — directional movewindow.
 -- Lua config: the /dispatch IPC evaluates its arg as Lua, so exec_cmd "hyprctl
 -- dispatch movewindow l" fails. Use the typed hl.dsp.* dispatchers directly.
-hl.bind(mainMod .. " + SHIFT + H", hl.dsp.window.move({ direction = "l" }))
-hl.bind(mainMod .. " + SHIFT + L", hl.dsp.window.move({ direction = "r" }))
-hl.bind(mainMod .. " + SHIFT + J", hl.dsp.window.move({ direction = "d" }))
-hl.bind(mainMod .. " + SHIFT + K", hl.dsp.window.move({ direction = "u" }))
-hl.bind(mainMod .. " + SHIFT + left",  hl.dsp.window.move({ direction = "l" }))
-hl.bind(mainMod .. " + SHIFT + right", hl.dsp.window.move({ direction = "r" }))
-hl.bind(mainMod .. " + SHIFT + down",  hl.dsp.window.move({ direction = "d" }))
-hl.bind(mainMod .. " + SHIFT + up",    hl.dsp.window.move({ direction = "u" }))
+-- movewindoworgroup, not movewindow: pushing a window INTO a group merges it
+-- as a new tab; against a normal window it behaves exactly like the old move.
+hl.bind(mainMod .. " + SHIFT + H", hl.dsp.exec_cmd("hyprctl dispatch movewindoworgroup l"))
+hl.bind(mainMod .. " + SHIFT + L", hl.dsp.exec_cmd("hyprctl dispatch movewindoworgroup r"))
+hl.bind(mainMod .. " + SHIFT + J", hl.dsp.exec_cmd("hyprctl dispatch movewindoworgroup d"))
+hl.bind(mainMod .. " + SHIFT + K", hl.dsp.exec_cmd("hyprctl dispatch movewindoworgroup u"))
+hl.bind(mainMod .. " + SHIFT + left",  hl.dsp.exec_cmd("hyprctl dispatch movewindoworgroup l"))
+hl.bind(mainMod .. " + SHIFT + right", hl.dsp.exec_cmd("hyprctl dispatch movewindoworgroup r"))
+hl.bind(mainMod .. " + SHIFT + down",  hl.dsp.exec_cmd("hyprctl dispatch movewindoworgroup d"))
+hl.bind(mainMod .. " + SHIFT + up",    hl.dsp.exec_cmd("hyprctl dispatch movewindoworgroup u"))
+
+-- window groups (tabbed stacks — see the WINDOW GROUPS block above)
+hl.bind(mainMod .. " + G",            hl.dsp.exec_cmd("hyprctl dispatch togglegroup"))
+hl.bind(mainMod .. " + SHIFT + G",    hl.dsp.exec_cmd("hyprctl dispatch moveoutofgroup"))
+hl.bind(mainMod .. " + bracketleft",  hl.dsp.exec_cmd("hyprctl dispatch changegroupactive b"))
+hl.bind(mainMod .. " + bracketright", hl.dsp.exec_cmd("hyprctl dispatch changegroupactive f"))
 
 -- Resize the focused window (Ctrl + hjkl) ------------------------------------
 hl.bind(mainMod .. " + CTRL + H", hl.dsp.window.resize({ x = -40, y = 0, relative = true }))

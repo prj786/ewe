@@ -24,7 +24,10 @@ on save). Ported from the old Qtile bindings so most muscle memory carries over.
 | Shortcut | Action |
 |---|---|
 | `Super` + `H/J/K/L` *or* arrow keys | Focus left / down / up / right |
-| `Super` + `Shift` + `H/J/K/L` *or* arrows | Move window in that direction |
+| `Super` + `Shift` + `H/J/K/L` *or* arrows | Move window (merges into a group if one is there) |
+| `Super` + `G` | Group / ungroup the focused window (tabbed stack) |
+| `Super` + `Shift` + `G` | Pull the active window out of its group |
+| `Super` + `[` / `]` | Previous / next tab inside a group |
 | `Super` + `Ctrl` + `H/J/K/L` | Resize the focused window |
 | `Super` + `Shift` + `N` | Reset split ratio |
 | `Super` + `Q` | Close focused window |

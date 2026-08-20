@@ -2,6 +2,7 @@ pragma Singleton
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import Quickshell.Hyprland
 import Quickshell.Services.UPower
 
 // Globals — shared, instant shell state (no IPC round-trip for in-shell toggles).
@@ -25,7 +26,7 @@ QtObject {
     // Project version — the shell's runtime copy. Keep in sync with the repo-root
     // VERSION file (the canonical source used for git tags / releases). Semver, with
     // an -alpha/-beta pre-release suffix until the first stable cut.
-    readonly property string version: "0.8.0"
+    readonly property string version: "0.8.1"
 
     property bool barVisible: true          // the top bar (Super+Shift+B toggles)
     property bool quickSettingsOpen: false  // the Quick Settings panel
@@ -62,6 +63,32 @@ QtObject {
         if (g.kombleInstalled) Quickshell.execDetached(["komble"])
         else g.storeOpen = true
     }
+    // ── Focus-or-launch ────────────────────────────────────────────────────
+    // Clicking an app that already has a window JUMPS to it (activate = focus
+    // + workspace switch) instead of spawning a second instance — for
+    // single-instance apps (Slack, Komble, browsers) a relaunch just pings the
+    // existing process and looks like "nothing happened". Both launchers call
+    // this first; middle-click still forces a fresh instance. Prefers the
+    // window that was most recently active when an app has several.
+    function activateAppWindow(entry) {
+        if (!entry) return false
+        var tls = Hyprland.toplevels ? Hyprland.toplevels.values : []
+        var best = null
+        for (var i = 0; i < tls.length; i++) {
+            var t = tls[i]
+            var o = t.lastIpcObject
+            var c = (o && (o.class || o.initialClass)) || (t.wayland && t.wayland.appId) || ""
+            if (c === "") continue
+            var e = DesktopEntries.heuristicLookup(c)
+            if (!e || e.id !== entry.id) continue
+            if (!best || t.activated) best = t
+        }
+        if (!best) return false
+        if (best.wayland) best.wayland.activate()
+        else if (best.address) Hyprland.dispatch("focuswindow address:" + best.address)
+        return true
+    }
+
     property Process _standaloneProbe: Process {
         running: true
         command: ["sh", "-c", "command -v komble >/dev/null && printf k; command -v ewe-settings >/dev/null && printf s; command -v hypr-settings >/dev/null && printf o"]

@@ -84,7 +84,7 @@ Scope {
         return s
     }
 
-    // which tile's section is expanded: "" | "wifi" | "bt" | "vpn" | "ssh" | "mobile" | "mail"
+    // which section is expanded: "" | "audio" | "wifi" | "bt" | "vpn" | "ssh" | "mobile" | "mail"
     property string expanded: ""
 
     // mobile (KDE Connect) sub-state
@@ -524,25 +524,62 @@ Scope {
             }
 
             // ── quick-toggle tile ──
+            // TWO independent visual states, GNOME-style, never conflated:
+            //   active — the SERVICE is on  → accent fill (and only that)
+            //   opened — its list is expanded → raised surface + accent border
+            //            + a turned chevron. Opening a list never paints the
+            //            tile accent, and an on-service never looks "opened".
+            // Split button: the body toggles/acts, the chevron zone (hasMenu)
+            // expands the section — so Wi-Fi can be switched off without ever
+            // opening the network list.
             component Tile: Rectangle {
                 id: tile
                 property string ic: ""
                 property string label: ""
                 property string sub: ""
                 property bool active: false
-                signal clicked()
+                property bool opened: false
+                property bool hasMenu: false
+                property bool busy: false            // section is loading (scan in flight)
+                signal clicked()                     // body
+                signal menu()                        // chevron zone
                 width: (inner.width - 10) / 2
                 height: 62
                 radius: Theme.radiusInner
-                color: active ? Theme.accent : Theme.elevated
+                color: active ? Theme.accent : (opened ? Theme.hover : Theme.elevated)
+                border.color: opened ? (active ? Qt.rgba(1, 1, 1, 0.75) : Theme.accent) : "transparent"
+                border.width: opened ? 1 : 0
                 Behavior on color { ColorAnimation { duration: 150 } }
                 Column {
                     anchors.fill: parent; anchors.margins: 11; spacing: 5
                     Text { text: tile.ic; font.family: Theme.fontIcons; font.pixelSize: 17; color: tile.active ? Theme.accentText : Theme.fg }
                     Text { width: parent.width; text: tile.label; color: tile.active ? Theme.accentText : Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold; elide: Text.ElideRight }
                 }
-                Text { anchors.right: parent.right; anchors.bottom: parent.bottom; anchors.margins: 11; text: tile.sub; color: tile.active ? Theme.accentText : Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 10; elide: Text.ElideRight }
-                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: tile.clicked() }
+                Text { anchors.right: parent.right; anchors.rightMargin: tile.hasMenu ? 30 : 11; anchors.bottom: parent.bottom; anchors.bottomMargin: 11; text: tile.sub; color: tile.active ? Theme.accentText : Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 10; elide: Text.ElideRight }
+                MouseArea { anchors.fill: parent; anchors.rightMargin: tile.hasMenu ? 28 : 0; cursorShape: Qt.PointingHandCursor; onClicked: tile.clicked() }
+                // chevron zone — its own hover, its own hit area
+                Rectangle {
+                    visible: tile.hasMenu
+                    anchors.right: parent.right; anchors.top: parent.top; anchors.bottom: parent.bottom
+                    width: 28
+                    radius: Theme.radiusInner
+                    color: chevMa.containsMouse ? (tile.active ? Qt.rgba(1, 1, 1, 0.18) : Theme.hover) : "transparent"
+                    Behavior on color { ColorAnimation { duration: 120 } }
+                    Spinner {
+                        visible: tile.busy
+                        anchors.centerIn: parent
+                        font.pixelSize: 12
+                    }
+                    Text {
+                        visible: !tile.busy
+                        anchors.centerIn: parent
+                        text: tile.opened ? Theme.icChevronUp : Theme.icChevronDown
+                        font.family: Theme.fontIcons; font.pixelSize: 12
+                        color: tile.opened ? (tile.active ? Theme.accentText : Theme.accent)
+                             : tile.active ? Theme.accentText : Theme.fgDim
+                    }
+                    MouseArea { id: chevMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: tile.menu() }
+                }
             }
 
             // ── slider ──
@@ -633,6 +670,115 @@ Scope {
                         }
                     }
 
+                    // ── sliders FIRST: volume and brightness are what a hand
+                    //    reaches for most, so they sit above everything and do
+                    //    exactly one job each (devices live in the Audio box) ──
+                    Rectangle {
+                        width: parent.width; height: topSliders.implicitHeight + 24; radius: Theme.radiusInner; color: Theme.elevated
+                        Column {
+                            id: topSliders
+                            anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 12; spacing: 8
+                            Slider { width: parent.width; icon: Theme.icVolHigh; value: root.volumeVal; onMoved: function (v) { root.setVolume(v) } }
+                            // which output that volume is driving
+                            Text {
+                                width: parent.width
+                                leftPadding: 28
+                                visible: Pipewire.defaultAudioSink !== null
+                                text: Pipewire.defaultAudioSink ? (Pipewire.defaultAudioSink.description || Pipewire.defaultAudioSink.nickname || Pipewire.defaultAudioSink.name || "") : ""
+                                color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 10
+                                elide: Text.ElideRight
+                            }
+                            Slider { width: parent.width; icon: Theme.icSun; value: root.brightnessVal; onMoved: function (v) { root.setBrightness(v) } }
+                        }
+                    }
+
+                    // ── Audio box — output & input devices, expandable like the
+                    //    network tiles (opened = raised + accent border, no accent
+                    //    fill: there is nothing to "activate" here) ──
+                    Rectangle {
+                        width: parent.width
+                        radius: Theme.radiusInner
+                        color: root.expanded === "audio" ? Theme.hover : Theme.elevated
+                        border.color: root.expanded === "audio" ? Theme.accent : "transparent"
+                        border.width: root.expanded === "audio" ? 1 : 0
+                        height: 40 + (root.expanded === "audio" ? audioCol.implicitHeight + 14 : 0)
+                        Item {
+                            width: parent.width; height: 40
+                            Text { anchors.left: parent.left; anchors.leftMargin: 12; anchors.verticalCenter: parent.verticalCenter; text: Theme.icVolHigh; font.family: Theme.fontIcons; font.pixelSize: 15; color: Theme.fg }
+                            Text { anchors.left: parent.left; anchors.leftMargin: 38; anchors.verticalCenter: parent.verticalCenter; text: "Audio"; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold }
+                            Text {
+                                anchors.right: parent.right; anchors.rightMargin: 34; anchors.verticalCenter: parent.verticalCenter
+                                anchors.left: parent.left; anchors.leftMargin: 90
+                                horizontalAlignment: Text.AlignRight
+                                text: Pipewire.defaultAudioSink ? (Pipewire.defaultAudioSink.description || Pipewire.defaultAudioSink.nickname || "") : ""
+                                color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 10; elide: Text.ElideRight
+                            }
+                            Text { anchors.right: parent.right; anchors.rightMargin: 12; anchors.verticalCenter: parent.verticalCenter; text: root.expanded === "audio" ? Theme.icChevronUp : Theme.icChevronDown; font.family: Theme.fontIcons; font.pixelSize: 12; color: root.expanded === "audio" ? Theme.accent : Theme.fgDim }
+                            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.expanded = root.expanded === "audio" ? "" : "audio" }
+                        }
+                        Column {
+                            id: audioCol
+                            visible: root.expanded === "audio"
+                            anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top
+                            anchors.topMargin: 40; anchors.leftMargin: 10; anchors.rightMargin: 10
+                            spacing: 4
+
+                            Text { text: "Output"; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold; topPadding: 2; bottomPadding: 2 }
+                            Rectangle {
+                                width: parent.width
+                                height: outCol.implicitHeight + 10
+                                radius: 7; color: Theme.bg; border.color: Theme.stroke; border.width: 1
+                                Column {
+                                    id: outCol
+                                    anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 5
+                                    Repeater {
+                                        model: {
+                                            var out = [], n = Pipewire.nodes.values
+                                            for (var i = 0; i < n.length; i++) if (n[i].isSink && !n[i].isStream && n[i].audio) out.push(n[i])
+                                            return out
+                                        }
+                                        delegate: Item {
+                                            required property var modelData
+                                            readonly property bool isDefault: Pipewire.defaultAudioSink && Pipewire.defaultAudioSink.id === modelData.id
+                                            width: outCol.width; height: 28
+                                            Rectangle { anchors.fill: parent; radius: 6; color: outMa.containsMouse ? Theme.hover : "transparent" }
+                                            Text { anchors.left: parent.left; anchors.leftMargin: 8; anchors.right: parent.right; anchors.rightMargin: 26; anchors.verticalCenter: parent.verticalCenter; text: modelData.description || modelData.nickname || modelData.name; color: isDefault ? Theme.accent : Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: isDefault ? Font.DemiBold : Font.Normal; elide: Text.ElideRight }
+                                            Text { anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter; visible: isDefault; text: Theme.icCheck; font.family: Theme.fontIcons; font.pixelSize: 11; color: Theme.accent }
+                                            MouseArea { id: outMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: { Pipewire.preferredDefaultAudioSink = modelData; volumeProc.running = true } }
+                                        }
+                                    }
+                                }
+                            }
+
+                            Text { text: "Input"; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold; topPadding: 6; bottomPadding: 2 }
+                            Rectangle {
+                                width: parent.width
+                                height: inCol.implicitHeight + 10
+                                radius: 7; color: Theme.bg; border.color: Theme.stroke; border.width: 1
+                                Column {
+                                    id: inCol
+                                    anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 5
+                                    Repeater {
+                                        model: {
+                                            var out = [], n = Pipewire.nodes.values
+                                            for (var i = 0; i < n.length; i++) if (!n[i].isSink && !n[i].isStream && n[i].audio) out.push(n[i])
+                                            return out
+                                        }
+                                        delegate: Item {
+                                            required property var modelData
+                                            readonly property bool isDefault: Pipewire.defaultAudioSource && Pipewire.defaultAudioSource.id === modelData.id
+                                            width: inCol.width; height: 28
+                                            Rectangle { anchors.fill: parent; radius: 6; color: inMa.containsMouse ? Theme.hover : "transparent" }
+                                            Text { anchors.left: parent.left; anchors.leftMargin: 8; anchors.right: parent.right; anchors.rightMargin: 26; anchors.verticalCenter: parent.verticalCenter; text: modelData.description || modelData.nickname || modelData.name; color: isDefault ? Theme.accent : Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: isDefault ? Font.DemiBold : Font.Normal; elide: Text.ElideRight }
+                                            Text { anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter; visible: isDefault; text: Theme.icCheck; font.family: Theme.fontIcons; font.pixelSize: 11; color: Theme.accent }
+                                            MouseArea { id: inMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: Pipewire.preferredDefaultAudioSource = modelData }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     // ── quick toggles — a tile's options expand INLINE, in a box right
                     //    under the row holding that tile (pushes the rows below down) ──
                     Row {
@@ -642,14 +788,26 @@ Scope {
                             // when a cable is the active connection and Wi-Fi isn't (e.g. VMs).
                             readonly property bool onWired: root.wiredUp && root.curSsid() === ""
                             ic: onWired ? Theme.icEthernet : Theme.icWifi   // mdi-ethernet : wifi
-                            label: onWired ? "Network" : "Wi-Fi"; active: root.expanded === "wifi"
+                            label: onWired ? "Network" : "Wi-Fi"
+                            active: root.wifiOn || onWired               // accent = the radio/link is ON
+                            opened: root.expanded === "wifi"
+                            hasMenu: true
+                            busy: root.expanded === "wifi" && wifiScan.running
                             sub: root.curSsid() !== "" ? root.curSsid() : (onWired ? "Wired" : (root.wifiOn ? "On" : "Off"))
-                            onClicked: { root.expanded = root.expanded === "wifi" ? "" : "wifi"; if (root.expanded === "wifi") wifiScan.running = true }
+                            // body = the switch (no list needed to turn Wi-Fi off);
+                            // chevron = the network list
+                            onClicked: { Quickshell.execDetached(["nmcli", "radio", "wifi", root.wifiOn ? "off" : "on"]); rescanTimer.restart() }
+                            onMenu: { root.expanded = root.expanded === "wifi" ? "" : "wifi"; if (root.expanded === "wifi") wifiScan.running = true }
                         }
                         Tile {
-                            ic: Theme.icBluetooth; label: "Bluetooth"; active: root.expanded === "bt"
+                            ic: Theme.icBluetooth; label: "Bluetooth"
+                            active: Bluetooth.defaultAdapter ? Bluetooth.defaultAdapter.enabled : false
+                            opened: root.expanded === "bt"
+                            hasMenu: true
+                            busy: root.expanded === "bt" && Bluetooth.defaultAdapter && Bluetooth.defaultAdapter.discovering
                             sub: (Bluetooth.defaultAdapter && Bluetooth.defaultAdapter.enabled) ? "On" : "Off"
-                            onClicked: {
+                            onClicked: if (Bluetooth.defaultAdapter) Bluetooth.defaultAdapter.enabled = !Bluetooth.defaultAdapter.enabled
+                            onMenu: {
                                 root.expanded = root.expanded === "bt" ? "" : "bt"
                                 if (Bluetooth.defaultAdapter) Bluetooth.defaultAdapter.discovering = (root.expanded === "bt")
                             }
@@ -673,13 +831,28 @@ Scope {
                                 width: parent.width; spacing: 2; visible: root.expanded === "wifi"
                                 Item {
                                     width: parent.width; height: 26
-                                    Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Wi-Fi"; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold }
+                                    Row {
+                                        anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; spacing: 8
+                                        Text { anchors.verticalCenter: parent.verticalCenter; text: wifiScan.running ? "Wi-Fi · scanning…" : "Wi-Fi"; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold }
+                                        Spinner { visible: wifiScan.running; anchors.verticalCenter: parent.verticalCenter; font.pixelSize: 11 }
+                                    }
                                     Rectangle {
                                         anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
                                         width: 38; height: 22; radius: 11; color: root.wifiOn ? Theme.accent : Theme.hover
                                         Behavior on color { ColorAnimation { duration: 150 } }
                                         Rectangle { width: 18; height: 18; radius: 9; color: "white"; anchors.verticalCenter: parent.verticalCenter; x: root.wifiOn ? parent.width-width-2 : 2; Behavior on x { NumberAnimation { duration: 150 } } }
                                         MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { Quickshell.execDetached(["nmcli","radio","wifi", root.wifiOn ? "off" : "on"]); rescanTimer.restart() } }
+                                    }
+                                }
+                                // a scan with nothing to show yet — say so instead of
+                                // sitting there as an empty box that looks broken
+                                Item {
+                                    width: parent.width; height: visible ? 28 : 0
+                                    visible: root.wifiOn && root.wifiList.length === 0
+                                    Row {
+                                        anchors.left: parent.left; anchors.leftMargin: 8; anchors.verticalCenter: parent.verticalCenter; spacing: 8
+                                        Spinner { visible: wifiScan.running; anchors.verticalCenter: parent.verticalCenter; font.pixelSize: 12 }
+                                        Text { anchors.verticalCenter: parent.verticalCenter; text: wifiScan.running ? "Looking for networks…" : "No networks found."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
                                     }
                                 }
                                 // network list — same inset panel style as the DropRow options
@@ -778,16 +951,37 @@ Scope {
                     Row {
                         width: parent.width; spacing: 10
                         Tile {
-                            ic: Theme.icVpn; label: "VPN"; active: Globals.vpnActive || root.expanded === "vpn"
+                            id: vpnTile
+                            ic: Theme.icVpn; label: "VPN"
+                            active: Globals.vpnActive
+                            opened: root.expanded === "vpn"
+                            hasMenu: true
+                            busy: root.vpnBusyName !== ""
                             sub: root.vpnBusyName !== "" ? "Connecting…" : (Globals.vpnActive ? "On" : "Off")
-                            onClicked: { root.expanded = root.expanded === "vpn" ? "" : "vpn"; if (root.expanded === "vpn") vpnScan.running = true }
+                            function openList() { root.expanded = root.expanded === "vpn" ? "" : "vpn"; if (root.expanded === "vpn") vpnScan.running = true }
+                            // body: GNOME semantics — disconnect the active VPN /
+                            // reconnect the single configured one; only when the
+                            // choice is ambiguous does the body open the list
+                            onClicked: {
+                                var act = null
+                                for (var i = 0; i < root.vpnList.length; i++) if (root.vpnList[i].active) { act = root.vpnList[i]; break }
+                                if (act) root.toggleVpn(act.name, false)
+                                else if (root.vpnList.length === 1) root.toggleVpn(root.vpnList[0].name, true)
+                                else vpnTile.openList()
+                            }
+                            onMenu: vpnTile.openList()
                         }
                         Tile {
-                            ic: Theme.icSsh; label: "SSH"; active: Globals.sshTunnelUp || root.expanded === "ssh"
+                            ic: Theme.icSsh; label: "SSH"
+                            active: Globals.sshTunnelUp
+                            opened: root.expanded === "ssh"
+                            hasMenu: true
                             sub: Globals.sshTunnelUp ? "Tunnel on"
                                : root.sshList.length > 0 ? root.sshList.length + (root.sshList.length === 1 ? " host" : " hosts")
                                : "Not set up"
+                            // hosts are a list, not a switch — body and chevron both open
                             onClicked: { root.expanded = root.expanded === "ssh" ? "" : "ssh"; if (root.expanded === "ssh") sshScan.running = true }
+                            onMenu: { root.expanded = root.expanded === "ssh" ? "" : "ssh"; if (root.expanded === "ssh") sshScan.running = true }
                         }
                     }
 
@@ -975,23 +1169,36 @@ Scope {
                         width: parent.width; spacing: 10
                         Tile {
                             ic: Theme.icPhone; label: "Mobile"
-                            active: KdeConnect.connected || root.expanded === "mobile"
+                            active: KdeConnect.connected
+                            opened: root.expanded === "mobile"
+                            hasMenu: true
                             sub: !KdeConnect.installed ? "Not set up"
                                : KdeConnect.connected ? (KdeConnect.unreadCount > 0 ? KdeConnect.unreadCount + " new"
                                                         : KdeConnect.device.batteryCharge >= 0 ? KdeConnect.device.batteryCharge + "%" : "Connected")
                                : (KdeConnect.device && KdeConnect.device.isPaired) ? "Offline" : "Not connected"
+                            // a phone is not a switch — body and chevron both open
                             onClicked: {
+                                root.expanded = root.expanded === "mobile" ? "" : "mobile"
+                                if (root.expanded === "mobile") { root.mobileView = "notifs"; KdeConnect.refresh() }
+                            }
+                            onMenu: {
                                 root.expanded = root.expanded === "mobile" ? "" : "mobile"
                                 if (root.expanded === "mobile") { root.mobileView = "notifs"; KdeConnect.refresh() }
                             }
                         }
                         Tile {
                             ic: Theme.icMail; label: "Mail"
-                            active: root.expanded === "mail"
+                            active: false                      // mail has no on/off — never accent
+                            opened: root.expanded === "mail"
+                            hasMenu: true
                             sub: !Google.signedIn ? "Not connected"
                                : Google.mailState === "offline" ? "Offline"
                                : Google.mailUnread > 0 ? Google.mailUnread + " unread" : "No unread"
                             onClicked: {
+                                root.expanded = root.expanded === "mail" ? "" : "mail"
+                                if (root.expanded === "mail" && Google.signedIn) Google.fetchMail()
+                            }
+                            onMenu: {
                                 root.expanded = root.expanded === "mail" ? "" : "mail"
                                 if (root.expanded === "mail" && Google.signedIn) Google.fetchMail()
                             }
@@ -1614,34 +1821,8 @@ Scope {
                         }
                     }
 
-                    // (the tiling⇄floating toggle lives in the top bar now)
-
-                    // ── sliders + audio output ──
-                    Rectangle {
-                        width: parent.width; height: sCol.implicitHeight + 24; radius: Theme.radiusInner; color: Theme.elevated
-                        Column {
-                            id: sCol
-                            anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 12; spacing: 12
-                            Slider { width: parent.width; icon: Theme.icSun; value: root.brightnessVal; onMoved: function (v) { root.setBrightness(v) } }
-                            Slider { width: parent.width; icon: Theme.icVolHigh; value: root.volumeVal; onMoved: function (v) { root.setVolume(v) } }
-                            // output device — the shared DropRow (same dropdown as Settings)
-                            DropRow {
-                                label: "Output"
-                                ddId: "qs-audio-out"
-                                buttonWidth: 210
-                                options: {
-                                    var out = [], n = Pipewire.nodes.values
-                                    for (var i = 0; i < n.length; i++) { var x = n[i]; if (x.isSink && !x.isStream && x.audio) out.push({ label: x.description || x.nickname || x.name, value: x.id }) }
-                                    return out
-                                }
-                                value: Pipewire.defaultAudioSink ? Pipewire.defaultAudioSink.id : ""
-                                onPicked: function (v) {
-                                    var n = Pipewire.nodes.values
-                                    for (var i = 0; i < n.length; i++) if (n[i].id === v) { Pipewire.preferredDefaultAudioSink = n[i]; break }
-                                }
-                            }
-                        }
-                    }
+                    // (the tiling⇄floating toggle lives in the top bar now; the
+                    //  sliders and audio devices moved to the TOP of the panel)
 
                     // ── media (MPRIS) — right under the audio controls. Only a live,
                     //    controllable player is shown: stale/dead MPRIS sources (no

@@ -162,9 +162,11 @@ Scope {
         fileProc.running = true
     }
 
-    function launch(item) {
+    function launch(item, fresh) {
         if (!item) return
-        if (item.type === "app") { if (item.entry) item.entry.execute() }
+        // focus-or-launch: jump to the app's existing window unless a new
+        // instance was explicitly asked for (middle click / fresh=true)
+        if (item.type === "app") { if (item.entry && (fresh || !Globals.activateAppWindow(item.entry))) item.entry.execute() }
         else if (item.type === "action") { if (item.run) item.run() }
         else Quickshell.execDetached(["xdg-open", item.path])
         root.hide()
@@ -331,8 +333,9 @@ Scope {
                             MouseArea {
                                 anchors.fill: parent
                                 hoverEnabled: true
+                                acceptedButtons: Qt.LeftButton | Qt.MiddleButton
                                 onPositionChanged: root.selected = row.index
-                                onClicked: root.launch(row.modelData)
+                                onClicked: function (mouse) { root.launch(row.modelData, mouse.button === Qt.MiddleButton) }
                             }
                         }
                     }

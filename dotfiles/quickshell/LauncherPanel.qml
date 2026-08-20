@@ -36,7 +36,9 @@ Scope {
         }
         return root.allApps.filter(function (e) { return (e.name || "").toLowerCase().indexOf(q) >= 0 }).slice(0, 24)
     }
-    function launch(e) { if (e) e.execute(); Globals.launcherOpen = false }
+    // focus-or-launch: a running app's window is jumped to; `fresh` (middle
+    // click) forces a new instance anyway
+    function launch(e, fresh) { if (e && (fresh || !Globals.activateAppWindow(e))) e.execute(); Globals.launcherOpen = false }
 
     // Latch the monitor when opening — binding `screen` to focusedMonitor makes it
     // churn under focus-follows-mouse (surface remaps → visible blink).
@@ -150,7 +152,7 @@ Scope {
                                     Image { anchors.horizontalCenter: parent.horizontalCenter; width: 40; height: 40; sourceSize.width: 64; sourceSize.height: 64; mipmap: true; source: modelData.icon ? Quickshell.iconPath(modelData.icon, "application-x-executable") : "" }
                                     Text { width: tile.width - 10; horizontalAlignment: Text.AlignHCenter; text: modelData.name || ""; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: 11; elide: Text.ElideRight; maximumLineCount: 1 }
                                 }
-                                MouseArea { id: tMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.launch(tile.modelData) }
+                                MouseArea { id: tMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; acceptedButtons: Qt.LeftButton | Qt.MiddleButton; onClicked: function (mouse) { root.launch(tile.modelData, mouse.button === Qt.MiddleButton) } }
                                 // pin badge (top-right)
                                 Rectangle {
                                     anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 5

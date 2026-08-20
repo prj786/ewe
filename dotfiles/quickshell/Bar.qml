@@ -524,7 +524,18 @@ Scope {
                         Row {
                             id: ctlRow
                             anchors.centerIn: parent
-                            spacing: 9
+                            spacing: 8
+
+                            // ORDER is deterministic and grouped, not first-come:
+                            //   spinner (transient) → TOGGLER STATES the user
+                            //   switched on (insomnia · ssh · vpn) → COMMS
+                            //   (notifications · mail · calendar · phone) →
+                            //   RADIOS (wired/wifi · bluetooth) → SYSTEM (power
+                            //   profile · battery) → clock.
+                            // Metrics are uniform on purpose: every glyph is
+                            //   Theme.barIconPx, every count/label 11 px, 4 px
+                            //   inside a glyph+label pair, 8 px between items —
+                            //   the group reads as one calm instrument row.
 
                             // connecting… — spins while a Wi-Fi/VPN attempt
                             // is in flight (Quick Settings drives Globals.netBusy)
@@ -532,12 +543,39 @@ Scope {
                                 visible: Globals.netBusy !== ""
                                 anchors.verticalCenter: parent.verticalCenter
                             }
-                            // Notifications — bell + count while the history
-                            // (control centre list) holds anything
+
+                            // ── toggler states ──
+                            // Insomnia / keep-awake — eye glyph, matches the CC toggle
+                            Text {
+                                visible: Globals.caffeine
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: Theme.icEye
+                                font.family: Theme.fontIcons; font.pixelSize: Theme.barIconPx
+                                color: Theme.fgSecondary
+                            }
+                            // SSH tunnel (a Quick Settings port-forward is up)
+                            Text {
+                                visible: Globals.sshTunnelUp
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: Theme.icSsh
+                                font.family: Theme.fontIcons; font.pixelSize: Theme.barIconPx
+                                color: Theme.fgSecondary
+                            }
+                            // VPN (only when active)
+                            Text {
+                                visible: Globals.vpnActive
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: Theme.icVpn
+                                font.family: Theme.fontIcons; font.pixelSize: Theme.barIconPx
+                                color: Theme.fgSecondary
+                            }
+
+                            // ── comms ──
+                            // Notifications — bell + count while the history holds anything
                             Row {
                                 visible: Globals.server && Globals.server.trackedNotifications.values.length > 0
                                 anchors.verticalCenter: parent.verticalCenter
-                                spacing: 3
+                                spacing: 4
                                 Text {
                                     anchors.verticalCenter: parent.verticalCenter
                                     text: Theme.icBell
@@ -551,37 +589,29 @@ Scope {
                                     color: Theme.fgSecondary
                                 }
                             }
+                            // Mail (Gmail) — envelope + count, only when there is unread mail
+                            Row {
+                                visible: Google.signedIn && Google.mailUnread > 0
+                                anchors.verticalCenter: parent.verticalCenter
+                                spacing: 4
+                                Text {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: Theme.icMail
+                                    font.family: Theme.fontIcons; font.pixelSize: Theme.barIconPx
+                                    color: Theme.fgSecondary
+                                }
+                                Text {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: Google.mailUnread > 99 ? "99+" : String(Google.mailUnread)
+                                    font.family: Theme.fontText; font.pixelSize: 11; font.weight: Font.DemiBold
+                                    color: Theme.fgSecondary
+                                }
+                            }
                             // Calendar — an event is running or starts within the hour
                             Text {
                                 visible: bar.calSoon
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: Theme.icCalendar
-                                font.family: Theme.fontIcons; font.pixelSize: Theme.barIconPx
-                                color: Theme.fgSecondary
-                            }
-                            // VPN (only when active) — key glyph
-                            Text {
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: Theme.icVpn
-                                font.family: Theme.fontIcons; font.pixelSize: Theme.barIconPx
-                                color: Theme.fgSecondary
-                                visible: Globals.vpnActive
-                            }
-                            // SSH tunnel (only when one of the Quick Settings
-                            // port-forward tunnels is up) — console glyph
-                            Text {
-                                visible: Globals.sshTunnelUp
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: Theme.icSsh
-                                font.family: Theme.fontIcons; font.pixelSize: Theme.barIconPx
-                                color: Theme.fgSecondary
-                            }
-                            // Insomnia / keep-awake (only when on) — eye glyph, matches
-                            // the control-centre toggle
-                            Text {
-                                visible: Globals.caffeine
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: Theme.icEye
                                 font.family: Theme.fontIcons; font.pixelSize: Theme.barIconPx
                                 color: Theme.fgSecondary
                             }
@@ -613,24 +643,6 @@ Scope {
                                     anchors.verticalCenter: parent.verticalCenter
                                     text: KdeConnect.connected ? KdeConnect.device.batteryCharge + "%" : ""
                                     font.family: Theme.fontText; font.pixelSize: 11
-                                    color: Theme.fgSecondary
-                                }
-                            }
-                            // Mail (Gmail) — envelope + count, only when there is unread mail
-                            Row {
-                                visible: Google.signedIn && Google.mailUnread > 0
-                                anchors.verticalCenter: parent.verticalCenter
-                                spacing: 3
-                                Text {
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    text: Theme.icMail
-                                    font.family: Theme.fontIcons; font.pixelSize: Theme.barIconPx
-                                    color: Theme.fgSecondary
-                                }
-                                Text {
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    text: Google.mailUnread > 99 ? "99+" : String(Google.mailUnread)
-                                    font.family: Theme.fontText; font.pixelSize: 11; font.weight: Font.DemiBold
                                     color: Theme.fgSecondary
                                 }
                             }
@@ -701,7 +713,7 @@ Scope {
                                 Text {
                                     anchors.verticalCenter: parent.verticalCenter
                                     text: Math.round(parent.pct) + "%"
-                                    font.family: Theme.fontText; font.pixelSize: 12
+                                    font.family: Theme.fontText; font.pixelSize: 11
                                     color: Theme.fgSecondary
                                 }
                             }
@@ -722,6 +734,12 @@ Scope {
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
                             onClicked: Globals.quickSettingsOpen = !Globals.quickSettingsOpen
+                            // wheel = volume, mirroring the XF86 keys; the OSD
+                            // pops by itself (it observes the default sink)
+                            onWheel: function (wheel) {
+                                var up = wheel.angleDelta.y > 0
+                                Quickshell.execDetached(["wpctl", "set-volume", "-l", "1.0", "@DEFAULT_AUDIO_SINK@", up ? "3%+" : "3%-"])
+                            }
                         }
                     }
                 }
