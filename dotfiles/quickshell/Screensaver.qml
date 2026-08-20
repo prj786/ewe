@@ -99,6 +99,27 @@ Scope {
         for (var i = 0; i < ps.length; i++) if (ps[i].isPlaying) on = true
         return on
     }
+    // An open capture stream (mic in use) is the one reliable "on a call" signal:
+    // Slack/Discord/browser huddles publish no MPRIS player and aren't fullscreen,
+    // which is how a huddle idle-dimmed and locked mid-call on 2026-08-13. Event-
+    // driven via `pactl subscribe` — zero wakeups while nothing touches the mic.
+    property bool callActive: false
+    Process {
+        id: micEvents
+        running: true
+        command: ["sh", "-c", "pactl subscribe 2>/dev/null | grep --line-buffered source-output"]
+        stdout: SplitParser { onRead: micProbeDebounce.restart() }
+        onExited: micEventsRespawn.restart()   // pipewire restarted under us
+    }
+    Timer { id: micEventsRespawn; interval: 3000; onTriggered: micEvents.running = true }
+    Timer { id: micProbeDebounce; interval: 400; onTriggered: { micProbe.running = false; micProbe.running = true } }
+    Process {
+        id: micProbe
+        command: ["sh", "-c", "pactl list short source-outputs 2>/dev/null | wc -l"]
+        stdout: StdioCollector { onStreamFinished: root.callActive = parseInt(this.text.trim() || "0") > 0 }
+    }
+    Component.onCompleted: micProbe.running = true
+
     property bool fullscreenFocused: false
     Connections {
         target: Hyprland
@@ -125,7 +146,7 @@ Scope {
         anchors { top: true; left: true }
         IdleInhibitor {
             window: inhibitWin
-            enabled: root.mediaPlaying || root.fullscreenFocused
+            enabled: root.mediaPlaying || root.fullscreenFocused || root.callActive
         }
     }
 
