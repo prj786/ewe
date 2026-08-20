@@ -272,6 +272,7 @@ hl.bind(mainMod .. " + B",      hl.dsp.exec_cmd(browser))
 hl.bind(mainMod .. " + C",      hl.dsp.exec_cmd(scripts .. "/calendar.sh"))
 hl.bind(mainMod .. " + N",      hl.dsp.exec_cmd("qs ipc call quicksettings toggle"))  -- Quick Settings
 hl.bind(mainMod .. " + comma",  hl.dsp.exec_cmd("qs ipc call settings toggle")) -- Super+, Settings
+hl.bind(mainMod .. " + SHIFT + C", hl.dsp.exec_cmd("qs ipc call cast toggle"))  -- Cast to TV (same as the Quick Settings tile)
 -- Blind display recovery: works with a BLACK screen — forces every output's
 -- dpms on and re-asserts the saved display profile. If a plug/unplug or the
 -- xe driver ever blanks everything, press this instead of the power button.

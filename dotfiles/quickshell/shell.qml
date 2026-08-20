@@ -32,6 +32,8 @@ ShellRoot {
     ScreenshotPreview {}
     Lock {}
     Caffeine {}
+    Cast {}
+    SharePicker {}
     Screensaver {}
     Osd {}
     Overview {}

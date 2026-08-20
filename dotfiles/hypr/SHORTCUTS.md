@@ -15,6 +15,7 @@ on save). Ported from the old Qtile bindings so most muscle memory carries over.
 | `Super` + `C` | Calendar | Quickshell popup |
 | `Super` + `,` | **Settings** | Quickshell |
 | `Super` + `N` | Toggle Quick Settings | Quickshell |
+| `Super` + `Shift` + `C` | **Cast to TV** — toggle screen mirroring (Miracast / Chromecast); same as the Quick Settings tile | Quickshell → `gnome-network-displays` |
 
 > The bar + launcher are now **Quickshell** (`~/.config/quickshell/`). The search
 > glyph at the top-left opens the Launcher. (A Quickshell power menu is on the list.)

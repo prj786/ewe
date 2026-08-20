@@ -27,6 +27,8 @@ ScreenshotPreview 1.0 ScreenshotPreview.qml
 InvertedCorner 1.0 InvertedCorner.qml
 Lock 1.0 Lock.qml
 Caffeine 1.0 Caffeine.qml
+Cast 1.0 Cast.qml
+SharePicker 1.0 SharePicker.qml
 Osd 1.0 Osd.qml
 Overview 1.0 Overview.qml
 Settings 1.0 Settings.qml

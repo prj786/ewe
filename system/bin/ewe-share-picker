@@ -1,0 +1,42 @@
+#!/bin/sh
+# ewe-share-picker — xdg-desktop-portal-hyprland's custom_picker_binary
+# (dotfiles/hypr/xdph.conf). Installed to /usr/local/bin by phase 30 because
+# xdph exec()s the path verbatim (no shell, no ~ expansion).
+#
+# Protocol (xdph src/shared/ScreencopyShared.cpp): xdph runs us with
+# `--allow-token` when restore tokens are on by default, hands the window list
+# in $XDPH_WINDOW_SHARING_LIST ("<handle>[HC>]<class>[HT>]<title>[HE>]<addr>[HA>]"
+# per window) and reads ONE line from stdout:
+#     [SELECTION]<flags>/screen:<output>      flags: "r" = allow restore token
+#     [SELECTION]<flags>/window:<handle>
+#     [SELECTION]<flags>/region:<output>@<x>,<y>,<w>,<h>
+# No "[SELECTION]" on stdout = cancelled.
+#
+# We ask the RUNNING ewe shell to draw the picker (SharePicker.qml: themed,
+# live previews of every monitor and window, so you can see what you're
+# sharing) and wait on a fifo for its one-line answer. No shell → the stock
+# hyprland-share-picker, so sharing never silently breaks.
+set -u
+
+rt="${XDG_RUNTIME_DIR:-/tmp}"
+fifo="$rt/ewe-picker.$$"
+# exec replaces this shell, so the EXIT trap never fires — tidy first
+fallback() { rm -f "$fifo" "$fifo.windows"; exec hyprland-share-picker "$@"; }
+mkfifo -m 600 "$fifo" 2>/dev/null || fallback "$@"
+trap 'rm -f "$fifo" "$fifo.windows"' EXIT INT TERM
+
+allow=0
+for a in "$@"; do [ "$a" = "--allow-token" ] && allow=1; done
+printf '%s' "${XDPH_WINDOW_SHARING_LIST:-}" > "$fifo.windows"
+
+command -v qs >/dev/null 2>&1 || fallback "$@"
+# qs picks the instance by default config + WAYLAND_DISPLAY (xdph passes the
+# latter). EWE_QS_IPC is for the nested dev driver only (e.g. "--pid <qs pid>").
+# shellcheck disable=SC2086
+qs ipc ${EWE_QS_IPC:-} call picker open "$fifo" "$allow" >/dev/null 2>&1 || fallback "$@"
+
+# The shell writes exactly one line (possibly empty = cancel) and closes.
+# The timeout is the safety net for a shell that died mid-prompt.
+sel=$(timeout 300 cat "$fifo" 2>/dev/null)
+[ -n "$sel" ] && printf '%s\n' "$sel"
+exit 0

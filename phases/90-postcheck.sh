@@ -40,6 +40,22 @@ phase_postcheck() {
     _check "network: NetworkManager active"       systemctl is-active NetworkManager.service
     _check "power: power-profiles-daemon active"   systemctl is-active power-profiles-daemon.service
     _check "bluetooth: service active"            systemctl is-active bluetooth.service
+    # Cast to TV (control-centre tile). Miracast additionally needs a Wi-Fi card
+    # with Wi-Fi Direct (P2P) — hardware, so a note rather than a red cross; the
+    # Chromecast path works regardless.
+    _check "portal: ewe share picker installed"      test -x /usr/local/bin/ewe-share-picker
+    # screencopy freeze fix: three upstream commits after xdph 1.4.1 (#424/#425); we ship them as 1.4.1-1.1 (packages/patched)
+    _check "portal: screencopy freeze fix (xdph ≥ 1.4.1-1.1)" sh -c '[ "$(vercmp "$(pacman -Q xdg-desktop-portal-hyprland 2>/dev/null | awk "{print \$2}")" 1.4.1-1.1)" -ge 0 ]'
+    if gst-inspect-1.0 vah264enc >/dev/null 2>&1; then _note "cast: hardware H.264 encoder (vah264enc) available"
+    else _note "cast: no VA-API H.264 encoder — software x264 (sudo pacman -S gst-plugin-va)"; fi
+    if iw reg get 2>/dev/null | grep -q 'country 00'; then _note "wifi: regulatory domain unset (world) — 5 GHz Wi-Fi Direct/hotspot disabled; set WIRELESS_REGDOM in /etc/conf.d/wireless-regdom"
+    else _note "wifi: regulatory domain $(iw reg get 2>/dev/null | awk '/^country/{print $2; exit}' | tr -d :)"; fi
+    _check "cast: Wi-Fi power-save hook (Miracast stays connected)" test -x /etc/NetworkManager/dispatcher.d/50-ewe-cast-powersave
+    _check "cast: gnome-network-displays installed"  sh -c 'command -v gnome-network-displays'
+    _check "cast: avahi-daemon active (Chromecast discovery)" systemctl is-active avahi-daemon.service
+    if ! command -v iw >/dev/null 2>&1; then _note "cast: iw missing — can't verify Wi-Fi Direct (Miracast) support"
+    elif iw list 2>/dev/null | grep -qE 'P2P-client|P2P-GO'; then _note "cast: Wi-Fi card supports Wi-Fi Direct (Miracast OK)"
+    else _note "cast: Wi-Fi card reports NO Wi-Fi Direct — Miracast unavailable, Chromecast still works"; fi
     # Wi-Fi/GPU firmware lives in linux-firmware; usually pulled by the kernel, but a
     # truly stripped base can lack it — note (don't fail) so a dead radio is explained.
     if pkg_present linux-firmware; then _note "firmware: linux-firmware present"

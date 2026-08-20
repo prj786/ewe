@@ -89,6 +89,10 @@ https://github.com/user-attachments/assets/a2ffb2e1-2482-46c7-911d-c94bb8413434
   settings sync to Drive; native OAuth, no GNOME Online Accounts.
 - **Optional phone link** — KDE Connect daemon driven from the shell: phone
   battery, notifications, SMS from the control centre.
+- **Cast to TV** — one control-centre tile mirrors the desktop to a Samsung
+  (Miracast) or Android / Google TV (Miracast or Chromecast) via
+  `gnome-network-displays`, captured through the Hyprland portal — with ewe's
+  own share picker (live previews, real display names) for every screen-share.
 
 ## Docs
 

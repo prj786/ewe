@@ -1,0 +1,75 @@
+# ewe — Arch's xdg-desktop-portal-hyprland 1.4.1 PKGBUILD + three upstream
+# screencopy fixes merged after the 1.4.1 release (2026-08-04..17), without
+# which any PipeWire consumer that returns buffers late (gnome-network-displays
+# encoding 1080p on the CPU, OBS under load) FREEZES the capture for good:
+#   #422 don't send bad transform information over wire
+#   #424 fix permanent freeze after running out of buffers   ← the Cast-to-TV "static image"
+#   #425 don't destroy the frame callback installed while renegotiating
+# Built + installed by phase 20 (install_patched_pkgs) only while the repo
+# still ships 1.4.1; drop this directory once 1.4.2 lands. pkgrel 1.1 so the
+# real 1.4.1-2 / 1.4.2 from the repos replaces it on the next -Syu.
+#
+# Upstream maintainer: Caleb Maclennan <caleb@alerque.com>
+
+pkgname=xdg-desktop-portal-hyprland
+pkgver=1.4.1
+_protocolver=1cb6db5fd6bb8aee419f4457402fa18293ace917   # ewe: Arch pins 4d29e48, which predates hyprland-input-capture-v1 (1.4.1 needs it; Arch builds with the system package instead)
+pkgrel=1.1
+pkgdesc='xdg-desktop-portal backend for hyprland'
+url="https://github.com/hyprwm/$pkgname"
+arch=(x86_64)
+license=(MIT)
+provides=(xdg-desktop-portal-impl)
+depends=(
+         libgcc
+         libstdc++
+         glibc
+         hyprlang libhyprlang.so
+         hyprutils libhyprutils.so
+         hyprwayland-scanner
+         libinih
+         pipewire
+         qt6-base
+         sdbus-cpp libsdbus-c++.so
+         util-linux-libs libuuid.so
+         xdg-desktop-portal
+)
+makedepends=(cmake
+             hyprland-protocols
+             wayland
+             wayland-protocols)
+optdepends=('grim: required for the screenshot portal to function'
+            'slurp: support for interactive mode for the screenshot portal')
+_archive="$pkgname-$pkgver"
+source=("$url/archive/v$pkgver/$_archive.tar.gz"
+        "https://github.com/hyprwm/hyprland-protocols/archive/$_protocolver.tar.gz"
+        0001-screencopy-dont-send-bad-transform.patch
+        0002-screencopy-fix-permanent-freeze-out-of-buffers.patch
+        0003-screencopy-keep-frame-callback-while-renegotiating.patch)
+sha256sums=('3652c14f63a9666acea2c841e196782dbc0f74ea5b4783622dd04a32f08b709f'
+            '66d43275bc0e5d00204d37ba0e6b8b4f28cc9b15e4e241832d024e0d2cef9f14'
+            'd25184a970aba9d5c512497e3e797a5f88bb905a68e4601a587645974c04469e' '0d4e724cfc3047ffc362a0b85448e15d51125a5a5ee619bd1371e19ba21580fc' '140c4b792f50b8bcd63a3fde62ef3b1596de964bdeb0b29385124c211d540510')
+
+prepare() {
+	cd "$_archive"
+	local p
+	for p in "$srcdir"/000?-*.patch; do patch -Np1 -i "$p"; done
+	cd subprojects
+	rm -rf hyprland-protocols sdbus-cpp
+	ln -sfT "$srcdir/hyprland-protocols-$_protocolver" hyprland-protocols
+}
+
+build() {
+	cd "$_archive"
+	cmake -B build \
+		-D CMAKE_INSTALL_PREFIX=/usr \
+		-D CMAKE_INSTALL_LIBEXECDIR=/usr/lib \
+		-D CMAKE_BUILD_TYPE=Release
+	cmake --build build
+}
+
+package() {
+	cd "$_archive"
+	DESTDIR="$pkgdir" cmake --install build
+	install -Dm0644 -t "$pkgdir/usr/share/licenses/$pkgname/" LICENSE
+}

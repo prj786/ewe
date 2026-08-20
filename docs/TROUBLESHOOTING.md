@@ -1,5 +1,60 @@
 # Troubleshooting
 
+## Cast to TV: frozen picture, lag, or the TV drops after ~10 s
+
+What the 2026-08-21 investigation found, in the order it bit:
+
+1. **Capture freezes for good (static image on the TV, or the TV connects and
+   drops ~10 s later because no frames ever arrive).** xdg-desktop-portal-
+   hyprland 1.4.1 has a bug in its screencopy retry path: the first time the
+   consumer (gnome-network-displays encoding 1080p in software) returns a
+   PipeWire buffer late, the portal logs `Out of buffers` → `Retrying
+   screencopy` → `tried scheduling on already scheduled cb` and then never
+   asks the compositor for another frame. Upstream fixed it after the release
+   (commits #422/#424/#425). ewe ships them as **`xdg-desktop-portal-hyprland
+   1.4.1-1.1`** from `packages/patched/` (phase 20 builds it; it retires
+   itself once the repos ship something newer). Check with
+   `pacman -Q xdg-desktop-portal-hyprland` and
+   `journalctl --user -u xdg-desktop-portal-hyprland | grep -c "Out of buffers"`.
+   Measured: stock 1.4.1 delivered 7 frames to a slow consumer and froze;
+   patched kept delivering at the consumer's pace indefinitely.
+2. **Lag / stutter while it works.** Two causes, both fixable:
+   - software x264 encoding — `gst-plugin-va` gives `vah264enc`, which
+     gnome-network-displays prefers automatically (Intel iHD / AMD).
+   - the Wi-Fi Direct link shares the channel of your Wi-Fi connection. On a
+     2.4 GHz network that is a crowded 20 MHz channel for both. A fresh Arch
+     also has no regulatory domain (`iw reg get` → `country 00`), which makes
+     5 GHz receive-only, so Wi-Fi Direct can never use it: phase 30 installs
+     `wireless-regdb` and sets the country from GeoIP. Then use a 5 GHz
+     network, or disconnect Wi-Fi while casting.
+3. **The TV drops on its own after a few minutes** (a working stream just
+   stops; the journal shows `AP-STA-DISCONNECTED` from the TV then NM
+   `peer-not-found`, and nothing else). The culprit is **Wi-Fi power saving**:
+   the laptop is the Wi-Fi Direct group owner, and a radio that still power-saves
+   its normal Wi-Fi link delivers the group's beacons and video late, so the TV
+   gives up (measured 3.5 min on 2026-08-21). Phase 30 installs a NetworkManager
+   dispatcher hook (`/etc/NetworkManager/dispatcher.d/50-ewe-cast-powersave`)
+   that turns `power_save off` on the Wi-Fi interface while any `p2p-*`
+   connection is up and back on after. Check it's there and, live,
+   `iw dev wlan0 get power_save` should read `off` while casting.
+4. **No sound on the TV (audio stays on the laptop).** gnome-network-displays
+   makes a null sink (`gnome_network_displays_*`) and streams *its* monitor, but
+   never moves your audio into it. ewe's `hypr/scripts/cast-audio.sh` (started by
+   Cast.qml while casting) makes that sink the default and moves live streams
+   onto it, restoring your speakers when casting stops. If sound doesn't follow,
+   check `pactl get-default-sink` names the `gnome_network_displays` sink while
+   casting; set it by hand in `pavucontrol` → Playback / Output Devices if not.
+5. **"Connection failed" with nothing else.** The app is terse; the reason is
+   in the journal. While casting, the shell tails NetworkManager +
+   wpa_supplicant and toasts a translation (TV found · handshake timeout ·
+   refused · connected-then-dropped). Raw: `journalctl -f -u NetworkManager -u
+   wpa_supplicant`; the app's own debug trace is `~/.local/state/ewe/cast.log`.
+   `supplicant-timeout` with no GO-negotiation lines = the TV wasn't listening
+   (open Source → Screen Mirroring on it first).
+
+Run `~/.config/hypr/scripts/cast-check.sh` any time — it checks all of the
+above and prints the fix for each.
+
 ## The laptop hard-freezes (must force power-off)
 
 A full freeze — pointer stuck, keyboard dead, REISUB does nothing — is almost

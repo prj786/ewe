@@ -75,6 +75,11 @@ is genuinely safe and the whole thing is re-runnable.
 
 ### Packages
 
+`packages/patched/<name>/` holds an official package rebuilt with upstream
+fixes the repos don't carry yet (Arch's PKGBUILD, `pkgrel` N.1, the patches,
+a header saying why). Phase 20 builds and installs it only while the repos
+still offer that exact version, so it retires itself.
+
 - **`packages/common.list`** — official-repo packages (real Arch names),
   installed with `pacman -S --needed`. Grouped: core session, greeter, audio,
   network, bluetooth, power, terminals, **GTK utility apps** (Nemo, Engrampa,
@@ -196,6 +201,83 @@ demand; the shell talks to it through
 kdeconnectd; the shell only persists which notifications you've seen and the
 chosen device. MMS bodies often aren't exposed over D-Bus — threads label them
 instead of showing garbage.
+
+## Cast to TV (screen mirroring)
+
+The control centre has a **Cast** tile (also `Super+Shift+C`) that mirrors the
+desktop to a smart TV. It runs **`gnome-network-displays`** (AUR, phase 20),
+the one app that speaks both protocols a TV may offer, and captures the screen
+through the xdg-desktop-portal ScreenCast — the Hyprland portal — so it works
+fine outside GNOME:
+
+- **Miracast** — Samsung "Screen Mirroring" (Tizen) and most Android TVs. Uses
+  Wi-Fi Direct (P2P) through NetworkManager + wpa_supplicant, so the Wi-Fi card
+  must support P2P (`iw list | grep -E 'P2P-client|P2P-GO'`). NetworkManager's
+  **iwd** backend has no P2P — keep `wifi.backend=wpa_supplicant` (the default).
+- **Chromecast** — Chromecast built-in / Google TV. Found over mDNS, which is
+  why phase 30 enables **`avahi-daemon`**.
+
+Turning the tile on launches the app: its window lists the TVs it can see, you
+pick one, and the TV asks you to accept. Closing that window (or toggling the
+tile off, which SIGTERMs the app so the session ends cleanly) stops the
+mirror; the tile and the bar's screencast glyph follow the process, not the
+other way round. The first toggle of a session runs
+`hypr/scripts/cast-check.sh`, which toasts anything missing together with the
+fix (`paru -S gnome-network-displays`, `sudo pacman -S iw`,
+`sudo systemctl enable --now avahi-daemon`); a missing app is the only fatal
+case — a Chromecast-only or Miracast-only setup still launches.
+
+**Which screen?** When the app asks the portal for the picture, the portal
+pops **ewe's own share picker** (`SharePicker.qml`) — every display as a
+live thumbnail named by its model, every window with a live preview, or a
+region — instead of xdg-desktop-portal-hyprland's stock white list of
+connector names. It's wired through `hypr/xdph.conf`
+(`screencopy:custom_picker_binary = /usr/local/bin/ewe-share-picker`, the
+wrapper phase 30 installs from `system/bin/`); the wrapper asks the running
+shell over `qs ipc call picker …` and falls back to `hyprland-share-picker`
+when the shell is down, so screen sharing never silently breaks. The same
+picker serves every portal ScreenCast — browser calls, OBS, recorders.
+
+**When a connect fails**, the app shows one line and nothing else. The real
+reason is in the system journal — NetworkManager drives the Wi-Fi Direct link
+and wpa_supplicant does the handshake — so while casting the shell tails both
+and toasts a translation: *TV found*, *link up*, or the failure with what to
+do (e.g. "the TV never answered the handshake — open Source → Screen
+Mirroring on the TV so it's listening, then pick it again"). The app's own
+debug output is kept in `~/.local/state/ewe/cast.log`; for the raw story run
+`journalctl -f -u NetworkManager -u wpa_supplicant` during an attempt.
+
+**Why it needs a patched portal.** xdg-desktop-portal-hyprland 1.4.1 freezes
+a screen share for good the first time the consumer returns a buffer late —
+on the TV that's a static image, or a connect that drops after ~10 s. The
+three upstream fixes (#422/#424/#425) landed after the release, so phase 20
+builds **`xdg-desktop-portal-hyprland 1.4.1-1.1`** from `packages/patched/`
+(Arch's PKGBUILD + the patches; it retires itself once the repos ship newer).
+For quality, `gst-plugin-va` gives hardware H.264 (the app prefers it), and
+phase 30 sets the Wi-Fi regulatory domain so Wi-Fi Direct may use 5 GHz —
+see *Troubleshooting → Cast to TV*.
+
+Expectations: Miracast works on most 2018+ Samsung sets but Samsung's
+implementation is finicky (retry, keep the laptop close to the TV; a 5 GHz
+Wi-Fi network — or no Wi-Fi at all while casting — avoids sharing a 2.4 GHz
+channel with the mirror). Chromecast-with-Google-TV devices don't do Miracast
+at all — `gnome-network-displays` uses its Chromecast path for them, which
+needs the laptop and TV on the same network.
+
+**Audio.** The mirror carries sound too: while casting, `cast-audio.sh` routes
+the desktop's audio into the sink gnome-network-displays streams to the TV
+(GND makes the sink but doesn't redirect audio itself), and puts your speakers
+back when you stop. To keep sound on the laptop instead, pick your speaker
+again in `pavucontrol` while casting.
+
+**Streaming apps (Stremio, browsers) and their own "Cast" button.** That button
+is the *app's* casting (Chromecast/DLNA), not ewe's — it hands the TV a stream
+URL to fetch itself, and only works with a device that speaks that protocol
+(Chromecast built-in / DLNA renderer). A Samsung/Miracast TV isn't one, so the
+button pauses local playback and nothing appears on the TV. For those TVs, use
+ewe's **Cast** tile to mirror the whole desktop, then play the video normally —
+picture and sound both go over Miracast. (A real Chromecast/Google TV *does*
+answer Stremio's cast, and also shows up under ewe's Chromecast path.)
 
 ## Repo layout
 

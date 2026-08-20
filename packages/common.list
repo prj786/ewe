@@ -57,6 +57,14 @@ networkmanager-openvpn  # OpenVPN profiles (the most common VPN type)
 networkmanager-l2tp     # L2TP/IPsec profiles (needs strongswan below)
 strongswan              # IPsec for networkmanager-l2tp
 iwd
+# Cast to TV (the control-centre "Cast" tile → gnome-network-displays, aur.list):
+iw                      # `iw list` — cast-check.sh verifies the Wi-Fi card does Wi-Fi Direct (P2P), which Miracast needs
+avahi                   # mDNS — Chromecast / Google TV discovery (phase 30 enables avahi-daemon)
+wireless-regdb          # regulatory database; phase 30 sets the country. Without it the kernel runs the
+                        # "world" domain: 5 GHz is receive-only, so hotspot / Wi-Fi Direct (Miracast) are
+                        # pinned to crowded 2.4 GHz — the "laggy / frozen mirror" of 2026-08-21
+gst-plugin-va           # vah264enc — hardware H.264 for Cast to TV (gnome-network-displays prefers it over
+                        # x264); Intel iHD + AMD Mesa both expose it via VA-API
 bluez
 bluez-utils
 blueman

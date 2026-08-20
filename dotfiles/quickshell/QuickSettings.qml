@@ -1825,6 +1825,17 @@ Scope {
                             onClicked: Globals.caffeine = !Globals.caffeine
                         }
                     }
+                    Row {
+                        width: parent.width; spacing: 10
+                        Tile {
+                            // Cast to TV — Miracast (Samsung "Screen Mirroring", Android TV)
+                            // or Chromecast (Google TV); Cast.qml runs gnome-network-displays,
+                            // whose window picks the TV. Tile stays lit until that window closes.
+                            ic: Theme.icCast; label: "Cast"; active: Globals.casting
+                            sub: Globals.casting ? "On" : "Off"
+                            onClicked: Globals.casting = !Globals.casting
+                        }
+                    }
 
                     // (the tiling⇄floating toggle lives in the top bar now; the
                     //  sliders and audio devices moved to the TOP of the panel)

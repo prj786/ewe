@@ -528,7 +528,7 @@ Scope {
 
                             // ORDER is deterministic and grouped, not first-come:
                             //   spinner (transient) → TOGGLER STATES the user
-                            //   switched on (insomnia · ssh · vpn) → COMMS
+                            //   switched on (insomnia · cast · ssh · vpn) → COMMS
                             //   (notifications · mail · calendar · phone) →
                             //   RADIOS (wired/wifi · bluetooth) → SYSTEM (power
                             //   profile · battery) → clock.
@@ -550,6 +550,14 @@ Scope {
                                 visible: Globals.caffeine
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: Theme.icEye
+                                font.family: Theme.fontIcons; font.pixelSize: Theme.barIconPx
+                                color: Theme.fgSecondary
+                            }
+                            // Cast to TV — screencast glyph while gnome-network-displays is up
+                            Text {
+                                visible: Globals.casting
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: Theme.icCast
                                 font.family: Theme.fontIcons; font.pixelSize: Theme.barIconPx
                                 color: Theme.fgSecondary
                             }

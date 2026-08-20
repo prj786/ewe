@@ -81,6 +81,7 @@ phase_packages() {
         [ "${GAMING:-0}" = "1" ] && printf '%s   gaming:%s %s\n' "$C_DIM" "$C_0" "${game[*]}"
         printf '%s   source:%s Reversal-icon-theme (all variants), mocu-xcursor → /usr/share/icons\n' "$C_DIM" "$C_0"
         printf '%s   releases:%s komble-arch (the software manager), ewe-settings (the Settings app) — prebuilt GitHub release, source-build fallback\n' "$C_DIM" "$C_0"
+        printf '%s   patched:%s %s — official packages rebuilt with not-yet-released upstream fixes (packages/patched/*, self-retiring)\n' "$C_DIM" "$C_0" "$(ls "$DOTREPO/packages/patched" 2>/dev/null | tr '\n' ' ')"
         return 0
     fi
 
@@ -110,6 +111,11 @@ phase_packages() {
         ask_yes "Build & install ${#aur[@]} AUR packages now? (compiles from source)" \
             && install_aur "${aur[@]}" || warn "skipped AUR packages"
     fi
+    # Official packages with upstream fixes the repos don't ship yet
+    # (packages/patched/*). Today: xdg-desktop-portal-hyprland — without the
+    # three post-1.4.1 screencopy fixes any screen share whose consumer returns
+    # a buffer late (Cast to TV encoding 1080p, OBS under load) freezes for good.
+    install_patched_pkgs
     # Komble — THE software manager of the DE (repos + AUR + AppImages +
     # updates). The dock's store button and `qs ipc call store` launch it; the
     # shell's built-in quick installer is only a fallback while the binary is

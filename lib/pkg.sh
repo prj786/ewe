@@ -143,6 +143,52 @@ install_git_pkgbuild() {
     return 0
 }
 
+# install_patched_pkgs — build + install every packages/patched/<name>/PKGBUILD:
+# an OFFICIAL package carrying upstream fixes the repos haven't shipped yet
+# (Arch's own PKGBUILD, pkgrel bumped to N.1, plus the upstream patches; the
+# PKGBUILD header says which fixes and why). Self-retiring: a patched build is
+# only made while the repos still offer exactly that pkgver — once they ship a
+# newer version (the fix landed upstream) the directory is skipped, and the
+# normal -Syu already replaced our N.1 with the repo's next release. Same
+# contract as everything here: warn-and-continue, ALWAYS returns 0.
+install_patched_pkgs() {
+    local dir name ver rel repo cur tmp pkgfile
+    for dir in "$DOTREPO"/packages/patched/*/; do
+        [ -f "$dir/PKGBUILD" ] || continue
+        name="$(basename "$dir")"
+        ver="$(sed -n 's/^pkgver=//p' "$dir/PKGBUILD" | head -1)"
+        rel="$(sed -n 's/^pkgrel=//p' "$dir/PKGBUILD" | head -1)"
+        repo="$(pacman -Si "$name" 2>/dev/null | awk '/^Version/{print $3; exit}')"
+        if [ -n "$repo" ] && [ "$(vercmp "${repo%-*}" "$ver" 2>/dev/null || echo 0)" -gt 0 ]; then
+            ok "$name: repos now ship ${repo%-*} (> patched $ver) — upstream has the fix, our patched build is retired"
+            continue
+        fi
+        cur="$(pacman -Q "$name" 2>/dev/null | awk '{print $2}')"
+        if [ -n "$cur" ] && [ "$(vercmp "$cur" "$ver-$rel" 2>/dev/null || echo -1)" -ge 0 ]; then
+            ok "$name $cur already carries the patches"
+            continue
+        fi
+        if [ "${DRY_RUN:-0}" = "1" ]; then
+            printf '%s   would run:%s makepkg -s in packages/patched/%s && pacman -U %s-%s-%s (patched official package)\n' "$C_DIM" "$C_0" "$name" "$name" "$ver" "$rel"
+            continue
+        fi
+        command -v makepkg >/dev/null 2>&1 || { warn "base-devel missing — skipping patched $name"; continue; }
+        tmp="$(mktemp -d -p /var/tmp "ewe-patched-$name.XXXXXX" 2>/dev/null || mktemp -d)" || { warn "no build dir — skipping patched $name"; continue; }
+        cp -r "$dir"/. "$tmp/"
+        info "building patched $name $ver-$rel (upstream fixes not yet in the repos — see its PKGBUILD header)"
+        # makepkg refuses root and escalates itself for makedepends (-s)
+        if ( cd "$tmp" && PACKAGER="ewe <ewe@localhost>" makepkg -s --noconfirm --needed ) \
+            && pkgfile="$(find "$tmp" -maxdepth 1 -name "$name-$ver-$rel-*.pkg.tar.*" ! -name '*-debug-*' | head -1)" \
+            && [ -n "$pkgfile" ] && sudo_run pacman -U --noconfirm "$pkgfile"; then
+            ok "installed patched $name $ver-$rel"
+        else
+            warn "patched $name failed to build/install — the stock package stays (retry: cd packages/patched/$name && makepkg -si)"
+        fi
+        rm -rf "$tmp"
+    done
+    return 0
+}
+
 # pkg_present <pkg> — installed? (official or AUR, pacman tracks both)
 pkg_present() { pacman -Qq "$1" >/dev/null 2>&1; }
 

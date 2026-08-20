@@ -36,6 +36,7 @@ QtObject {
     property string netBusy: ""            // "wifi" | "vpn" while a connection attempt runs (bar spinner)
     property bool sshTunnelUp: false       // any background ssh -f -N tunnel from Quick Settings is up (bar shows a console glyph)
     property bool caffeine: false          // keep-awake: holds a wayland idle inhibitor (no lock/blank/sleep)
+    property bool casting: false           // Cast to TV: gnome-network-displays (Miracast/Chromecast) is up — Cast.qml owns the process
     property bool overviewOpen: false      // GNOME-style window overview (Super tapped alone)
     property bool clipboardOpen: false     // the clipboard-history / emoji popup (scissors icon)
     property bool settingsOpen: false      // the Quickshell Settings window (Super+, or the CC gear)

@@ -8,5 +8,10 @@
 oh-my-posh-bin             # shell prompt engine; themes in dotfiles/oh-my-posh/
 mpvpaper                   # video wallpapers (wallpaper.sh's video backend) — AUR-only, was
                            # wrongly in common.list where the pacman batch tripped over it
+gnome-network-displays     # Cast to TV — Miracast (Samsung "Screen Mirroring", most Android TVs) AND
+                           # Chromecast built-in (Google TV) from one app; captures via the
+                           # xdg-desktop-portal ScreenCast (the hyprland portal), so it works outside
+                           # GNOME. Needs NetworkManager + wpa_supplicant for Wi-Fi P2P (not iwd) and
+                           # avahi-daemon for Chromecast discovery (phase 30). Driven by Cast.qml.
 fresh-editor-bin           # Fresh — terminal IDE (default editor). PREBUILT x86_64 binary (no
                            # ~500-crate source compile). For aarch64/other arches use 'fresh-editor'.

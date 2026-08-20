@@ -141,6 +141,7 @@ QtObject {
     readonly property string icEye:         ic(0xE220)  // eye (insomnia / keep-awake)
     readonly property string icEyeOff:      ic(0xE224)  // eye-slash
     readonly property string icDnd:         ic(0xE330)  // moon (do not disturb)
+    readonly property string icCast:        ic(0xE404)  // screencast (cast to TV)
     readonly property string icSun:         ic(0xE472)  // sun (brightness)
     readonly property string icBolt:        ic(0xE2DE)  // lightning (charging)
     readonly property string icBattFull:    ic(0xE0C0)  // battery-full

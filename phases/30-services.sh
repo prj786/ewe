@@ -30,6 +30,13 @@ phase_services() {
     _enable_system NetworkManager.service
     _enable_system bluetooth.service
     _enable_system power-profiles-daemon.service
+    # ── Cast to TV: Chromecast / Google TV discovery is mDNS, which is avahi's
+    # job (Miracast needs nothing extra — NetworkManager + wpa_supplicant do the
+    # Wi-Fi P2P). Start it now too: the Cast tile should work without a reboot.
+    _enable_system avahi-daemon.service
+    if pkg_present avahi && ! systemctl is-active --quiet avahi-daemon.service 2>/dev/null; then
+        sudo_run systemctl start avahi-daemon.service || warn "could not start avahi-daemon — Chromecast discovery works after reboot"
+    fi
 
     # ── time: NTP on + a real timezone ──
     # A minimal Arch install often leaves NTP off and the clock in UTC — the
@@ -46,6 +53,25 @@ phase_services() {
                      || warn "could not set timezone '$tz' — set it manually: timedatectl set-timezone <Region/City>" ;;
             *)   info "timezone is UTC and the GeoIP lookup failed — set it with: timedatectl set-timezone <Region/City>" ;;
         esac
+    fi
+
+    # ── Wi-Fi regulatory domain ──
+    # A fresh Arch never sets one, so the kernel runs the "world" domain (00):
+    # 5 GHz is receive-only (NO-IR) — no 5 GHz hotspot and no 5 GHz Wi-Fi
+    # Direct, which pins Cast to TV's Miracast link to the crowded 2.4 GHz band
+    # (lag, frozen frames). Set it once from GeoIP (the timezone lookup above
+    # already trusts the same source); the user can change it any time in
+    # /etc/conf.d/wireless-regdom.
+    if pkg_present wireless-regdb && ! grep -qE '^[[:space:]]*WIRELESS_REGDOM=' /etc/conf.d/wireless-regdom 2>/dev/null; then
+        local cc
+        cc=$(curl -fsSL --max-time 8 "http://ip-api.com/line/?fields=countryCode" 2>/dev/null | tr -d '[:space:]' || true)
+        if printf '%s' "$cc" | grep -qE '^[A-Z]{2}$'; then
+            printf 'WIRELESS_REGDOM="%s"\n' "$cc" | sudo_run tee -a /etc/conf.d/wireless-regdom >/dev/null \
+                && ok "Wi-Fi regulatory domain set from GeoIP: $cc (5 GHz allowed for hotspot / Wi-Fi Direct)"
+            command -v iw >/dev/null 2>&1 && { sudo_run iw reg set "$cc" 2>/dev/null || true; }
+        else
+            info "could not determine the country for the Wi-Fi regulatory domain — set WIRELESS_REGDOM in /etc/conf.d/wireless-regdom"
+        fi
     fi
 
     # ── persistent journal ──
@@ -138,6 +164,31 @@ phase_services() {
         fi
     else
         warn "greetd not installed — start the session from a TTY with start-hyprland.sh, or enable a greeter."
+    fi
+
+    # ── Screen-share picker: xdg-desktop-portal-hyprland runs OUR chooser
+    # (SharePicker.qml — live previews, real monitor names) instead of its
+    # white Qt list. xdph exec()s screencopy:custom_picker_binary verbatim
+    # (no shell, no ~), so the wrapper needs a fixed absolute path — same
+    # reason the greeter wrapper lives in /usr/local/bin. Config: hypr/xdph.conf.
+    sudo_run install -m 755 "$DOTREPO/system/bin/ewe-share-picker" /usr/local/bin/ewe-share-picker \
+        && ok "installed screen-share picker wrapper (/usr/local/bin/ewe-share-picker)"
+    if systemctl --user is-active --quiet xdg-desktop-portal-hyprland.service 2>/dev/null; then
+        run systemctl --user restart xdg-desktop-portal-hyprland.service 2>/dev/null \
+            || info "restart xdg-desktop-portal-hyprland (or log out) to pick up the new share picker"
+    fi
+
+    # ── Cast to TV: keep the Wi-Fi radio awake during a Miracast session ──
+    # A P2P group owner on a radio that still power-saves its station link
+    # delivers beacons/RTP late; the TV walks away after a few minutes (a clean
+    # 3.5-min stream died this way on 2026-08-21, TV-side AP-STA-DISCONNECTED
+    # and nothing else logged). This dispatcher turns power_save off on the
+    # parent Wi-Fi iface while a p2p-* connection is up, and back on after.
+    if [ -d /etc/NetworkManager/dispatcher.d ] || command -v NetworkManager >/dev/null 2>&1 || pkg_present networkmanager; then
+        sudo_run install -d /etc/NetworkManager/dispatcher.d
+        sudo_run install -m 755 "$DOTREPO/system/networkmanager/50-ewe-cast-powersave" \
+            /etc/NetworkManager/dispatcher.d/50-ewe-cast-powersave \
+            && ok "installed NetworkManager cast power-save hook (Miracast link stays up)"
     fi
 
     # ── Lid ownership: Hyprland's lid.sh does clamshell (panel off when docked,

@@ -39,8 +39,11 @@ Hyprland straight from the official repos (installed by phase 20).
 │   ├── calendar.sh       # Super+C calendar popup
 │   ├── idle-suspend.sh   # battery-only idle suspend helper
 │   ├── lid.sh            # reports the lid switch (policy lives in Lid.qml)
+│   ├── cast-check.sh     # Cast to TV preflight (app / Wi-Fi Direct / avahi) — run by Cast.qml
+│   ├── cast-audio.sh     # Cast to TV: routes desktop audio to the TV sink while casting (Cast.qml)
 │   ├── kb-per-window.py  # per-window keyboard-layout memory
 │   └── install-sf-pro.sh # optional: fetch SF Pro fonts (user-level)
+├── xdph.conf             # xdg-desktop-portal-hyprland: our share picker (SharePicker.qml via /usr/local/bin/ewe-share-picker)
 ├── SHORTCUTS.md          # every keybinding
 └── README.md
 ```

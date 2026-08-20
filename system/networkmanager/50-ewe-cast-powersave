@@ -1,0 +1,39 @@
+#!/bin/sh
+# 50-ewe-cast-powersave — NetworkManager dispatcher hook (installed by ewe
+# phase 30 to /etc/NetworkManager/dispatcher.d/, root-owned as NM requires).
+#
+# While a Wi-Fi Direct group is up (Cast to TV → Miracast; the laptop is the
+# group owner), turn 802.11 power saving OFF on the parent Wi-Fi interface,
+# and back on when the group goes down. Power save lets the radio sleep
+# between beacons of the *station* link; a group owner on the same radio then
+# delivers its own beacons and RTP late, and the TV walks away after a few
+# minutes ("AP-STA-DISCONNECTED" from the TV side, nothing else in any log —
+# 2026-08-21, 3.5 min into a clean stream). iw needs root, which is exactly
+# what a dispatcher script has.
+#
+#   $1 = interface NM reports (p2p-dev-wlan0 for the P2P device, or the
+#        group interface p2p-wlan0-N), $2 = action; DEVICE_IP_IFACE names the
+#        group interface when $1 is the device.
+iface="$1" action="$2"
+case "$iface" in p2p-*) ;; *) exit 0 ;; esac
+command -v iw >/dev/null 2>&1 || exit 0
+
+parent=$(printf '%s' "${DEVICE_IP_IFACE:-$iface}" | sed -E 's/^p2p-dev-//; s/^p2p-(.+)-[0-9]+$/\1/')
+[ -n "$parent" ] && [ -d "/sys/class/net/$parent" ] || exit 0
+state="/run/ewe-cast-powersave.$parent"
+
+case "$action" in
+    up)
+        if iw dev "$parent" get power_save 2>/dev/null | grep -q ': on'; then
+            echo on > "$state"
+            iw dev "$parent" set power_save off 2>/dev/null || true
+        fi
+        ;;
+    down)
+        if [ -f "$state" ]; then
+            iw dev "$parent" set power_save on 2>/dev/null || true
+            rm -f "$state"
+        fi
+        ;;
+esac
+exit 0
