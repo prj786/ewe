@@ -103,7 +103,11 @@ if [ -n "$UPSTREAM" ]; then
     BEHIND="$(git rev-list --count 'HEAD..@{u}' 2>/dev/null || echo 0)"
 fi
 DIRTY=0
-[ -n "$(git status --porcelain 2>/dev/null)" ] && DIRTY=1
+# -uno: only MODIFIED tracked files block a fast-forward. Untracked files
+# don't (git aborts by itself in the rare path-collision case), and counting
+# them made any stray file — a note, a screenshot, a not-yet-ignored state
+# file — refuse the whole desktop update.
+[ -n "$(git status --porcelain -uno 2>/dev/null)" ] && DIRTY=1
 
 if [ "$MODE" = "check" ]; then
     VER="$(cat VERSION 2>/dev/null || echo '?')"
