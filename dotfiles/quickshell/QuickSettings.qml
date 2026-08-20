@@ -546,9 +546,11 @@ Scope {
                 width: (inner.width - 10) / 2
                 height: 62
                 radius: Theme.radiusInner
-                color: active ? Theme.accent : (opened ? Theme.hover : Theme.elevated)
-                border.color: opened ? (active ? Qt.rgba(1, 1, 1, 0.75) : Theme.accent) : "transparent"
-                border.width: opened ? 1 : 0
+                // opened = BORDER ONLY — the fill never changes for opening a
+                // list, so accent fill stays unambiguous: "the service is on"
+                color: active ? Theme.accent : Theme.elevated
+                border.color: opened ? (active ? Qt.rgba(1, 1, 1, 0.85) : Theme.accent) : "transparent"
+                border.width: opened ? 2 : 0
                 Behavior on color { ColorAnimation { duration: 150 } }
                 Column {
                     anchors.fill: parent; anchors.margins: 11; spacing: 5
@@ -569,6 +571,9 @@ Scope {
                         visible: tile.busy
                         anchors.centerIn: parent
                         font.pixelSize: 12
+                        // white, not accent: the default accent glyph vanishes
+                        // on an accent-filled tile (Wi-Fi on = blue on blue)
+                        color: tile.active ? Theme.accentText : Theme.fg
                     }
                     Text {
                         visible: !tile.busy
@@ -698,9 +703,9 @@ Scope {
                     Rectangle {
                         width: parent.width
                         radius: Theme.radiusInner
-                        color: root.expanded === "audio" ? Theme.hover : Theme.elevated
+                        color: Theme.elevated
                         border.color: root.expanded === "audio" ? Theme.accent : "transparent"
-                        border.width: root.expanded === "audio" ? 1 : 0
+                        border.width: root.expanded === "audio" ? 2 : 0
                         height: 40 + (root.expanded === "audio" ? audioCol.implicitHeight + 14 : 0)
                         Item {
                             width: parent.width; height: 40
