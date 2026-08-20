@@ -103,7 +103,7 @@ Scope {
             id: dock
             anchors.horizontalCenter: parent.horizontalCenter
             y: win.revealed ? (parent.height - height - 8) : (parent.height - win.peek)
-            Behavior on y { NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutCubic } }
+            Behavior on y { NumberAnimation { duration: Theme.durBase; easing.type: Theme.ease } }
             height: win.dockH
             width: row.implicitWidth + 16
             radius: Theme.radius

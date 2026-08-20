@@ -79,7 +79,7 @@ Scope {
                 color: "black"
                 opacity: Globals.saverDimming ? 0.55 : 0
                 Behavior on opacity {
-                    NumberAnimation { duration: Globals.saverDimming ? 1500 : Theme.durBase; easing.type: Easing.OutCubic }
+                    NumberAnimation { duration: Globals.saverDimming ? 1500 : Theme.durBase; easing.type: Theme.ease }
                 }
             }
         }

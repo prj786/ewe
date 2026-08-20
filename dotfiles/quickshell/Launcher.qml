@@ -25,7 +25,15 @@ Scope {
 
     // clear the INPUT too — resetting only `query` leaves the old text on
     // screen while the results are unfiltered (stale-search bug on reopen)
-    onOpenedChanged: if (opened) { query = ""; input.text = ""; selected = 0; fileResults = [] }
+    // `held` keeps the window mapped through the close fade — the compositor's
+    // layer fade is noanim'd for this namespace, so the QML must play it (set
+    // on OPEN so no signal-order race can unmap early; see Overview.qml)
+    property bool held: false
+    property Timer _closeHold: Timer { interval: Math.max(1, Theme.durBase + 60); onTriggered: root.held = false }
+    onOpenedChanged: {
+        if (opened) { _closeHold.stop(); held = true; query = ""; input.text = ""; selected = 0; fileResults = [] }
+        else _closeHold.restart()
+    }
     onResultsChanged: if (selected >= results.length) selected = Math.max(0, results.length - 1)
     onQueryChanged: {
         var q = query.trim()
@@ -165,7 +173,7 @@ Scope {
     // ── the overlay window ────────────────────────────────────────────────
     PanelWindow {
         id: win
-        visible: root.opened
+        visible: root.opened || root.held
         color: "transparent"
         exclusiveZone: 0
         WlrLayershell.layer: WlrLayer.Overlay
@@ -191,7 +199,7 @@ Scope {
 
             opacity: root.opened ? 1 : 0
             scale: root.opened ? 1 : 0.97
-            Behavior on opacity { NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutCubic } }
+            Behavior on opacity { NumberAnimation { duration: Theme.durBase; easing.type: Theme.ease } }
             Behavior on scale   { NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutBack; easing.overshoot: 1.2 } }
 
 

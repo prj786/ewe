@@ -44,7 +44,7 @@ Scope {
                 Timer { running: true; interval: 1500; onTriggered: fade.start() }
                 NumberAnimation {
                     id: fade; target: bg; property: "opacity"
-                    from: 1; to: 0; duration: 700; easing.type: Easing.OutCubic
+                    from: 1; to: 0; duration: 700; easing.type: Theme.ease
                     onFinished: root.done = true
                 }
 
@@ -78,7 +78,7 @@ Scope {
                         anchors.horizontalCenter: parent.horizontalCenter
                         height: 3; radius: 2; color: Theme.accent
                         width: 0; opacity: 0.9
-                        NumberAnimation on width { from: 0; to: 120; duration: 1400; easing.type: Easing.OutCubic; running: true }
+                        NumberAnimation on width { from: 0; to: 120; duration: 1400; easing.type: Theme.ease; running: true }
                     }
                 }
             }

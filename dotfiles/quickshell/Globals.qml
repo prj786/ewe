@@ -25,7 +25,7 @@ QtObject {
     // Project version — the shell's runtime copy. Keep in sync with the repo-root
     // VERSION file (the canonical source used for git tags / releases). Semver, with
     // an -alpha/-beta pre-release suffix until the first stable cut.
-    readonly property string version: "0.5.0-beta"
+    readonly property string version: "0.8.0"
 
     property bool barVisible: true          // the top bar (Super+Shift+B toggles)
     property bool quickSettingsOpen: false  // the Quick Settings panel
@@ -72,6 +72,61 @@ QtObject {
                 if (this.text.indexOf("s") < 0 && this.text.indexOf("o") >= 0) g.settingsAppBin = "hypr-settings"
             }
         }
+    }
+
+    // ── System updates (the bar's Komble indicator) ───────────────────────────
+    // The bar shows a permanent status glyph (check = current, download+count =
+    // updates pending, spinner = a pacman transaction is running) fed by
+    // scripts/updates-check.sh: checkupdates + paru -Qua + the db.lck probe.
+    // Komble pokes `qs ipc call updates refresh` after every transaction it
+    // runs, and while a transaction holds the lock the re-check tightens to 5 s
+    // so the spinner clears the moment pacman does.
+    property int updatesRepo: 0
+    property int updatesAur: 0
+    readonly property int updatesTotal: updatesRepo + updatesAur
+    property bool updatesBusy: false
+    // Komble raises this over IPC for the whole of a long upgrade — AUR builds
+    // hold no pacman lock while makepkg runs, so db.lck alone would show
+    // "updating" only for the final seconds. Auto-clears if Komble dies
+    // mid-run and stops re-poking (it re-asserts before every package).
+    property bool updatesWorking: false
+    property Timer _updWorkTimeout: Timer {
+        interval: 15 * 60 * 1000
+        running: g.updatesWorking
+        onTriggered: g.updatesWorking = false
+    }
+    function setUpdatesWorking(on) {
+        g.updatesWorking = on
+        if (on) { g._updWorkTimeout.restart() }
+    }
+    property Process _updProc: Process {
+        command: ["bash", "-c", "exec \"$HOME/.config/quickshell/scripts/updates-check.sh\""]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                try {
+                    var j = JSON.parse(this.text)
+                    g.updatesRepo = j.repo || 0
+                    g.updatesAur = j.aur || 0
+                    g.updatesBusy = !!j.busy
+                } catch (e) {}
+            }
+        }
+    }
+    function checkUpdates() { g._updProc.running = false; g._updProc.running = true }
+    // first check a minute after login (let the network settle), then hourly;
+    // 5 s while a transaction is live so "updating" ends when pacman does
+    property Timer _updKick: Timer { interval: 60 * 1000; running: true; onTriggered: g.checkUpdates() }
+    property Timer _updTimer: Timer {
+        interval: g.updatesBusy ? 5000 : (g.lowPower ? 2 : 1) * 3600 * 1000
+        running: true; repeat: true
+        onTriggered: g.checkUpdates()
+    }
+    property IpcHandler _updIpc: IpcHandler {
+        target: "updates"
+        function refresh(): void { g.checkUpdates() }
+        function count(): string { return String(g.updatesTotal) }
+        // Komble: `qs ipc call updates working true|false` around upgrades
+        function working(on: bool): void { g.setUpdatesWorking(on) }
     }
 
     // ── Shell look ────────────────────────────────────────────────────────────
@@ -192,7 +247,27 @@ QtObject {
         g._themeLoad.running = false; g._themeLoad.running = true
         g._pinLoad.running = false; g._pinLoad.running = true
         g._placesLoad.running = false; g._placesLoad.running = true
+        g._animLoad.running = false; g._animLoad.running = true
         g.recheckFace()
+    }
+
+    // ── Animations pane state (animations.json, written by ewe-settings) ──────
+    // The Hyprland side of that pane applies via generated/animations.lua; the
+    // shell reads the SAME json so its own motion (Theme.dur* / Theme.ease)
+    // follows the pane too. null while the file doesn't exist — Theme then
+    // falls back to the legacy Settings → Theme speed multiplier.
+    property var animPrefs: null
+    property Process _animLoad: Process {
+        running: true
+        command: ["sh", "-c", "cat \"$HOME/.config/quickshell/animations.json\" 2>/dev/null"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                try {
+                    var j = JSON.parse(this.text)
+                    g.animPrefs = (j && typeof j === "object" && !Array.isArray(j)) ? j : null
+                } catch (e) { g.animPrefs = null }
+            }
+        }
     }
 
     property Process _placesWriter: Process {}

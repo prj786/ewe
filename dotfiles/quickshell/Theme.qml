@@ -82,15 +82,35 @@ QtObject {
     readonly property int gap:          8
     readonly property int barHeight:    30
 
-    // ── Motion (ms) — quick, ease-out. Scaled by the global
-    //    animation-speed setting (>1 faster, 0 = instant) so the whole shell
-    //    tracks the Settings → Theme → Animations control. The presets are
-    //    Off/Fast/Normal/Slow = m 0/2/1/0.6, i.e. durBase 0/150/300/500 ms —
-    //    far enough apart that each step is actually FELT. ───────────────────
-    readonly property real _animMul: Globals.animationSpeed
-    readonly property int durFast:   _animMul <= 0 ? 0 : Math.round(150 / _animMul)
-    readonly property int durBase:   _animMul <= 0 ? 0 : Math.round(300 / _animMul)
-    readonly property int durSlow:   _animMul <= 0 ? 0 : Math.round(420 / _animMul)
+    // ── Motion (ms) — follows the Animations pane (animations.json, written
+    //    by ewe-settings) when that file exists: every shell surface is a
+    //    layershell layer, so the pane's "layers" leaf (global as fallback)
+    //    sets the base duration and curve here, exactly as
+    //    generated/animations.lua does for Hyprland — one pane, both halves.
+    //    Without the file, the legacy Settings → Theme speed multiplier
+    //    applies (Off/Fast/Normal/Slow = m 0/2/1/0.6 → durBase 0/150/300/500).
+    readonly property var _aj: Globals.animPrefs
+    readonly property var _ajLayers: _aj && _aj.anims ? _aj.anims.layers : null
+    readonly property bool _animOff: _aj ? (_aj.enabled === false || (_ajLayers && _ajLayers.on === false))
+                                         : Globals.animationSpeed <= 0
+    readonly property int _msBase: _aj ? ((_ajLayers && _ajLayers.ms) || (_aj.global && _aj.global.ms) || 300)
+                                       : Math.round(300 / Math.max(Globals.animationSpeed, 0.001))
+    readonly property int durFast:   _animOff ? 0 : Math.max(1, Math.round(_msBase * 0.5))
+    readonly property int durBase:   _animOff ? 0 : _msBase
+    readonly property int durSlow:   _animOff ? 0 : Math.round(_msBase * 1.4)
+
+    // The pane's Hyprland curve mapped to its closest stock QML easing — used
+    // by every `easing.type: Theme.ease` Behavior so the shell's motion FEEL
+    // matches the compositor's. Unset/unknown curve = the old OutCubic.
+    readonly property string _curve: _aj ? String((_ajLayers && _ajLayers.curve) || (_aj.global && _aj.global.curve) || "") : ""
+    readonly property int ease: _curve === "snap"           ? Easing.OutExpo
+                              : _curve === "quick"          ? Easing.OutQuart
+                              : _curve === "easeOutQuint"   ? Easing.OutQuint
+                              : _curve === "easeInOutCubic" ? Easing.InOutCubic
+                              : _curve === "overshoot"      ? Easing.OutBack
+                              : _curve === "linear"         ? Easing.Linear
+                              : _curve === "spring"         ? Easing.OutBack
+                              : Easing.OutCubic
 
     // ── Icons — the SINGLE glyph table (Phosphor Fill ONLY). Every component
     //    pulls its glyphs from here with font.family: Theme.fontIcons, so the

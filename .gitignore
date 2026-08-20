@@ -10,6 +10,7 @@ dotfiles/hypr/generated/animations.lua
 dotfiles/hypr/hyprpaper.conf
 dotfiles/quickshell/display-profiles.json
 dotfiles/quickshell/window-rules.json
+dotfiles/quickshell/animations.json
 dotfiles/quickshell/input-devices.json
 dotfiles/quickshell/user-theme.json
 dotfiles/quickshell/pinned-apps.json

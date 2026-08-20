@@ -71,7 +71,7 @@ Scope {
 
     PanelWindow {
         id: win
-        visible: Globals.clipboardOpen || closeTimer.running
+        visible: Globals.clipboardOpen || win.held
         screen: {
             var s = Quickshell.screens, fm = Hyprland.focusedMonitor
             if (fm) for (var i = 0; i < s.length; i++) if (s[i].name === fm.name) return s[i]
@@ -90,11 +90,14 @@ Scope {
         WlrLayershell.keyboardFocus: Globals.clipboardOpen ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
         anchors { top: true; bottom: true; left: true; right: true }
 
-        Timer { id: closeTimer; interval: Math.max(1, Theme.durSlow) }
+        // `held` keeps the window mapped through the close animation; set on
+        // OPEN so no signal-order race can unmap it early (see Overview.qml)
+        property bool held: false
+        Timer { id: closeTimer; interval: Math.max(1, Theme.durSlow + 60); onTriggered: win.held = false }
         Connections {
             target: Globals
             function onClipboardOpenChanged() {
-                if (Globals.clipboardOpen) searchField.forceActiveFocus()
+                if (Globals.clipboardOpen) { closeTimer.stop(); win.held = true; searchField.forceActiveFocus() }
                 else closeTimer.restart()
             }
         }
@@ -117,7 +120,7 @@ Scope {
                 width: parent.width
                 height: parent.height
                 y: Globals.clipboardOpen ? 0 : -height
-                Behavior on y { NumberAnimation { duration: Theme.durSlow; easing.type: Easing.OutCubic } }
+                Behavior on y { NumberAnimation { duration: Theme.durSlow; easing.type: Theme.ease } }
                 // square top (flush with the bar), rounded bottom — drops out of the bar
                 topLeftRadius: 0
                 topRightRadius: 0

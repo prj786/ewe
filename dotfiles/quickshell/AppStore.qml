@@ -201,7 +201,7 @@ Scope {
 
     PanelWindow {
         id: win
-        visible: Globals.storeOpen || closeTimer.running
+        visible: Globals.storeOpen || win.held
         screen: root.openScreen
         color: "transparent"
         exclusionMode: ExclusionMode.Ignore
@@ -210,9 +210,12 @@ Scope {
         WlrLayershell.namespace: "quickshell:store"
         anchors { top: true; bottom: true; left: true; right: true }
 
-        Timer { id: closeTimer; interval: Math.max(1, Theme.durSlow) }
+        // `held` keeps the window mapped through the close animation; set on
+        // OPEN so no signal-order race can unmap it early (see Overview.qml)
+        property bool held: false
+        Timer { id: closeTimer; interval: Math.max(1, Theme.durSlow + 60); onTriggered: win.held = false }
         Connections { target: Globals; function onStoreOpenChanged() {
-            if (Globals.storeOpen) { root.openScreen = root.focusedScreen(); root.query = ""; root.results = []; root.searched = false; root.cancelAsk(); storeIn.text = ""; storeIn.forceActiveFocus(); helperProc.running = true; qProc.running = true }
+            if (Globals.storeOpen) { closeTimer.stop(); win.held = true; root.openScreen = root.focusedScreen(); root.query = ""; root.results = []; root.searched = false; root.cancelAsk(); storeIn.text = ""; storeIn.forceActiveFocus(); helperProc.running = true; qProc.running = true }
             else closeTimer.restart()
         } }
 
@@ -245,8 +248,8 @@ Scope {
             opacity: Globals.storeOpen ? 1 : 0
             scale: Globals.storeOpen ? 1 : 0.96
             transformOrigin: Item.BottomLeft
-            Behavior on opacity { NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutCubic } }
-            Behavior on scale { NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutCubic } }
+            Behavior on opacity { NumberAnimation { duration: Theme.durBase; easing.type: Theme.ease } }
+            Behavior on scale { NumberAnimation { duration: Theme.durBase; easing.type: Theme.ease } }
             layer.enabled: true
             layer.effect: Elevation {}
 
@@ -340,7 +343,7 @@ Scope {
                                 height: parent.height; radius: 2; color: Theme.accent
                                 width: root.busyPct >= 0 ? Math.max(6, track.width * root.busyPct) : track.width * 0.32
                                 x: root.busyPct >= 0 ? 0 : indet.pos
-                                Behavior on width { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
+                                Behavior on width { NumberAnimation { duration: 200; easing.type: Theme.ease } }
                             }
                             // indeterminate sweep (only runs while pct is unknown)
                             QtObject {

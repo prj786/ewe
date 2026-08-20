@@ -89,11 +89,11 @@ Scope {
             anchors.rightMargin: 10
             spacing: 8
             add: Transition {
-                NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.durBase; easing.type: Easing.OutCubic }
+                NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.durBase; easing.type: Theme.ease }
                 NumberAnimation { property: "scale"; from: 0.92; to: 1; duration: Theme.durBase; easing.type: Easing.OutBack; easing.overshoot: 1.2 }
             }
             move: Transition {
-                NumberAnimation { properties: "x,y"; duration: Theme.durBase; easing.type: Easing.OutCubic }
+                NumberAnimation { properties: "x,y"; duration: Theme.durBase; easing.type: Theme.ease }
             }
 
             Repeater {

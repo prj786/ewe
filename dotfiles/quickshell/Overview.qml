@@ -268,8 +268,22 @@ Scope {
         function find(q: string): void { Globals.overviewOpen = true; root.query = q }
     }
 
-    Timer { id: closeTimer; interval: Math.max(1, Theme.durSlow) }
-    Connections { target: Globals; function onOverviewOpenChanged() { if (!Globals.overviewOpen) closeTimer.restart() } }
+    // The window stays mapped through the QML close animation via `held`, which
+    // flips true on OPEN and only drops when closeTimer fires. Binding visible
+    // to `closeTimer.running` directly was a signal-order race: on close, the
+    // visible binding (connected later, notified first) saw open=false with the
+    // timer not yet started and unmapped the surface instantly — then the
+    // Connections handler started the timer, remapping it mid-fade, and the
+    // timer expiring unmapped it again. Gone, back, gone: the blink.
+    property bool held: false
+    Timer { id: closeTimer; interval: Math.max(1, Theme.durSlow + 60); onTriggered: root.held = false }
+    Connections {
+        target: Globals
+        function onOverviewOpenChanged() {
+            if (Globals.overviewOpen) { closeTimer.stop(); root.held = true }
+            else closeTimer.restart()
+        }
+    }
 
     // ── one overview per monitor: each screen shows ITS active workspace's
     //    windows; the search UI lives on the focused screen only ──
@@ -280,7 +294,7 @@ Scope {
         id: win
         required property var modelData
         screen: modelData
-        visible: Globals.overviewOpen || closeTimer.running
+        visible: Globals.overviewOpen || root.held
         color: "transparent"
         // IGNORE exclusive zones so the scrim runs under the dock (the dock
         // jumps to the Overlay layer while the overview is open and draws on
@@ -320,7 +334,7 @@ Scope {
             anchors.fill: parent
             color: Qt.rgba(0, 0, 0, 0.45)
             opacity: Globals.overviewOpen ? 1 : 0
-            Behavior on opacity { NumberAnimation { duration: Theme.durSlow; easing.type: Easing.OutCubic } }
+            Behavior on opacity { NumberAnimation { duration: Theme.durSlow; easing.type: Theme.ease } }
             MouseArea { anchors.fill: parent; onClicked: root.close() }
         }
 
@@ -331,8 +345,8 @@ Scope {
             opacity: Globals.overviewOpen ? 1 : 0
             scale: Globals.overviewOpen ? 1 : 1.10
             transformOrigin: Item.Center
-            Behavior on opacity { NumberAnimation { duration: Theme.durSlow; easing.type: Easing.OutCubic } }
-            Behavior on scale   { NumberAnimation { duration: Theme.durSlow; easing.type: Easing.OutCubic } }
+            Behavior on opacity { NumberAnimation { duration: Theme.durSlow; easing.type: Theme.ease } }
+            Behavior on scale   { NumberAnimation { duration: Theme.durSlow; easing.type: Theme.ease } }
 
             readonly property real monAR: (win.screen && win.screen.height > 0) ? (win.screen.width / win.screen.height) : 1.6
             readonly property color glassBg: Qt.rgba(Theme.panel.r, Theme.panel.g, Theme.panel.b, 0.90)
@@ -350,7 +364,7 @@ Scope {
                 boundsBehavior: Flickable.StopAtBounds
                 interactive: !root.searching
                 opacity: root.searching ? 0.35 : 1
-                Behavior on opacity { NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutCubic } }
+                Behavior on opacity { NumberAnimation { duration: Theme.durBase; easing.type: Theme.ease } }
                 // card size scales down as the desktop gets busier
                 readonly property real cardH: Math.round(height * (win.winWins.length <= 2 ? 0.52 : win.winWins.length <= 6 ? 0.40 : 0.30))
                 readonly property real cardW: Math.round(cardH * stage.monAR)
@@ -671,7 +685,7 @@ Scope {
                 anchors.bottom: parent.bottom; anchors.bottomMargin: 96
                 spacing: 12
                 opacity: root.searching ? 0.35 : 1
-                Behavior on opacity { NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutCubic } }
+                Behavior on opacity { NumberAnimation { duration: Theme.durBase; easing.type: Theme.ease } }
                 Repeater {
                     model: root.wsPills
                     delegate: Item {
@@ -682,7 +696,7 @@ Scope {
                         readonly property bool empty: modelData.count === 0
                         width: 58; height: 38
                         scale: thumbDrop.containsDrag ? 1.14 : (thumbMa.containsMouse ? 1.06 : 1)
-                        Behavior on scale { NumberAnimation { duration: Theme.durFast; easing.type: Easing.OutCubic } }
+                        Behavior on scale { NumberAnimation { duration: Theme.durFast; easing.type: Theme.ease } }
 
                         Rectangle {
                             id: thumbBox

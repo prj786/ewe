@@ -446,6 +446,67 @@ Scope {
                         }
                     }
 
+                    // ── Komble — ALWAYS present, whether or not the app has ever
+                    // run: the glyph IS the state. Check = everything current,
+                    // accent download + count = updates pending, spinning
+                    // arrows-clockwise = an upgrade is running (db.lck held, or
+                    // Komble asserting `updates working` through its AUR
+                    // builds). Click opens Komble on its Updates page;
+                    // middle-click re-checks.
+                    Item {
+                        readonly property bool updating: Globals.updatesBusy || Globals.updatesWorking
+                        id: updItem
+                        width: updRow.implicitWidth + 14
+                        height: parent.height
+                        Row {
+                            id: updRow
+                            anchors.centerIn: parent
+                            spacing: 4
+                            Text {
+                                visible: updItem.updating
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: Theme.icRefresh
+                                font.family: Theme.fontIcons
+                                font.pixelSize: Theme.barIconPx
+                                color: Theme.accent
+                                RotationAnimation on rotation {
+                                    running: updItem.updating
+                                    loops: Animation.Infinite
+                                    from: 0; to: 360
+                                    duration: 1400
+                                }
+                            }
+                            Text {
+                                visible: !updItem.updating
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: Globals.updatesTotal > 0 ? Theme.icDownload : Theme.icCheck
+                                font.family: Theme.fontIcons
+                                font.pixelSize: Theme.barIconPx
+                                color: Globals.updatesTotal > 0 ? Theme.accent : Theme.fgSecondary
+                                opacity: Globals.updatesTotal > 0 ? 1 : 0.55
+                            }
+                            Text {
+                                visible: !updItem.updating && Globals.updatesTotal > 0
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: Globals.updatesTotal
+                                color: Theme.accent
+                                font.family: Theme.fontText
+                                font.pixelSize: 12
+                                font.weight: Font.DemiBold
+                            }
+                        }
+                        MouseArea {
+                            anchors.fill: parent
+                            acceptedButtons: Qt.LeftButton | Qt.MiddleButton
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: function (mouse) {
+                                if (mouse.button === Qt.MiddleButton) { Globals.checkUpdates(); return }
+                                if (Globals.kombleInstalled) Quickshell.execDetached(["komble", "--updates"])
+                                else Globals.openStore()
+                            }
+                        }
+                    }
+
                     // thin separator between the action buttons and the control centre
                     Rectangle { anchors.verticalCenter: parent.verticalCenter; width: 1; height: 13; color: Theme.fgSecondary; opacity: 0.25 }
 

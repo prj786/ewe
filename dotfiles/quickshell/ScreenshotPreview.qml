@@ -33,12 +33,15 @@ Scope {
     }
 
     Timer { id: hideTimer; interval: 5000; onTriggered: root.shown = false }
-    Timer { id: gone; interval: 420; onTriggered: if (!root.shown) root.paths = [] }
-    onShownChanged: if (!shown) gone.restart()
+    // `held` keeps the window mapped through the slide-out; set on SHOW so no
+    // signal-order race can unmap it early (see Overview.qml)
+    property bool held: false
+    Timer { id: gone; interval: Theme.durSlow + 60; onTriggered: { root.held = false; if (!root.shown) root.paths = [] } }
+    onShownChanged: if (shown) { gone.stop(); root.held = true } else gone.restart()
 
     PanelWindow {
         id: win
-        visible: (root.shown || gone.running) && root.n > 0
+        visible: (root.shown || root.held) && root.n > 0
         color: "transparent"
         exclusiveZone: 0
         WlrLayershell.namespace: "quickshell:preview"
@@ -56,7 +59,7 @@ Scope {
             anchors.bottom: parent.bottom
             anchors.bottomMargin: 16
             x: root.shown ? (win.width - width - 16) : (win.width + 16)
-            Behavior on x { NumberAnimation { duration: Theme.durSlow; easing.type: Easing.OutCubic } }
+            Behavior on x { NumberAnimation { duration: Theme.durSlow; easing.type: Theme.ease } }
 
             // back peek cards (drawn first → behind), offset down-right
             Repeater {

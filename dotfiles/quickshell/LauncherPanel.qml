@@ -57,7 +57,7 @@ Scope {
 
     PanelWindow {
         id: win
-        visible: Globals.launcherOpen || closeTimer.running
+        visible: Globals.launcherOpen || win.held
         screen: root.openScreen
         color: "transparent"
         exclusionMode: ExclusionMode.Ignore
@@ -66,9 +66,12 @@ Scope {
         WlrLayershell.namespace: "quickshell:launcher"
         anchors { top: true; bottom: true; left: true; right: true }
 
-        Timer { id: closeTimer; interval: Math.max(1, Theme.durSlow) }
+        // `held` keeps the window mapped through the close animation; set on
+        // OPEN so no signal-order race can unmap it early (see Overview.qml)
+        property bool held: false
+        Timer { id: closeTimer; interval: Math.max(1, Theme.durSlow + 60); onTriggered: win.held = false }
         Connections { target: Globals; function onLauncherOpenChanged() {
-            if (Globals.launcherOpen) { root.openScreen = root.focusedScreen(); root.query = ""; searchIn.text = ""; searchIn.forceActiveFocus() }
+            if (Globals.launcherOpen) { closeTimer.stop(); win.held = true; root.openScreen = root.focusedScreen(); root.query = ""; searchIn.text = ""; searchIn.forceActiveFocus() }
             else closeTimer.restart()
         } }
 
@@ -85,8 +88,8 @@ Scope {
             opacity: Globals.launcherOpen ? 1 : 0
             scale: Globals.launcherOpen ? 1 : 0.96
             transformOrigin: Item.BottomLeft
-            Behavior on opacity { NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutCubic } }
-            Behavior on scale { NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutCubic } }
+            Behavior on opacity { NumberAnimation { duration: Theme.durBase; easing.type: Theme.ease } }
+            Behavior on scale { NumberAnimation { duration: Theme.durBase; easing.type: Theme.ease } }
             layer.enabled: true
             layer.effect: Elevation {}
 

@@ -445,15 +445,22 @@ Scope {
 
     PanelWindow {
         id: win
-        visible: Globals.quickSettingsOpen || closeTimer.running
+        visible: Globals.quickSettingsOpen || win.held
         color: "transparent"
         exclusiveZone: 0
         WlrLayershell.namespace: "quickshell:control"
         WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
         anchors { top: true; bottom: true; left: true; right: true }
 
-        Timer { id: closeTimer; interval: Math.max(1, Theme.durSlow) }
-        Connections { target: Globals; function onQuickSettingsOpenChanged() { if (!Globals.quickSettingsOpen) { closeTimer.restart(); root.powerOpen = false } } }
+        // `held` keeps the window mapped through the close animation; it is set
+        // on OPEN so no signal-order race can unmap it early (the close blink —
+        // see Overview.qml for the full story)
+        property bool held: false
+        Timer { id: closeTimer; interval: Math.max(1, Theme.durSlow + 60); onTriggered: win.held = false }
+        Connections { target: Globals; function onQuickSettingsOpenChanged() {
+            if (Globals.quickSettingsOpen) { closeTimer.stop(); win.held = true }
+            else { closeTimer.restart(); root.powerOpen = false }
+        } }
         MouseArea { anchors.fill: parent; onClicked: Globals.quickSettingsOpen = false }
 
         Rectangle {
@@ -471,7 +478,7 @@ Scope {
             Sheen { radius: parent.radius }
             property real off: Globals.quickSettingsOpen ? 0 : (width + 60)
             x: parent.width - width - 10 + off
-            Behavior on off { NumberAnimation { duration: Theme.durSlow; easing.type: Easing.OutCubic } }
+            Behavior on off { NumberAnimation { duration: Theme.durSlow; easing.type: Theme.ease } }
             MouseArea { anchors.fill: parent }
 
             // catches Esc to close (Quick Settings is otherwise mouse-driven)
@@ -1885,8 +1892,8 @@ Scope {
                 transformOrigin: Item.TopRight
                 opacity: root.powerOpen ? 1 : 0
                 scale: root.powerOpen ? 1 : 0.9
-                Behavior on opacity { NumberAnimation { duration: Theme.durFast; easing.type: Easing.OutCubic } }
-                Behavior on scale { NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutCubic } }
+                Behavior on opacity { NumberAnimation { duration: Theme.durFast; easing.type: Theme.ease } }
+                Behavior on scale { NumberAnimation { duration: Theme.durBase; easing.type: Theme.ease } }
                 Timer { id: ppCloseTimer; interval: Math.max(1, Theme.durBase) }
                 Connections { target: root; function onPowerOpenChanged() { if (!root.powerOpen) ppCloseTimer.restart() } }
 
@@ -1983,8 +1990,8 @@ Scope {
                     border.color: Theme.stroke; border.width: 1
                     opacity: root.confirmAction !== "" ? 1 : 0
                     scale: root.confirmAction !== "" ? 1 : 0.92
-                    Behavior on opacity { NumberAnimation { duration: Theme.durFast; easing.type: Easing.OutCubic } }
-                    Behavior on scale { NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutCubic } }
+                    Behavior on opacity { NumberAnimation { duration: Theme.durFast; easing.type: Theme.ease } }
+                    Behavior on scale { NumberAnimation { duration: Theme.durBase; easing.type: Theme.ease } }
                     layer.enabled: true
                     layer.effect: MultiEffect {
                         shadowEnabled: true

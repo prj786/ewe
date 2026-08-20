@@ -98,7 +98,7 @@ Scope {
 
     PanelWindow {
         id: win
-        visible: Globals.trayMenuOpen || closeTimer.running
+        visible: Globals.trayMenuOpen || win.held
         screen: root.openScreen
         color: "transparent"
         exclusionMode: ExclusionMode.Ignore
@@ -107,9 +107,12 @@ Scope {
         WlrLayershell.namespace: "quickshell:traymenu"
         anchors { top: true; bottom: true; left: true; right: true }
 
-        Timer { id: closeTimer; interval: Math.max(1, Theme.durBase) }
+        // `held` keeps the window mapped through the close animation; set on
+        // OPEN so no signal-order race can unmap it early (see Overview.qml)
+        property bool held: false
+        Timer { id: closeTimer; interval: Math.max(1, Theme.durBase + 60); onTriggered: win.held = false }
         Connections { target: Globals; function onTrayMenuOpenChanged() {
-            if (Globals.trayMenuOpen) { root.openScreen = root.focusedScreen(); root.subEntry = null }
+            if (Globals.trayMenuOpen) { closeTimer.stop(); win.held = true; root.openScreen = root.focusedScreen(); root.subEntry = null }
             else closeTimer.restart()
         } }
 
@@ -126,7 +129,7 @@ Scope {
             opacity: Globals.trayMenuOpen ? 1 : 0
             scale: Globals.trayMenuOpen ? 1 : 0.97
             transformOrigin: Item.Top
-            Behavior on opacity { NumberAnimation { duration: Theme.durFast; easing.type: Easing.OutCubic } }
+            Behavior on opacity { NumberAnimation { duration: Theme.durFast; easing.type: Theme.ease } }
             Behavior on scale { NumberAnimation { duration: Theme.durFast; easing.type: Easing.OutBack; easing.overshoot: 1.2 } }
             layer.enabled: true
             layer.effect: Elevation {}

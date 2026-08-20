@@ -39,7 +39,7 @@ configuration is restored automatically.
 | `~/.config/hypr/generated/kb-per-window.disabled` | Keyboard & Mouse | flag file: presence tells `autostart.sh` not to start the per-window-layout daemon |
 | `~/.config/hypr/generated/windowrules.lua` | Window Rules *(standalone app only — no in-shell fallback pane)* | per-app `hl.window_rule{}` lines: open on workspace N, force float/tile; applied live via `hyprctl reload` (named rules, so reloads are idempotent) |
 | `~/.config/hypr/generated/animations.lua` | Animations *(standalone app only — no in-shell fallback pane)* | per-animation `hl.animation{}` lines (enable, duration, curve, style) + the `hl.curve` definitions they reference; sourced after `user.lua` so it wins over the fallback speed-multiplier block; `prefs.animationSpeed` is baked in at write time and the file is regenerated on every speed change |
-| `~/.config/quickshell/animations.json` | Animations | source of truth for the per-animation settings (preset + per-leaf enable/ms/curve/style) |
+| `~/.config/quickshell/animations.json` | Animations | source of truth for the per-animation settings (preset + per-leaf enable/ms/curve/style); the SHELL reads it too — `Theme.dur*`/`Theme.ease` derive from the `layers` leaf (`global` fallback), re-read on the `settings reload` poke, so the pane drives Hyprland and Quickshell motion together |
 | `~/.config/quickshell/window-rules.json` | Window Rules | source of truth for the rules list (app name, window class, workspace, float/tile) |
 | `~/.config/quickshell/display-profiles.json` | Displays | source of truth for the display profiles (below) |
 | `~/.config/quickshell/input-devices.json` | Keyboard & Mouse | per-device pointer overrides (mirrors the `hl.device{}` lines) |

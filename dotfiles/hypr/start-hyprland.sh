@@ -27,6 +27,9 @@ export XDG_SESSION_TYPE=wayland
 export XDG_CURRENT_DESKTOP=Hyprland
 export XDG_SESSION_DESKTOP=Hyprland
 export DESKTOP_SESSION=hyprland
+# first-party apps (Komble, ewe-settings) detect the DE by this — e.g. Komble
+# skips its own tray icon because the bar's indicator is the tray here
+export EWE_SESSION=1
 
 # ── Toolkit theming env — MUST be exported HERE, before `exec Hyprland`, not only
 #    via hl.env() in hyprland.lua. hl.env applies to Hyprland's children, but its

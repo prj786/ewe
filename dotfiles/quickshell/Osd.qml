@@ -99,7 +99,7 @@ Scope {
             opacity: root.shown ? 1 : 0
             scale: root.shown ? 1 : 0.94
             visible: opacity > 0.01
-            Behavior on opacity { NumberAnimation { duration: Theme.durFast; easing.type: Easing.OutCubic } }
+            Behavior on opacity { NumberAnimation { duration: Theme.durFast; easing.type: Theme.ease } }
             Behavior on scale { NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutBack; easing.overshoot: 1.35 } }
 
 

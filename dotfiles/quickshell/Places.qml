@@ -99,7 +99,7 @@ Scope {
 
     PanelWindow {
         id: win
-        visible: Globals.placesOpen || closeTimer.running
+        visible: Globals.placesOpen || win.held
         screen: root.openScreen
         color: "transparent"
         exclusionMode: ExclusionMode.Ignore
@@ -112,9 +112,12 @@ Scope {
         // a folder/file drag can land on Slack/etc. (see header). No outside-click close.
         mask: Region { item: box }
 
-        Timer { id: closeTimer; interval: Math.max(1, Theme.durSlow) }
+        // `held` keeps the window mapped through the close animation; set on
+        // OPEN so no signal-order race can unmap it early (see Overview.qml)
+        property bool held: false
+        Timer { id: closeTimer; interval: Math.max(1, Theme.durSlow + 60); onTriggered: win.held = false }
         Connections { target: Globals; function onPlacesOpenChanged() {
-            if (Globals.placesOpen) { root.openScreen = root.focusedScreen(); if (root.home && !root.cwd) root.cwd = root.home; lister.running = true; root.refreshPinTypes(); box.forceActiveFocus() }
+            if (Globals.placesOpen) { closeTimer.stop(); win.held = true; root.openScreen = root.focusedScreen(); if (root.home && !root.cwd) root.cwd = root.home; lister.running = true; root.refreshPinTypes(); box.forceActiveFocus() }
             else closeTimer.restart()
         } }
 
@@ -130,7 +133,7 @@ Scope {
             opacity: Globals.placesOpen ? 1 : 0
             scale: Globals.placesOpen ? 1 : 0.96
             transformOrigin: Item.BottomLeft
-            Behavior on opacity { NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutCubic } }
+            Behavior on opacity { NumberAnimation { duration: Theme.durBase; easing.type: Theme.ease } }
             Behavior on scale { NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutBack; easing.overshoot: 1.2 } }
             layer.enabled: true
             layer.effect: Elevation {}
