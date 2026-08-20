@@ -150,23 +150,27 @@ hl.config({
 -- the group keybinds and chrome. Workspace navigation lives in the bottom dock.
 
 
--- ── Animations: smooth, slightly snappy; workspaces slide horizontally ───────
+-- ── Animations: short and sharp (the "Snappy" preset's values) ───────────────
+-- The old springy feel lives on as the "Smooth" preset in Settings → Animations
+-- (ewe-settings), which overrides all of this via generated/animations.lua.
+-- Mirrored by ANIM_BASE (hypr.js) and animBase (Settings.qml) — change together.
 hl.curve("easeOutQuint",   { type = "bezier", points = { {0.23, 1},    {0.32, 1} } })
 hl.curve("easeInOutCubic", { type = "bezier", points = { {0.65, 0.05}, {0.36, 1} } })
 hl.curve("linear",         { type = "bezier", points = { {0, 0},       {1, 1} } })
 hl.curve("almostLinear",   { type = "bezier", points = { {0.5, 0.5},   {0.75, 1} } })
 hl.curve("quick",          { type = "bezier", points = { {0.15, 0},    {0.1, 1} } })
+hl.curve("snap",           { type = "bezier", points = { {0.16, 1},    {0.3, 1} } })
 hl.curve("easy",           { type = "spring", mass = 1, stiffness = 71.2633, dampening = 15.8273644 })
 
 hl.config({ animations = { enabled = true } })
 
-hl.animation({ leaf = "global",     enabled = true, speed = 9,    bezier = "easeOutQuint" })
-hl.animation({ leaf = "border",     enabled = true, speed = 5.39, bezier = "easeOutQuint" })
-hl.animation({ leaf = "windows",    enabled = true, speed = 5,    spring = "easy",         style = "popin 88%" })
-hl.animation({ leaf = "windowsOut", enabled = true, speed = 3,    bezier = "linear",       style = "popin 88%" })
-hl.animation({ leaf = "fade",       enabled = true, speed = 3.5,  bezier = "quick" })
-hl.animation({ leaf = "layers",     enabled = true, speed = 4,    bezier = "easeOutQuint", style = "fade" })
-hl.animation({ leaf = "workspaces", enabled = true, speed = 5,    bezier = "easeOutQuint", style = "slide" })
+hl.animation({ leaf = "global",     enabled = true, speed = 3,   bezier = "snap" })
+hl.animation({ leaf = "border",     enabled = true, speed = 3,   bezier = "easeOutQuint" })
+hl.animation({ leaf = "windows",    enabled = true, speed = 2.8, bezier = "snap",  style = "popin 92%" })
+hl.animation({ leaf = "windowsOut", enabled = true, speed = 1.8, bezier = "quick", style = "popin 92%" })
+hl.animation({ leaf = "fade",       enabled = true, speed = 1.8, bezier = "quick" })
+hl.animation({ leaf = "layers",     enabled = true, speed = 2,   bezier = "quick", style = "fade" })
+hl.animation({ leaf = "workspaces", enabled = true, speed = 2.8, bezier = "snap",  style = "slide" })
 
 
 -- ╭───────────────────────────────────────────────────────────────╮
@@ -465,6 +469,10 @@ pcall(dofile, home .. "/.config/hypr/generated/user.lua")
 --   monitors.lua     — Settings → Displays (per-monitor-set profiles, desc:-matched)
 --   windowrules.lua — Settings → Window Rules (per-app: open on workspace N,
 --                     force float/tile — written by ewe-settings)
+--   animations.lua  — Settings → Animations (per-animation duration/curve/style
+--                     — written by ewe-settings; wins over user.lua's simple
+--                     speed-multiplier block)
 pcall(dofile, home .. "/.config/hypr/generated/input.lua")
 pcall(dofile, home .. "/.config/hypr/generated/monitors.lua")
 pcall(dofile, home .. "/.config/hypr/generated/windowrules.lua")
+pcall(dofile, home .. "/.config/hypr/generated/animations.lua")

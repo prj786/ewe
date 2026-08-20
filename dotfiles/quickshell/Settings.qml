@@ -156,14 +156,16 @@ Scope {
     // ── Animations (speed multiplier → Hyprland animation overrides) ────────────
     // Scaling the per-leaf `speed` (duration in ds): higher multiplier → smaller
     // speed → faster. m=0 disables animations entirely.
+    // Mirrors hyprland.lua's shipped block (and ANIM_BASE in ewe-settings'
+    // hypr.js) — the three must change together.
     readonly property var animBase: [
-        { leaf: "global",     s: 9,    bz: "easeOutQuint" },
-        { leaf: "border",     s: 5.39, bz: "easeOutQuint" },
-        { leaf: "windows",    s: 5,    spring: "easy", style: "popin 88%" },
-        { leaf: "windowsOut", s: 3,    bz: "linear",   style: "popin 88%" },
-        { leaf: "fade",       s: 3.5,  bz: "quick" },
-        { leaf: "layers",     s: 4,    bz: "easeOutQuint", style: "fade" },
-        { leaf: "workspaces", s: 5,    bz: "easeOutQuint", style: "slide" }
+        { leaf: "global",     s: 3,   bz: "snap" },
+        { leaf: "border",     s: 3,   bz: "easeOutQuint" },
+        { leaf: "windows",    s: 2.8, bz: "snap",  style: "popin 92%" },
+        { leaf: "windowsOut", s: 1.8, bz: "quick", style: "popin 92%" },
+        { leaf: "fade",       s: 1.8, bz: "quick" },
+        { leaf: "layers",     s: 2,   bz: "quick", style: "fade" },
+        { leaf: "workspaces", s: 2.8, bz: "snap",  style: "slide" }
     ]
     function animLuaLines(m) {
         var L = []

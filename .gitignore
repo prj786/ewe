@@ -6,6 +6,7 @@ dotfiles/hypr/generated/wallpapers.conf
 dotfiles/hypr/generated/kb-per-window.disabled
 dotfiles/hypr/generated/hypridle.conf
 dotfiles/hypr/generated/windowrules.lua
+dotfiles/hypr/generated/animations.lua
 dotfiles/hypr/hyprpaper.conf
 dotfiles/quickshell/display-profiles.json
 dotfiles/quickshell/window-rules.json
