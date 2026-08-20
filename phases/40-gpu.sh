@@ -10,9 +10,13 @@ phase_gpu() {
     [ "${NO_PACKAGES:-0}" = "1" ] || {
         case " $GPU_VENDOR " in
             *" intel "*)
-                install_official vulkan-intel intel-media-driver intel-gpu-tools
+                # vpl-gpu-rt is the oneVPL GPU runtime: without it libvpl has no
+                # implementation to dispatch to and every QuickSync consumer (OBS
+                # QSV, ffmpeg -qsv) dies with MFX_ERR_NOT_FOUND while plain VAAPI
+                # looks perfectly healthy (bitten live on the Zenbook, 2026-08-20).
+                install_official vulkan-intel intel-media-driver vpl-gpu-rt intel-gpu-tools
                 [ "${GAMING:-0}" = "1" ] && install_official lib32-vulkan-intel
-                ok "Intel: ANV + iHD VAAPI + intel_gpu_top installed." ;;
+                ok "Intel: ANV + iHD VAAPI + QSV (oneVPL) + intel_gpu_top installed." ;;
         esac
         case " $GPU_VENDOR " in
             *" amd "*)
