@@ -251,6 +251,36 @@ Scope {
     function gotoWs(ws) { if (ws !== root.focusedWs) Hyprland.dispatch("hl.dsp.focus({workspace=" + ws + "})") }
     function close() { Globals.overviewOpen = false }
 
+    // ── window-group map: address → member count ──
+    // Queried straight from `hyprctl -j clients` (its `grouped` field lists the
+    // whole group, self included). NOT read from lastIpcObject: Quickshell only
+    // refreshes that on window open/close/move, so grouping done while the
+    // overview is closed would never show up.
+    property var groupsByAddr: ({})
+    property Process _groupProc: Process {
+        command: ["hyprctl", "-j", "clients"]
+        stdout: StdioCollector { onStreamFinished: {
+            var m = {}
+            try {
+                var arr = JSON.parse(this.text)
+                for (var i = 0; i < arr.length; i++)
+                    if (arr[i].grouped && arr[i].grouped.length) m[arr[i].address] = arr[i].grouped.length
+            } catch (e) {}
+            root.groupsByAddr = m
+        } }
+    }
+    function refreshGroups() { root._groupProc.running = false; root._groupProc.running = true }
+    // keep the map live while open — group membership can change under the
+    // overview (keybinds fire through it); cheap enough to just re-query
+    Connections {
+        target: Hyprland
+        function onRawEvent(ev) {
+            if (!Globals.overviewOpen) return
+            var n = ev.name
+            if (n.indexOf("group") >= 0 || n === "openwindow" || n === "closewindow") root.refreshGroups()
+        }
+    }
+
     onQueryChanged: {
         root.sel = 0
         root.fileResults = []
@@ -280,7 +310,7 @@ Scope {
     Connections {
         target: Globals
         function onOverviewOpenChanged() {
-            if (Globals.overviewOpen) { closeTimer.stop(); root.held = true }
+            if (Globals.overviewOpen) { closeTimer.stop(); root.held = true; root.refreshGroups() }
             else closeTimer.restart()
         }
     }
@@ -441,6 +471,7 @@ Scope {
                             required property var modelData
                             required property int index
                             readonly property bool seld: win.isFocused && index === root.sel && !root.searching
+                            readonly property int groupN: root.groupsByAddr[root.addrOf(modelData)] || 0
                             readonly property var rect: index < cardArea.cardLayout.rects.length
                                 ? cardArea.cardLayout.rects[index] : { x: 0, y: 0, w: 200, h: 130 }
                             x: rect.x; y: rect.y
@@ -549,6 +580,7 @@ Scope {
 
                                 // app-icon badge — top-right, as in the mockup
                                 Rectangle {
+                                    id: appBadge
                                     anchors.top: parent.top; anchors.right: parent.right; anchors.margins: 10
                                     width: 34; height: 34; radius: 17
                                     color: Qt.rgba(0, 0, 0, 0.55)
@@ -556,6 +588,23 @@ Scope {
                                         anchors.centerIn: parent
                                         width: 22; height: 22; sourceSize.width: 44; sourceSize.height: 44; mipmap: true
                                         source: root.iconFor(dragArea.modelData)
+                                    }
+                                }
+
+                                // grouped → a stack pill beside the badge: this window
+                                // is one tab of N (same chip aesthetics as the badge)
+                                Rectangle {
+                                    visible: dragArea.groupN > 1
+                                    anchors.verticalCenter: appBadge.verticalCenter
+                                    anchors.right: appBadge.left; anchors.rightMargin: 6
+                                    width: grpRow.implicitWidth + 16; height: 24; radius: 12
+                                    color: Qt.rgba(0, 0, 0, 0.55)
+                                    border.color: Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.55); border.width: 1
+                                    Row {
+                                        id: grpRow
+                                        anchors.centerIn: parent; spacing: 5
+                                        Text { anchors.verticalCenter: parent.verticalCenter; text: Theme.icStack; font.family: Theme.fontIcons; font.pixelSize: 12; color: Theme.accent }
+                                        Text { anchors.verticalCenter: parent.verticalCenter; text: dragArea.groupN; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: 11; font.weight: Font.DemiBold }
                                     }
                                 }
                             }
