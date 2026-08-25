@@ -15,6 +15,12 @@ ExecStart=/usr/bin/env qs
 Restart=on-failure
 RestartSec=1
 Slice=session.slice
+# Apps launched from the shell (launcher, dock, xdg-open) inherit the shell's
+# cgroup, so a wedged GUI child sits in ewe.service and systemd waits the full
+# 90 s default for it on the way down — observed 2026-08-22: a stuck
+# `jetbrainsd` added 90 s to a poweroff ("State 'stop-sigterm' timed out").
+# The shell itself has nothing to flush on exit, so cut the wait short.
+TimeoutStopSec=5s
 
 [Install]
 WantedBy=graphical-session.target
