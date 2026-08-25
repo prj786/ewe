@@ -39,6 +39,20 @@ Scope {
         return m + ":" + (r < 10 ? "0" : "") + r
     }
 
+    // Quickshell's togglePlaying() sends the INDIVIDUAL Play/Pause methods on
+    // the bus; some players (Stremio) ignore those and only answer the spec's
+    // combined PlayPause verb (verified with dbus-monitor). When the player
+    // allows both directions, call PlayPause directly — the one verb everyone
+    // answers; otherwise fall back to togglePlaying() for the odd player where
+    // only one direction is possible (PlayPause errors when CanPause=false).
+    function playPause(pl) {
+        if (!pl) return
+        if (pl.canPlay && pl.canPause && pl.dbusName)
+            Quickshell.execDetached(["busctl", "--user", "call", pl.dbusName,
+                "/org/mpris/MediaPlayer2", "org.mpris.MediaPlayer2.Player", "PlayPause"])
+        else pl.togglePlaying()
+    }
+
     IpcHandler {
         target: "player"
         function toggle(): void { if (!Globals.mediaOpen && root.player === null) return; Globals.launcherOpen = false; Globals.storeOpen = false; Globals.placesOpen = false; Globals.mediaOpen = !Globals.mediaOpen }
@@ -174,7 +188,7 @@ Scope {
                                     text: box.pl && box.pl.isPlaying ? Theme.icPause : Theme.icPlay
                                     font.family: Theme.fontIcons; font.pixelSize: 18; color: Theme.accentText
                                 }
-                                MouseArea { id: playMa; anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: if (box.pl && (box.pl.isPlaying ? box.pl.canPause : box.pl.canPlay)) box.pl.togglePlaying() }
+                                MouseArea { id: playMa; anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: if (box.pl && (box.pl.isPlaying ? box.pl.canPause : box.pl.canPlay)) root.playPause(box.pl) }
                             }
                             Text {
                                 anchors.verticalCenter: parent.verticalCenter
