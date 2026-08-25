@@ -58,4 +58,57 @@ function M.rgb(hex)
     return string.format("rgb(%s)", hex)
 end
 
+-- Blend two hex colours. mix("1c1c1e", "0a84ff", 0.10) -> a hair of accent.
+function M.mix(a, b, t)
+    local function ch(h, i) return tonumber(h:sub(i, i + 1), 16) end
+    local out = {}
+    for _, i in ipairs({ 1, 3, 5 }) do
+        out[#out + 1] = math.floor(ch(a, i) + (ch(b, i) - ch(a, i)) * t + 0.5)
+    end
+    return string.format("%02x%02x%02x", out[1], out[2], out[3])
+end
+
+-- Readable text on an accent fill. MIRRORS Theme.accentText: white on dark
+-- accents, ink on light ones, tipping at 0.55 (mid-luminance accents like the
+-- system green already lose white text before 0.6).
+function M.on_accent(hex)
+    local r, g, b = tonumber(hex:sub(1, 2), 16) / 255,
+                    tonumber(hex:sub(3, 4), 16) / 255,
+                    tonumber(hex:sub(5, 6), 16) / 255
+    return (0.299 * r + 0.587 * g + 0.114 * b) > 0.55 and "1c1c1e" or "ffffff"
+end
+
+-- ── Live look: accent + surface variant ─────────────────────────────────────
+-- The shell owns the look, and Settings persists it to user-theme.json. Read it
+-- here so Hyprland-drawn chrome (window borders, the groupbar) tracks the SAME
+-- accent and the SAME flock/blacksheep surfaces as the shell, instead of
+-- drifting to the hardcoded system blue on flock grey. Missing or half-written
+-- file (first boot, before Settings has ever run) -> the shipped defaults.
+-- Re-read on every `hyprctl reload`, which is what Settings triggers.
+local function user_theme()
+    local home = os.getenv("HOME")
+    if not home then return "" end
+    local f = io.open(home .. "/.config/quickshell/user-theme.json", "r")
+    if not f then return "" end
+    local s = f:read("*a")
+    f:close()
+    return s or ""
+end
+
+local ut = user_theme()
+
+-- The user's accent, or the shipped system blue.
+M.accent     = ut:match('"accent"%s*:%s*"#?(%x%x%x%x%x%x)"') or M.t_accent
+M.accent_fg  = M.on_accent(M.accent)
+M.pitchBlack = ut:match('"themeName"%s*:%s*"(%a+)"') == "blacksheep"
+
+-- Neutral surfaces — MIRRORS Theme.qml's flock / pitchBlack pair.
+M.s_bg       = M.pitchBlack and "020202" or "1c1c1e"  -- desktop / app base
+M.s_panel    = M.pitchBlack and "020202" or "1d1d1f"  -- popup / panel surface
+M.s_elevated = M.pitchBlack and "101012" or "2c2c2e"  -- cards / inactive tab
+M.s_hover    = M.pitchBlack and "1a1a1c" or "3a3a3c"  -- hover fill
+M.s_stroke   = M.pitchBlack and "222225" or "38383a"  -- hairline border
+M.s_fg       = "f2f2f7"                               -- primary text
+M.s_fg_dim   = "8e8e93"                               -- dim text
+
 return M

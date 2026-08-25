@@ -353,4 +353,16 @@ if command -v dbus-send >/dev/null 2>&1; then
     dbus-send --session --type=signal /KGlobalSettings org.kde.KGlobalSettings.notifyChange int32 0 int32 0 2>/dev/null || true
 fi
 
+# ── live update: Hyprland's window-group chrome (tab strip + group borders) ──
+# The groupbar is the one piece of Hyprland-drawn chrome that follows the accent
+# AND the flock/blacksheep surfaces, so it has to be re-applied here rather than
+# waiting for a config reload. We do NOT restate the palette in shell: busting
+# the two module caches and re-require'ing group-theme.lua re-reads
+# user-theme.json through colors.lua and re-applies exactly the same Lua the
+# config runs at startup — one definition, two callers.
+# No-op off Hyprland, on a non-Lua config, or before the dotfiles are linked.
+if command -v hyprctl >/dev/null 2>&1 && [ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]; then
+    hyprctl eval 'package.loaded["colors"]=nil package.loaded["group-theme"]=nil require("group-theme")' >/dev/null 2>&1 || true
+fi
+
 exit 0
