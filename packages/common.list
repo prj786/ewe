@@ -92,6 +92,7 @@ imv                     # image viewer (Wayland-native, decorationless)
 zathura                 # PDF / document viewer (keyboard-driven, fully themeable)
 zathura-pdf-mupdf       # PDF backend for zathura
 mpv                     # video player (decorationless, themeless — ideal)
+mpv-mpris               # mpv → MPRIS bridge, so the dock's now-playing popup sees it
 galculator              # calculator (GTK3, menubar — follows adw-gtk3 + accent)
 mate-system-monitor     # task manager / resources (GTK3, menubar, no headerbar)
 ffmpegthumbnailer       # video thumbnails in Nemo
