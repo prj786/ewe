@@ -62,8 +62,10 @@ phase_bootsplash() {
     # vt.global_cursor_default=0` (below) leave the console blank, so what
     # shows between splash and greeter is a brief black frame, not boot text.
     if [ -e /etc/systemd/system/plymouth-quit.service.d/10-ewe-retain-splash.conf ]; then
-        sudo_run rm -rf /etc/systemd/system/plymouth-quit.service.d \
+        # Remove only our drop-in — the directory may hold ones we didn't install.
+        sudo_run rm -f /etc/systemd/system/plymouth-quit.service.d/10-ewe-retain-splash.conf \
             && ok "removed the --retain-splash drop-in (it black-screened the greeter)"
+        sudo_run rmdir --ignore-fail-on-non-empty /etc/systemd/system/plymouth-quit.service.d
         run systemctl daemon-reload 2>/dev/null || true
     fi
 

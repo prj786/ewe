@@ -208,6 +208,15 @@ local function neighbour_in(win, dir)
     return best
 end
 
+-- Corners are square only while a window is grouped (see group-theme.lua). The
+-- event hooks there would catch this a frame later; calling it straight after a
+-- membership change makes the shape flip with the keypress, not after it.
+-- Declared before its callers — a later `local function` would leave them
+-- resolving a global that is never set.
+local function sync_group_rounding()
+    if _G.ewe_sync_group_rounding then _G.ewe_sync_group_rounding() end
+end
+
 -- `movewindoworgroup`, rebuilt: pushing a window INTO a neighbouring group
 -- merges it as a new tab; against a plain window it's an ordinary directional
 -- move. Returns the bind callback, so each key gets its own closure.
@@ -222,13 +231,6 @@ local function move_window_or_group(dir)
             hl.dispatch(hl.dsp.window.move({ direction = dir }))
         end
     end
-end
-
--- Corners are square only while a window is grouped (see group-theme.lua). The
--- event hooks there would catch this a frame later; calling it straight after a
--- membership change makes the shape flip with the keypress, not after it.
-local function sync_group_rounding()
-    if _G.ewe_sync_group_rounding then _G.ewe_sync_group_rounding() end
 end
 
 -- `moveoutofgroup`, rebuilt: pull the active window out of its own group.
