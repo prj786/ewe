@@ -41,15 +41,33 @@ phase_bootsplash() {
     [ -d /usr/share/plymouth/themes/hypr-shell ] && sudo_run rm -rf /usr/share/plymouth/themes/hypr-shell
     ok "installed plymouth theme: ewe"
 
-    # ── 1b. quit with --retain-splash ───────────────────────────────────────
-    # Stock plymouth-quit drops the framebuffer back to the text console, so
-    # every boot line flashes up between the splash and the greeter (and again
-    # on the VT juggle after login). Retaining the last frame means the sheep
-    # stays up until cage draws — no console text is ever exposed.
-    sudo_run install -d /etc/systemd/system/plymouth-quit.service.d
-    sudo_run install -m 644 "$DOTREPO/system/plymouth/10-ewe-retain-splash.conf" \
-        /etc/systemd/system/plymouth-quit.service.d/10-ewe-retain-splash.conf \
-        && ok "plymouth-quit retains the splash frame (no console flash before the greeter)"
+    # ── 1b. plymouth must QUIT, not retain ──────────────────────────────────
+    # 2026-08-25 REGRESSION FIX — do not reintroduce --retain-splash.
+    #
+    # We used to drop in `plymouth quit --retain-splash` here to avoid the
+    # console-text flash between the splash and the greeter. It black-screens
+    # the machine. `--retain-splash` makes plymouthd hand its DRM/framebuffer
+    # fds to a `plymouthd-fd-escrow` child that holds them open FOREVER so the
+    # last frame stays on screen. cage (the greeter compositor) then cannot
+    # become DRM master, and greetd's session worker blocks in the VT switch
+    # before it ever reaches pam_open_session — the login screen never draws.
+    #
+    # The journal shows it exactly: with `splash` on the cmdline, greetd logs
+    # its config dump and then NOTHING; without `splash` the very next line is
+    # "session opened for user greeter". plymouth-start runs in both cases, so
+    # the only variable is whether a splash was actually rendered — and so
+    # retained. Stock plymouth-quit releases the fds and the handoff works.
+    #
+    # The flash it was hiding is a non-issue in practice: `quiet loglevel=3
+    # vt.global_cursor_default=0` (below) leave the console blank, so what
+    # shows between splash and greeter is a brief black frame, not boot text.
+    if [ -e /etc/systemd/system/plymouth-quit.service.d/10-ewe-retain-splash.conf ]; then
+        # Remove only our drop-in — the directory may hold ones we didn't install.
+        sudo_run rm -f /etc/systemd/system/plymouth-quit.service.d/10-ewe-retain-splash.conf \
+            && ok "removed the --retain-splash drop-in (it black-screened the greeter)"
+        sudo_run rmdir --ignore-fail-on-non-empty /etc/systemd/system/plymouth-quit.service.d
+        run systemctl daemon-reload 2>/dev/null || true
+    fi
 
     # ── 2. mkinitcpio hook ──────────────────────────────────────────────────
     # plymouth must sit right after the `udev` (or `systemd`) hook so it starts
@@ -71,19 +89,25 @@ phase_bootsplash() {
         info "no /etc/mkinitcpio.conf (dracut/UKI?) — relying on plymouth-set-default-theme -R to wire the initramfs."
     fi
 
+    # ── 3. quiet kernel cmdline (systemd-boot entries, /etc/kernel/cmdline, GRUB) ──
+    # BEFORE the initramfs regeneration below, not after. On a UKI setup
+    # (mkinitcpio preset with `default_uki=`, which is what a modern
+    # systemd-boot Arch install uses) the cmdline is BAKED INTO the .efi from
+    # /etc/kernel/cmdline at build time. Writing the file after the build left
+    # the UKI without `quiet splash` until some unrelated pacman hook happened
+    # to rebuild it — the splash silently never appeared on a fresh install.
+    _apply_quiet_cmdline
+
     # ── set theme + regenerate initramfs (this runs mkinitcpio -P / dracut) ──
     sudo_run plymouth-set-default-theme -R ewe && ok "set default plymouth theme + regenerated initramfs" \
         || warn "plymouth-set-default-theme -R failed — check the initramfs generator output."
-
-    # ── 3. quiet kernel cmdline (systemd-boot entries, /etc/kernel/cmdline, GRUB) ──
-    _apply_quiet_cmdline
 
     # ── greeter handoff: start greetd only after plymouth has cleanly quit, so the
     # splash → greeter transition doesn't flash a TTY or fight over the DRM master ─
     if systemctl list-unit-files greetd.service >/dev/null 2>&1; then
         sudo_run install -d /etc/systemd/system/greetd.service.d
-        sudo_run sh -c 'printf "[Unit]\n# ewe: hand off cleanly from the plymouth splash.\nAfter=plymouth-quit-wait.service\n" > /etc/systemd/system/greetd.service.d/plymouth.conf' \
-            && ok "ordered greetd after the plymouth splash"
+        sudo_run install -m 644 "$DOTREPO/system/greetd/plymouth.conf" /etc/systemd/system/greetd.service.d/plymouth.conf \
+            && ok "ordered greetd after the plymouth splash (+ black-screen guard)"
         run systemctl daemon-reload 2>/dev/null || true
     fi
 

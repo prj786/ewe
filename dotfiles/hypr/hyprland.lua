@@ -146,9 +146,19 @@ hl.config({
 -- │ WINDOW GROUPS (tabbed stacks) — themed to match Theme.qml       │
 -- ╰───────────────────────────────────────────────────────────────╯
 -- NATIVE Hyprland grouping, no shell chrome on top: the groupbar is the tab
--- strip. The Lua API still lacks the group dispatchers, so the binds below go
--- through `hyprctl dispatch` (exec_cmd) — same result, one extra process per
--- keypress, which a human keybind never notices.
+-- strip. Grouping needs no extra package — it is built into the compositor.
+--
+-- These binds used to shell out to `hyprctl dispatch togglegroup` and friends.
+-- Under a Lua config that CANNOT work: the /dispatch IPC evaluates its argument
+-- as Lua, so the bare dispatcher name is a nil global and hyprctl exits with
+-- "expected a dispatcher". exec_cmd only reports whether hyprctl *launched*, so
+-- every one of these keys silently did nothing. They now call the typed
+-- dispatchers, which 0.56 does expose as hl.dsp.group.*.
+--
+-- Two legacy dispatchers have no hl.dsp.* equivalent (verified against the
+-- runtime namespace, not just the stubs): `moveoutofgroup` and
+-- `movewindoworgroup`. Both are rebuilt below on the group object API
+-- (hl.get_active_window().group:add/remove).
 --
 --   Super+G          make/dissolve a group on the focused window
 --   Super+Shift+G    pull the active window OUT of its group
@@ -157,27 +167,84 @@ hl.config({
 --                    plain move when the neighbour isn't a group — a strict
 --                    superset of the old movewindow behaviour)
 --
--- Flock-themed: accent frame on the active group, groupbar tabs as quiet
--- translucent pills (no gradients, titles on).
-hl.config({
-    group = {
-        col = {
-            border_active   = c.rgba(c.t_accent, 0xee),
-            border_inactive = c.rgba(c.t_stroke, 0xaa),
-        },
-        groupbar = {
-            enabled       = true,
-            height        = 18,
-            font_size     = 11,
-            gradients     = false,
-            render_titles = true,
-            col = {
-                active   = c.rgba(c.t_accent, 0x55),
-                inactive = c.rgba(c.t_bg, 0x99),
-            },
-        },
-    },
-})
+-- Themed from the LIVE look: the palette lives in group-theme.lua, which reads
+-- the accent and the flock/blacksheep surfaces out of user-theme.json through
+-- colors.lua, and the corner radius straight off the live config. It is
+-- require()d at the very BOTTOM of this file, not here: it has to see the
+-- user's decoration.rounding from generated/user.lua, which is loaded last.
+
+-- Unit vectors for the four tiling directions, keyed by the same l/r/u/d
+-- letters the dispatchers take.
+local GROUP_DIRS = {
+    l = { x = -1, y =  0 },
+    r = { x =  1, y =  0 },
+    u = { x =  0, y = -1 },
+    d = { x =  0, y =  1 },
+}
+
+-- Nearest tiled neighbour of `win` in `dir`, by centre-to-centre offset on the
+-- same workspace. The along-axis component has to be positive (it really is on
+-- that side) and has to dominate the across-axis one (it's not just diagonally
+-- adjacent) — the same test Hyprland's own directional focus applies.
+local function neighbour_in(win, dir)
+    local v = GROUP_DIRS[dir]
+    if not (win and v and win.workspace) then return nil end
+    local cx, cy = win.at.x + win.size.x / 2, win.at.y + win.size.y / 2
+    local best, bestDist
+    for _, w in ipairs(hl.get_windows()) do
+        if w.address ~= win.address and w.mapped and not w.floating
+            and w.workspace and w.workspace.id == win.workspace.id then
+            local dx = (w.at.x + w.size.x / 2) - cx
+            local dy = (w.at.y + w.size.y / 2) - cy
+            local along, across
+            if v.x ~= 0 then along, across = dx * v.x, math.abs(dy)
+            else               along, across = dy * v.y, math.abs(dx) end
+            if along > 0 and along >= across then
+                local dist = along + across
+                if not bestDist or dist < bestDist then best, bestDist = w, dist end
+            end
+        end
+    end
+    return best
+end
+
+-- Corners are square only while a window is grouped (see group-theme.lua). The
+-- event hooks there would catch this a frame later; calling it straight after a
+-- membership change makes the shape flip with the keypress, not after it.
+-- Declared before its callers — a later `local function` would leave them
+-- resolving a global that is never set.
+local function sync_group_rounding()
+    if _G.ewe_sync_group_rounding then _G.ewe_sync_group_rounding() end
+end
+
+-- `movewindoworgroup`, rebuilt: pushing a window INTO a neighbouring group
+-- merges it as a new tab; against a plain window it's an ordinary directional
+-- move. Returns the bind callback, so each key gets its own closure.
+local function move_window_or_group(dir)
+    return function()
+        local me = hl.get_active_window()
+        local other = me and neighbour_in(me, dir)
+        if other and other.group and other.group ~= me.group then
+            other.group:add(me)
+            sync_group_rounding()
+        else
+            hl.dispatch(hl.dsp.window.move({ direction = dir }))
+        end
+    end
+end
+
+-- `moveoutofgroup`, rebuilt: pull the active window out of its own group.
+local function move_out_of_group()
+    local w = hl.get_active_window()
+    if w and w.group then w.group:remove(w) end
+    sync_group_rounding()
+end
+
+-- Super+G, wrapped so the corners square up with the same keypress.
+local function toggle_group()
+    hl.dispatch(hl.dsp.group.toggle())
+    sync_group_rounding()
+end
 
 
 -- ── Animations: short and sharp (the "Snappy" preset's values) ───────────────
@@ -296,23 +363,29 @@ hl.bind(mainMod .. " + up",    hl.dsp.focus({ direction = "up" }))
 
 -- Move the focused window (Shift + hjkl / Shift + arrows) — directional movewindow.
 -- Lua config: the /dispatch IPC evaluates its arg as Lua, so exec_cmd "hyprctl
--- dispatch movewindow l" fails. Use the typed hl.dsp.* dispatchers directly.
--- movewindoworgroup, not movewindow: pushing a window INTO a group merges it
--- as a new tab; against a normal window it behaves exactly like the old move.
-hl.bind(mainMod .. " + SHIFT + H", hl.dsp.exec_cmd("hyprctl dispatch movewindoworgroup l"))
-hl.bind(mainMod .. " + SHIFT + L", hl.dsp.exec_cmd("hyprctl dispatch movewindoworgroup r"))
-hl.bind(mainMod .. " + SHIFT + J", hl.dsp.exec_cmd("hyprctl dispatch movewindoworgroup d"))
-hl.bind(mainMod .. " + SHIFT + K", hl.dsp.exec_cmd("hyprctl dispatch movewindoworgroup u"))
-hl.bind(mainMod .. " + SHIFT + left",  hl.dsp.exec_cmd("hyprctl dispatch movewindoworgroup l"))
-hl.bind(mainMod .. " + SHIFT + right", hl.dsp.exec_cmd("hyprctl dispatch movewindoworgroup r"))
-hl.bind(mainMod .. " + SHIFT + down",  hl.dsp.exec_cmd("hyprctl dispatch movewindoworgroup d"))
-hl.bind(mainMod .. " + SHIFT + up",    hl.dsp.exec_cmd("hyprctl dispatch movewindoworgroup u"))
+-- dispatch movewindow l" fails — it reports "ok" (hyprctl *launched* fine) while
+-- the inner call dies, so the bind silently does nothing. Use the typed
+-- hl.dsp.* dispatchers directly; never shell out to `hyprctl dispatch`.
+hl.bind(mainMod .. " + SHIFT + H", move_window_or_group("l"))
+hl.bind(mainMod .. " + SHIFT + L", move_window_or_group("r"))
+hl.bind(mainMod .. " + SHIFT + J", move_window_or_group("d"))
+hl.bind(mainMod .. " + SHIFT + K", move_window_or_group("u"))
+hl.bind(mainMod .. " + SHIFT + left",  move_window_or_group("l"))
+hl.bind(mainMod .. " + SHIFT + right", move_window_or_group("r"))
+hl.bind(mainMod .. " + SHIFT + down",  move_window_or_group("d"))
+hl.bind(mainMod .. " + SHIFT + up",    move_window_or_group("u"))
 
 -- window groups (tabbed stacks — see the WINDOW GROUPS block above)
-hl.bind(mainMod .. " + G",            hl.dsp.exec_cmd("hyprctl dispatch togglegroup"))
-hl.bind(mainMod .. " + SHIFT + G",    hl.dsp.exec_cmd("hyprctl dispatch moveoutofgroup"))
-hl.bind(mainMod .. " + bracketleft",  hl.dsp.exec_cmd("hyprctl dispatch changegroupactive b"))
-hl.bind(mainMod .. " + bracketright", hl.dsp.exec_cmd("hyprctl dispatch changegroupactive f"))
+hl.bind(mainMod .. " + G",            toggle_group)
+hl.bind(mainMod .. " + SHIFT + G",    move_out_of_group)
+hl.bind(mainMod .. " + bracketleft",  hl.dsp.group.prev())
+hl.bind(mainMod .. " + bracketright", hl.dsp.group.next())
+-- Jump straight to tab N of the group (1-based, browser-style). Super+ALT is
+-- free — Super+N is workspaces and Super+Shift+N moves a window there. Off a
+-- group these warn harmlessly ("Window is not in a group") and change nothing.
+for i = 1, 9 do
+    hl.bind(mainMod .. " + ALT + " .. i, hl.dsp.group.active({ index = i }))
+end
 
 -- Resize the focused window (Ctrl + hjkl) ------------------------------------
 hl.bind(mainMod .. " + CTRL + H", hl.dsp.window.resize({ x = -40, y = 0, relative = true }))
@@ -531,3 +604,10 @@ pcall(dofile, home .. "/.config/hypr/generated/input.lua")
 pcall(dofile, home .. "/.config/hypr/generated/monitors.lua")
 pcall(dofile, home .. "/.config/hypr/generated/windowrules.lua")
 pcall(dofile, home .. "/.config/hypr/generated/animations.lua")
+
+-- Window-group chrome LAST: group-theme.lua shares the window corner radius, so
+-- it must read decoration.rounding AFTER the generated files above have had
+-- their say. A separate module so colorscheme.sh (accent/style) and Settings →
+-- Layout (radius) can both re-run exactly this code live, with no config reload
+-- and without restating a single value. See dotfiles/hypr/group-theme.lua.
+require("group-theme")

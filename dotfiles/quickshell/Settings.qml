@@ -202,6 +202,10 @@ Scope {
                 + ", border_size = " + root.borderSize + " } })",
             "hl.config({ decoration = { rounding = " + root.rounding + " } })"
         ]
+        // NOTE: nothing to do for window groups here. Grouped windows are held
+        // square by group-theme.lua and ungrouped ones are left on `unset`,
+        // which means "follow decoration.rounding" — so this slider reaches
+        // them on its own.
         Quickshell.execDetached(["sh", "-c", L.map(function (c) { return "hyprctl eval '" + c + "'" }).join("; ")])
         root.writeOverrides()
     }

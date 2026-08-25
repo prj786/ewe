@@ -139,7 +139,7 @@ writes the same generated files as the in-shell panel (see
 
 External control (keybinds, scripts) uses **`qs ipc call <target> <fn>`** against an
 `IpcHandler { target: "<name>" }` in a component — targets: `bar cast picker clipboard quicksettings
-launcher lock osd overview places preview settings applauncher store updates`. Most expose
+launcher lock osd overview places player preview settings applauncher store updates`. Most expose
 `toggle`/`show`/`hide`. Gotcha: `qs ipc call <t> show` collides with the `qs ipc
 show` subcommand and no-ops — bind to **`toggle`**.
 

@@ -29,6 +29,7 @@ on save). Ported from the old Qtile bindings so most muscle memory carries over.
 | `Super` + `G` | Group / ungroup the focused window (tabbed stack) |
 | `Super` + `Shift` + `G` | Pull the active window out of its group |
 | `Super` + `[` / `]` | Previous / next tab inside a group |
+| `Super` + `Alt` + `1`…`9` | Jump straight to tab 1–9 of the group |
 | `Super` + `Ctrl` + `H/J/K/L` | Resize the focused window |
 | `Super` + `Shift` + `N` | Reset split ratio |
 | `Super` + `Q` | Close focused window |

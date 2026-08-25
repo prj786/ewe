@@ -86,9 +86,9 @@ Scope {
         // slide the dock out from under the cursor → no flicker.
         property bool revealed: !Globals.dockAutohide || edgeHov.hovered || dockHov.hovered
                                  || closeHold.running || Globals.launcherOpen || Globals.storeOpen
-                                 || Globals.placesOpen || Globals.overviewOpen
+                                 || Globals.placesOpen || Globals.mediaOpen || Globals.overviewOpen
         Timer { id: closeHold; interval: 280 }
-        function maybeHide() { if (!edgeHov.hovered && !dockHov.hovered && !Globals.launcherOpen && !Globals.storeOpen && !Globals.placesOpen) closeHold.restart() }
+        function maybeHide() { if (!edgeHov.hovered && !dockHov.hovered && !Globals.launcherOpen && !Globals.storeOpen && !Globals.placesOpen && !Globals.mediaOpen) closeHold.restart() }
         Connections { target: edgeHov; function onHoveredChanged() { win.maybeHide() } }
         Connections { target: dockHov; function onHoveredChanged() { win.maybeHide() } }
 
@@ -147,12 +147,14 @@ Scope {
                 anchors.centerIn: parent
                 spacing: 8
 
-                DockBtn { id: launchBtn; glyph: Theme.icApps; activeState: Globals.launcherOpen; anchors.verticalCenter: parent.verticalCenter; onGo: { Globals.launcherAnchorX = launchBtn.mapToItem(null, launchBtn.width / 2, 0).x; Globals.storeOpen = false; Globals.placesOpen = false; Globals.launcherOpen = !Globals.launcherOpen } }
+                DockBtn { id: launchBtn; glyph: Theme.icApps; activeState: Globals.launcherOpen; anchors.verticalCenter: parent.verticalCenter; onGo: { Globals.launcherAnchorX = launchBtn.mapToItem(null, launchBtn.width / 2, 0).x; Globals.storeOpen = false; Globals.placesOpen = false; Globals.mediaOpen = false; Globals.launcherOpen = !Globals.launcherOpen } }
                 DockBtn { glyph: Theme.icStack; anchors.verticalCenter: parent.verticalCenter; onGo: Quickshell.execDetached(["qs", "ipc", "call", "overview", "toggle"]) }
                 // store button → Komble (the software manager) when installed;
                 // the in-shell quick-installer panel is only the fallback.
-                DockBtn { id: storeBtn; glyph: Theme.icDownload; activeState: Globals.storeOpen; anchors.verticalCenter: parent.verticalCenter; onGo: { if (Globals.kombleInstalled) { Quickshell.execDetached(["komble"]) } else { Globals.storeAnchorX = storeBtn.mapToItem(null, storeBtn.width / 2, 0).x; Globals.launcherOpen = false; Globals.placesOpen = false; Globals.storeOpen = !Globals.storeOpen } } }
-                DockBtn { id: placesBtn; glyph: Theme.icFolder; activeState: Globals.placesOpen; anchors.verticalCenter: parent.verticalCenter; onGo: { Globals.placesAnchorX = placesBtn.mapToItem(null, placesBtn.width / 2, 0).x; Globals.launcherOpen = false; Globals.storeOpen = false; Globals.placesOpen = !Globals.placesOpen } }
+                DockBtn { id: storeBtn; glyph: Theme.icDownload; activeState: Globals.storeOpen; anchors.verticalCenter: parent.verticalCenter; onGo: { if (Globals.kombleInstalled) { Quickshell.execDetached(["komble"]) } else { Globals.storeAnchorX = storeBtn.mapToItem(null, storeBtn.width / 2, 0).x; Globals.launcherOpen = false; Globals.placesOpen = false; Globals.mediaOpen = false; Globals.storeOpen = !Globals.storeOpen } } }
+                DockBtn { id: placesBtn; glyph: Theme.icFolder; activeState: Globals.placesOpen; anchors.verticalCenter: parent.verticalCenter; onGo: { Globals.placesAnchorX = placesBtn.mapToItem(null, placesBtn.width / 2, 0).x; Globals.launcherOpen = false; Globals.storeOpen = false; Globals.mediaOpen = false; Globals.placesOpen = !Globals.placesOpen } }
+                // now-playing — only exists while an MPRIS player does (MediaPlayer.qml resolves it)
+                DockBtn { id: mediaBtn; visible: Globals.mediaPlayer !== null; glyph: Theme.icMusic; activeState: Globals.mediaOpen; anchors.verticalCenter: parent.verticalCenter; onGo: { Globals.mediaAnchorX = mediaBtn.mapToItem(null, mediaBtn.width / 2, 0).x; Globals.launcherOpen = false; Globals.storeOpen = false; Globals.placesOpen = false; Globals.mediaOpen = !Globals.mediaOpen } }
 
                 Rectangle { anchors.verticalCenter: parent.verticalCenter; width: 1; height: Math.round(40 * win.k); color: Theme.stroke }
 
