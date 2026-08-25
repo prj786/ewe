@@ -3,15 +3,15 @@ import QtQuick.Effects
 import Quickshell
 import Quickshell.Wayland
 import Quickshell.Io
-import Quickshell.Services.Mpris
 import Quickshell.Services.Pipewire
 import Quickshell.Services.UPower
 import Quickshell.Bluetooth
 
 // QuickSettings — full-height sidebar, slides in from the right.
 // Layout: header · quick toggles (a tile's options expand inline, right under
-// its own row) · brightness+volume sliders + audio output · media (only when a
-// live player exists) · system load · calendar · notifications grouped by app.
+// its own row) · brightness+volume sliders + audio output · system load ·
+// calendar · notifications grouped by app. (Now-playing lives in the dock's
+// MediaPlayer popup, not here.)
 Scope {
     id: root
 
@@ -1840,50 +1840,7 @@ Scope {
                     // (the tiling⇄floating toggle lives in the top bar now; the
                     //  sliders and audio devices moved to the TOP of the panel)
 
-                    // ── media (MPRIS) — right under the audio controls. Only a live,
-                    //    controllable player is shown: stale/dead MPRIS sources (no
-                    //    control interface, nothing loaded) hide the card entirely,
-                    //    so a play button that would do nothing never appears. ──
-                    Rectangle {
-                        id: mediaCard
-                        property var player: {
-                            var ps = Mpris.players.values
-                            for (var i = 0; i < ps.length; i++) if (ps[i].isPlaying) return ps[i]
-                            for (var j = 0; j < ps.length; j++) {
-                                var p = ps[j]
-                                if (p.canControl && p.canPlay && ((p.trackTitle && p.trackTitle !== "") || (p.trackArtist && p.trackArtist !== ""))) return p
-                            }
-                            return null
-                        }
-                        visible: player !== null
-                        width: parent.width; height: visible ? mediaRow.implicitHeight + 24 : 0; radius: Theme.radiusInner; color: Theme.elevated
-                        Row {
-                            id: mediaRow
-                            anchors.fill: parent; anchors.margins: 12; spacing: 12
-                            Rectangle {
-                                anchors.verticalCenter: parent.verticalCenter
-                                width: 48; height: 48; radius: 8; color: Theme.hover; clip: true
-                                Image { id: art; anchors.fill: parent; fillMode: Image.PreserveAspectCrop; source: mediaCard.player && mediaCard.player.trackArtUrl ? mediaCard.player.trackArtUrl : ""; visible: source != "" }
-                                Text { anchors.centerIn: parent; visible: art.source == ""; text: Theme.icMusic; font.family: Theme.fontIcons; font.pixelSize: 18; color: Theme.fgDim }
-                            }
-                            Column {
-                                width: parent.width - 48 - 24 - mediaCtl.width; anchors.verticalCenter: parent.verticalCenter; spacing: 1
-                                // the playing source (player identity: "Spotify", "mpv", …)
-                                Text { width: parent.width; text: mediaCard.player ? (mediaCard.player.identity || mediaCard.player.desktopEntry || "Media") : ""; color: Theme.accent; font.family: Theme.fontText; font.pixelSize: 10; font.weight: Font.DemiBold; elide: Text.ElideRight }
-                                Text { width: parent.width; text: mediaCard.player ? (mediaCard.player.trackTitle || "—") : ""; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsBody; font.weight: Font.DemiBold; elide: Text.ElideRight }
-                                Text { width: parent.width; visible: text !== ""; text: mediaCard.player ? (mediaCard.player.trackArtist || "") : ""; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; elide: Text.ElideRight }
-                            }
-                            Row {
-                                id: mediaCtl
-                                anchors.verticalCenter: parent.verticalCenter; spacing: 16
-                                property var pl: mediaCard.player
-                                // controls dim + ignore clicks when the player can't do the action
-                                Text { anchors.verticalCenter: parent.verticalCenter; text: Theme.icPrev; font.family: Theme.fontIcons; font.pixelSize: 15; color: Theme.fg; opacity: mediaCtl.pl && mediaCtl.pl.canGoPrevious ? 1 : 0.35; MouseArea { anchors.fill: parent; anchors.margins: -8; cursorShape: Qt.PointingHandCursor; onClicked: if (mediaCtl.pl && mediaCtl.pl.canGoPrevious) mediaCtl.pl.previous() } }
-                                Text { anchors.verticalCenter: parent.verticalCenter; text: mediaCtl.pl && mediaCtl.pl.isPlaying ? Theme.icPause : Theme.icPlay; font.family: Theme.fontIcons; font.pixelSize: 18; color: Theme.fg; opacity: mediaCtl.pl && (mediaCtl.pl.isPlaying ? mediaCtl.pl.canPause : mediaCtl.pl.canPlay) ? 1 : 0.35; MouseArea { anchors.fill: parent; anchors.margins: -8; cursorShape: Qt.PointingHandCursor; onClicked: if (mediaCtl.pl && (mediaCtl.pl.isPlaying ? mediaCtl.pl.canPause : mediaCtl.pl.canPlay)) mediaCtl.pl.togglePlaying() } }
-                                Text { anchors.verticalCenter: parent.verticalCenter; text: Theme.icNext; font.family: Theme.fontIcons; font.pixelSize: 15; color: Theme.fg; opacity: mediaCtl.pl && mediaCtl.pl.canGoNext ? 1 : 0.35; MouseArea { anchors.fill: parent; anchors.margins: -8; cursorShape: Qt.PointingHandCursor; onClicked: if (mediaCtl.pl && mediaCtl.pl.canGoNext) mediaCtl.pl.next() } }
-                            }
-                        }
-                    }
+                    // (now-playing moved to the dock's MediaPlayer popup)
 
                     // ── system load (CPU + memory; RunCat reads the same CPU value) ──
                     Rectangle {

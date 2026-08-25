@@ -24,6 +24,7 @@ ShellRoot {
     LauncherPanel {}
     AppStore {}
     Places {}
+    MediaPlayer {}
     TrayMenu {}
     Launcher {}
     QuickSettings {}

@@ -227,9 +227,12 @@ QtObject {
     property bool launcherOpen: false       // pinned-apps / launcher panel
     property bool storeOpen: false           // app-store panel
     property bool placesOpen: false          // places / directories panel (Home, Desktop, … + pinned folders)
+    property bool mediaOpen: false           // now-playing popup (MediaPlayer.qml, above the dock's music button)
     property real launcherAnchorX: 200       // screen-local x of the launcher dock button (popup centers on it)
     property real storeAnchorX: 200          // screen-local x of the store dock button
     property real placesAnchorX: 200         // screen-local x of the places dock button
+    property real mediaAnchorX: 200          // screen-local x of the media dock button
+    property var  mediaPlayer: null          // active MPRIS player (resolved by MediaPlayer.qml; dock button shows iff non-null)
 
     // ── System-tray context menu (themed, rendered by TrayMenu.qml) ─────────────
     property bool trayMenuOpen: false
