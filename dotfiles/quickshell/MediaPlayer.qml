@@ -88,7 +88,19 @@ Scope {
             focus: true
             readonly property var pl: root.player
             readonly property bool hasArt: pl !== null && pl.trackArtUrl !== undefined && String(pl.trackArtUrl) !== ""
-            readonly property bool hasBar: pl !== null && pl.positionSupported && pl.lengthSupported && pl.length > 0
+            // Browser MPRIS drops length/positionSupported for a moment right
+            // after a SetPosition, and nothing re-publishes them until the next
+            // play/pause — binding the bar to the LIVE flags made it vanish
+            // after every scrub. Latch the last good length + eligibility and
+            // only reset when the player itself changes.
+            property real knownLength: 0
+            property bool knownBar: false
+            readonly property real liveLength: (pl !== null && pl.lengthSupported && pl.length > 0 && isFinite(pl.length)) ? pl.length : 0
+            onLiveLengthChanged: if (liveLength > 0) knownLength = liveLength
+            readonly property bool liveBar: pl !== null && pl.positionSupported && liveLength > 0
+            onLiveBarChanged: if (liveBar) knownBar = true
+            onPlChanged: { knownLength = liveLength; knownBar = liveBar }
+            readonly property bool hasBar: pl !== null && knownBar && knownLength > 0
             x: Math.max(12, Math.min(parent.width - width - 12, Globals.mediaAnchorX - width / 2))
             y: parent.height - height - 90
             width: 340
@@ -185,7 +197,7 @@ Scope {
                         width: parent.width; height: 14
                         property bool scrubbing: false
                         property real scrubFrac: 0
-                        readonly property real playFrac: box.hasBar ? Math.max(0, Math.min(1, box.pl.position / box.pl.length)) : 0
+                        readonly property real playFrac: box.hasBar ? Math.max(0, Math.min(1, box.pl.position / box.knownLength)) : 0
                         readonly property real frac: scrubbing ? scrubFrac : playFrac
 
                         Rectangle {
@@ -212,7 +224,7 @@ Scope {
                             onPressed: function (m) { seek.scrubbing = true; seek.scrubFrac = fracAt(m.x) }
                             onPositionChanged: function (m) { if (seek.scrubbing) seek.scrubFrac = fracAt(m.x) }
                             onReleased: {
-                                if (box.pl && box.pl.canSeek && box.hasBar) box.pl.position = seek.scrubFrac * box.pl.length
+                                if (box.pl && box.pl.canSeek && box.hasBar) box.pl.position = seek.scrubFrac * box.knownLength
                                 seek.scrubbing = false
                             }
                         }
@@ -220,8 +232,8 @@ Scope {
 
                     Item {
                         width: parent.width; height: 14
-                        Text { anchors.left: parent.left; text: box.hasBar ? root.fmt(seek.frac * box.pl.length) : ""; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11 }
-                        Text { anchors.right: parent.right; text: box.hasBar ? root.fmt(box.pl.length) : ""; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11 }
+                        Text { anchors.left: parent.left; text: box.hasBar ? root.fmt(seek.frac * box.knownLength) : ""; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11 }
+                        Text { anchors.right: parent.right; text: box.hasBar ? root.fmt(box.knownLength) : ""; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11 }
                     }
                 }
             }
