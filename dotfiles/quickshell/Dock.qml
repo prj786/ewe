@@ -32,6 +32,22 @@ Scope {
         return out
     }
 
+    // Intelligent hide needs to know when floating/fullscreen state changes —
+    // those live only in lastIpcObject, which Quickshell doesn't refetch on
+    // its own for these events. Bump a revision so wsClaimed re-evaluates.
+    property int claimRev: 0
+    Connections {
+        target: Hyprland
+        function onRawEvent(ev) {
+            var n = ev.name
+            if (n === "openwindow" || n === "closewindow" || n === "movewindow"
+             || n === "changefloatingmode" || n === "fullscreen") {
+                Hyprland.refreshToplevels()
+                root.claimRev++
+            }
+        }
+    }
+
     // One window per screen, visible only on the primary — NOT a single window
     // with a screen: binding. Rebinding screen mid-hotplug (the primary name
     // going stale while the output detaches) could resolve to null and destroy
@@ -80,11 +96,33 @@ Scope {
         readonly property int peek: 6
         implicitHeight: dockH + 18
 
-        // Revealed when: autohide off · hovering the fixed bottom edge · hovering the
-        // dock itself · a popup is open · within the close grace period · the Overview
-        // is open. The bottom edge trigger is FIXED (never moves), so revealing can't
-        // slide the dock out from under the cursor → no flicker.
-        property bool revealed: !Globals.dockAutohide || edgeHov.hovered || dockHov.hovered
+        // Intelligent hide, made intelligent: the dock ducks only when this
+        // screen's active workspace has a window that actually claims the
+        // screen (tiled, or fullscreened in any mode). An empty or
+        // floating-only workspace keeps the dock out even with autohide on.
+        // A toplevel whose IPC object hasn't arrived yet counts as claiming —
+        // better a dock that ducks a beat early than one sitting over a tile.
+        readonly property var hyMon: Hyprland.monitorFor(win.screen)
+        readonly property bool wsClaimed: {
+            var rev = root.claimRev
+            var wid = win.hyMon && win.hyMon.activeWorkspace ? win.hyMon.activeWorkspace.id : -1
+            var tls = Hyprland.toplevels ? Hyprland.toplevels.values : []
+            for (var i = 0; i < tls.length; i++) {
+                var t = tls[i]
+                if (!t.workspace || t.workspace.id !== wid) continue
+                var o = t.lastIpcObject
+                if (!o || !o.floating || o.fullscreen) return true
+            }
+            return false
+        }
+
+        // Revealed when: autohide off · nothing on the workspace claims the screen ·
+        // hovering the fixed bottom edge · hovering the dock itself · a popup is open ·
+        // within the close grace period · the Overview is open. The bottom edge trigger
+        // is FIXED (never moves), so revealing can't slide the dock out from under the
+        // cursor → no flicker.
+        property bool revealed: !Globals.dockAutohide || !win.wsClaimed || edgeHov.hovered
+                                 || dockHov.hovered
                                  || closeHold.running || Globals.launcherOpen || Globals.storeOpen
                                  || Globals.placesOpen || Globals.mediaOpen || Globals.overviewOpen
         Timer { id: closeHold; interval: 280 }
@@ -107,6 +145,15 @@ Scope {
             anchors.horizontalCenter: parent.horizontalCenter
             y: win.revealed ? (parent.height - height - 8) : (parent.height - win.peek)
             Behavior on y { NumberAnimation { duration: Theme.durBase; easing.type: Theme.ease } }
+            // Entrance: slide up from below the screen edge once the shell is
+            // up (mirrors the bar's slide-down; also plays on hotplug). Runs
+            // on a Translate so it never fights the revealed/peek y binding.
+            transform: Translate {
+                NumberAnimation on y {
+                    from: win.implicitHeight; to: 0
+                    duration: Theme.durSlow; easing.type: Theme.ease
+                }
+            }
             height: win.dockH
             width: row.implicitWidth + 16
             radius: Theme.radius
