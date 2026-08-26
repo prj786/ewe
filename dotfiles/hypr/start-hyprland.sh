@@ -23,6 +23,19 @@ _hs_old_dir="${XDG_STATE_HOME:-$HOME/.local/state}/hypr-shell"
 [ -d "$_hs_old_dir" ] && [ ! -e "$_hs_log_dir" ] && mv "$_hs_old_dir" "$_hs_log_dir" 2>/dev/null
 mkdir -p "$_hs_log_dir" 2>/dev/null && exec >"$_hs_log_dir/session.log" 2>&1
 
+# ── Packaged installs: self-refresh at login ─────────────────────────────────
+# When ewe is installed as a pacman package, `pacman -Syu` only updates the
+# read-only payload at /usr/share/ewe. Pull it into the user tree now, and if
+# a sync actually ran (exit 0; 3 = already current), re-enter the refreshed
+# wrapper once so THIS login already runs the new version. EWE_SYNCED guards
+# the exec from ever looping.
+if [ -z "${EWE_SYNCED:-}" ] && command -v ewe-setup >/dev/null 2>&1; then
+    export EWE_SYNCED=1
+    if ewe-setup --sync-if-newer; then
+        exec "$(readlink -f "$0")"
+    fi
+fi
+
 export XDG_SESSION_TYPE=wayland
 export XDG_CURRENT_DESKTOP=Hyprland
 export XDG_SESSION_DESKTOP=Hyprland

@@ -1,6 +1,20 @@
 #!/usr/bin/env bash
-# phase 10 — enable [multilib] (for 32-bit gaming libs + Steam) and bootstrap an
-# AUR helper. Both are idempotent.
+# phase 10 — enable the [ewe] package repo and [multilib] (for 32-bit gaming
+# libs + Steam), and bootstrap an AUR helper. All idempotent.
+
+# The [ewe] repo (github.com/prj786/ewe-repo, rolling release tag) carries the
+# ewe/komble-arch/ewe-settings packages plus prebuilt copies of the aur.list
+# packages — this is what makes plain `pacman -Syu` update the whole DE.
+_enable_ewe_repo() {
+    if grep -q '^\[ewe\]' /etc/pacman.conf 2>/dev/null; then
+        ok "[ewe] repo already enabled"; return
+    fi
+    info "adding the [ewe] repo to /etc/pacman.conf"
+    if [ "${DRY_RUN:-0}" = "1" ]; then info "would append the [ewe] block + pacman -Sy"; return; fi
+    printf '\n[ewe]\nSigLevel = Optional TrustAll\nServer = https://github.com/prj786/ewe-repo/releases/download/x86_64\n' \
+        | sudo_run tee -a /etc/pacman.conf >/dev/null
+    sudo_run pacman -Sy && ok "[ewe] repo enabled" || warn "could not sync the [ewe] repo — check network and /etc/pacman.conf."
+}
 
 _enable_multilib() {
     if multilib_enabled; then ok "[multilib] already enabled"; return; fi
@@ -94,6 +108,7 @@ _bootstrap_aur() {
 
 phase_repos() {
     step "10 · repositories"
+    _enable_ewe_repo
     # [multilib] is only needed for 32-bit libs (Steam + the lib32 GPU drivers),
     # which are now opt-in — so only enable it when the gaming stack was requested.
     if [ "${GAMING:-0}" = "1" ]; then

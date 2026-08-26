@@ -1,0 +1,51 @@
+# Maintainer: scubba
+#
+# The ewe desktop environment as a pacman package, served from the [ewe]
+# repository (github.com/prj786/ewe-repo). The payload — the whole release
+# tree — lands read-only at /usr/share/ewe; per-user deployment stays exactly
+# the get.sh model (a writable copy in ~/.local/share/ewe behind the ~/.config
+# symlink farm), done by `ewe-setup` and refreshed automatically at login by
+# the session wrapper when pacman has delivered a newer payload. System-level
+# setup (greeter, plymouth, hibernate, GPU) remains install.sh's job — those
+# phases edit files owned by other packages and machine state a package must
+# not touch.
+#
+# depends is computed in package() from packages/common.list + aur.list (the
+# aur.list names are served prebuilt from the [ewe] repo), so the lists stay
+# the single source of truth. gaming.list becomes optdepends.
+
+pkgname=ewe
+pkgver=0.8.3
+pkgrel=1
+pkgdesc="ewe — a clean, dark Hyprland + Quickshell desktop environment"
+arch=('any')
+url="https://github.com/prj786/ewe"
+license=('GPL-2.0-only')
+depends=('komble-arch' 'ewe-settings')   # + the package lists, appended in package()
+install=ewe.install
+source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz"
+        'ewe-setup')
+sha256sums=('SKIP'
+            'SKIP')
+
+package() {
+    cd "$pkgname-$pkgver"
+
+    # Dependency lists → package metadata. Comments stripped, first word only.
+    local _p
+    while read -r _p; do
+        depends+=("$_p")
+    done < <(sed 's/#.*//' packages/common.list packages/aur.list | awk 'NF{print $1}')
+    while read -r _p; do
+        optdepends+=("$_p: gaming stack (install.sh --gaming)")
+    done < <(sed 's/#.*//' packages/gaming.list | awk 'NF{print $1}')
+
+    # The payload: everything a user-side deploy or a system setup needs.
+    # (.claude/.github are dev tooling; dist/ is build output and untracked.)
+    install -d "$pkgdir/usr/share/ewe"
+    cp -a dotfiles systemd system packages phases lib templates docs \
+          install.sh update.sh uninstall.sh VERSION VERSIONS README.md LICENSE \
+          "$pkgdir/usr/share/ewe/"
+
+    install -Dm755 "$srcdir/ewe-setup" "$pkgdir/usr/bin/ewe-setup"
+}

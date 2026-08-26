@@ -1,0 +1,19 @@
+# alpm scriptlet for the ewe package. pacman can never touch $HOME, so the
+# per-user deploy is a separate step — pointed at here, and run automatically
+# at login by the session wrapper once a user is set up.
+
+post_install() {
+    cat <<'EOF'
+:: ewe is installed. Two steps remain:
+::   1. per user:  ewe-setup            (deploys the dotfiles into your home)
+::   2. system:    /usr/share/ewe/install.sh   (greeter, services, plymouth —
+::      skips anything already configured; safe to re-run)
+EOF
+}
+
+post_upgrade() {
+    cat <<'EOF'
+:: ewe payload updated. Each user's desktop refreshes itself at next login
+:: (or run `ewe-setup` now and restart the shell).
+EOF
+}
