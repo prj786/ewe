@@ -261,8 +261,17 @@ Scope {
             anchors { top: true; left: true; right: true }
 
             Rectangle {
-                anchors { top: parent.top; left: parent.left; right: parent.right }
+                id: barStrip
+                anchors { left: parent.left; right: parent.right }
                 height: Theme.barHeight
+                // Entrance: slide down from behind the top edge once the shell
+                // is up (also plays for a bar spawned on hotplug). Start above
+                // the full window (bar + shadow room) so the shadow tail is
+                // hidden too; the surface clips anything at negative y.
+                NumberAnimation on y {
+                    from: -(Theme.barHeight + 12); to: 0
+                    duration: Theme.durSlow; easing.type: Theme.ease
+                }
                 layer.enabled: true
                 // shallower than the floating panels — the bar is anchored, not floating
                 layer.effect: Elevation { shadowOpacity: 0.38; shadowVerticalOffset: 3 }

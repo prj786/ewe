@@ -39,6 +39,5 @@ ShellRoot {
     Osd {}
     Overview {}
     Settings {}
-    Splash {}
     Battery {}
 }

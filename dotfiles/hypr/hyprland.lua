@@ -560,8 +560,10 @@ hl.window_rule({
 -- snapshot of the already-faded frame, which reads as a blink: the panel fades
 -- out, flashes back, and fades again (worst on the Overview). Hyprland must
 -- not animate these at all; the QML owns their motion. Surfaces with no QML
--- animation of their own (bar, notifications, splash, auth, screensaver,
--- caffeine) keep the compositor fade. The dock is listed because it hops
+-- animation of their own (bar, notifications, auth, screensaver, caffeine)
+-- keep the compositor fade — the bar's one-shot QML slide-in at startup rides
+-- inside its surface, so the map fade composes with it rather than fighting
+-- it. The dock is listed because it hops
 -- between the Top and Overlay layers while the Overview is open — a remap the
 -- fade would otherwise turn into a flicker on every Super tap.
 hl.layer_rule({
