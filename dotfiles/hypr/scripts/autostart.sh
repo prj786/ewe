@@ -87,8 +87,13 @@ fi
 
 # ── Idle / lock: hypridle. The Settings → Screensaver pane writes a generated
 # config (saver stage + timeouts) which wins over the shipped default. ────────
+# Live-ISO sessions (EWE_LIVE=1, exported by the ISO's ewe-live-session) get
+# NO idle daemon at all: the live user has an empty password, so a lock would
+# be a dead end — and a demo session must never lock or suspend by itself.
 LOCK="$HOME/.config/hypr/scripts/lock.sh"
-if command -v hypridle >/dev/null 2>&1 && [ -r "$HOME/.config/hypr/generated/hypridle.conf" ]; then
+if [ "${EWE_LIVE:-0}" = "1" ]; then
+    :
+elif command -v hypridle >/dev/null 2>&1 && [ -r "$HOME/.config/hypr/generated/hypridle.conf" ]; then
     run_once hypridle hypridle -c "$HOME/.config/hypr/generated/hypridle.conf"
 elif command -v hypridle >/dev/null 2>&1 && [ -r "$HOME/.config/hypr/hypridle.conf" ]; then
     run_once hypridle hypridle

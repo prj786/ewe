@@ -16,12 +16,16 @@
 
 pkgname=ewe
 pkgver=0.8.3
-pkgrel=1
+pkgrel=2
 pkgdesc="ewe — a clean, dark Hyprland + Quickshell desktop environment"
 arch=('any')
 url="https://github.com/prj786/ewe"
 license=('GPL-2.0-only')
-depends=('komble-arch' 'ewe-settings')   # + the package lists, appended in package()
+# reversal-icon-theme + mocu-cursor-theme are served from the [ewe] repo
+# (ewe-repo pkgbuilds/) — phase 20's source install is only the non-repo
+# fallback, and an ISO without them boots to pink missing-icon tiles.
+depends=('komble-arch' 'ewe-settings'
+         'reversal-icon-theme' 'mocu-cursor-theme')   # + the lists, appended in package()
 install=ewe.install
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz"
         'ewe-setup')
