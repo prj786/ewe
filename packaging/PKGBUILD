@@ -32,13 +32,12 @@ package() {
     cd "$pkgname-$pkgver"
 
     # Dependency lists → package metadata. Comments stripped, first word only.
-    local _p
-    while read -r _p; do
-        depends+=("$_p")
-    done < <(sed 's/#.*//' packages/common.list packages/aur.list | awk 'NF{print $1}')
-    while read -r _p; do
-        optdepends+=("$_p: gaming stack (install.sh --gaming)")
-    done < <(sed 's/#.*//' packages/gaming.list | awk 'NF{print $1}')
+    # (mapfile, not depends+= in a loop: makepkg's linter extracts +=-lines
+    # from package() and evaluates them out of context, seeing empty values.)
+    mapfile -t -O "${#depends[@]}" depends \
+        < <(sed 's/#.*//' packages/common.list packages/aur.list | awk 'NF{print $1}')
+    mapfile -t optdepends \
+        < <(sed 's/#.*//' packages/gaming.list | awk 'NF{print $1": gaming stack (install.sh --gaming)"}')
 
     # The payload: everything a user-side deploy or a system setup needs.
     # (.claude/.github are dev tooling; dist/ is build output and untracked.)
