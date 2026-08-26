@@ -66,8 +66,6 @@ Then reboot, pick **Ewe** at the login screen, and you're in —
 
 ## A look around
 
-https://github.com/user-attachments/assets/a2ffb2e1-2482-46c7-911d-c94bb8413434
-
 | | |
 |---|---|
 | **Tiling workflow**<br><img src="docs/media/tiling.png" alt="Tiling workflow"> | **Launcher** — fuzzy app / file search<br><img src="docs/media/launcher.png" alt="Launcher"> |

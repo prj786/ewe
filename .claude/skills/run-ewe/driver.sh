@@ -48,7 +48,7 @@ cmd_up() {
 # The aquamarine Wayland-backend output is named WAYLAND-1; the wildcard rule
 # pins ANY output to a sane size so screenshots are consistent (without it the
 # nested output defaults to a tiny ~350x420 and panels render off-viewport).
-monitor = , 1280x800@60, 0x0, 1
+monitor = , 1920x1200@60, 0x0, 1
 misc {
     disable_hyprland_logo = true
     disable_splash_rendering = true
