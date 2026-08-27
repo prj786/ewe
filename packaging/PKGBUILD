@@ -16,7 +16,7 @@
 
 pkgname=ewe
 pkgver=0.8.3
-pkgrel=2
+pkgrel=3
 pkgdesc="ewe — a clean, dark Hyprland + Quickshell desktop environment"
 arch=('any')
 url="https://github.com/prj786/ewe"

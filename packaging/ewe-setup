@@ -33,6 +33,11 @@ if [ "${1:-}" = "--sync-if-newer" ]; then
     fi
 fi
 
+# First deploy on this account? Then default appearance must be applied below
+# (a refresh must never re-theme a user who changed their look).
+FIRST=0
+[ -e "$DEST/VERSION" ] || FIRST=1
+
 say "syncing $PAYLOAD -> $DEST ($(cat "$PAYLOAD/VERSION"))"
 mkdir -p "$DEST"
 cp -a "$PAYLOAD/." "$DEST/" || die "copy failed"
@@ -52,6 +57,17 @@ run()  { "$@"; }
 # shellcheck source=/dev/null
 source "$DEST/lib/deploy.sh" || die "payload is missing lib/deploy.sh"
 deploy_dotfiles
+
+# Default appearance on FIRST deploy — the phase-60 equivalent. Without this a
+# fresh account (live ISO included) runs with no icon/cursor/GTK/Qt theming at
+# all: Adwaita icon lookups miss half the apps and every launcher tile shows
+# the broken-image checkerboard. colorscheme.sh writes gtk settings.ini,
+# qt6ct, gsettings (best-effort without a bus) and the Mocu cursor link.
+if [ "$FIRST" = 1 ] && [ -r "$DEST/dotfiles/quickshell/scripts/colorscheme.sh" ]; then
+    say "applying the default appearance (dark, blue accent)"
+    sh "$DEST/dotfiles/quickshell/scripts/colorscheme.sh" dark 0a84ff >/dev/null 2>&1 \
+        || warn "colorscheme.sh reported errors — theming may be incomplete until Settings → Theme is used."
+fi
 
 say "done — the refreshed shell loads at the next login (or: systemctl --user restart ewe.service)"
 say "first install on this machine? run $DEST/install.sh for the system side (greeter, services)."
