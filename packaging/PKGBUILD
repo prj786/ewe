@@ -15,7 +15,7 @@
 # the single source of truth. gaming.list becomes optdepends.
 
 pkgname=ewe
-pkgver=0.8.4
+pkgver=0.9.0
 pkgrel=1
 pkgdesc="ewe — a clean, dark Hyprland + Quickshell desktop environment"
 arch=('any')
