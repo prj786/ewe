@@ -239,7 +239,15 @@ QtObject {
     property var  trayMenuHandle: null       // the clicked item's QsMenuHandle
     property real trayMenuAnchorX: 200       // screen-local x of the tray icon (menu centers on it)
 
-    // ── Pinned apps (desktop ids; persisted in pinned-apps.json) ───────────────
+    // ── RFC-001: every persist goes through ewe-conf, the ONE writer of the
+    // ONE file. It rewrites ~/.config/ewe/ewe.conf and regenerates the runtime
+    // JSON this shell reads — the shell never writes state files directly.
+    // The path resolves through the config farm, so dev checkouts, tarball
+    // installs and the package each reach their own copy; --no-hooks because
+    // the shell live-applies itself and IS the thing the reload poke targets.
+    readonly property string eweConf: Quickshell.env("HOME") + "/.config/quickshell/../../bin/ewe-conf"
+
+    // ── Pinned apps (desktop ids; persisted via ewe-conf → apps.pinned) ───────
     property var pinnedApps: []
     function isPinned(id) { return (g.pinnedApps || []).indexOf(id) >= 0 }
     function togglePin(id) {
@@ -247,7 +255,7 @@ QtObject {
         var i = a.indexOf(id)
         if (i >= 0) a.splice(i, 1); else a.push(id)
         g.pinnedApps = a
-        g._pinWriter.command = ["sh", "-c", "cat > \"$HOME/.config/quickshell/pinned-apps.json\" <<'QS_EOF'\n" + JSON.stringify(a) + "\nQS_EOF\n"]
+        g._pinWriter.command = [g.eweConf, "set", "--no-hooks", "apps.pinned", JSON.stringify(a)]
         g._pinWriter.running = false; g._pinWriter.running = true
     }
     // ── Pinned places (folder paths; persisted in places.json) ────────────────
@@ -261,7 +269,7 @@ QtObject {
         var i = a.indexOf(p)
         if (i >= 0) a.splice(i, 1); else a.push(p)
         g.pinnedPlaces = a
-        g._placesWriter.command = ["sh", "-c", "cat > \"$HOME/.config/quickshell/places.json\" <<'QS_EOF'\n" + JSON.stringify(a) + "\nQS_EOF\n"]
+        g._placesWriter.command = [g.eweConf, "set", "--no-hooks", "apps.places", JSON.stringify(a)]
         g._placesWriter.running = false; g._placesWriter.running = true
     }
     // Re-read every JSON state file this singleton owns — used after a settings

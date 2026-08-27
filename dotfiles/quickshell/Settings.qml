@@ -71,8 +71,9 @@ Scope {
         }
     }
     function saveStartup() {
-        HyprMon.atomicWrite(root.saWriter, Quickshell.env("HOME") + "/.config/quickshell/startup-apps.json",
-                            JSON.stringify({ apps: root.startupApps }, null, 2))
+        // RFC-001: persist through ewe-conf (regenerates startup-apps.json)
+        root.saWriter.command = [Globals.eweConf, "set", "--no-hooks", "apps.startup", JSON.stringify(root.startupApps)]
+        root.saWriter.running = false; root.saWriter.running = true
     }
     function startupAdd(name, exec, icon) {
         var a = root.startupApps.slice()
@@ -243,8 +244,10 @@ Scope {
         sv.lockAfterMin = Number(Globals.saverLockAfterMin)
         o.saver = sv
         Globals.prefsRaw = o        // keep the cache in step with the file
-        root.atomicWrite(jsonWriter, root.home + "/.config/quickshell/user-theme.json",
-                         JSON.stringify(o, null, 2))
+        // RFC-001: persist through ewe-conf — `absorb user-theme` owns the
+        // user-theme→ewe.conf key mapping and regenerates user-theme.json.
+        jsonWriter.command = [Globals.eweConf, "absorb", "--no-hooks", "user-theme", JSON.stringify(o)]
+        jsonWriter.running = false; jsonWriter.running = true
     }
 
     // ── Screensaver → generated hypridle.conf (hypridle owns all idle timing).
