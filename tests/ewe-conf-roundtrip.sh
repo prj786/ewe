@@ -21,6 +21,13 @@ for f in user-theme.json pinned-apps.json places.json startup-apps.json \
     fi
 done
 
+# wallpapers.conf import source (live machine's, when present)
+GEN_SRC="${EWE_TEST_GEN:-$HOME/.config/hypr/generated}"
+if [ -e "$GEN_SRC/wallpapers.conf" ]; then
+    mkdir -p "$SANDBOX/hypr/generated"
+    cp "$GEN_SRC/wallpapers.conf" "$SANDBOX/hypr/generated/"
+fi
+
 ./bin/ewe-conf import >/dev/null
 python3 -c "import tomllib,sys; tomllib.load(open('$SANDBOX/ewe/ewe.conf','rb'))" \
     && echo "ok  ewe.conf is valid TOML"
@@ -53,6 +60,19 @@ for f in sorted(os.listdir(os.path.join(sb, "orig"))):
                 print(f"      {k}: {a.get(k)!r} -> {b.get(k)!r}")
 sys.exit(fail)
 EOF
+
+# Phase 4: generated artifacts must be BYTE-identical to what the UIs wrote.
+# Goldens come from this machine's real generated files when present.
+GEN="${EWE_TEST_GEN:-$HOME/.config/hypr/generated}"
+for g in animations.lua windowrules.lua wallpapers.conf; do
+    if [ -e "$GEN/$g" ] && [ -e "$SANDBOX/hypr/generated/$g" ]; then
+        if diff -q "$GEN/$g" "$SANDBOX/hypr/generated/$g" >/dev/null; then
+            echo "ok  $g byte-identical to the live UI-generated file"
+        else
+            echo "FAIL $g differs from golden:"; diff "$GEN/$g" "$SANDBOX/hypr/generated/$g" | head -8; exit 1
+        fi
+    fi
+done
 
 # set/get semantics
 ./bin/ewe-conf set desktop.theme.accent '"#ff0000"' >/dev/null 2>&1 || ./bin/ewe-conf set desktop.theme.accent '#ff0000'
