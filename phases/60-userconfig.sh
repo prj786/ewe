@@ -229,6 +229,14 @@ RC
         warn "oh-my-posh not installed — prompt left as-is (install it, then re-run)."
     fi
 
+    # RFC-001 [system]: record what this run made the machine into. Only ever
+    # raises flags — the file is the memory, not the off switch.
+    if [ -x "${EWE_CONF_BIN:-}" ] && [ "${DRY_RUN:-0}" != "1" ]; then
+        [ "${GAMING:-0}" = "1" ] && run "$EWE_CONF_BIN" set --no-hooks system.gaming true
+        [ "${DEV:-0}" = "1" ]    && run "$EWE_CONF_BIN" set --no-hooks system.development true
+        ok "profiles recorded in $("$EWE_CONF_BIN" path)"
+    fi
+
     # zram (laptop benefit). Ship a sane generator config if none exists.
     if [ "$CHASSIS" = "laptop" ] && [ ! -e /etc/systemd/zram-generator.conf ]; then
         info "writing /etc/systemd/zram-generator.conf (zstd, capped at 8G)"

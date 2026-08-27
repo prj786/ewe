@@ -205,8 +205,18 @@ def do_import():
             node[last] = parse_wallpapers_conf(f.read())
     except FileNotFoundError:
         pass
-    doc.setdefault("system", {}).setdefault("gaming", False)
-    doc["system"].setdefault("development", False)
+    # [system] flags reflect what the machine actually has: import must not
+    # claim gaming=false on a box with Steam installed (flags only raise)
+    import shutil
+    sysd = doc.setdefault("system", {})
+    if shutil.which("steam"):
+        sysd["gaming"] = True
+    else:
+        sysd.setdefault("gaming", False)
+    if shutil.which("mise") and shutil.which("fresh"):
+        sysd["development"] = True
+    else:
+        sysd.setdefault("development", False)
     doc.setdefault("sync", {}).setdefault("enabled", False)
     save(doc)
     return doc

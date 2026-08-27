@@ -65,7 +65,18 @@ for a in "$@"; do
         *) echo "unknown flag: $a (see --help)"; exit 2 ;;
     esac
 done
-export DRY_RUN ASSUME_YES NO_PACKAGES GAMING DEV COEXIST
+# RFC-001 [system]: the one file remembers what this machine IS. A restored
+# or re-run machine whose ewe.conf says gaming/development=true gets those
+# stacks without re-passing the flag; flags only ever upgrade the file
+# (re-running WITHOUT --gaming must never silently remove Steam).
+EWE_CONF_BIN="$(cd "$(dirname "$0")" && pwd)/bin/ewe-conf"
+if [ -x "$EWE_CONF_BIN" ]; then
+    [ "$(command -v python3)" ] && {
+        [ "$("$EWE_CONF_BIN" get system.gaming 2>/dev/null)" = "true" ] && GAMING=1
+        [ "$("$EWE_CONF_BIN" get system.development 2>/dev/null)" = "true" ] && DEV=1
+    }
+fi
+export DRY_RUN ASSUME_YES NO_PACKAGES GAMING DEV COEXIST EWE_CONF_BIN
 
 # A fixed per-run timestamp for backups (passed without Date.now-style drift).
 RUN_STAMP="$(date -u +%Y%m%d-%H%M%S 2>/dev/null || echo manual)"
