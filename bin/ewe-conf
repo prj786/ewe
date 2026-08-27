@@ -204,7 +204,14 @@ def do_import():
             node, last = dig(doc, "desktop.wallpapers", create=True)
             node[last] = parse_wallpapers_conf(f.read())
     except FileNotFoundError:
-        pass
+        # nothing configured → the shipped default (resolved through the
+        # config farm so every install type finds its own copy)
+        default_wp = os.path.realpath(os.path.join(
+            QS, "..", "..", "system", "branding", "wallpapers", "ewe-dark.png"))
+        if os.path.exists(default_wp):
+            node, last = dig(doc, "desktop.wallpapers", create=True)
+            node[last] = {"mode": "fill", "mute": True,
+                          "default": default_wp, "outputs": {}}
     # [system] flags reflect what the machine actually has: import must not
     # claim gaming=false on a box with Steam installed (flags only raise)
     import shutil
