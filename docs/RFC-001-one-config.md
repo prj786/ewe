@@ -1,0 +1,132 @@
+# RFC-001 — one file: `ewe.conf`
+
+*Status: accepted · shipping incrementally (see Phases) · target: ewe OS 0.3-alpha → 1.0-beta "Dolly"*
+
+In Linux everything is a file; in ewe **the machine is one file**. Every piece
+of desktop and system configuration a user can express lives in a single
+declarative document, `~/.config/ewe/ewe.conf`. Settings UIs edit it, one tool
+applies it, everything else is generated from it. Save the file, restore the
+machine.
+
+## Why
+
+Today the configuration surface is ~14 files (docs/SETTINGS-BACKEND.md) kept
+consistent by TWO byte-identical generator implementations (the in-shell
+Settings panel and the ewe-settings app) — a contract enforced by care, not by
+architecture. Sync/backup means gathering many files; install writes them
+imperatively; komble's restore list lives apart. One file with one generator
+deletes the drift class entirely and makes sync, backup, and install the same
+operation: produce the file, apply the file.
+
+## The rules
+
+1. **One canonical file**: `~/.config/ewe/ewe.conf` — TOML. Human-readable,
+   diffable, comment headers regenerated on write.
+2. **One writer**: the `ewe-conf` CLI (ships with the DE). Nothing else ever
+   writes the file — not the shell, not ewe-settings, not the installer, not
+   komble. They all call `ewe-conf`.
+3. **Everything else is generated.** The runtime files the shell and Hyprland
+   read (user-theme.json, monitors.lua, input.lua, wallpapers.conf, …) are
+   *build artifacts* of `ewe-conf apply`. Editing them by hand keeps working
+   exactly until the next apply, same as today's "never edit by hand" files.
+4. **Secrets never enter the file.** `ewe.conf` is the thing that syncs to
+   Drive; tokens live in the keyring behind the `ewe-auth` broker (Phase 6).
+   The file may name accounts (an email), never credentials.
+5. **Live-apply stays with the UIs.** The two-layer model
+   (live `hyprctl eval` + persist) is unchanged — UIs still apply instantly,
+   then persist by writing *through* `ewe-conf`, which regenerates artifacts.
+
+## Schema (v1)
+
+```toml
+schema = 1
+
+[desktop.theme]        # ← user-theme.json today
+color_scheme = "dark"          # dark (light parked, same as today)
+accent = "#0a84ff"
+theme_name = "flock"           # flock | blacksheep
+tint_borders = true
+window_transparency = 1.0
+avatar_shape = "circle"
+
+[desktop.dock]
+enabled = true
+autohide = false               # "intelligent hide"
+icon_size = "medium"
+
+[desktop.animations]           # ← animations.json (preset + per-leaf overrides)
+speed = 1                      # 0 | 0.6 | 1 | 2 multiplier (0 = off)
+# [desktop.animations.anims.<leaf>] enable/ms/curve/style — mirrors animations.json "anims"
+
+[desktop.tiling]
+enabled = true
+
+[desktop.power]
+low_power = true
+lid_docked_suspend = false
+saver = "auto"                 # screensaver stage config (user-theme.json "saver")
+
+[desktop.displays]             # ← display-profiles.json (verbatim structure)
+# version / lastKey scalars + [[desktop.displays.profiles]] tables
+
+[desktop.input]                # ← input-devices.json + the input.lua block's knobs
+# keyboard layout(s), repeat, touchpad, per-device overrides
+
+[desktop.wallpapers]           # ← wallpapers.conf lines
+# mode, mute, backend, default, per-output entries
+
+[desktop.window_rules]         # ← window-rules.json "rules"
+[desktop.keybinds]             # (future) user keybind overrides
+
+[apps]
+pinned = ["nemo.desktop", "firefox.desktop", "komble.desktop"]   # ← pinned-apps.json
+# [[apps.startup]] name/exec/icon/enabled                        # ← startup-apps.json
+# [[apps.places]]                                                # ← places.json
+# [apps.installed] — komble's manifest (Phase 6): explicit repo/AUR/AppImage
+#                    installs, so a restored machine can reinstall itself
+
+[system]                       # ← OS concerns; read by installer/ewe-os tooling ONLY
+gaming = false                 # steam + [multilib] + lib32 drivers
+development = false            # dev CLIs + mise Node/LSP stack
+# hostname/locale/etc recorded by the OS installer for reproduction
+
+[sync]
+enabled = false
+provider = "google"            # account IDENTITY (email) — never tokens
+```
+
+Domains map 1:1 onto today's files so `ewe-conf import` can build the file
+from a live machine and `apply` can round-trip byte-identically.
+
+## The tool
+
+`ewe-conf` (Python, stdlib `tomllib` + its own constrained TOML emitter; no
+deps beyond python — already in the DE's tree). Atomic writes
+(tmp+rename), `flock` around read-modify-write, stable key ordering so diffs
+are honest.
+
+```
+ewe-conf get <dotted.key>          value (JSON on stdout for structures)
+ewe-conf set <dotted.key> <value>  value parsed as JSON, else string; then apply
+ewe-conf dump                      whole file as JSON (one read for QML/Rust)
+ewe-conf import                    build ewe.conf FROM the live runtime files
+ewe-conf apply [--only <domain>]   regenerate artifacts + `qs ipc call settings reload`
+ewe-conf path                      print the canonical file path
+```
+
+## Phases
+
+| # | What | Lands in |
+|---|---|---|
+| 1 | `ewe-conf` + schema + `import` + `apply` for the JSON-state domains (theme, dock, animations, pinned, places, startup, displays-state, window-rules) + theming via colorscheme.sh | ewe (DE) |
+| 2 | in-shell Settings/Globals persist through `ewe-conf` (reads unchanged — the shell keeps reading its generated runtime files) | ewe |
+| 3 | ewe-settings persists through `ewe-conf`; its duplicated JSON writers retire (the byte-identical contract shrinks to the lua generators only) | ewe-settings |
+| 4 | lua/conf generators move INTO `ewe-conf` one artifact at a time (input.lua → wallpapers.conf → hypridle.conf → user.lua → windowrules.lua → animations.lua → monitors.lua) and get deleted from both UIs | ewe + ewe-settings |
+| 5 | `[system]`: installer records profiles in the file; gaming/dev package lists move to ewe-os; ISO/ewe-install seed the file | ewe + ewe-os |
+| 6 | `ewe-auth` token broker (refresh token in keyring, access tokens over a socket — one Google OAuth for shell + komble + future apps) · `ewe.conf` Drive sync · `[apps.installed]` manifest written by komble | ewe + komble |
+
+Phases 1–5 ⇒ **ewe OS 0.3-alpha "one file"**. Phase 6 + repo signing +
+CI-built ISO ⇒ **0.4-alpha "connected"**. Hardware-verified, GUI-installer
+decision resolved, docs ⇒ **1.0-beta "Dolly"** — named for the sheep that
+proved you can clone the whole animal from one cell: log in, get your
+machine back.
