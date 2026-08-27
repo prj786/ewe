@@ -16,6 +16,21 @@ _enable_ewe_repo() {
     sudo_run pacman -Sy && ok "[ewe] repo enabled" || warn "could not sync the [ewe] repo — check network and /etc/pacman.conf."
 }
 
+# Trust the [ewe] signing key (fpr 639CA544B61509B3FC2621ABADBCD432FC0763C1).
+# Idempotent; imported ahead of the SigLevel tightening so already-installed
+# machines are ready the day the repo flips to Required.
+_trust_ewe_key() {
+    [ -r "$DOTREPO/system/ewe.gpg" ] || return 0
+    if sudo_run pacman-key --list-keys 639CA544B61509B3FC2621ABADBCD432FC0763C1 >/dev/null 2>&1; then
+        ok "[ewe] signing key already trusted"; return 0
+    fi
+    if [ "${DRY_RUN:-0}" = "1" ]; then info "would pacman-key --add system/ewe.gpg + --lsign-key"; return 0; fi
+    sudo_run pacman-key --add "$DOTREPO/system/ewe.gpg" \
+        && sudo_run pacman-key --lsign-key 639CA544B61509B3FC2621ABADBCD432FC0763C1 \
+        && ok "[ewe] signing key imported + locally signed" \
+        || warn "could not import the [ewe] signing key — unsigned SigLevel still works for now."
+}
+
 _enable_multilib() {
     if multilib_enabled; then ok "[multilib] already enabled"; return; fi
     info "enabling [multilib] in /etc/pacman.conf (needed for steam + lib32-*)"
@@ -109,6 +124,7 @@ _bootstrap_aur() {
 phase_repos() {
     step "10 · repositories"
     _enable_ewe_repo
+    _trust_ewe_key
     # [multilib] is only needed for 32-bit libs (Steam + the lib32 GPU drivers),
     # which are now opt-in — so only enable it when the gaming stack was requested.
     if [ "${GAMING:-0}" = "1" ]; then
