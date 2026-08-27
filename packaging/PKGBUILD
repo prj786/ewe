@@ -25,7 +25,8 @@ license=('GPL-2.0-only')
 # (ewe-repo pkgbuilds/) — phase 20's source install is only the non-repo
 # fallback, and an ISO without them boots to pink missing-icon tiles.
 depends=('komble-arch' 'ewe-settings'
-         'reversal-icon-theme' 'mocu-cursor-theme')   # + the lists, appended in package()
+         'reversal-icon-theme' 'mocu-cursor-theme'
+         'python')   # ewe-conf; + the lists, appended in package()
 install=ewe.install
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz"
         'ewe-setup')
@@ -46,9 +47,11 @@ package() {
     # The payload: everything a user-side deploy or a system setup needs.
     # (.claude/.github are dev tooling; dist/ is build output and untracked.)
     install -d "$pkgdir/usr/share/ewe"
-    cp -a dotfiles systemd system packages phases lib templates docs \
+    cp -a dotfiles systemd system packages phases lib templates docs bin \
           install.sh update.sh uninstall.sh VERSION VERSIONS README.md LICENSE \
           "$pkgdir/usr/share/ewe/"
 
     install -Dm755 "$srcdir/ewe-setup" "$pkgdir/usr/bin/ewe-setup"
+    # RFC-001: the ONE writer of the ONE file
+    install -Dm755 bin/ewe-conf "$pkgdir/usr/bin/ewe-conf"
 }

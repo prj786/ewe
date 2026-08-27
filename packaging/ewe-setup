@@ -58,6 +58,18 @@ run()  { "$@"; }
 source "$DEST/lib/deploy.sh" || die "payload is missing lib/deploy.sh"
 deploy_dotfiles
 
+# RFC-001: make ewe-conf reachable for tarball installs too (the package
+# already owns /usr/bin/ewe-conf; ~/.local/bin shadows consistently) and make
+# sure the ONE file exists — first deploy imports it from the runtime state
+# seed_state just created.
+if [ -x "$DEST/bin/ewe-conf" ]; then
+    mkdir -p "$HOME/.local/bin"
+    ln -sf "$DEST/bin/ewe-conf" "$HOME/.local/bin/ewe-conf"
+    [ -e "${XDG_CONFIG_HOME:-$HOME/.config}/ewe/ewe.conf" ] \
+        || "$DEST/bin/ewe-conf" import >/dev/null \
+        || warn "ewe-conf import failed — the one file will be created on first Settings change."
+fi
+
 # Default appearance on FIRST deploy — the phase-60 equivalent. Without this a
 # fresh account (live ISO included) runs with no icon/cursor/GTK/Qt theming at
 # all: Adwaita icon lookups miss half the apps and every launcher tile shows

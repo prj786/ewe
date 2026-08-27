@@ -1,0 +1,329 @@
+#!/usr/bin/env python3
+"""ewe-conf — the ONE writer of the ONE file (RFC-001).
+
+The machine is a single declarative document, ~/.config/ewe/ewe.conf (TOML).
+Settings UIs, the installer and komble never touch it directly — they call
+this tool, and everything the shell/Hyprland actually read is a build
+artifact of `ewe-conf apply`.
+
+    ewe-conf path                     canonical file path
+    ewe-conf dump                     whole document as JSON on stdout
+    ewe-conf get <dotted.key>         value (JSON for structures)
+    ewe-conf set <dotted.key> <val>   val parsed as JSON, else string; applies
+    ewe-conf unset <dotted.key>       remove a key; applies
+    ewe-conf import                   build ewe.conf FROM the live runtime files
+    ewe-conf apply [--only DOMAIN] [--no-hooks]
+                                      regenerate artifacts (+ colorscheme +
+                                      settings-reload poke unless --no-hooks)
+
+Python stdlib only: tomllib reads, the constrained emitter below writes (our
+schema is tables, arrays, scalars — nothing exotic). Writes are atomic
+(tmp+rename) under an flock, keys are emitted in stable order so diffs are
+honest. Phase 1 scope: the JSON-state domains; lua/conf generators join in
+RFC Phase 4.
+"""
+import fcntl
+import json
+import os
+import re
+import subprocess
+import sys
+import tempfile
+import tomllib
+
+SCHEMA = 1
+
+CFG_DIR = os.path.join(os.environ.get("XDG_CONFIG_HOME")
+                       or os.path.join(os.path.expanduser("~"), ".config"))
+EWE_DIR = os.path.join(CFG_DIR, "ewe")
+CONF = os.path.join(EWE_DIR, "ewe.conf")
+QS = os.path.join(CFG_DIR, "quickshell")
+
+HEADER = """\
+# ewe.conf — the machine as one file (RFC-001).
+# Owned by `ewe-conf`; edit by hand if you like, but every Settings change
+# rewrites it wholesale and comments do not survive. `ewe-conf apply` turns
+# this document into the runtime files Hyprland and the shell read.
+"""
+
+# ── constrained TOML emitter ─────────────────────────────────────────────────
+
+_BARE = re.compile(r"^[A-Za-z0-9_-]+$")
+
+
+def _key(k):
+    return k if _BARE.match(k) else json.dumps(k)
+
+
+def _scalar(v):
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    if isinstance(v, (int, float)):
+        return repr(v)
+    if isinstance(v, str):
+        return json.dumps(v)
+    if isinstance(v, list):
+        return "[" + ", ".join(_scalar(x) for x in v) + "]"
+    if isinstance(v, dict):
+        return "{" + ", ".join(f"{_key(k)} = {_scalar(x)}" for k, x in v.items()) + "}"
+    raise TypeError(f"unsupported value: {type(v).__name__}")
+
+
+def _emit_table(out, path, table):
+    scalars = {k: v for k, v in table.items() if not isinstance(v, dict)}
+    subs = {k: v for k, v in table.items() if isinstance(v, dict)}
+    if path and (scalars or not subs):
+        out.append("[" + ".".join(_key(p) for p in path) + "]")
+    for k, v in scalars.items():
+        out.append(f"{_key(k)} = {_scalar(v)}")
+    if scalars or not subs:
+        out.append("")
+    for k, v in subs.items():
+        _emit_table(out, path + [k], v)
+
+
+def emit(doc):
+    out = [HEADER]
+    _emit_table(out, [], doc)
+    return "\n".join(out).rstrip() + "\n"
+
+
+# ── document I/O ─────────────────────────────────────────────────────────────
+
+def load():
+    try:
+        with open(CONF, "rb") as f:
+            return tomllib.load(f)
+    except FileNotFoundError:
+        return {"schema": SCHEMA}
+
+
+def save(doc):
+    doc["schema"] = SCHEMA
+    os.makedirs(EWE_DIR, exist_ok=True)
+    text = emit(doc)
+    tomllib.loads(text)  # never persist something we cannot read back
+    fd, tmp = tempfile.mkstemp(dir=EWE_DIR, prefix=".ewe.conf.")
+    try:
+        with os.fdopen(fd, "w") as f:
+            f.write(text)
+        os.replace(tmp, CONF)
+    except BaseException:
+        os.unlink(tmp)
+        raise
+
+
+class locked:
+    def __enter__(self):
+        os.makedirs(EWE_DIR, exist_ok=True)
+        self.f = open(os.path.join(EWE_DIR, ".lock"), "w")
+        fcntl.flock(self.f, fcntl.LOCK_EX)
+        return self
+
+    def __exit__(self, *a):
+        self.f.close()
+
+
+def dig(doc, dotted, create=False):
+    *parts, last = dotted.split(".")
+    node = doc
+    for p in parts:
+        if p not in node or not isinstance(node[p], dict):
+            if not create:
+                return None, last
+            node[p] = {}
+        node = node[p]
+    return node, last
+
+
+# ── runtime-file mappings (Phase 1 domains) ──────────────────────────────────
+
+def _rj(name, default):
+    try:
+        with open(os.path.join(QS, name)) as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return default
+
+
+def _wj(name, data):
+    path = os.path.join(QS, name)
+    os.makedirs(QS, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=QS, prefix=f".{name}.")
+    with os.fdopen(fd, "w") as f:
+        json.dump(data, f, indent=2)
+        f.write("\n")
+    os.replace(tmp, path)
+
+
+THEME_MAP = [  # ewe.conf key ↔ user-theme.json key (with defaults)
+    ("desktop.theme.color_scheme", "colorScheme", "dark"),
+    ("desktop.theme.accent", "accent", "#0a84ff"),
+    ("desktop.theme.theme_name", "themeName", "flock"),
+    ("desktop.theme.tint_borders", "tintBorders", True),
+    ("desktop.theme.window_transparency", "windowTransparency", False),
+    ("desktop.theme.avatar_shape", "avatarShape", "circle"),
+    ("desktop.dock.enabled", "dockEnabled", True),
+    ("desktop.dock.autohide", "dockAutohide", False),
+    ("desktop.dock.icon_size", "dockIconSize", "medium"),
+    ("desktop.animations.speed", "animationSpeed", 1),
+    ("desktop.tiling.enabled", "tilingEnabled", True),
+    ("desktop.power.low_power", "lowPowerEnabled", True),
+    ("desktop.power.lid_docked_suspend", "lidDockedSuspend", False),
+    ("desktop.power.saver", "saver",
+     {"enabled": True, "lock": False, "lockAfterMin": 5, "min": 5, "style": "clock"}),
+]
+
+
+def do_import():
+    doc = load()
+    ut = _rj("user-theme.json", {})
+    for ck, jk, dflt in THEME_MAP:
+        node, last = dig(doc, ck, create=True)
+        node[last] = ut.get(jk, dflt)
+    an = _rj("animations.json", None)
+    if an is not None:
+        node, last = dig(doc, "desktop.animations.detail", create=True)
+        node[last] = an
+    node, last = dig(doc, "apps.pinned", create=True)
+    node[last] = _rj("pinned-apps.json", [])
+    node, last = dig(doc, "apps.startup", create=True)
+    node[last] = _rj("startup-apps.json", {"apps": []}).get("apps", [])
+    node, last = dig(doc, "apps.places", create=True)
+    node[last] = _rj("places.json", [])
+    dp = _rj("display-profiles.json", None)
+    if dp is not None:
+        node, last = dig(doc, "desktop.displays", create=True)
+        node[last] = dp
+    wr = _rj("window-rules.json", None)
+    if wr is not None:
+        node, last = dig(doc, "desktop.window_rules", create=True)
+        node[last] = wr.get("rules", [])
+    doc.setdefault("system", {}).setdefault("gaming", False)
+    doc["system"].setdefault("development", False)
+    doc.setdefault("sync", {}).setdefault("enabled", False)
+    save(doc)
+    return doc
+
+
+def do_apply(doc, only=None, hooks=True):
+    def want(domain):
+        return only is None or only == domain
+
+    if want("theme"):
+        ut = _rj("user-theme.json", {})
+        for ck, jk, dflt in THEME_MAP:
+            node, last = dig(doc, ck)
+            ut[jk] = (node or {}).get(last, dflt)
+        _wj("user-theme.json", ut)
+    if want("animations"):
+        node, last = dig(doc, "desktop.animations.detail")
+        detail = (node or {}).get(last) if node else None
+        if detail:
+            _wj("animations.json", detail)
+    if want("apps"):
+        node, last = dig(doc, "apps.pinned")
+        if node and last in node:
+            _wj("pinned-apps.json", node[last])
+        node, last = dig(doc, "apps.startup")
+        if node and last in node:
+            _wj("startup-apps.json", {"apps": node[last]})
+        node, last = dig(doc, "apps.places")
+        if node and last in node:
+            _wj("places.json", node[last])
+    if want("displays"):
+        node, last = dig(doc, "desktop.displays")
+        if node and last in node:
+            _wj("display-profiles.json", node[last])
+    if want("window_rules"):
+        node, last = dig(doc, "desktop.window_rules")
+        if node and last in node:
+            _wj("window-rules.json", {"rules": node[last]})
+
+    if hooks:
+        if want("theme"):
+            cs = os.path.join(QS, "scripts", "colorscheme.sh")
+            node, last = dig(doc, "desktop.theme.color_scheme")
+            scheme = (node or {}).get(last, "dark") if node else "dark"
+            node, last = dig(doc, "desktop.theme.accent")
+            accent = ((node or {}).get(last, "#0a84ff") if node else "#0a84ff").lstrip("#")
+            if os.path.exists(cs):
+                subprocess.run(["sh", cs, scheme, accent],
+                               capture_output=True, timeout=120)
+        subprocess.run(["qs", "ipc", "call", "settings", "reload"],
+                       capture_output=True, timeout=10)
+
+
+# ── CLI ──────────────────────────────────────────────────────────────────────
+
+def parse_value(raw):
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        return raw
+
+
+def main(argv):
+    cmd = argv[0] if argv else "help"
+    if cmd == "path":
+        print(CONF)
+    elif cmd == "dump":
+        print(json.dumps(load(), indent=2))
+    elif cmd == "get" and len(argv) == 2:
+        node, last = dig(load(), argv[1])
+        if node is None or last not in node:
+            return 1
+        v = node[last]
+        print(json.dumps(v) if isinstance(v, (dict, list, bool)) else v)
+    elif cmd == "set" and len(argv) == 3:
+        with locked():
+            doc = load()
+            node, last = dig(doc, argv[1], create=True)
+            node[last] = parse_value(argv[2])
+            save(doc)
+            do_apply(doc, only=_domain(argv[1]))
+    elif cmd == "unset" and len(argv) == 2:
+        with locked():
+            doc = load()
+            node, last = dig(doc, argv[1])
+            if node and last in node:
+                del node[last]
+                save(doc)
+                do_apply(doc, only=_domain(argv[1]))
+    elif cmd == "import":
+        with locked():
+            do_import()
+        print(CONF)
+    elif cmd == "apply":
+        only = None
+        hooks = True
+        args = argv[1:]
+        while args:
+            a = args.pop(0)
+            if a == "--only" and args:
+                only = args.pop(0)
+            elif a == "--no-hooks":
+                hooks = False
+        with locked():
+            do_apply(load(), only=only, hooks=hooks)
+    else:
+        print(__doc__.strip(), file=sys.stderr)
+        return 2
+    return 0
+
+
+def _domain(dotted):
+    # first meaningful routing segment: desktop.<domain>… or apps.* / system.*
+    parts = dotted.split(".")
+    if parts[0] == "desktop" and len(parts) > 1:
+        return {"theme": "theme", "dock": "theme", "tiling": "theme",
+                "power": "theme", "animations": "animations",
+                "displays": "displays", "window_rules": "window_rules",
+                }.get(parts[1], None)
+    if parts[0] == "apps":
+        return "apps"
+    return None
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
