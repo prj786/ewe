@@ -1,0 +1,377 @@
+#!/usr/bin/env python3
+"""ewe-auth — one Google identity for every ewe app (RFC-002).
+
+Promoted from the shell's google-auth.py: the same PKCE + loopback flow and
+Secret Service keyring, now serving the whole desktop. The shell, Komble and
+future apps stop doing their own OAuth and ask this broker instead.
+
+Subcommands (every one prints a single JSON object and exits 0 — callers
+never hang on it; `token` prints the bare token unless --json):
+  status   -> {configured, client, keyring, signed_in, profile}
+  login    -> browser consent -> refresh token into the keyring
+  token    -> a valid access token (runtime-cached; refreshes under flock)
+  refresh  -> like token, but always JSON and never the runtime cache's copy
+              without checking expiry (kept for the shell's existing calls)
+  logout   -> revoke at Google + clear keyring + caches
+
+Client config — the fresh "ewe" OAuth client drops in here:
+  1. ~/.config/ewe/oauth-client.json      (the ewe client; flat or the
+     console's {"installed": {...}} download, verbatim)
+  2. ~/.config/quickshell/google-oauth.json   (legacy shell client)
+Changing the client invalidates the stored refresh token by definition —
+the broker detects the swap (client_id recorded at login) and reports
+signed-out with reason "client-changed" so UIs prompt one clean re-login.
+
+Secrets policy unchanged: the refresh token lives ONLY in the keyring; the
+access token cache lives in XDG_RUNTIME_DIR (tmpfs, 0600, gone at logout);
+a Desktop-app client_secret is explicitly not confidential (Google's own
+docs) but still never enters version control.
+"""
+
+import base64
+import fcntl
+import hashlib
+import json
+import os
+import secrets as pysecrets
+import subprocess
+import sys
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+from http.server import BaseHTTPRequestHandler, HTTPServer
+
+CFG_DIR = os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
+EWE_CLIENT = os.path.join(CFG_DIR, "ewe", "oauth-client.json")
+LEGACY_CLIENT = os.path.join(CFG_DIR, "quickshell", "google-oauth.json")
+AUTH_META = os.path.join(CFG_DIR, "ewe", "auth.json")        # client_id + email, non-secret
+PROFILE_CACHE = os.path.join(CFG_DIR, "quickshell", "google-profile.json")
+RUN_DIR = os.environ.get("XDG_RUNTIME_DIR") or "/tmp"
+TOKEN_CACHE = os.path.join(RUN_DIR, "ewe-auth-token.json")
+
+AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
+TOKEN_URL = os.environ.get("EWE_AUTH_TOKEN_URL", "https://oauth2.googleapis.com/token")
+REVOKE_URL = "https://oauth2.googleapis.com/revoke"
+USERINFO_URL = "https://openidconnect.googleapis.com/v1/userinfo"
+# gmail.readonly is a RESTRICTED scope: fine for a personal client published
+# "In production" (unverified-app clickthrough) — see README
+SCOPES = ("openid email profile "
+          "https://www.googleapis.com/auth/calendar.readonly "
+          "https://www.googleapis.com/auth/drive.appdata "
+          "https://www.googleapis.com/auth/gmail.readonly")
+
+KEYRING_ARGS = ["service", "ewe", "account", "google"]
+OLD_KEYRING_ARGS = ["service", "hypr-shell", "account", "google"]
+FAKE_KEYRING = os.environ.get("EWE_AUTH_FAKE_KEYRING")   # tests only
+LOGIN_TIMEOUT = 300
+
+
+def out(obj):
+    print(json.dumps(obj))
+    sys.exit(0)
+
+
+def read_client():
+    cid = os.environ.get("EWE_GOOGLE_CLIENT_ID", "")
+    csec = os.environ.get("EWE_GOOGLE_CLIENT_SECRET", "")
+    which = "env" if cid else ""
+    if not cid:
+        for path, name in ((EWE_CLIENT, "ewe"), (LEGACY_CLIENT, "legacy")):
+            try:
+                with open(path) as f:
+                    j = json.load(f)
+                if isinstance(j.get("installed"), dict):
+                    j = j["installed"]
+                if j.get("client_id"):
+                    cid, csec, which = j["client_id"], j.get("client_secret", ""), name
+                    break
+            except (OSError, ValueError):
+                continue
+    return cid, csec, which
+
+
+def keyring_get():
+    if FAKE_KEYRING is not None:
+        try:
+            return open(FAKE_KEYRING).read().strip()
+        except OSError:
+            return ""
+    try:
+        r = subprocess.run(["secret-tool", "lookup", *KEYRING_ARGS],
+                           capture_output=True, text=True, timeout=10)
+        if r.returncode == 0 and r.stdout.strip():
+            return r.stdout.strip()
+        r = subprocess.run(["secret-tool", "lookup", *OLD_KEYRING_ARGS],
+                           capture_output=True, text=True, timeout=10)
+        tok = r.stdout.strip() if r.returncode == 0 else ""
+        if tok and keyring_set(tok):
+            subprocess.run(["secret-tool", "clear", *OLD_KEYRING_ARGS],
+                           capture_output=True, text=True, timeout=10)
+        return tok
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+
+
+def keyring_set(token):
+    if FAKE_KEYRING is not None:
+        open(FAKE_KEYRING, "w").write(token)
+        return True
+    r = subprocess.run(["secret-tool", "store", "--label=ewe Google", *KEYRING_ARGS],
+                       input=token, capture_output=True, text=True, timeout=10)
+    return r.returncode == 0
+
+
+def keyring_clear():
+    if FAKE_KEYRING is not None:
+        try:
+            os.remove(FAKE_KEYRING)
+        except OSError:
+            pass
+        return
+    subprocess.run(["secret-tool", "clear", *KEYRING_ARGS],
+                   capture_output=True, text=True, timeout=10)
+
+
+def read_json(path):
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return None
+
+
+def write_json(path, data, mode=None):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = path + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(data, f)
+    if mode is not None:
+        os.chmod(tmp, mode)
+    os.replace(tmp, path)
+
+
+def http_post_form(url, fields):
+    data = urllib.parse.urlencode(fields).encode()
+    req = urllib.request.Request(url, data=data,
+                                 headers={"Content-Type": "application/x-www-form-urlencoded"})
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            return json.loads(resp.read().decode()), None
+    except urllib.error.HTTPError as e:
+        try:
+            body = json.loads(e.read().decode())
+        except ValueError:
+            body = {}
+        return None, body.get("error", "http-%d" % e.code)
+    except (urllib.error.URLError, OSError) as e:
+        return None, "network: %s" % e
+
+
+def fetch_userinfo(access_token):
+    req = urllib.request.Request(USERINFO_URL, headers={"Authorization": "Bearer " + access_token})
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            j = json.loads(resp.read().decode())
+        return {"name": j.get("name", ""), "email": j.get("email", ""), "picture": j.get("picture", "")}
+    except (urllib.error.URLError, OSError, ValueError):
+        return {"name": "", "email": "", "picture": ""}
+
+
+def client_changed(cid):
+    meta = read_json(AUTH_META)
+    return bool(meta and meta.get("client_id") and meta["client_id"] != cid)
+
+
+def signed_out(reason):
+    keyring_clear()
+    for p in (PROFILE_CACHE, TOKEN_CACHE, AUTH_META):
+        try:
+            os.remove(p)
+        except OSError:
+            pass
+    out({"ok": False, "error": "signed-out", "reason": reason})
+
+
+def do_refresh(cid, csec):
+    """refresh-token → fresh access token; updates the runtime cache.
+    Returns (token_dict, None) or (None, error-json-already-printed)."""
+    rt = keyring_get()
+    if not rt:
+        out({"ok": False, "error": "signed-out"})
+    if client_changed(cid):
+        signed_out("client-changed")
+    tok, err = http_post_form(TOKEN_URL, {
+        "client_id": cid, "client_secret": csec,
+        "refresh_token": rt, "grant_type": "refresh_token",
+    })
+    if err == "invalid_grant":
+        signed_out("invalid_grant")
+    if err or "access_token" not in (tok or {}):
+        out({"ok": False, "error": err or "no access_token"})
+    exp = int(time.time()) + int(tok.get("expires_in", 3600))
+    write_json(TOKEN_CACHE, {"access_token": tok["access_token"],
+                             "expires_at": exp, "client_id": cid}, mode=0o600)
+    return tok["access_token"], exp
+
+
+def cmd_status():
+    cid, _, which = read_client()
+    keyring_ok = True
+    if FAKE_KEYRING is None:
+        try:
+            subprocess.run(["secret-tool", "--help"], capture_output=True, timeout=10)
+        except (OSError, subprocess.TimeoutExpired):
+            keyring_ok = False
+    out({"configured": bool(cid), "client": which, "keyring": keyring_ok,
+         "signed_in": bool(keyring_get()) and not client_changed(cid),
+         "profile": read_json(PROFILE_CACHE)})
+
+
+def cmd_token(argv):
+    as_json = "--json" in argv
+    cid, csec, _ = read_client()
+    if not cid:
+        out({"ok": False, "error": "not-configured"})
+    os.makedirs(RUN_DIR, exist_ok=True)
+    with open(os.path.join(RUN_DIR, ".ewe-auth.lock"), "w") as lk:
+        fcntl.flock(lk, fcntl.LOCK_EX)
+        cache = read_json(TOKEN_CACHE)
+        if (cache and cache.get("client_id") == cid
+                and cache.get("expires_at", 0) - time.time() > 60):
+            at, exp = cache["access_token"], cache["expires_at"]
+        else:
+            at, exp = do_refresh(cid, csec)
+    if as_json:
+        out({"ok": True, "access_token": at, "expires_at": exp})
+    print(at)
+    sys.exit(0)
+
+
+def cmd_refresh():
+    cid, csec, _ = read_client()
+    if not cid:
+        out({"ok": False, "error": "not-configured"})
+    at, exp = do_refresh(cid, csec)
+    out({"ok": True, "access_token": at, "expires_at": exp})
+
+
+def cmd_login():
+    cid, csec, which = read_client()
+    if not cid:
+        out({"ok": False, "error": "not-configured"})
+    if not keyring_set("ewe-keyring-probe"):
+        out({"ok": False, "error": "keyring-unavailable"})
+    keyring_clear()
+
+    verifier = base64.urlsafe_b64encode(pysecrets.token_bytes(48)).decode().rstrip("=")
+    challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).decode().rstrip("=")
+    state = pysecrets.token_urlsafe(24)
+    result = {}
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *a):
+            pass
+
+        def do_GET(self):
+            q = urllib.parse.urlparse(self.path)
+            params = dict(urllib.parse.parse_qsl(q.query))
+            body = "<html><body style='background:#1d1d1d;color:#eee;font-family:sans-serif'>" \
+                   "<h2>ewe</h2><p>%s</p></body></html>"
+            if q.path != "/callback":
+                self.send_response(404); self.end_headers(); return
+            if params.get("state") != state:
+                result["error"] = "state-mismatch"
+                msg = "Sign-in failed (state mismatch) — you can close this tab."
+            elif "error" in params:
+                result["error"] = params["error"]
+                msg = "Sign-in was cancelled — you can close this tab."
+            elif "code" in params:
+                result["code"] = params["code"]
+                msg = "Signed in — you can close this tab and return to ewe."
+            else:
+                result["error"] = "no-code"
+                msg = "Sign-in failed — you can close this tab."
+            data = (body % msg).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+    srv = HTTPServer(("127.0.0.1", 0), Handler)
+    port = srv.server_address[1]
+    redirect = "http://127.0.0.1:%d/callback" % port
+
+    auth = AUTH_URL + "?" + urllib.parse.urlencode({
+        "client_id": cid, "redirect_uri": redirect, "response_type": "code",
+        "scope": SCOPES, "code_challenge": challenge, "code_challenge_method": "S256",
+        "access_type": "offline", "prompt": "consent", "state": state,
+    })
+    subprocess.Popen(["xdg-open", auth], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    srv.timeout = 5
+    deadline = time.time() + LOGIN_TIMEOUT
+    while time.time() < deadline and not result:
+        srv.handle_request()
+    srv.server_close()
+
+    if "code" not in result:
+        out({"ok": False, "error": result.get("error", "timeout")})
+
+    tok, err = http_post_form(TOKEN_URL, {
+        "client_id": cid, "client_secret": csec, "code": result["code"],
+        "code_verifier": verifier, "grant_type": "authorization_code",
+        "redirect_uri": redirect,
+    })
+    if err or "access_token" not in (tok or {}):
+        out({"ok": False, "error": "token-exchange: %s" % (err or "no access_token")})
+    if "refresh_token" not in tok:
+        out({"ok": False, "error": "no-refresh-token"})
+    if not keyring_set(tok["refresh_token"]):
+        out({"ok": False, "error": "keyring-store-failed"})
+
+    profile = fetch_userinfo(tok["access_token"])
+    write_json(PROFILE_CACHE, profile)
+    write_json(AUTH_META, {"client_id": cid, "client": which,
+                           "email": profile.get("email", "")})
+    exp = int(time.time()) + int(tok.get("expires_in", 3600))
+    write_json(TOKEN_CACHE, {"access_token": tok["access_token"],
+                             "expires_at": exp, "client_id": cid}, mode=0o600)
+    out({"ok": True, "profile": profile, "access_token": tok["access_token"],
+         "expires_at": exp})
+
+
+def cmd_logout():
+    rt = keyring_get()
+    if rt:
+        try:
+            urllib.request.urlopen(
+                urllib.request.Request(REVOKE_URL,
+                                       data=urllib.parse.urlencode({"token": rt}).encode(),
+                                       headers={"Content-Type": "application/x-www-form-urlencoded"}),
+                timeout=15)
+        except (urllib.error.URLError, OSError):
+            pass
+    keyring_clear()
+    for p in (PROFILE_CACHE, TOKEN_CACHE, AUTH_META):
+        try:
+            os.remove(p)
+        except OSError:
+            pass
+    out({"ok": True})
+
+
+if __name__ == "__main__":
+    argv = sys.argv[1:]
+    cmd = argv[0] if argv else "status"
+    try:
+        if cmd == "token":
+            cmd_token(argv[1:])
+        else:
+            {"status": cmd_status, "login": cmd_login,
+             "refresh": cmd_refresh, "logout": cmd_logout}.get(cmd, cmd_status)()
+    except SystemExit:
+        raise
+    except Exception as e:  # absolute backstop: still emit parseable JSON
+        print(json.dumps({"ok": False, "error": "internal: %s" % e}))

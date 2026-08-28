@@ -29,7 +29,10 @@ QtObject {
     property double _expiresAt: 0
     property var _tokenWaiters: []
 
-    readonly property string helper: Quickshell.env("HOME") + "/.config/quickshell/scripts/google-auth.py"
+    // RFC-002: the OAuth broker is ewe-auth — one Google identity for the
+    // shell, Komble and future apps (same JSON contract this file always
+    // spoke; the old scripts/google-auth.py path remains as a shim).
+    readonly property string helper: Quickshell.env("HOME") + "/.config/quickshell/../../bin/ewe-auth"
 
     function refresh() { _statusProc.running = false; _statusProc.running = true }
 

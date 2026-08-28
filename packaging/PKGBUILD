@@ -61,4 +61,6 @@ package() {
     install -Dm755 "$srcdir/ewe-setup" "$pkgdir/usr/bin/ewe-setup"
     # RFC-001: the ONE writer of the ONE file
     install -Dm755 bin/ewe-conf "$pkgdir/usr/bin/ewe-conf"
+    # RFC-002: the ONE Google identity for every ewe app
+    install -Dm755 bin/ewe-auth "$pkgdir/usr/bin/ewe-auth"
 }
