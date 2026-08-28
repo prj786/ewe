@@ -487,6 +487,126 @@ def _wtext(path, text):
     os.replace(tmp, path)
 
 
+# ── RFC-002: sync of the one file (Drive appDataFolder via ewe-auth) ────────
+# Boring by design: push after writes (30s debounce, only when [sync].enabled
+# and signed in), pull ONLY on demand, newest-wins with the loser kept as
+# ewe.conf.<ts>.bak. appDataFolder is app-scoped hidden storage — the file
+# never appears in the user's visible Drive.
+
+DRIVE_FILES = "https://www.googleapis.com/drive/v3/files"
+DRIVE_UPLOAD = "https://www.googleapis.com/upload/drive/v3/files"
+PUSH_STAMP = os.path.join(os.environ.get("XDG_RUNTIME_DIR") or "/tmp", "ewe-conf-push.stamp")
+
+
+def _auth_token():
+    ea = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ewe-auth")
+    if not os.path.exists(ea):
+        ea = "ewe-auth"
+    r = subprocess.run([ea, "token"], capture_output=True, text=True, timeout=60)
+    tok = r.stdout.strip().splitlines()[-1] if r.stdout.strip() else ""
+    return tok if r.returncode == 0 and len(tok) > 20 and not tok.startswith("{") else None
+
+
+def _drive(method, url, token, body=None, ctype="application/json"):
+    import urllib.request
+    import urllib.error
+    req = urllib.request.Request(url, method=method, data=body,
+                                 headers={"Authorization": "Bearer " + token,
+                                          **({"Content-Type": ctype} if body else {})})
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            raw = resp.read()
+            return (json.loads(raw) if raw and raw.strip().startswith(b"{") else raw), None
+    except urllib.error.HTTPError as e:
+        return None, f"http-{e.code}: {e.read().decode()[:160]}"
+    except OSError as e:
+        return None, f"network: {e}"
+
+
+def _remote_find(token):
+    import urllib.parse
+    q = urllib.parse.quote("name='ewe.conf'")
+    url = f"{DRIVE_FILES}?spaces=appDataFolder&q={q}&fields=files(id,name,modifiedTime)"
+    j, err = _drive("GET", url, token)
+    if err:
+        return None, err
+    files = j.get("files", [])
+    return (files[0] if files else None), None
+
+
+def do_push(quiet=False):
+    token = _auth_token()
+    if not token:
+        return {"ok": False, "error": "not-signed-in"}
+    try:
+        content = open(CONF, "rb").read()
+    except OSError:
+        return {"ok": False, "error": "no-local-file"}
+    remote, err = _remote_find(token)
+    if err:
+        return {"ok": False, "error": err}
+    if remote:
+        j, err = _drive("PATCH", f"{DRIVE_UPLOAD}/{remote['id']}?uploadType=media",
+                        token, content, "application/toml")
+    else:
+        boundary = "eweconfboundary"
+        meta = json.dumps({"name": "ewe.conf", "parents": ["appDataFolder"]})
+        body = (f"--{boundary}\r\nContent-Type: application/json\r\n\r\n{meta}\r\n"
+                f"--{boundary}\r\nContent-Type: application/toml\r\n\r\n").encode()                + content + f"\r\n--{boundary}--".encode()
+        j, err = _drive("POST", f"{DRIVE_UPLOAD}?uploadType=multipart",
+                        token, body, f"multipart/related; boundary={boundary}")
+    if err:
+        return {"ok": False, "error": err}
+    with open(PUSH_STAMP, "w") as f:
+        f.write(str(int(__import__("time").time())))
+    return {"ok": True, "id": j.get("id", ""), "bytes": len(content)}
+
+
+def do_pull(out_path=None):
+    token = _auth_token()
+    if not token:
+        return {"ok": False, "error": "not-signed-in"}
+    remote, err = _remote_find(token)
+    if err:
+        return {"ok": False, "error": err}
+    if not remote:
+        return {"ok": False, "error": "nothing-synced"}
+    raw, err = _drive("GET", f"{DRIVE_FILES}/{remote['id']}?alt=media", token)
+    if err:
+        return {"ok": False, "error": err}
+    if isinstance(raw, dict):
+        raw = json.dumps(raw).encode()
+    tomllib.loads(raw.decode())          # never write a document we can't read
+    target = out_path or CONF
+    backed_up = ""
+    if not out_path and os.path.exists(CONF):
+        import time as _t
+        backed_up = CONF + "." + _t.strftime("%Y%m%d-%H%M%S") + ".bak"
+        os.replace(CONF, backed_up)
+    os.makedirs(os.path.dirname(target), exist_ok=True)
+    with open(target, "wb") as f:
+        f.write(raw)
+    return {"ok": True, "bytes": len(raw), "modified": remote.get("modifiedTime", ""),
+            "backup": backed_up, "written": target}
+
+
+def maybe_auto_push(doc):
+    """fire-and-forget push after a write — only when the user opted in,
+    debounced so bursts of Settings changes cost one upload."""
+    node, last = dig(doc, "sync.enabled")
+    if not (node and node.get(last)):
+        return
+    try:
+        with open(PUSH_STAMP) as f:
+            import time as _t
+            if _t.time() - int(f.read().strip() or 0) < 30:
+                return
+    except OSError:
+        pass
+    subprocess.Popen([sys.executable, os.path.abspath(__file__), "push", "--quiet"],
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
 # ── CLI ──────────────────────────────────────────────────────────────────────
 
 def parse_value(raw):
@@ -520,6 +640,7 @@ def main(argv):
             node[last] = parse_value(argv[2])
             save(doc)
             do_apply(doc, only=_domain(argv[1]), hooks=hooks)
+            maybe_auto_push(doc)
     elif cmd == "unset" and len(argv) == 2:
         with locked():
             doc = load()
@@ -540,6 +661,13 @@ def main(argv):
                     node[last] = ut[jk]
             save(doc)
             do_apply(doc, only="theme", hooks=hooks)
+    elif cmd == "push":
+        print(json.dumps(do_push(quiet="--quiet" in argv)))
+    elif cmd == "pull":
+        outp = None
+        if "--out" in argv:
+            outp = argv[argv.index("--out") + 1]
+        print(json.dumps(do_pull(outp)))
     elif cmd == "import":
         with locked():
             do_import()

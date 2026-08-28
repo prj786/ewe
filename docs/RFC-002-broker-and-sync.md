@@ -1,7 +1,10 @@
 # RFC-002 — ewe-auth and the sync of the one file
 
-*Status: draft for review · target: ewe OS 0.5-alpha "connected" · builds on
-RFC-001*
+*Status: steps 1–3 SHIPPED and verified against real Google (broker token
+from a live session; ewe.conf → Drive appData → back, byte-identical).
+Remaining: komble's restore surface (4), legacy-pipeline retirement (5),
+and the owner minting the fresh "ewe" client (docs/GOOGLE-CLIENT.md — a
+drop-in file swap). Target: ewe OS 0.5-alpha "connected".*
 
 The promise: **log in, get your machine back.** `ewe.conf` already describes
 the machine; this RFC moves it to the user's Google Drive and gives every ewe
