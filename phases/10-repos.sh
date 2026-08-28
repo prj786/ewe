@@ -11,7 +11,7 @@ _enable_ewe_repo() {
     fi
     info "adding the [ewe] repo to /etc/pacman.conf"
     if [ "${DRY_RUN:-0}" = "1" ]; then info "would append the [ewe] block + pacman -Sy"; return; fi
-    printf '\n[ewe]\nSigLevel = Optional TrustAll\nServer = https://github.com/prj786/ewe-repo/releases/download/x86_64\n' \
+    printf '\n[ewe]\nSigLevel = Required DatabaseRequired\nServer = https://github.com/prj786/ewe-repo/releases/download/x86_64\n' \
         | sudo_run tee -a /etc/pacman.conf >/dev/null
     sudo_run pacman -Sy && ok "[ewe] repo enabled" || warn "could not sync the [ewe] repo — check network and /etc/pacman.conf."
 }
@@ -123,8 +123,10 @@ _bootstrap_aur() {
 
 phase_repos() {
     step "10 · repositories"
-    _enable_ewe_repo
+    # key BEFORE repo: with SigLevel Required the very first `pacman -Sy`
+    # already verifies the db signature, so trust must exist first
     _trust_ewe_key
+    _enable_ewe_repo
     # [multilib] is only needed for 32-bit libs (Steam + the lib32 GPU drivers),
     # which are now opt-in — so only enable it when the gaming stack was requested.
     if [ "${GAMING:-0}" = "1" ]; then
