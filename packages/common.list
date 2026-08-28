@@ -56,7 +56,6 @@ networkmanager
 networkmanager-openvpn  # OpenVPN profiles (the most common VPN type)
 networkmanager-l2tp     # L2TP/IPsec profiles (needs strongswan below)
 strongswan              # IPsec for networkmanager-l2tp
-iwd
 # Cast to TV (the control-centre "Cast" tile → gnome-network-displays, aur.list):
 iw                      # `iw list` — cast-check.sh verifies the Wi-Fi card does Wi-Fi Direct (P2P), which Miracast needs
 avahi                   # mDNS — Chromecast / Google TV discovery (phase 30 enables avahi-daemon)
@@ -90,7 +89,10 @@ nemo                    # file manager (GTK3; custom right-click via .nemo_actio
 engrampa                # archive manager (GTK3, no headerbar) — create / extract
 imv                     # image viewer (Wayland-native, decorationless)
 zathura                 # PDF / document viewer (keyboard-driven, fully themeable)
-zathura-pdf-mupdf       # PDF backend for zathura
+zathura-pdf-mupdf
+tesseract-data-eng      # libmupdf → tesseract needs A data pack; unpinned, pacman's
+                        # resolver picks the first provider alphabetically — which is
+                        # AFRIKAANS. Pin English; users add languages via Komble.       # PDF backend for zathura
 mpv                     # video player (decorationless, themeless — ideal)
 mpv-mpris               # mpv → MPRIS bridge, so the dock's now-playing popup sees it
 galculator              # calculator (GTK3, menubar — follows adw-gtk3 + accent)
@@ -133,7 +135,6 @@ gnome-themes-extra
 # itself is Quickshell/Qt but themed by Theme.qml). No more plasma-integration / kde
 # platform theme — we ship no KDE apps.
 qt6ct
-papirus-icon-theme      # fallback icon set (Reversal inherits/falls back to it)
 librsvg                  # rsvg-convert — builds the Mocu cursor (phase 20 source step)
 xorg-xcursorgen          # xcursorgen — builds the Mocu cursor
 xmlstarlet               # cursor hotspot extraction for the Mocu build

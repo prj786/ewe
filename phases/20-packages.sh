@@ -18,9 +18,9 @@ _install_themes() {
         if git clone --depth 1 https://github.com/yeyushengfan258/Reversal-icon-theme.git "$d/rev"; then
             ( cd "$d/rev" && sudo_run bash ./install.sh -d /usr/share/icons -t all ) \
                 && ok "Reversal icon theme installed" \
-                || warn "Reversal install.sh FAILED — icons will fall back to Papirus."
+                || warn "Reversal install.sh FAILED — icons fall back to the theme defaults (hicolor)."
         else
-            warn "Reversal clone failed (network?) — icons will fall back to Papirus."
+            warn "Reversal clone failed (network?) — icons fall back to the theme defaults (hicolor)."
         fi
         rm -rf "$d"
     fi

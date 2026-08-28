@@ -15,16 +15,21 @@
 # the single source of truth. gaming.list becomes optdepends.
 
 pkgname=ewe
-pkgver=0.9.0
+pkgver=0.9.1
 pkgrel=1
 pkgdesc="ewe — a clean, dark Hyprland + Quickshell desktop environment"
 arch=('any')
 url="https://github.com/prj786/ewe"
 license=('GPL-2.0-only')
-# reversal-icon-theme + mocu-cursor-theme are served from the [ewe] repo
-# (ewe-repo pkgbuilds/) — phase 20's source install is only the non-repo
-# fallback, and an ISO without them boots to pink missing-icon tiles.
-depends=('komble-arch' 'ewe-settings'
+# PROVIDER PINS COME FIRST: pacman resolves depends in array order, and an
+# unpinned virtual is claimed by whichever provider a DEEP dependency reaches
+# first — that is exactly how a fresh `pacman -S ewe` once resolved jack2
+# AND pipewire-jack into the same transaction (unresolvable conflict).
+# reversal/mocu are served from the [ewe] repo (ewe-repo pkgbuilds/);
+# phase 20's source install is only the non-repo fallback.
+depends=('pipewire-jack'            # claims 'jack' before ffmpeg/mpv/portaudio ask
+         'tesseract-data-eng'       # claims 'tessdata' before libmupdf asks (else: Afrikaans)
+         'komble-arch' 'ewe-settings'
          'reversal-icon-theme' 'mocu-cursor-theme'
          'python')   # ewe-conf; + the lists, appended in package()
 install=ewe.install
@@ -39,8 +44,10 @@ package() {
     # Dependency lists → package metadata. Comments stripped, first word only.
     # (mapfile, not depends+= in a loop: makepkg's linter extracts +=-lines
     # from package() and evaluates them out of context, seeing empty values.)
+    # skip entries already front-pinned above — no duplicate depends
     mapfile -t -O "${#depends[@]}" depends \
-        < <(sed 's/#.*//' packages/common.list packages/aur.list | awk 'NF{print $1}')
+        < <(sed 's/#.*//' packages/common.list packages/aur.list | awk 'NF{print $1}' \
+            | grep -vxF -e pipewire-jack -e tesseract-data-eng)
     mapfile -t optdepends \
         < <(sed 's/#.*//' packages/gaming.list | awk 'NF{print $1": gaming stack (install.sh --gaming)"}')
 
