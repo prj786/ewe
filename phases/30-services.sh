@@ -189,6 +189,11 @@ phase_services() {
         sudo_run install -m 755 "$DOTREPO/system/networkmanager/50-ewe-cast-powersave" \
             /etc/NetworkManager/dispatcher.d/50-ewe-cast-powersave \
             && ok "installed NetworkManager cast power-save hook (Miracast link stays up)"
+        # automatic timezone: land somewhere new, the next connection moves the
+        # clock (IP geolocation → timedatectl; opt out: /etc/ewe/no-auto-timezone)
+        sudo_run install -m 755 "$DOTREPO/system/networkmanager/60-ewe-auto-timezone" \
+            /etc/NetworkManager/dispatcher.d/60-ewe-auto-timezone \
+            && ok "installed automatic-timezone hook (follows your network location)"
     fi
 
     # ── Lid ownership: Hyprland's lid.sh does clamshell (panel off when docked,

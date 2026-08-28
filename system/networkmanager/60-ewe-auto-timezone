@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# NetworkManager dispatcher: automatic timezone. Installed to
+# /etc/NetworkManager/dispatcher.d by ewe phase 30.
+#
+# The CLOCK is always right (systemd-timesyncd keeps UTC synced); what goes
+# stale when you fly is the TIMEZONE — set once at install and never again.
+# On every new connection this asks where the machine's public IP is and
+# moves /etc/localtime accordingly: land in Athens, the next Wi-Fi association
+# turns the clock Greek.
+#
+# Design notes:
+#   * IP geolocation only — no GPS, no radio scanning; the providers below see
+#     the same IP every website you visit sees. Two providers, first answer
+#     wins; both down = silent no-op, try again on the next connection.
+#   * The answer must name an existing /usr/share/zoneinfo file — nothing a
+#     provider returns is ever passed to timedatectl unvalidated.
+#   * Kill switch: `sudo touch /etc/ewe/no-auto-timezone` (a Settings toggle
+#     can own this file later).
+#   * flock + a 60s stamp keep connection flaps from hammering the providers.
+
+IFACE="$1" ACTION="$2"
+case "$ACTION" in up|connectivity-change|dhcp4-change) ;; *) exit 0 ;; esac
+[ -e /etc/ewe/no-auto-timezone ] && exit 0
+
+exec 9>/run/ewe-auto-timezone.lock
+flock -n 9 || exit 0
+STAMP=/run/ewe-auto-timezone.stamp
+now=$(date +%s)
+if [ -r "$STAMP" ]; then
+    last=$(cat "$STAMP" 2>/dev/null || echo 0)
+    [ $((now - last)) -lt 60 ] && exit 0
+fi
+echo "$now" > "$STAMP"
+
+tz=""
+for url in "https://ipinfo.io/timezone" "https://ipapi.co/timezone"; do
+    tz="$(curl -sf --max-time 7 "$url" | tr -d '[:space:]')"
+    [ -n "$tz" ] && break
+done
+[ -n "$tz" ] || exit 0
+
+case "$tz" in *[!A-Za-z0-9_+/-]*) exit 0 ;; esac        # charset guard
+[ -e "/usr/share/zoneinfo/$tz" ] || exit 0               # must be a real zone
+
+cur="$(timedatectl show -p Timezone --value 2>/dev/null)"
+[ "$tz" = "$cur" ] && exit 0
+
+if timedatectl set-timezone "$tz"; then
+    logger -t ewe-auto-timezone "timezone $cur -> $tz (network location)"
+fi
