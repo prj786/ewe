@@ -85,6 +85,29 @@ if command -v gsettings >/dev/null 2>&1 && command -v nemo >/dev/null 2>&1 && [ 
     fi
 fi
 
+# ── Same bare-window treatment for the rest of the built-ins (one-time). ──────
+# Engrampa exposes toolbar/statusbar via gsettings; galculator keeps its own
+# conf file (which it rewrites on exit — hence seed-once, never a symlink).
+CHROME_STAMP="${XDG_STATE_HOME:-$HOME/.local/state}/ewe/app-chrome.seeded"
+if [ ! -e "$CHROME_STAMP" ]; then
+    seeded=0
+    if command -v gsettings >/dev/null 2>&1 && command -v engrampa >/dev/null 2>&1; then
+        gsettings set org.mate.engrampa.ui view-toolbar false 2>/dev/null \
+            && gsettings set org.mate.engrampa.ui view-statusbar false 2>/dev/null \
+            && seeded=1
+    fi
+    GCONF="$HOME/.config/galculator/galculator.conf"
+    if command -v galculator >/dev/null 2>&1 && ! pgrep -x galculator >/dev/null; then
+        if [ -f "$GCONF" ]; then
+            sed -i 's/^show_menu_bar=true$/show_menu_bar=false/' "$GCONF" && seeded=1
+        else
+            mkdir -p "${GCONF%/*}"
+            printf '[general]\nshow_menu_bar=false\n' > "$GCONF" && seeded=1
+        fi
+    fi
+    [ "$seeded" = 1 ] && mkdir -p "${CHROME_STAMP%/*}" && touch "$CHROME_STAMP"
+fi
+
 # ── Idle / lock: hypridle. The Settings → Screensaver pane writes a generated
 # config (saver stage + timeouts) which wins over the shipped default. ────────
 # Live-ISO sessions (EWE_LIVE=1, exported by the ISO's ewe-live-session) get
@@ -140,5 +163,10 @@ fi
         run_once kdeconnectd /usr/lib/kdeconnectd
     fi
 ) >/dev/null 2>&1 &
+
+# ── First-launch warm-up: pre-fault the big apps' working set at idle so the
+# user's first click feels like their second (details + cost model in the
+# script). Battery-aware; page cache only — no steady-state RSS cost.
+run_once "warmup.sh" "$HOME/.config/hypr/scripts/warmup.sh"
 
 exit 0

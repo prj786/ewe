@@ -69,22 +69,75 @@ def _scalar(v):
     raise TypeError(f"unsupported value: {type(v).__name__}")
 
 
+# Section comments — regenerated on every write, so the file explains itself.
+SECTION_NOTES = {
+    "desktop": "everything the Settings surfaces manage",
+    "desktop.theme": "colours + look; colorscheme.sh reapplies these",
+    "desktop.dock": "the bottom dock (autohide = intelligent hide)",
+    "desktop.animations": "speed multiplies every duration; detail = per-leaf tuning",
+    "desktop.displays": "per-monitor-set profiles (Settings → Displays owns this)",
+    "desktop.window_rules": "per-app workspace/float rules",
+    "desktop.wallpapers": "per-output wallpaper map (image/GIF/video)",
+    "apps": "pins, startup entries, places, and Komble's installed manifest",
+    "system": "what this MACHINE is — read by the installer/OS tooling only",
+    "sync": "account identity for sync; credentials never live in this file",
+}
+
+_INLINE_MAX = 96
+
+
+def _is_record_list(v):
+    return isinstance(v, list) and v and all(isinstance(x, dict) for x in v)
+
+
+def _note(out, path):
+    n = SECTION_NOTES.get(".".join(path))
+    if n:
+        out.append(f"# {n}")
+
+
 def _emit_table(out, path, table):
-    scalars = {k: v for k, v in table.items() if not isinstance(v, dict)}
-    subs = {k: v for k, v in table.items() if isinstance(v, dict)}
-    if path and (scalars or not subs):
+    scalars, inlines, records, subs = {}, {}, {}, {}
+    for k, v in table.items():
+        if isinstance(v, dict):
+            flat = not any(isinstance(x, dict) for x in v.values())
+            documented = ".".join(path + [k]) in SECTION_NOTES
+            if flat and not documented and path and len(_scalar(v)) <= _INLINE_MAX:
+                inlines[k] = v          # small leaf dict → one readable line
+            else:
+                subs[k] = v
+        elif _is_record_list(v) and len(_scalar(v)) > _INLINE_MAX:
+            records[k] = v              # list of records → [[...]] blocks
+        else:
+            scalars[k] = v
+    plain = {**scalars, **inlines}
+    if path and (plain or not (subs or records)):
+        _note(out, path)
         out.append("[" + ".".join(_key(p) for p in path) + "]")
-    for k, v in scalars.items():
+    for k, v in plain.items():
         out.append(f"{_key(k)} = {_scalar(v)}")
-    if scalars or not subs:
+    if plain or not (subs or records):
         out.append("")
+    for k, v in records.items():
+        _note(out, path + [k])
+        head = "[[" + ".".join(_key(p) for p in path + [k]) + "]]"
+        for rec in v:
+            out.append(head)
+            for rk, rv in rec.items():
+                out.append(f"{_key(rk)} = {_scalar(rv)}")
+            out.append("")
     for k, v in subs.items():
         _emit_table(out, path + [k], v)
 
 
+_TOP_ORDER = ["schema", "desktop", "apps", "system", "sync"]
+
+
 def emit(doc):
+    ordered = {k: doc[k] for k in _TOP_ORDER if k in doc}
+    ordered.update({k: v for k, v in doc.items() if k not in ordered})
     out = [HEADER]
-    _emit_table(out, [], doc)
+    _emit_table(out, [], ordered)
     return "\n".join(out).rstrip() + "\n"
 
 

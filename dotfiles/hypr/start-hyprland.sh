@@ -53,6 +53,11 @@ export EWE_SESSION=1
 #    scripts/colorscheme.sh (writes the GTK settings.ini + qt6ct/kdeglobals fallback)
 #    and ~/.icons/default (cursor inheritance).
 export QT_QPA_PLATFORM="wayland;xcb"
+# glibc per-thread malloc arenas trade RSS for lock contention; heavily
+# threaded desktop apps (browsers, Qt, the shell) bloat noticeably with the
+# default (8×cores). 4 is the sweet spot measured for desktop workloads —
+# every session process inherits this.
+export MALLOC_ARENA_MAX=4
 # First-party apps are GTK now (Nemo/Engrampa/Zathura/imv), themed via GTK below.
 # qt6ct is just a fallback so any stray Qt app you install gets a dark Fusion
 # palette instead of blinding white — there are no KDE apps, so no plasma-integration
