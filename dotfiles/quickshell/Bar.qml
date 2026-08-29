@@ -562,13 +562,15 @@ Scope {
                                 font.family: Theme.fontIcons; font.pixelSize: Theme.barIconPx
                                 color: Theme.fgSecondary
                             }
-                            // Cast to TV — screencast glyph while gnome-network-displays is up
+                            // Cast to TV — screencast glyph while a cast session exists;
+                            // accent = picture on glass, dim = still handshaking
                             Text {
                                 visible: Globals.casting
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: Theme.icCast
                                 font.family: Theme.fontIcons; font.pixelSize: Theme.barIconPx
-                                color: Theme.fgSecondary
+                                color: Globals.castState === "streaming" || Globals.castLegacy
+                                       ? Theme.accent : Theme.fgSecondary
                             }
                             // SSH tunnel (a Quick Settings port-forward is up)
                             Text {

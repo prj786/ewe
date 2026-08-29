@@ -1828,15 +1828,76 @@ Scope {
                             onClicked: Globals.caffeine = !Globals.caffeine
                         }
                     }
-                    Row {
-                        width: parent.width; spacing: 10
-                        Tile {
-                            // Cast to TV — Miracast (Samsung "Screen Mirroring", Android TV)
-                            // or Chromecast (Google TV); Cast.qml runs gnome-network-displays,
-                            // whose window picks the TV. Tile stays lit until that window closes.
-                            ic: Theme.icCast; label: "Cast"; active: Globals.casting
-                            sub: Globals.casting ? "On" : "Off"
-                            onClicked: Globals.casting = !Globals.casting
+                    // ── Cast to TV — the whole flow lives here now (RFC-004):
+                    //    click → sink list from ewe-castd (Miracast + Chromecast),
+                    //    pick a TV → SharePicker → streaming. No foreign window.
+                    Column {
+                        width: parent.width; spacing: 6
+                        property bool castOpen: false
+                        id: castCard
+                        Row {
+                            width: parent.width; spacing: 10
+                            Tile {
+                                ic: Theme.icCast; label: "Cast"; active: Globals.casting
+                                sub: Globals.castState === "streaming" ? Globals.castSinkName
+                                   : Globals.casting ? "Connecting…" : "Off"
+                                onClicked: {
+                                    if (Globals.casting) { Globals.castCommand("stop", ""); castCard.castOpen = false }
+                                    else {
+                                        castCard.castOpen = !castCard.castOpen
+                                        if (castCard.castOpen) Globals.castCommand("scan", "")
+                                    }
+                                }
+                            }
+                        }
+                        // while a session is being built, narrate the daemon's state
+                        // where the user is looking — the same line the toasts carry
+                        Text {
+                            visible: Globals.casting && Globals.castState !== "streaming" && Globals.castDetail !== ""
+                            width: parent.width; leftPadding: 8
+                            text: Globals.castDetail
+                            color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11
+                            wrapMode: Text.WordWrap
+                        }
+                        // nothing yet — an honest empty state instead of a broken-looking box
+                        Item {
+                            width: parent.width; height: visible ? 28 : 0
+                            visible: castCard.castOpen && !Globals.casting && Globals.castSinks.length === 0
+                            Row {
+                                anchors.left: parent.left; anchors.leftMargin: 8; anchors.verticalCenter: parent.verticalCenter; spacing: 8
+                                Spinner { visible: Globals.castDetail.indexOf("not installed") === -1; anchors.verticalCenter: parent.verticalCenter; font.pixelSize: 12 }
+                                Text { anchors.verticalCenter: parent.verticalCenter
+                                    text: Globals.castDetail.indexOf("not installed") !== -1 ? Globals.castDetail : "Looking for displays…"
+                                    color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
+                            }
+                        }
+                        // sink list — same inset panel style as the Wi-Fi networks
+                        Rectangle {
+                            width: parent.width
+                            visible: castCard.castOpen && !Globals.casting && Globals.castSinks.length > 0
+                            height: visible ? castOptCol.implicitHeight + 10 : 0
+                            radius: 7; color: Theme.bg; border.color: Theme.stroke; border.width: 1
+                            Column {
+                                id: castOptCol
+                                anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 5
+                                Repeater {
+                                    model: castCard.castOpen ? Globals.castSinks : []
+                                    delegate: Item {
+                                        required property var modelData
+                                        width: castOptCol.width; height: 28
+                                        Rectangle { anchors.fill: parent; radius: 6; color: cMa.containsMouse ? Theme.hover : "transparent" }
+                                        Text { anchors.left: parent.left; anchors.leftMargin: 8; anchors.verticalCenter: parent.verticalCenter
+                                            text: Theme.icCast; font.family: Theme.fontIcons; font.pixelSize: 13; color: Theme.fgDim }
+                                        Text { anchors.left: parent.left; anchors.leftMargin: 32; anchors.right: parent.right; anchors.rightMargin: 70; anchors.verticalCenter: parent.verticalCenter
+                                            text: modelData.name; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; elide: Text.ElideRight }
+                                        Text { anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter
+                                            text: modelData.kind === "chromecast" ? "Chromecast" : modelData.kind === "miracast" ? "Miracast" : ""
+                                            color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 10 }
+                                        MouseArea { id: cMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                                            onClicked: Globals.castCommand("start", modelData.id) }
+                                    }
+                                }
+                            }
                         }
                     }
 

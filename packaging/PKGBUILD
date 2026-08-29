@@ -29,7 +29,7 @@ license=('GPL-2.0-only')
 # phase 20's source install is only the non-repo fallback.
 depends=('pipewire-jack'            # claims 'jack' before ffmpeg/mpv/portaudio ask
          'tesseract-data-eng'       # claims 'tessdata' before libmupdf asks (else: Afrikaans)
-         'komble-arch' 'ewe-settings'
+         'komble-arch' 'ewe-settings' 'ewe-cast'
          'reversal-icon-theme' 'mocu-cursor-theme'
          'python')   # ewe-conf; + the lists, appended in package()
 install=ewe.install

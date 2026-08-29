@@ -36,7 +36,16 @@ QtObject {
     property string netBusy: ""            // "wifi" | "vpn" while a connection attempt runs (bar spinner)
     property bool sshTunnelUp: false       // any background ssh -f -N tunnel from Quick Settings is up (bar shows a console glyph)
     property bool caffeine: false          // keep-awake: holds a wayland idle inhibitor (no lock/blank/sleep)
-    property bool casting: false           // Cast to TV: gnome-network-displays (Miracast/Chromecast) is up — Cast.qml owns the process
+    // ── Cast to TV (RFC-004: ewe-castd owns the protocols, Cast.qml owns the
+    //    socket, this is the shared truth the tile/bar/card all render) ──
+    property string castState: "idle"      // idle·picking·connecting·waiting·negotiating·starting·streaming·error
+    property string castDetail: ""         // one narrated line for the current state
+    property string castSinkName: ""       // who we're casting to, while active
+    property var castSinks: []             // [{id, name, kind}] — displays in range
+    property bool castLegacy: false        // the gnome-network-displays fallback is up
+    signal castCommand(string cmd, string arg)   // QS card → Cast.qml → daemon socket
+    // derived: anything that makes the bar glyph and the tile light up
+    readonly property bool casting: castLegacy || (castState !== "idle" && castState !== "error")
     property bool overviewOpen: false      // GNOME-style window overview (Super tapped alone)
     property bool clipboardOpen: false     // the clipboard-history / emoji popup (scissors icon)
     property bool settingsOpen: false      // the Quickshell Settings window (Super+, or the CC gear)
