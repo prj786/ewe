@@ -2,7 +2,8 @@
 
 *Status: steps 1–3 SHIPPED and verified against real Google (broker token
 from a live session; ewe.conf → Drive appData → back, byte-identical).
-Remaining: komble's restore surface (4), legacy-pipeline retirement (5),
+Step 4 SHIPPED (komble 0.9.3: For You restores from the manifest; sync
+verbs are ewe-conf push/pull). Remaining: legacy-pipeline retirement (5),
 and the owner minting the fresh "ewe" client (docs/GOOGLE-CLIENT.md — a
 drop-in file swap). Target: ewe OS 0.5-alpha "connected".*
 
