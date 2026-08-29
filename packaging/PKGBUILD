@@ -63,6 +63,7 @@ package() {
     install -Dm755 bin/ewe-conf "$pkgdir/usr/bin/ewe-conf"
     # RFC-002: the ONE Google identity for every ewe app
     install -Dm755 bin/ewe-auth "$pkgdir/usr/bin/ewe-auth"
+    install -Dm755 bin/ewe-drive "$pkgdir/usr/bin/ewe-drive"
     # the project OAuth client (once minted — see docs/GOOGLE-CLIENT.md);
     # cp -a of the tree above already carries system/oauth-client.json
 }

@@ -1,0 +1,138 @@
+#!/usr/bin/env bash
+# ewe-drive — your Google Drive as a folder (RFC-002 extension).
+#
+# One Google sign-in for everything is the ewe promise; this extends it to
+# files. rclone mounts Drive at ~/Google Drive using the SAME identity the
+# broker holds — the refresh token from the keyring and the same OAuth
+# client — so there is no second consent system (and no GNOME Online
+# Accounts). Nemo sees a plain folder; a GTK bookmark puts it in the
+# sidebar. Shared-with-you files live under "Shared with me" inside it.
+#
+#   ewe-drive setup      one-time: consent (adds the Drive scope), write the
+#                        rclone remote, bookmark, mount
+#   ewe-drive mount      mount if configured (autostart calls this)
+#   ewe-drive unmount    unmount
+#   ewe-drive status     {configured, mounted} JSON
+#
+# The rclone config lives in its own file (~/.config/ewe/rclone-drive.conf)
+# so a user's own ~/.config/rclone is never touched.
+set -uo pipefail
+
+CFG="${XDG_CONFIG_HOME:-$HOME/.config}"
+CONF="$CFG/ewe/rclone-drive.conf"
+MOUNT="$HOME/Google Drive"
+REMOTE="ewedrive"
+BOOKMARKS="$CFG/gtk-3.0/bookmarks"
+
+say() { printf '\033[1;36m::\033[0m %s\n' "$*"; }
+die() { printf '\033[1;31mxx\033[0m %s\n' "$*" >&2; exit 1; }
+
+ewe_auth() {
+    for c in "$(dirname "$(realpath "$0")")/ewe-auth" /usr/bin/ewe-auth ewe-auth; do
+        command -v "$c" >/dev/null 2>&1 && { "$c" "$@"; return; }
+    done
+    die "ewe-auth not found"
+}
+
+mounted() { mountpoint -q "$MOUNT" 2>/dev/null; }
+
+case "${1:-status}" in
+
+setup)
+    # --offline (tests/CI) skips both the consent and the mount — rclone
+    # itself is only needed for the real mount
+    if [ "${2:-}" != "--offline" ]; then
+        command -v rclone >/dev/null 2>&1 || die "rclone is not installed (pacman -S rclone fuse3)"
+    fi
+    # 1 · make sure the signed-in identity carries the Drive scope
+    if [ "${2:-}" != "--offline" ]; then
+        say "Google will ask once to allow Drive access…"
+        r="$(ewe_auth login --with-drive)"
+        echo "$r" | grep -q '"ok": true' || die "sign-in failed: $r"
+    fi
+    # 2 · the rclone remote: our client, the broker's refresh token. The
+    # expiry is set in the past so rclone refreshes on first use — Google
+    # happily serves many access tokens from one refresh token.
+    rt="$(secret-tool lookup service ewe account google 2>/dev/null || true)"
+    [ -n "${EWE_DRIVE_TEST_RT:-}" ] && rt="$EWE_DRIVE_TEST_RT"
+    [ -n "$rt" ] || die "no refresh token in the keyring — sign in first"
+    read -r cid csec < <(python3 - <<'PY'
+import json, os
+cfg = os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
+for p in (os.environ.get("EWE_GOOGLE_CLIENT_FILE", ""),
+          os.path.join(cfg, "ewe", "oauth-client.json"),
+          os.path.join(cfg, "quickshell", "google-oauth.json"),
+          "/usr/share/ewe/system/oauth-client.json"):
+    try:
+        j = json.load(open(p))
+        j = j.get("installed", j)
+        if j.get("client_id"):
+            print(j["client_id"], j.get("client_secret", ""))
+            break
+    except (OSError, ValueError):
+        continue
+PY
+    )
+    [ -n "${cid:-}" ] || die "no OAuth client configured"
+    umask 077
+    mkdir -p "$(dirname "$CONF")"
+    tok="{\"access_token\":\"x\",\"token_type\":\"Bearer\",\"refresh_token\":\"$rt\",\"expiry\":\"2000-01-01T00:00:00Z\"}"
+    cat > "$CONF" <<EOF
+# written by ewe-drive — do not edit; \`ewe-drive setup\` regenerates it
+[$REMOTE]
+type = drive
+client_id = $cid
+client_secret = $csec
+scope = drive
+token = $tok
+
+[$REMOTE-shared]
+type = drive
+client_id = $cid
+client_secret = $csec
+scope = drive
+shared_with_me = true
+token = $tok
+
+# one folder, both worlds: "My Drive" + "Shared with me" side by side
+[$REMOTE-all]
+type = combine
+upstreams = "My Drive=$REMOTE:" "Shared with me=$REMOTE-shared:"
+EOF
+    say "remote written"
+    # 3 · folder + Nemo sidebar bookmark (idempotent)
+    mkdir -p "$MOUNT"
+    mkdir -p "$(dirname "$BOOKMARKS")"
+    grep -q "Google%20Drive" "$BOOKMARKS" 2>/dev/null \
+        || printf 'file://%s/Google%%20Drive Google Drive\n' "$HOME" >> "$BOOKMARKS"
+    [ "${2:-}" = "--offline" ] && { say "offline setup done (no mount)"; exit 0; }
+    exec "$0" mount
+    ;;
+
+mount)
+    [ -r "$CONF" ] || exit 0                       # not set up — silent no-op
+    command -v rclone >/dev/null 2>&1 || exit 0
+    mounted && exit 0
+    mkdir -p "$MOUNT"
+    say "mounting Google Drive"
+    rclone --config "$CONF" mount "$REMOTE-all:" "$MOUNT" \
+        --daemon --vfs-cache-mode writes --dir-cache-time 1m \
+        --poll-interval 30s --drive-skip-gdocs=false \
+        || die "mount failed (see: rclone --config $CONF lsd $REMOTE:)"
+    say "mounted at $MOUNT"
+    ;;
+
+unmount)
+    mounted || exit 0
+    fusermount3 -u "$MOUNT" 2>/dev/null || fusermount -u "$MOUNT" 2>/dev/null
+    say "unmounted"
+    ;;
+
+status)
+    printf '{"configured": %s, "mounted": %s}\n' \
+        "$([ -r "$CONF" ] && echo true || echo false)" \
+        "$(mounted && echo true || echo false)"
+    ;;
+
+*) die "usage: ewe-drive setup|mount|unmount|status" ;;
+esac

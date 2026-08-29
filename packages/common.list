@@ -104,6 +104,8 @@ ffmpegthumbnailer       # video thumbnails in Nemo
 gvfs
 gvfs-mtp
 gvfs-smb
+rclone                  # ~/Google Drive mount (ewe-drive: one sign-in, files too)
+fuse3                   # rclone mount's engine
 udisks2
 unzip
 7zip                     # provides 7z (p7zip was dropped from the Arch repos)

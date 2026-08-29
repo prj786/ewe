@@ -164,6 +164,12 @@ fi
     fi
 ) >/dev/null 2>&1 &
 
+# ── Google Drive folder: remount at login when the user set it up ────────────
+# (ewe-drive mount is a silent no-op when unconfigured or already mounted)
+if [ -r "${XDG_CONFIG_HOME:-$HOME/.config}/ewe/rclone-drive.conf" ]; then
+    run_once "rclone.*ewedrive" "$HOME/.local/bin/ewe-drive" mount
+fi
+
 # ── First-launch warm-up: pre-fault the big apps' working set at idle so the
 # user's first click feels like their second (details + cost model in the
 # script). Battery-aware; page cache only — no steady-state RSS cost.

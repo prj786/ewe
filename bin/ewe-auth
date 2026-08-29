@@ -69,6 +69,10 @@ BASE_SCOPES = ("openid email profile "
                "https://www.googleapis.com/auth/calendar.readonly "
                "https://www.googleapis.com/auth/drive.appdata")
 MAIL_SCOPE = "https://www.googleapis.com/auth/gmail.readonly"
+# full Drive is ALSO restricted-tier: needed only for the ~/Google Drive
+# mount (ewe-drive setup passes --with-drive); appdata alone stays the
+# default for the one-file sync
+DRIVE_SCOPE = "https://www.googleapis.com/auth/drive"
 
 KEYRING_ARGS = ["service", "ewe", "account", "google"]
 OLD_KEYRING_ARGS = ["service", "hypr-shell", "account", "google"]
@@ -275,6 +279,8 @@ def cmd_login(argv=()):
     with_mail = "--with-mail" in argv or (which in ("ewe", "legacy", "env")
                                           and "--base-only" not in argv)
     scopes = BASE_SCOPES + (" " + MAIL_SCOPE if with_mail else "")
+    if "--with-drive" in argv:
+        scopes += " " + DRIVE_SCOPE
     if not keyring_set("ewe-keyring-probe"):
         out({"ok": False, "error": "keyring-unavailable"})
     keyring_clear()
