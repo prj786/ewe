@@ -1214,6 +1214,9 @@ Scope {
     FloatingWindow {
         id: win
         visible: false
+        // lazy-loaded: created AFTER settingsOpen flipped true, so the change
+        // signal below already fired — sync the level at birth
+        Component.onCompleted: if (Globals.settingsOpen) visible = true
         title: "ewe settings"
         implicitWidth: 880
         implicitHeight: 620
