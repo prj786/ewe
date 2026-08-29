@@ -45,6 +45,10 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 CFG_DIR = os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
 EWE_CLIENT = os.path.join(CFG_DIR, "ewe", "oauth-client.json")
 LEGACY_CLIENT = os.path.join(CFG_DIR, "quickshell", "google-oauth.json")
+# the project-owned "ewe" client, shipped with the OS — a Desktop-app
+# client's secret is non-confidential by Google's own definition. Users
+# never open a cloud console; a personal client in EWE_CLIENT still wins.
+SHIPPED_CLIENT = "/usr/share/ewe/system/oauth-client.json"
 AUTH_META = os.path.join(CFG_DIR, "ewe", "auth.json")        # client_id + email, non-secret
 PROFILE_CACHE = os.path.join(CFG_DIR, "quickshell", "google-profile.json")
 RUN_DIR = os.environ.get("XDG_RUNTIME_DIR") or "/tmp"
@@ -54,12 +58,17 @@ AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 TOKEN_URL = os.environ.get("EWE_AUTH_TOKEN_URL", "https://oauth2.googleapis.com/token")
 REVOKE_URL = "https://oauth2.googleapis.com/revoke"
 USERINFO_URL = "https://openidconnect.googleapis.com/v1/userinfo"
-# gmail.readonly is a RESTRICTED scope: fine for a personal client published
-# "In production" (unverified-app clickthrough) — see README
-SCOPES = ("openid email profile "
-          "https://www.googleapis.com/auth/calendar.readonly "
-          "https://www.googleapis.com/auth/drive.appdata "
-          "https://www.googleapis.com/auth/gmail.readonly")
+# Scope strategy (docs/GOOGLE-CLIENT.md): the SHIPPED project client signs
+# everyone in with the base set — identity + calendar (sensitive: warning
+# only) + drive.appdata (non-sensitive). gmail.readonly is a RESTRICTED
+# scope: Google hard-blocks it for unverified clients beyond test users, so
+# Mail is an OPT-IN extra consent (login --with-mail) that personal clients
+# and test-listed accounts can grant; the shell already degrades cleanly
+# when the token lacks it (mailState "scope").
+BASE_SCOPES = ("openid email profile "
+               "https://www.googleapis.com/auth/calendar.readonly "
+               "https://www.googleapis.com/auth/drive.appdata")
+MAIL_SCOPE = "https://www.googleapis.com/auth/gmail.readonly"
 
 KEYRING_ARGS = ["service", "ewe", "account", "google"]
 OLD_KEYRING_ARGS = ["service", "hypr-shell", "account", "google"]
@@ -77,7 +86,8 @@ def read_client():
     csec = os.environ.get("EWE_GOOGLE_CLIENT_SECRET", "")
     which = "env" if cid else ""
     if not cid:
-        for path, name in ((EWE_CLIENT, "ewe"), (LEGACY_CLIENT, "legacy")):
+        for path, name in ((EWE_CLIENT, "ewe"), (LEGACY_CLIENT, "legacy"),
+                           (SHIPPED_CLIENT, "shipped")):
             try:
                 with open(path) as f:
                     j = json.load(f)
@@ -256,10 +266,15 @@ def cmd_refresh():
     out({"ok": True, "access_token": at, "expires_at": exp})
 
 
-def cmd_login():
+def cmd_login(argv=()):
     cid, csec, which = read_client()
     if not cid:
         out({"ok": False, "error": "not-configured"})
+    # personal clients get the full set by default (their owner controls the
+    # consent screen); the shipped project client keeps mail opt-in
+    with_mail = "--with-mail" in argv or (which in ("ewe", "legacy", "env")
+                                          and "--base-only" not in argv)
+    scopes = BASE_SCOPES + (" " + MAIL_SCOPE if with_mail else "")
     if not keyring_set("ewe-keyring-probe"):
         out({"ok": False, "error": "keyring-unavailable"})
     keyring_clear()
@@ -305,8 +320,9 @@ def cmd_login():
 
     auth = AUTH_URL + "?" + urllib.parse.urlencode({
         "client_id": cid, "redirect_uri": redirect, "response_type": "code",
-        "scope": SCOPES, "code_challenge": challenge, "code_challenge_method": "S256",
+        "scope": scopes, "code_challenge": challenge, "code_challenge_method": "S256",
         "access_type": "offline", "prompt": "consent", "state": state,
+        "include_granted_scopes": "true",
     })
     subprocess.Popen(["xdg-open", auth], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
@@ -368,8 +384,10 @@ if __name__ == "__main__":
     try:
         if cmd == "token":
             cmd_token(argv[1:])
+        elif cmd == "login":
+            cmd_login(argv[1:])
         else:
-            {"status": cmd_status, "login": cmd_login,
+            {"status": cmd_status,
              "refresh": cmd_refresh, "logout": cmd_logout}.get(cmd, cmd_status)()
     except SystemExit:
         raise

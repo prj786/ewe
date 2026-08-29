@@ -1,23 +1,47 @@
-# Minting the "ewe" Google OAuth client
+# The "ewe" Google OAuth client — strategy and setup
 
-One-time, in the Google Cloud console (the broker takes the result as a
-drop-in file — no code changes):
+## How it works for USERS (the point)
 
-1. https://console.cloud.google.com → New project → name it **ewe**.
-2. **APIs & Services → OAuth consent screen**: External · app name **ewe** ·
-   your support email · add scopes: `openid`, `email`, `profile`,
-   `calendar.readonly`, `drive.appdata`, `gmail.readonly` · **Publish** the
-   app (In production — the unverified-app warning is a one-click through
-   for your own account; gmail.readonly is a restricted scope and this is
-   the personal-use path).
-3. **APIs & Services → Enabled APIs**: enable *Gmail API*, *Google Calendar
-   API*, *Google Drive API*.
-4. **Credentials → Create credentials → OAuth client ID → Desktop app**,
-   name **ewe desktop** → **Download JSON**.
-5. Save the download verbatim as `~/.config/ewe/oauth-client.json`
-   (the `{"installed": {...}}` wrapper is fine as-is).
-6. `ewe-auth login` — one consent for every ewe app. The broker notices the
-   client changed and asks for exactly one re-login; the old client's token
-   is cleared automatically.
+Nothing. Users click "Sign in with Google" and consent — the OS ships a
+project-owned client (`/usr/share/ewe/system/oauth-client.json`, committed
+as `system/oauth-client.json` once minted). Nobody opens a cloud console.
+A Desktop-app client's secret is non-confidential by Google's own
+definition; the refresh token — the actual credential — never leaves the
+user's keyring.
 
-Check: `ewe-auth status` → `"client": "ewe"`.
+## Scope strategy (why Mail is opt-in)
+
+Google tiers scopes, and the tiers decide what an unverified client may do:
+
+| scope | tier | unverified client |
+|---|---|---|
+| openid/email/profile | basic | fine |
+| drive.appdata | non-sensitive | fine |
+| calendar.readonly | sensitive | works, shows the "unverified" warning |
+| gmail.readonly | **restricted** | **blocked** except listed test users; full verification = CASA security audit |
+
+So the shipped client signs everyone in with **base scopes** (identity,
+calendar, the one-file sync). **Mail is an extra, explicit consent** —
+`ewe-auth login --with-mail` — available to accounts on the client's
+test-user list (up to 100) and to anyone using a personal client. The shell
+already degrades cleanly when a token lacks the mail scope (the Mail card
+shows its re-consent state). If ewe ever outgrows 100 mail users, CASA
+verification is the gate to budget for — until then this is the honest
+maximum Google allows.
+
+Personal clients (`~/.config/ewe/oauth-client.json`) still override the
+shipped one and get the full scope set by default — the owner's setup keeps
+working unchanged.
+
+## Minting the project client (owner, once)
+
+1. console.cloud.google.com → New project → **ewe**.
+2. OAuth consent screen: External · name **ewe** · scopes: the base set +
+   gmail.readonly · publish **In production**. Add your own account (and
+   future testers) under **Test users** — that's what unlocks Mail for you.
+3. Enable APIs: Calendar, Drive, Gmail.
+4. Credentials → OAuth client ID → **Desktop app** → "ewe desktop" →
+   Download JSON.
+5. Commit it: `cp ~/Downloads/client_secret*.json system/oauth-client.json`
+   in the ewe repo (PKGBUILD ships it into /usr/share/ewe/system/). Done —
+   every install signs in as "ewe" from the next release.
