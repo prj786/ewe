@@ -1074,15 +1074,24 @@ Scope {
     // ── packages-from-backup review: diff the cloud bundle against pacman -Qq
     // and offer a checkbox install (runs visibly in kitty; AUR via paru) ───────
     property var pkgReview: null      // { repo: [{name,on}], aur: [{name,on}] } | null = closed
+    property var _manifest: null
     function reviewPackages() {
-        if (!Google.getCloudBundle()) {
-            Google.checkCloud(function (ok) {
-                if (ok) { pkgProbe.running = false; pkgProbe.running = true }
-                else root.errorMsg = "No cloud backup found for this account."
-            })
-            return
+        // RFC-002: the app list is ewe.conf's [apps.installed] (read through
+        // ewe-conf, same source as Komble's For You)
+        manifestProbe.running = false; manifestProbe.running = true
+    }
+    Process {
+        id: manifestProbe
+        command: [Globals.eweConf, "get", "apps.installed"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                var m = null
+                try { m = JSON.parse(this.text) } catch (e) {}
+                if (!m || !m.packages) { root.errorMsg = "No synced app list yet — restore the machine file first (or install something through Komble)."; return }
+                root._manifest = m
+                pkgProbe.running = false; pkgProbe.running = true
+            }
         }
-        pkgProbe.running = false; pkgProbe.running = true
     }
     Process {
         id: pkgProbe
@@ -1091,20 +1100,13 @@ Scope {
             onStreamFinished: {
                 var installed = {}, ls = this.text.split("\n")
                 for (var i = 0; i < ls.length; i++) if (ls[i] !== "") installed[ls[i]] = true
-                var b = Google.getCloudBundle()
-                var explicit = (b && b.apps && b.apps.explicit) || []
-                var foreign = (b && b.apps && b.apps.foreign) || []
-                // older bundles were captured with -Qqe, which includes AUR
-                // packages — never route those to pacman, and never list twice
-                var isAur = {}
-                for (var f = 0; f < foreign.length; f++) isAur[foreign[f]] = true
-                var mk = function (arr, skipAur) {
-                    var out = []
-                    for (var j = 0; j < (arr || []).length; j++)
-                        if (!installed[arr[j]] && !(skipAur && isAur[arr[j]])) out.push({ name: arr[j], on: true })
-                    return out
+                var repo = [], aur = []
+                var pk = (root._manifest && root._manifest.packages) || []
+                for (var j = 0; j < pk.length; j++) {
+                    if (!pk[j].package || installed[pk[j].package]) continue
+                    (pk[j].source === "aur" ? aur : repo).push({ name: pk[j].package, on: true })
                 }
-                root.pkgReview = { repo: mk(explicit, true), aur: mk(foreign, false) }
+                root.pkgReview = { repo: repo, aur: aur }
             }
         }
     }
@@ -2867,8 +2869,8 @@ Scope {
                             anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 12; spacing: 8
                             Text { text: "Restore settings from the cloud backup?"; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsBody; font.weight: Font.DemiBold }
                             KV { k: "Saved on"; v: Google.pendingRestore ? ("“" + (Google.pendingRestore.device || "?") + "” · " + root.fmtSyncTime(Google.pendingRestore.updatedAt || "")) : "" }
-                            KV { k: "Sections"; v: Google.pendingRestore ? Object.keys(Google.pendingRestore.settings || {}).filter(function (k) { return k !== "files" }).join(", ") : "" }
-                            KV { k: "Captured packages"; v: Google.pendingRestore && Google.pendingRestore.apps ? ((Google.pendingRestore.apps.explicit || []).length + " repo · " + (Google.pendingRestore.apps.foreign || []).length + " AUR (opt-in, never auto-installed)") : "none" }
+                            KV { k: "Restores"; v: "the machine file (ewe.conf) — theme, dock, displays, rules, apps list; your current file is kept as a timestamped backup" }
+                            KV { k: "Applications"; v: "reinstall offers appear in Komble → For you (never auto-installed)" }
                             Text { width: parent.width; text: "Overwrites this machine's theme, keyboard, dock, wallpaper, screensaver, SSH-host and display-profile settings, then reloads the shell config live."; color: Theme.warning; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
                             Row {
                                 spacing: 10

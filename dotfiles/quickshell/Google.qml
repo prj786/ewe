@@ -55,24 +55,10 @@ QtObject {
         // lists (never settings/avatar/ssh — Komble has no business with those)
         // into a JSON file Komble reads. Async by nature, so the reply is
         // "started" and the file is the result.
-        function fetchPackages(): string {
-            if (!goo.signedIn) return "not-signed-in"
-            goo.checkCloud(function (ok) {
-                var doc = { fetchedAt: new Date().toISOString(), ok: ok }
-                var b = ok ? goo.getCloudBundle() : null
-                if (b && b.apps) {
-                    doc.updatedAt = b.updatedAt || ""
-                    doc.device = b.device || ""
-                    doc.explicit = b.apps.explicit || []
-                    doc.foreign = b.apps.foreign || []
-                    doc.desktopApps = b.apps.desktopApps || []
-                }
-                HyprMon.atomicWrite(goo._pkgCacheWriter,
-                    Quickshell.env("HOME") + "/.config/quickshell/google-restore-packages.json",
-                    JSON.stringify(doc, null, 2))
-            })
-            return "started"
-        }
+        // RETIRED (RFC-002 step 5): the app list now lives in ewe.conf's
+        // [apps.installed] — Komble ≥0.9.3 reads it through ewe-conf. The verb
+        // name survives for older Komble binaries; they get a clear answer.
+        function fetchPackages(): string { return "retired-see-ewe-conf" }
         function status(): string {
             return JSON.stringify({
                 probed: goo.probed, configured: goo.configured, keyringOk: goo.keyringOk,
@@ -256,17 +242,8 @@ QtObject {
     // promise — the toggle in Settings/Komble is the opt-out
     property bool autoSync: true
     property var cloudInfo: null         // { device, updatedAt } of the cloud copy
-    property var pendingRestore: null    // downloaded bundle awaiting explicit confirmation
-    property var _cloudBundle: null
-    property string _cloudFileId: ""
-
-    readonly property string bundleHelper: Quickshell.env("HOME") + "/.config/quickshell/scripts/settings-bundle.py"
+    property var pendingRestore: null    // remote-file marker awaiting explicit confirmation
     readonly property string syncMetaPath: Quickshell.env("HOME") + "/.config/quickshell/google-sync.json"
-    readonly property string restorePath: Quickshell.env("HOME") + "/.config/quickshell/google-restore.json"
-    // the old name is a migration: bundles uploaded before the ewe rename keep
-    // their cloud filename (appDataFolder is invisible), and matching both means
-    // an existing backup is found, PATCHed in place and never duplicated
-    readonly property string driveListUrl: "https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=" + encodeURIComponent("name='ewe-settings.json' or name='hypr-shell-settings.json'") + "&fields=" + encodeURIComponent("files(id,modifiedTime)")
 
     property Process _metaLoad: Process {
         running: true
@@ -296,7 +273,7 @@ QtObject {
         // the content hash turns it into a no-op when nothing moved
         function onSessionReady() { goo.checkCloud(); goo.fetchCalendar(); goo.fetchMail(); goo.syncSoon() }
         function onSessionClosed() {
-            goo.cloudInfo = null; goo._cloudBundle = null; goo._cloudFileId = ""
+            goo.cloudInfo = null
             goo.pendingRestore = null; goo.syncState = "idle"; goo.syncError = ""; goo.restoreSummary = ""
             // reset the fan-out latch too: a sign-out landing mid-fetch left
             // _calPending non-zero, and fetchCalendar early-returns on that —
@@ -308,86 +285,63 @@ QtObject {
         }
     }
 
-    // the last-downloaded cloud bundle (Settings' package-review card diffs it)
-    function getCloudBundle() { return goo._cloudBundle }
-
-    // fetch the cloud copy (6 KB) — feeds both the panel info line and restore
-    function checkCloud(cb) {
-        goo.api("GET", goo.driveListUrl, null, function (st, j, err) {
-            var f = (st === 200 && j && j.files && j.files.length) ? j.files[0] : null
-            if (!f) { goo.cloudInfo = null; goo._cloudBundle = null; goo._cloudFileId = ""; if (cb) cb(false); return }
-            goo._cloudFileId = f.id
-            goo.api("GET", "https://www.googleapis.com/drive/v3/files/" + f.id + "?alt=media", null, function (st2, bundle, err2) {
-                if (st2 === 200 && bundle && bundle.settings) {
-                    goo._cloudBundle = bundle
-                    goo.cloudInfo = { device: bundle.device || "?", updatedAt: bundle.updatedAt || "" }
-                    if (cb) cb(true)
-                } else { if (cb) cb(false) }
-            })
-        })
-    }
-
-    // ── push ────────────────────────────────────────────────────────────────────
+    // ── push / restore — RFC-002: the engine is ewe-conf ─────────────────────
+    // The one file replaced the legacy bundle. The shell keeps the same UI
+    // contract (syncState, cloudInfo, lastSync, pendingRestore, restore
+    // summary) but every verb delegates: push/pull/apply/sync-status.
+    // DELIBERATE DROP vs the old pipeline: Wi-Fi networks (their PSKs lived
+    // in the Drive bundle — secrets never sync, RFC-001 rule 4).
+    readonly property string eweConf: Quickshell.env("HOME") + "/.config/quickshell/../../bin/ewe-conf"
     property bool _autoPushing: false
     function syncNow() {
         if (!goo.signedIn || goo.syncState === "syncing") return
         goo.syncState = "syncing"; goo.syncError = ""; goo.restoreSummary = ""
-        _collectProc.running = false; _collectProc.running = true
+        _pushProc.running = false; _pushProc.running = true
     }
-    property Process _collectProc: Process {
-        command: ["python3", goo.bundleHelper, "collect"]
-        stdout: StdioCollector { onStreamFinished: goo._pushBundle(this.text) }
-    }
-    function _pushBundle(text) {
-        var bundle = null
-        try { bundle = JSON.parse(text) } catch (e) {}
-        if (!bundle || !bundle.settings) { goo._syncFail("could not collect local settings"); return }
-        if (goo._autoPushing && bundle.hash === goo.lastHash) { goo._autoPushing = false; goo.syncState = "idle"; return }
-        var done = function (st, j, err) {
-            goo._autoPushing = false
-            if (st === 200) {
-                goo.lastSync = bundle.updatedAt; goo.lastHash = bundle.hash; goo._saveSyncMeta()
-                goo.cloudInfo = { device: bundle.device, updatedAt: bundle.updatedAt }
-                goo._cloudBundle = bundle
-                goo.syncState = "idle"
-            } else goo._syncFail(err === "offline" ? "offline — will keep the local copy" : goo._httpErrMsg("Drive upload", st, j))
-        }
-        if (goo._cloudFileId !== "") {
-            goo.api("PATCH", "https://www.googleapis.com/upload/drive/v3/files/" + goo._cloudFileId + "?uploadType=media",
-                    { body: text, contentType: "application/json" }, done)
-        } else {
-            var b = "--hsbundle\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n"
-                  + JSON.stringify({ name: "ewe-settings.json", parents: ["appDataFolder"] })
-                  + "\r\n--hsbundle\r\nContent-Type: application/json\r\n\r\n" + text + "\r\n--hsbundle--"
-            goo.api("POST", "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart",
-                    { body: b, contentType: "multipart/related; boundary=hsbundle" },
-                    function (st, j, err) { if (st === 200 && j && j.id) goo._cloudFileId = j.id; done(st, j, err) })
+    property Process _pushProc: Process {
+        command: [goo.eweConf, "push"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                var j = null
+                try { j = JSON.parse(this.text) } catch (e) {}
+                goo._autoPushing = false
+                if (j && j.ok) {
+                    goo.lastSync = new Date().toISOString(); goo._saveSyncMeta()
+                    goo.syncState = "idle"
+                    goo.checkCloud()
+                } else goo._syncFail(j && j.error ? j.error : "push failed")
+            }
         }
     }
     function _syncFail(msg) { goo.syncState = "error"; goo.syncError = "Sync failed: " + msg }
-    // surface Google's own error reason, not a bare HTTP code — first sentence
-    // of the API message ("Google Drive API has not been used in project … or
-    // it is disabled.") tells the user exactly what to fix
-    function _httpErrMsg(what, st, j) {
-        var m = (j && j.error && j.error.message) ? String(j.error.message) : ""
-        if (m !== "") {
-            var s = m.split(". ")[0]
-            return what + ": " + s + (s.indexOf("disabled") >= 0 || s.indexOf("has not been used") >= 0
-                ? ". Enable the API in the Google Cloud console, wait a minute, then retry." : " (HTTP " + st + ")")
+
+    // cloud info = the remote file's modifiedTime (sync-status verb)
+    property var _statusCb: null
+    function checkCloud(cb) {
+        goo._statusCb = cb || null
+        _cloudStatusProc.running = false; _cloudStatusProc.running = true
+    }
+    property Process _cloudStatusProc: Process {
+        command: [goo.eweConf, "sync-status"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                var j = null
+                try { j = JSON.parse(this.text) } catch (e) {}
+                var ok = !!(j && j.ok && j.remote)
+                goo.cloudInfo = ok ? { device: "your account", updatedAt: j.remote.modifiedTime || "" } : null
+                var cb = goo._statusCb; goo._statusCb = null
+                if (cb) cb(ok)
+            }
         }
-        return what + " failed (HTTP " + st + ")"
     }
 
-    // auto-sync: debounce-push after Settings closes, only when content changed
+    // auto-sync: debounce-push after Settings closes
     property Connections _autoHook: Connections {
         target: Globals
         function onSettingsOpenChanged() {
             if (!Globals.settingsOpen && goo.autoSync && goo.signedIn) goo._autoPushTimer.restart()
         }
     }
-    /** Debounced "something changed, push when quiet" — the burst of writes a
-     *  Settings drag or a batch install produces collapses into one upload,
-     *  and the content hash still skips the push when nothing really changed. */
     function syncSoon() {
         if (!goo.autoSync || !goo.signedIn) return
         goo._autoPushTimer.restart()
@@ -397,52 +351,44 @@ QtObject {
         onTriggered: { if (goo.autoSync && goo.signedIn && goo.syncState !== "syncing") { goo._autoPushing = true; goo.syncNow() } }
     }
 
-    // ── restore (explicit, confirmed) ───────────────────────────────────────────
+    // ── restore (explicit, confirmed): pull the file, apply, reload ──────────
     function requestRestore() {
         goo.restoreSummary = ""; goo.syncError = ""
-        if (goo._cloudBundle) { goo.pendingRestore = goo._cloudBundle; return }
         goo.checkCloud(function (ok) {
-            if (ok) goo.pendingRestore = goo._cloudBundle
+            if (ok) goo.pendingRestore = { updatedAt: goo.cloudInfo.updatedAt, device: goo.cloudInfo.device }
             else { goo.syncState = "error"; goo.syncError = "No cloud backup found for this account." }
         })
     }
     function cancelRestore() { goo.pendingRestore = null }
-    property Process _restoreWriter: Process {}
-    property Process _applyProc: Process {
+    function applyRestore() {
+        if (!goo.pendingRestore) return
+        goo.pendingRestore = null
+        goo.syncState = "syncing"
+        _restoreProc.running = false; _restoreProc.running = true
+    }
+    property Process _restoreProc: Process {
+        // pull writes ewe.conf (timestamped backup of the old one), apply
+        // regenerates every runtime file the shell reads
+        command: ["sh", "-c", '"$HOME/.config/quickshell/../../bin/ewe-conf" pull && "$HOME/.config/quickshell/../../bin/ewe-conf" apply --no-hooks']
         stdout: StdioCollector {
             onStreamFinished: {
                 var j = null
-                try { j = JSON.parse(this.text) } catch (e) {}
-                if (!j || !j.ok) { goo._syncFail("restore: " + (j && j.error ? j.error : "bundle apply failed")); return }
-                // reload everything the bundle touched
+                try { j = JSON.parse(this.text.split("\n")[0]) } catch (e) {}
+                if (!j || !j.ok) { goo._syncFail("restore: " + (j && j.error ? j.error : "pull failed")); return }
                 Globals.reloadUserState()
                 HyprMon.reloadProfiles()
                 if (!HyprMon.virtualSession) {
-                    Globals.saverDimming = false   // hypridle restart orphans any active dim
+                    Globals.saverDimming = false
                     Quickshell.execDetached(["sh", "-c",
                         'hyprctl reload >/dev/null 2>&1; "$HOME/.config/hypr/scripts/wallpaper.sh" --reapply >/dev/null 2>&1; pkill -x hypridle; sleep 0.6; hypridle -c "$HOME/.config/hypr/generated/hypridle.conf" >/dev/null 2>&1'])
-                    Wallpaper.reapplied()   // the restore respawned mpvpaper unpaused
+                    Wallpaper.reapplied()
                 }
-                goo.lastSync = j.updatedAt; goo.lastHash = ""; goo._saveSyncMeta()
+                goo.lastSync = j.modified || new Date().toISOString(); goo._saveSyncMeta()
                 goo.syncState = "idle"
-                var net = j.network || {}
-                goo.restoreSummary = "Restored " + j.applied.length + " sections from “" + j.device + "”."
-                    + (net.added && net.added.length ? " Networks restored: " + net.added.join(", ") + "." : "")
-                    + (net.failed && net.failed.length ? " Could not recreate: " + net.failed.join(", ") + "." : "")
-                    + (j.vpn && j.vpn.length ? " VPNs from an older backup to re-import manually: " + j.vpn.join(", ") + "." : "")
+                goo.restoreSummary = "Restored the machine file from Drive"
+                    + (j.backup ? " (previous kept as " + j.backup.split("/").pop() + ")" : "") + "."
             }
         }
-    }
-    function applyRestore() {
-        if (!goo.pendingRestore) return
-        goo.syncState = "syncing"
-        HyprMon.atomicWrite(goo._restoreWriter, goo.restorePath, JSON.stringify(goo.pendingRestore))
-        goo.pendingRestore = null
-        goo._applyTimer.restart()   // let the atomic write land before apply reads it
-    }
-    property Timer _applyTimer: Timer {
-        interval: 700
-        onTriggered: { goo._applyProc.command = ["python3", goo.bundleHelper, "apply", goo.restorePath]; goo._applyProc.running = false; goo._applyProc.running = true }
     }
 
     // ══════════════════════════════════════════════════════════════════════════

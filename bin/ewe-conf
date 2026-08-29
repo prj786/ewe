@@ -661,6 +661,21 @@ def main(argv):
                     node[last] = ut[jk]
             save(doc)
             do_apply(doc, only="theme", hooks=hooks)
+    elif cmd == "sync-status":
+        token = _auth_token()
+        if not token:
+            print(json.dumps({"ok": False, "error": "not-signed-in"}))
+            return 0
+        remote, err = _remote_find(token)
+        local_mtime = None
+        try:
+            local_mtime = int(os.path.getmtime(CONF))
+        except OSError:
+            pass
+        print(json.dumps({"ok": err is None,
+                          "error": err,
+                          "remote": remote,
+                          "local_mtime": local_mtime}))
     elif cmd == "push":
         print(json.dumps(do_push(quiet="--quiet" in argv)))
     elif cmd == "pull":
