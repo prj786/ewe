@@ -177,9 +177,23 @@ FloatingWindow {
                 Rectangle {
                     anchors.fill: parent; radius: 64
                     color: pal.field; border.color: pal.stroke; border.width: 1
+                    // brand fallback: the sheep mark (payload path first, then
+                    // the packaged one); a bare initial only if both are absent
+                    Image {
+                        id: brandFace
+                        anchors.centerIn: parent
+                        width: 84; height: 84
+                        visible: face.status !== Image.Ready && status === Image.Ready
+                        opacity: 0.85
+                        fillMode: Image.PreserveAspectFit
+                        sourceSize.width: 168; sourceSize.height: 168
+                        source: "file:///usr/share/ewe/system/branding/ewe-logo-dark.png"
+                        onStatusChanged: if (status === Image.Error && source != "file:///usr/share/pixmaps/ewe-logo-dark.png")
+                                             source = "file:///usr/share/pixmaps/ewe-logo-dark.png"
+                    }
                     Text {
                         anchors.centerIn: parent
-                        visible: face.status !== Image.Ready
+                        visible: face.status !== Image.Ready && brandFace.status !== Image.Ready
                         text: (win.userReal || win.userName || "?").charAt(0).toUpperCase()
                         color: pal.fgDim; font.family: pal.fontText; font.pixelSize: 52; font.weight: Font.Light
                     }
