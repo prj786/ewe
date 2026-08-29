@@ -2763,7 +2763,7 @@ Scope {
                     // configured, signed out → connect
                     Card {
                         visible: Google.probed && Google.configured && !Google.signedIn
-                        Text { width: parent.width; text: "Connect your Google account to get calendar events in Quick Settings and settings backup/restore via Google Drive (hidden app storage only — not your files)."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; wrapMode: Text.Wrap }
+                        Text { width: parent.width; text: "Connect your Google account and ewe lights up around it: calendar in Quick Settings, your machine synced as one file, app restore through Komble — and, if you choose, your Drive as a folder in Files. Until then, nothing Google appears anywhere: this button is the only trace."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; wrapMode: Text.Wrap }
                         Row {
                             spacing: 10
                             Pill { visible: Google.busy !== "signin"; label: "Connect Google account"; primary: true; onGo: Google.signIn() }

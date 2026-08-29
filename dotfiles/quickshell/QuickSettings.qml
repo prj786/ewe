@@ -1192,12 +1192,15 @@ Scope {
                             }
                         }
                         Tile {
+                            // freedom by absence: no Google account, no Google
+                            // chrome — the card only exists once signed in
+                            // (the sign-in lives in Settings → Account, alone)
+                            visible: Google.signedIn
                             ic: Theme.icMail; label: "Mail"
                             active: false                      // mail has no on/off — never accent
                             opened: root.expanded === "mail"
                             hasMenu: true
-                            sub: !Google.signedIn ? "Not connected"
-                               : Google.mailState === "offline" ? "Offline"
+                            sub: Google.mailState === "offline" ? "Offline"
                                : Google.mailUnread > 0 ? Google.mailUnread + " unread" : "No unread"
                             onClicked: {
                                 root.expanded = root.expanded === "mail" ? "" : "mail"
