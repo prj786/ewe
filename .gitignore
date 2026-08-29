@@ -44,3 +44,7 @@ __pycache__/
 # release artefacts built by release.sh
 dist/
 docs/media/
+
+# the shipped Google OAuth client is injected at package build (ewe-repo CI
+# secret EWE_OAUTH_CLIENT) — never committed; see docs/GOOGLE-CLIENT.md
+system/oauth-client.json
