@@ -21,6 +21,10 @@
 IFACE="$1" ACTION="$2"
 case "$ACTION" in up|connectivity-change|dhcp4-change) ;; *) exit 0 ;; esac
 [ -e /etc/ewe/no-auto-timezone ] && exit 0
+# a manually-chosen timezone always wins (Settings' Time & Place sets this)
+[ -e /etc/ewe/manual-timezone ] && exit 0
+# IP geolocation lies on VPNs (exit-node country) — do nothing while one is up
+nmcli -t -f TYPE connection show --active 2>/dev/null | grep -qE "^(vpn|wireguard)$" && exit 0
 
 exec 9>/run/ewe-auto-timezone.lock
 flock -n 9 || exit 0
@@ -32,12 +36,13 @@ if [ -r "$STAMP" ]; then
 fi
 echo "$now" > "$STAMP"
 
-tz=""
-for url in "https://ipinfo.io/timezone" "https://ipapi.co/timezone"; do
-    tz="$(curl -sf --max-time 7 "$url" | tr -d '[:space:]')"
-    [ -n "$tz" ] && break
-done
-[ -n "$tz" ] || exit 0
+# TWO providers must agree before we touch the clock: roaming carriers and
+# odd egress routes make single-source IP location confidently wrong (a
+# Greek hotspot geolocating to London moved a real machine to Europe/London)
+tz1="$(curl -sf --max-time 7 https://ipinfo.io/timezone | tr -d '[:space:]')"
+tz2="$(curl -sf --max-time 7 https://ipapi.co/timezone | tr -d '[:space:]')"
+[ -n "$tz1" ] && [ "$tz1" = "$tz2" ] || exit 0
+tz="$tz1"
 
 case "$tz" in *[!A-Za-z0-9_+/-]*) exit 0 ;; esac        # charset guard
 [ -e "/usr/share/zoneinfo/$tz" ] || exit 0               # must be a real zone
