@@ -47,16 +47,25 @@ restore() {
         done
     fi
 }
-trap 'restore; exit 0' INT TERM EXIT
-
 # React to sink add/remove and new streams; re-assert routing each time.
 # `pactl subscribe` blocks and prints an event per change — zero busy-wait.
+# It runs as a TRACKED background child feeding a fifo, not a `pactl | while`
+# pipeline: a pipeline's pactl survives the script's death as an immortal
+# orphan (the shell's Screensaver leaked 64 of those by 2026-08-30 and
+# starved pipewire-pulse's client cap, killing audio control session-wide).
+fifo="${XDG_RUNTIME_DIR:-/tmp}/ewe-cast-audio.$$"
+mkfifo "$fifo" 2>/dev/null || exit 0
+sub=""
+trap 'kill "$sub" 2>/dev/null; rm -f "$fifo"; restore; exit 0' INT TERM EXIT
+
 tv="$(gnd_sink)"; [ -n "$tv" ] && route_to_tv "$tv"
-pactl subscribe 2>/dev/null | while read -r line; do
+pactl subscribe >"$fifo" 2>/dev/null &
+sub=$!
+while read -r line; do
     case "$line" in
         *"'change'"*sink*|*"'new'"*sink*|*"'remove'"*sink*)
             tv="$(gnd_sink)"
             [ -n "$tv" ] && route_to_tv "$tv"
             ;;
     esac
-done
+done < "$fifo"

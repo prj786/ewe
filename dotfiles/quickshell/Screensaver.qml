@@ -104,11 +104,16 @@ Scope {
     // which is how a huddle idle-dimmed and locked mid-call on 2026-08-13. Event-
     // driven via `pactl subscribe` — zero wakeups while nothing touches the mic.
     property bool callActive: false
+    // pactl is a DIRECT child on purpose: the old `sh -c "pactl | grep"` form
+    // meant quickshell only ever killed the sh, and every component reload
+    // orphaned the pipeline — 64 immortal `pactl subscribe` processes later
+    // (2026-08-30), pipewire-pulse hit its client cap and audio control died
+    // session-wide. The filter lives here instead.
     Process {
         id: micEvents
         running: true
-        command: ["sh", "-c", "pactl subscribe 2>/dev/null | grep --line-buffered source-output"]
-        stdout: SplitParser { onRead: micProbeDebounce.restart() }
+        command: ["pactl", "subscribe"]
+        stdout: SplitParser { onRead: line => { if (line.indexOf("source-output") !== -1) micProbeDebounce.restart() } }
         onExited: micEventsRespawn.restart()   // pipewire restarted under us
     }
     Timer { id: micEventsRespawn; interval: 3000; onTriggered: micEvents.running = true }
