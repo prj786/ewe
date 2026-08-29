@@ -65,6 +65,7 @@ deploy_dotfiles
 if [ -x "$DEST/bin/ewe-conf" ]; then
     mkdir -p "$HOME/.local/bin"
     ln -sf "$DEST/bin/ewe-conf" "$HOME/.local/bin/ewe-conf"
+    [ -x "$DEST/bin/ewe-auth" ] && ln -sf "$DEST/bin/ewe-auth" "$HOME/.local/bin/ewe-auth"
     [ -e "${XDG_CONFIG_HOME:-$HOME/.config}/ewe/ewe.conf" ] \
         || "$DEST/bin/ewe-conf" import >/dev/null \
         || warn "ewe-conf import failed — the one file will be created on first Settings change."

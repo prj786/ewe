@@ -499,10 +499,15 @@ PUSH_STAMP = os.path.join(os.environ.get("XDG_RUNTIME_DIR") or "/tmp", "ewe-conf
 
 
 def _auth_token():
-    ea = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ewe-auth")
+    # realpath, not abspath: this file is reached through the ~/.config
+    # symlink farm, and lexical `..` collapsing lands in the wrong directory
+    ea = os.path.join(os.path.dirname(os.path.realpath(__file__)), "ewe-auth")
     if not os.path.exists(ea):
         ea = "ewe-auth"
-    r = subprocess.run([ea, "token"], capture_output=True, text=True, timeout=60)
+    try:
+        r = subprocess.run([ea, "token"], capture_output=True, text=True, timeout=60)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
     tok = r.stdout.strip().splitlines()[-1] if r.stdout.strip() else ""
     return tok if r.returncode == 0 and len(tok) > 20 and not tok.startswith("{") else None
 
