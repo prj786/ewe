@@ -330,6 +330,10 @@ def cmd_login(argv=()):
         "access_type": "offline", "prompt": "consent", "state": state,
         "include_granted_scopes": "true",
     })
+    # the URL also goes to stderr: if the browser hand-off fails (headless
+    # callers, odd sessions), whoever ran us can open it by hand
+    sys.stderr.write("consent-url: " + auth + "\n")
+    sys.stderr.flush()
     subprocess.Popen(["xdg-open", auth], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     srv.timeout = 5

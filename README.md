@@ -64,14 +64,7 @@ Then reboot, pick **Ewe** at the login screen, and you're in —
 `Super+Return` terminal · `Super+D` apps · `Super+,` Settings
 (full keymap: `dotfiles/hypr/SHORTCUTS.md`).
 
-## A look around
-
-| | |
-|---|---|
-| **Tiling workflow**<br><img src="docs/media/tiling.png" alt="Tiling workflow"> | **Launcher** — fuzzy app / file search<br><img src="docs/media/launcher.png" alt="Launcher"> |
-| **Quick Settings**<br><img src="docs/media/quick-settings.png" alt="Quick Settings"> | **Software manager** — pacman + AUR + AppImages<br><img src="docs/media/software-manager.png" alt="App Store"> |
-
-<sub>More in [`docs/media/`](docs/media). Accent and light/dark are yours to change — Settings → Theme recolours the whole desktop live.</sub>
+Screenshots and a tour live on the website: **[prj786.github.io](https://prj786.github.io)**.
 
 ## What you get
 

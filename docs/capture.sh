@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# capture.sh — (re)grab README media from inside a running ewe session.
+# capture.sh — grab website/promo media from inside a running ewe session.
 # Stills can't show motion, so the launcher/overview/notifications read far better
 # as short GIFs. Run this ON the real desktop (it uses grim/wf-recorder/ffmpeg),
 # not the test driver. Outputs land in docs/media/.

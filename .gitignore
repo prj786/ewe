@@ -43,3 +43,4 @@ __pycache__/
 
 # release artefacts built by release.sh
 dist/
+docs/media/

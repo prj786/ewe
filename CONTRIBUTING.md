@@ -40,7 +40,8 @@ See [`CLAUDE.md`](CLAUDE.md) for the architecture (install pipeline + `run()`/
 Scoped, descriptive messages (`fix(kitty): …`, `feat(theme): …`). Keep PRs focused —
 one concern per PR. For anything visible, attach before/after screenshots.
 
-## Refreshing the README media
+## Capturing media
 
-`docs/capture.sh` (run inside the real DE) regrabs the screenshots/GIFs in
-`docs/media/`. See its header for usage.
+Screenshots live on the website (prj786.github.io), not in this repo.
+`docs/capture.sh` (run inside the real DE) grabs shots/GIFs for it into
+`docs/media/` (gitignored). See its header for usage.
