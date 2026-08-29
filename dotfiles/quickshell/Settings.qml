@@ -573,52 +573,21 @@ Scope {
             if (Globals.tilingEnabled !== onDisk) root.setTiling(Globals.tilingEnabled)
         }
     }
-    IpcHandler {
-        target: "settings"
-        // Every "open" verb routes through Globals.openSettings(): the
-        // standalone ewe-settings app is THE settings UI when installed, and
-        // this in-shell window exists only as a fallback while the binary is
-        // absent. (An external app can't be toggled or deep-linked from here,
-        // so toggle/pane/pickWallpaper degrade to a plain launch.)
-        function toggle(): void {
-            if (Globals.settingsAppInstalled) { Globals.openSettings(); return }
-            Globals.settingsOpen = !Globals.settingsOpen
-        }
-        function show(): void { Globals.openSettings() }
-        function hide(): void { Globals.settingsOpen = false }
-        // deep-link straight to a pane: qs ipc call settings pane 1 (Displays)
-        function pane(n: int): void {
-            if (Globals.settingsAppInstalled) { Globals.openSettings(); return }
-            root.pane = Math.max(0, Math.min(root.navItems.length - 1, n)); Globals.settingsOpen = true
-        }
-        // jump to Wallpaper and open the file chooser (bindable to a key)
-        function pickWallpaper(): void {
-            if (Globals.settingsAppInstalled) { Globals.openSettings(); return }
+    // IPC lives in IpcHub.qml (always resident — this panel is lazy-loaded).
+    // Deep-links arrive through Globals.settingsPaneRequest.
+    function _consumePaneRequest() {
+        var n = Globals.settingsPaneRequest
+        if (n === -1) return
+        Globals.settingsPaneRequest = -1
+        if (n === -2) {
             for (var i = 0; i < root.navItems.length; i++) if (root.navItems[i].key === "wallpaper") root.pane = i
-            Globals.settingsOpen = true
             root.wallpaperBrowseRequested()
-        }
-
-        // ── the contract with the out-of-process Settings app ──────────────────
-        // ewe-settings (a separate Tauri app) cannot touch Globals, so it writes
-        // the same user-theme.json the shell reads and then calls `reload`. These
-        // three verbs are that contract — changing them breaks a shipped binary,
-        // so treat them as public API.
-
-        // Pick up a config written by someone else. The parts that live OUTSIDE
-        // the shell (GTK/Qt colours, the Hyprland border) do not follow from a
-        // property change the way the QML does, so they are re-applied — but only
-        // once the file has actually been parsed, hence the signal.
-        // Display profiles are re-read too: ewe-settings commits display
-        // changes to display-profiles.json, and HyprMon's hotplug/AC re-assert
-        // must never act on a stale in-memory copy of that file.
-        function reload(): void { Globals.reloadUserState(); HyprMon.reloadProfiles() }
-        // Liveness probe: ewe-settings greys out controls when the shell is not
-        // running, since a write would then only take effect at next login.
-        function ping(): string { return "pong" }
-        // Fallback for the version footer, used when the repo checkout is absent.
-        function version(): string { return Globals.version }
+        } else
+            root.pane = Math.max(0, Math.min(root.navItems.length - 1, n))
     }
+    Component.onCompleted: root._consumePaneRequest()
+    Connections { target: Globals; function onSettingsPaneRequestChanged() { root._consumePaneRequest() } }
+
     signal wallpaperBrowseRequested()
 
     // diagnostics (generic, app-agnostic)

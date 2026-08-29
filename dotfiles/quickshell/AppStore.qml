@@ -118,15 +118,7 @@ Scope {
     }
     Component.onCompleted: { root.openScreen = root.focusedScreen(); helperProc.running = true }
 
-    IpcHandler {
-        target: "store"
-        function toggle(): void {
-            if (Globals.kombleInstalled) { Globals.openStore(); return }
-            Globals.launcherOpen = false; Globals.placesOpen = false; Globals.storeOpen = !Globals.storeOpen
-        }
-        function show(): void { Globals.openStore() }
-        function hide(): void { Globals.storeOpen = false }
-    }
+    // IPC lives in IpcHub.qml (always resident — this panel is lazy-loaded).
 
     // which AUR helper is available? paru preferred, but many Arch derivatives
     // (CachyOS) ship yay — the installer reuses it (phase 10), so honour it too.

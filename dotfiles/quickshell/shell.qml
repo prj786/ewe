@@ -19,10 +19,34 @@ ShellRoot {
     Scope { Component.onCompleted: { HyprMon.start(); Logind.start(); Resume.start(); Lid.start(); Wallpaper.start() } }
 
     Notifications {}
+    IpcHub {}
+    // RSS diet (ewe#18): the fallback panels are the two biggest QML trees
+    // and almost never render now that ewe-settings and Komble exist as
+    // apps — load on first open, unload 30s after close (linger covers the
+    // close animation and quick reopens). Their IPC verbs live in IpcHub.
+    Scope {
+        id: lazyPanels
+        property bool settingsLinger: false
+        property bool storeLinger: false
+        property Timer settingsUnload: Timer { interval: 30000; onTriggered: lazyPanels.settingsLinger = false }
+        property Timer storeUnload: Timer { interval: 30000; onTriggered: lazyPanels.storeLinger = false }
+        property Connections hooks: Connections {
+            target: Globals
+            function onSettingsOpenChanged() {
+                if (Globals.settingsOpen) { lazyPanels.settingsLinger = true; lazyPanels.settingsUnload.stop() }
+                else lazyPanels.settingsUnload.restart()
+            }
+            function onStoreOpenChanged() {
+                if (Globals.storeOpen) { lazyPanels.storeLinger = true; lazyPanels.storeUnload.stop() }
+                else lazyPanels.storeUnload.restart()
+            }
+        }
+        LazyLoader { active: Globals.settingsOpen || lazyPanels.settingsLinger; component: Settings {} }
+        LazyLoader { active: Globals.storeOpen || lazyPanels.storeLinger; component: AppStore {} }
+    }
     Bar {}
     Dock {}
     LauncherPanel {}
-    AppStore {}
     Places {}
     MediaPlayer {}
     TrayMenu {}
@@ -38,6 +62,5 @@ ShellRoot {
     Screensaver {}
     Osd {}
     Overview {}
-    Settings {}
     Battery {}
 }

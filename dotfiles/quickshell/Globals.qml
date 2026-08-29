@@ -40,6 +40,9 @@ QtObject {
     property bool overviewOpen: false      // GNOME-style window overview (Super tapped alone)
     property bool clipboardOpen: false     // the clipboard-history / emoji popup (scissors icon)
     property bool settingsOpen: false      // the Quickshell Settings window (Super+, or the CC gear)
+    // deep-link for the LAZY-loaded fallback panel: pane index, or -2 =
+    // wallpaper pane + file chooser; the panel consumes and resets to -1
+    property int settingsPaneRequest: -1
     property string openDd: ""             // ddId of the one open DropRow, shell-wide ("" = none)
     property real clipAnchorX: 40           // screen-local x of the scissors icon (clipboard opens under it)
 

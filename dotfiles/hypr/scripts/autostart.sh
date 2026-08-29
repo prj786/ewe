@@ -48,7 +48,7 @@ fi
 if command -v systemctl >/dev/null 2>&1 && systemctl --user cat ewe.service >/dev/null 2>&1; then
     systemctl --user start ewe.service >/dev/null 2>&1 || true
 elif command -v qs >/dev/null 2>&1 && ! pgrep -x qs >/dev/null 2>&1; then
-    qs >/dev/null 2>&1 &
+    "$HOME/.config/quickshell/scripts/qs-launch.sh" >/dev/null 2>&1 &
 fi
 
 # ── Clipboard history recorder (feeds the scissors-icon popup) ────────────────

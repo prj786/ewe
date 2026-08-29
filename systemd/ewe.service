@@ -9,9 +9,10 @@ StartLimitIntervalSec=0
 
 [Service]
 Type=simple
-# /usr/bin/env so qs is resolved from the (session-imported) PATH without a
-# hard-coded path; works whether the binary is `qs` in /usr/bin or elsewhere.
-ExecStart=/usr/bin/env qs
+# The launch wrapper pins the shell's GL stack to the live GPU's vendor
+# (sheds ~86 MB of dead driver probing on Intel-only machines — ewe#18);
+# it exec's qs resolved from the session-imported PATH.
+ExecStart=%h/.config/quickshell/scripts/qs-launch.sh
 Restart=on-failure
 RestartSec=1
 Slice=session.slice
