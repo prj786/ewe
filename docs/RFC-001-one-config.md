@@ -97,6 +97,13 @@ development = false            # dev CLIs + mise Node/LSP stack
 [sync]
 enabled = false
 provider = "google"            # account IDENTITY (email) — never tokens
+
+# [network]                    # (planned, post-Phase-6) — rule 4 applied:
+# [network.ssh]                #   ~/.ssh/config HOST DEFINITIONS (alias/host/
+#                              #   user/port/options) — never keys
+# [network.vpn]                #   NM VPN/WireGuard PROFILE definitions —
+#                              #   never secrets (keyring re-prompts once
+#                              #   after a restore). See docs/EWE-CONF.md.
 ```
 
 Domains map 1:1 onto today's files so `ewe-conf import` can build the file

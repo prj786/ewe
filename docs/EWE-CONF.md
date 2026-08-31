@@ -1,0 +1,174 @@
+# `ewe.conf` — the manual
+
+*The machine as one file. This is the human guide to `~/.config/ewe/ewe.conf`;
+the architecture and its history live in [RFC-001](RFC-001-one-config.md).*
+
+## The idea
+
+Everything you can express about your desktop — theme, dock, animations,
+displays, wallpapers, window rules, pinned apps, what Komble installed —
+lives in **one declarative TOML document**. The Settings surfaces edit it,
+one tool (`ewe-conf`) applies it, and every runtime file Hyprland and the
+shell actually read is *generated from it*. Save this file, restore the
+machine.
+
+```
+~/.config/ewe/ewe.conf          ← the document (this manual)
+ewe-conf apply                  ← turns it into the runtime files
+~/.config/hypr/generated/*      ← build artifacts (never edit)
+~/.config/quickshell/*.json     ← build artifacts (never edit)
+```
+
+Three rules worth internalising:
+
+1. **One writer.** Only `ewe-conf` writes the file. The shell, ewe-settings,
+   Komble, and the installer all persist *through* it. You may edit it by
+   hand — it round-trips — but every Settings change rewrites the file
+   wholesale, and your hand-written comments do not survive. The `#` comments
+   you see in the file are regenerated on every write, so it always explains
+   itself.
+2. **Everything else is generated.** Editing a `generated/` file works
+   exactly until the next `apply`, then your change is gone. Change the
+   source of truth instead.
+3. **Secrets never enter this file.** `ewe.conf` is the thing that syncs to
+   your Drive. It may name an account (an email address); it never carries a
+   token, password, or private key — those live in the system keyring behind
+   the `ewe-auth` broker. If a future feature would need a secret in here,
+   the feature is designed differently instead (see *SSH & VPN* below).
+
+## The tool
+
+```
+ewe-conf get <dotted.key>          value (JSON on stdout for structures)
+ewe-conf set <dotted.key> <value>  value parsed as JSON, else string; then apply
+ewe-conf dump                      whole file as JSON (one read for QML/Rust)
+ewe-conf import                    build ewe.conf FROM the live runtime files
+ewe-conf apply [--only <domain>]   regenerate artifacts + poke the shell
+ewe-conf path                      print the canonical file path
+```
+
+Writes are atomic (tmp + rename) with `flock` around read-modify-write, and
+key order is stable, so diffs of the file are honest. `import` exists for
+migration and repair: it rebuilds the document from whatever the machine is
+actually doing right now.
+
+## Reference
+
+### `schema = 1`
+
+Version of this document's shape. Bumped only when a key changes meaning.
+
+### `[desktop.theme]` — colours and look
+
+| key | type | default | meaning |
+|---|---|---|---|
+| `color_scheme` | `"dark"` | `"dark"` | light is parked, by design |
+| `accent` | hex string | `"#0a84ff"` | recolours the whole shell live |
+| `theme_name` | `"flock"` \| `"blacksheep"` | `"flock"` | soft greys vs absolute black |
+| `tint_borders` | bool | `true` | accent-tinted window borders |
+| `window_transparency` | bool | `false` | translucent unfocused windows |
+| `avatar_shape` | `"circle"` \| `"rounded"` | `"circle"` | greeter/bar avatar mask |
+
+Applying this section re-runs `colorscheme.sh`, which writes every toolkit's
+config (GTK, Qt, cursor, icon hue) in one pass.
+
+### `[desktop.dock]`
+
+`enabled` (bool) · `autohide` (bool — "intelligent hide") ·
+`icon_size` (`"small"`/`"medium"`/`"large"`).
+
+### `[desktop.animations]`
+
+`speed` — one multiplier over every animation: `0` (off), `0.6` (brisk),
+`1` (default), `2` (showy). `detail` holds per-leaf overrides (enable,
+duration, curve per animation) exactly as the Animations pane writes them.
+
+### `[desktop.tiling]`
+
+`enabled` (bool) — the DE's tiling behaviour as one switch.
+
+### `[desktop.power]`
+
+`low_power` (bool — battery-aware timers) · `lid_docked_suspend` (bool —
+`false` keeps working on external monitors when the lid closes) · `saver`
+(the screensaver stage: `enabled`, `lock`, `lockAfterMin`, `min`, `style`).
+
+### `[desktop.displays]`
+
+Per-monitor-set profiles, verbatim from Settings → Displays. Keyed by the
+identity of every connected monitor, so docking at a desk restores that
+desk's layout. Owned entirely by the Displays UI — hand-editing this section
+is possible but the UI is the better editor.
+
+### `[[desktop.window_rules]]`
+
+One block per app: `name`, `class` (matched case-insensitively), `workspace`
+(0 = any), `mode` (`"float"` or `""`).
+
+### `[desktop.wallpapers]`
+
+`mode` (`fill`/…) · `mute` (video sound) · `default` (path for every output)
+· `[desktop.wallpapers.outputs]` per-output overrides. Images, GIFs, and
+videos are all valid paths.
+
+### `[apps]`
+
+`pinned` — the dock's pinned launcher list, in order.
+`[[apps.startup]]` — login autostart entries (`name`, `exec`, `icon`,
+`enabled`).
+`[[apps.places]]` — the Places panel's folder shortcuts.
+`[apps.installed]` — **Komble's manifest**: every repo package, AUR package,
+and AppImage Komble manages on this machine. This is the restore loop: a
+fresh install that pulls your synced `ewe.conf` can offer to reinstall all
+of it. Komble maintains this section; nothing else touches it.
+
+### `[system]` — what this machine is
+
+Read by the installer and ewe-os tooling only; the desktop never reads it.
+`gaming` (Steam + multilib + lib32 drivers) and `development` (dev CLI
+stack) record which install profiles this machine carries. Flags only ever
+raise on import — a box with Steam installed is a gaming box, whatever the
+file said.
+
+### `[sync]`
+
+`enabled` (bool) · `provider` (`"google"`). Identity only — the account
+*email* may appear here so a restored machine knows whose Drive to ask.
+Tokens live in the keyring behind `ewe-auth`, never in this file.
+
+## SSH & VPN (planned — the `[network]` domain)
+
+The question comes up: "my SSH hosts and VPN setup are part of my machine —
+why don't they restore too?" They will, with a firm line through the middle:
+
+**Config syncs. Credentials never do.**
+
+- `[network.ssh]` will carry your `~/.ssh/config` *host definitions* — the
+  aliases, hostnames, users, ports, and per-host options. Not the keys.
+  A restored machine gets every `ssh work`-style alias back and asks you to
+  provide or regenerate keys once; new key fingerprints are announced so the
+  server side can be updated deliberately.
+- `[network.vpn]` will carry NetworkManager VPN/WireGuard *profile
+  definitions* — server, type, username, routes. Not the private keys or
+  passwords, which NetworkManager already stores in the keyring; on first
+  connect after a restore it prompts once and re-stores them locally.
+
+Why not sync the secrets too, encrypted? Because the synced file then
+becomes a vault, and a vault needs key management, passphrase UX, rotation,
+and a threat model — a different product. Dedicated secret managers do this
+well; `ewe.conf` stays a document you can `cat`, diff, and email to yourself
+without a second thought. That is rule 3, and it is load-bearing.
+
+## Editing by hand
+
+Entirely supported, with the caveats above:
+
+```sh
+$EDITOR "$(ewe-conf path)"    # edit
+ewe-conf apply                # make it real
+```
+
+A syntax error fails `apply` loudly and changes nothing — the generated
+files are only replaced by a successful run. If the file and reality ever
+disagree (a fresh machine, a repair), `ewe-conf import` rebuilds the
+document from the live system.

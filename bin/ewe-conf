@@ -78,7 +78,9 @@ SECTION_NOTES = {
     "desktop.displays": "per-monitor-set profiles (Settings → Displays owns this)",
     "desktop.window_rules": "per-app workspace/float rules",
     "desktop.wallpapers": "per-output wallpaper map (image/GIF/video)",
+    "desktop.power": "lid/idle/screensaver behaviour",
     "apps": "pins, startup entries, places, and Komble's installed manifest",
+    "apps.installed": "what Komble manages here — a fresh machine reinstalls from this",
     "system": "what this MACHINE is — read by the installer/OS tooling only",
     "sync": "account identity for sync; credentials never live in this file",
 }
