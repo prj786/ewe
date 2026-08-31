@@ -145,9 +145,37 @@ QtObject {
             onStreamFinished: {
                 try {
                     var j = JSON.parse(this.text)
+                    g.updatesBusy = !!j.busy
+                    if (j.error) {
+                        // keep the last known counts; retry soon with backoff
+                        // (30s, 60s, … up to 5 tries) instead of an hour later
+                        if (g._updRetries < 5) {
+                            g._updRetries++
+                            g._updRetry.interval = 30 * 1000 * g._updRetries
+                            g._updRetry.restart()
+                        }
+                        return
+                    }
+                    g._updRetries = 0
                     g.updatesRepo = j.repo || 0
                     g.updatesAur = j.aur || 0
-                    g.updatesBusy = !!j.busy
+                } catch (e) {}
+            }
+        }
+    }
+    property int _updRetries: 0
+    property Timer _updRetry: Timer { onTriggered: g.checkUpdates() }
+    // last known counts from the previous session, shown instantly at login —
+    // the live check (60 s in) then confirms or corrects them
+    property Process _updCachedProc: Process {
+        running: true
+        command: ["bash", "-c", "exec \"$HOME/.config/quickshell/scripts/updates-check.sh\" --cached"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                try {
+                    var j = JSON.parse(this.text)
+                    g.updatesRepo = j.repo || 0
+                    g.updatesAur = j.aur || 0
                 } catch (e) {}
             }
         }
