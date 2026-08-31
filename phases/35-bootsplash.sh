@@ -70,19 +70,24 @@ phase_bootsplash() {
     fi
 
     # ── 2. mkinitcpio hook ──────────────────────────────────────────────────
-    # plymouth must sit right after the `udev` (or `systemd`) hook so it starts
-    # before the root device / encryption prompt.
+    # plymouth goes AFTER `kms` when the hook set has it (Fedora/Ubuntu order,
+    # and what our own ISO ships): the DRM driver must be loaded before
+    # plymouthd starts, or its drm renderer finds no card and the splash
+    # falls back to the framebuffer — late, wrong resolution, brief text
+    # flash. Only without kms does it fall back to after udev/systemd.
     if [ -f /etc/mkinitcpio.conf ]; then
         if grep -qE '^HOOKS=.*\bplymouth\b' /etc/mkinitcpio.conf; then
             info "mkinitcpio: plymouth hook already present"
         else
             sudo_run cp /etc/mkinitcpio.conf "/etc/mkinitcpio.conf.bak.$RUN_STAMP"
-            if grep -qE '^HOOKS=.*\budev\b' /etc/mkinitcpio.conf; then
+            if grep -qE '^HOOKS=.*\bkms\b' /etc/mkinitcpio.conf; then
+                sudo_run sed -i -E 's/^(HOOKS=\(.*\bkms)\b/\1 plymouth/' /etc/mkinitcpio.conf && ok "added plymouth to mkinitcpio HOOKS (after kms)"
+            elif grep -qE '^HOOKS=.*\budev\b' /etc/mkinitcpio.conf; then
                 sudo_run sed -i -E 's/^(HOOKS=\(.*\budev)\b/\1 plymouth/' /etc/mkinitcpio.conf && ok "added plymouth to mkinitcpio HOOKS (after udev)"
             elif grep -qE '^HOOKS=.*\bsystemd\b' /etc/mkinitcpio.conf; then
                 sudo_run sed -i -E 's/^(HOOKS=\(.*\bsystemd)\b/\1 plymouth/' /etc/mkinitcpio.conf && ok "added plymouth to mkinitcpio HOOKS (after systemd)"
             else
-                warn "couldn't find a udev/systemd hook in /etc/mkinitcpio.conf — add 'plymouth' to HOOKS manually."
+                warn "couldn't find a kms/udev/systemd hook in /etc/mkinitcpio.conf — add 'plymouth' to HOOKS manually."
             fi
         fi
     else
