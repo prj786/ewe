@@ -848,8 +848,35 @@ Scope {
         stdout: StdioCollector { onStreamFinished: { try { var j = JSON.parse(this.text); if (j && typeof j === "object") root.devOverrides = j } catch (e) {} } }
     }
 
+    // The full system xkb registry replaces these curated arrays as soon as
+    // base.lst parses (every layout + variant, same list other distros offer);
+    // the curated set below remains only as a fallback for a missing file.
+    property var kbVariantNames: ({})   // "layout/variant" → human description
+    Process {
+        id: xkbLoad; running: true
+        command: ["sh", "-c", "cat /usr/share/X11/xkb/rules/base.lst 2>/dev/null"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                var lines = this.text.split("\n"), sec = "", ps = [], vs = ({}), vn = ({})
+                for (var i = 0; i < lines.length; i++) {
+                    var t = lines[i].trim()
+                    if (t === "") continue
+                    if (t[0] === "!") { sec = t.slice(1).trim(); continue }
+                    var sp = t.search(/\s/); if (sp < 0) continue
+                    var code = t.slice(0, sp), rest = t.slice(sp).trim()
+                    if (sec === "layout") { ps.push({ c: code, n: rest }); vs[code] = [""] }
+                    else if (sec === "variant") {
+                        var ci = rest.indexOf(":"); if (ci < 0) continue
+                        var lay = rest.slice(0, ci).trim(), desc = rest.slice(ci + 1).trim()
+                        if (vs[lay]) { vs[lay].push(code); vn[lay + "/" + code] = desc }
+                    }
+                }
+                if (ps.length) { root.kbPresets = ps; root.kbVariants = vs; root.kbVariantNames = vn }
+            }
+        }
+    }
     // per-layout XKB variants (curated common set; Default = no variant)
-    readonly property var kbVariants: ({
+    property var kbVariants: ({
         us: ["", "intl", "dvorak", "colemak", "mac"], gb: ["", "extd", "intl", "dvorak", "mac"],
         ge: ["", "qwerty", "mess", "ru"], ru: ["", "phonetic", "typewriter", "mac"], ua: ["", "phonetic", "typewriter"],
         de: ["", "nodeadkeys", "neo", "mac"], at: ["", "nodeadkeys"], ch: ["", "de_nodeadkeys", "fr"],
@@ -878,7 +905,7 @@ Scope {
         { label: "Win+Space", value: "grp:win_space_toggle" },
         { label: "Caps Lock", value: "grp:caps_toggle" }
     ]
-    readonly property var kbPresets: [
+    property var kbPresets: [
         { c: "us", n: "English (US)" }, { c: "gb", n: "English (UK)" },
         { c: "ge", n: "Georgian" }, { c: "ru", n: "Russian" }, { c: "ua", n: "Ukrainian" },
         { c: "de", n: "German" }, { c: "at", n: "German (Austria)" }, { c: "ch", n: "Swiss" },
@@ -1770,7 +1797,7 @@ Scope {
                     function nameOf(code) { for (var i = 0; i < root.kbPresets.length; i++) if (root.kbPresets[i].c === code) return root.kbPresets[i].n; return code }
                     function variantOpts(code) {
                         var vs = root.kbVariants[code] || [""]
-                        return vs.map(function (v) { return { label: v === "" ? "Default" : v, value: v } })
+                        return vs.map(function (v) { return { label: v === "" ? "Default" : (root.kbVariantNames[code + "/" + v] || v), value: v } })
                     }
                     // layouts not already active, matching the search query (name or code)
                     function filtered() {
