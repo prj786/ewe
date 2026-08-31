@@ -533,7 +533,8 @@ def _drive(method, url, token, body=None, ctype="application/json"):
 def _remote_find(token):
     import urllib.parse
     q = urllib.parse.quote("name='ewe.conf'")
-    url = f"{DRIVE_FILES}?spaces=appDataFolder&q={q}&fields=files(id,name,modifiedTime)"
+    url = (f"{DRIVE_FILES}?spaces=appDataFolder&q={q}"
+           "&fields=files(id,name,modifiedTime,appProperties)")
     j, err = _drive("GET", url, token)
     if err:
         return None, err
@@ -541,23 +542,53 @@ def _remote_find(token):
     return (files[0] if files else None), None
 
 
-def do_push(quiet=False):
+def _rfc3339_epoch(ts):
+    """Drive modifiedTime ('2026-09-01T00:12:34.567Z') → epoch seconds, or 0."""
+    import datetime
+    try:
+        return int(datetime.datetime.fromisoformat(ts.replace("Z", "+00:00")).timestamp())
+    except (ValueError, AttributeError):
+        return 0
+
+
+def _machine():
+    import socket
+    return socket.gethostname() or "unknown"
+
+
+def do_push(quiet=False, force=False):
     token = _auth_token()
     if not token:
         return {"ok": False, "error": "not-signed-in"}
     try:
         content = open(CONF, "rb").read()
+        local_mtime = int(os.path.getmtime(CONF))
     except OSError:
         return {"ok": False, "error": "no-local-file"}
     remote, err = _remote_find(token)
     if err:
         return {"ok": False, "error": err}
+    # Conflict guard (RFC-002 newest-wins): a remote SAVED AFTER our local
+    # file was last edited means another machine has the newer document —
+    # pushing would clobber it. Refuse; `push --force` overrides, `pull`
+    # adopts theirs (and keeps ours as .bak).
+    if remote and not force:
+        rt = _rfc3339_epoch(remote.get("modifiedTime", ""))
+        if rt > local_mtime + 5 and remote.get("appProperties", {}).get("machine") != _machine():
+            return {"ok": False, "error": "remote-newer", "remote": remote,
+                    "local_mtime": local_mtime}
+    props = {"machine": _machine(), "schema": "1"}
     if remote:
         j, err = _drive("PATCH", f"{DRIVE_UPLOAD}/{remote['id']}?uploadType=media",
                         token, content, "application/toml")
+        if not err:
+            # media upload can't carry metadata — stamp the manifest after
+            _drive("PATCH", f"{DRIVE_FILES}/{remote['id']}", token,
+                   json.dumps({"appProperties": props}).encode())
     else:
         boundary = "eweconfboundary"
-        meta = json.dumps({"name": "ewe.conf", "parents": ["appDataFolder"]})
+        meta = json.dumps({"name": "ewe.conf", "parents": ["appDataFolder"],
+                           "appProperties": props})
         body = (f"--{boundary}\r\nContent-Type: application/json\r\n\r\n{meta}\r\n"
                 f"--{boundary}\r\nContent-Type: application/toml\r\n\r\n").encode()                + content + f"\r\n--{boundary}--".encode()
         j, err = _drive("POST", f"{DRIVE_UPLOAD}?uploadType=multipart",
@@ -566,7 +597,8 @@ def do_push(quiet=False):
         return {"ok": False, "error": err}
     with open(PUSH_STAMP, "w") as f:
         f.write(str(int(__import__("time").time())))
-    return {"ok": True, "id": j.get("id", ""), "bytes": len(content)}
+    return {"ok": True, "id": j.get("id", ""), "bytes": len(content),
+            "machine": props["machine"]}
 
 
 def do_pull(out_path=None):
@@ -684,7 +716,7 @@ def main(argv):
                           "remote": remote,
                           "local_mtime": local_mtime}))
     elif cmd == "push":
-        print(json.dumps(do_push(quiet="--quiet" in argv)))
+        print(json.dumps(do_push(quiet="--quiet" in argv, force="--force" in argv)))
     elif cmd == "pull":
         outp = None
         if "--out" in argv:

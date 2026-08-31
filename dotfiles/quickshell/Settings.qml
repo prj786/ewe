@@ -2850,9 +2850,11 @@ Scope {
                             spacing: 10
                             Pill { label: Google.syncState === "syncing" ? "Syncing…" : "Sync now"; primary: true; onGo: Google.syncNow() }
                             Pill { label: "Restore from cloud…"; onGo: Google.requestRestore() }
+                            // only offered when the conflict guard refused a push
+                            Pill { visible: Google.syncError.indexOf("Another machine") === 0; label: "Push anyway"; onGo: Google.pushForce() }
                             Pill { label: "Packages from backup…"; onGo: root.reviewPackages() }
                         }
-                        Text { width: parent.width; text: "Theme, keyboard, dock, wallpaper, shortcuts, screensaver, avatar (picture + shape), startup applications, display profiles, SSH hosts + browse tunnels (never keys) — one bundle in Drive's hidden app storage. VPN profiles hold secrets, so only their names are captured. The installed-package list is captured too; reinstalling from it is always opt-in."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
+                        Text { width: parent.width; text: "The machine file (ewe.conf) syncs to Drive's hidden app storage: theme + accent, dock, animations, power, display profiles, window rules, wallpapers, pinned/startup apps, places, and Komble's installed-apps list (reinstalling from it is always opt-in). Credentials never sync — that's the rule the file is built on."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
                         Text { visible: Google.syncError !== ""; width: parent.width; text: Google.syncError; color: Theme.danger; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
                         Text { visible: Google.restoreSummary !== ""; width: parent.width; text: Google.restoreSummary; color: Theme.success; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
                     }
@@ -2870,7 +2872,7 @@ Scope {
                             KV { k: "Saved on"; v: Google.pendingRestore ? ("“" + (Google.pendingRestore.device || "?") + "” · " + root.fmtSyncTime(Google.pendingRestore.updatedAt || "")) : "" }
                             KV { k: "Restores"; v: "the machine file (ewe.conf) — theme, dock, displays, rules, apps list; your current file is kept as a timestamped backup" }
                             KV { k: "Applications"; v: "reinstall offers appear in Komble → For you (never auto-installed)" }
-                            Text { width: parent.width; text: "Overwrites this machine's theme, keyboard, dock, wallpaper, screensaver, SSH-host and display-profile settings, then reloads the shell config live."; color: Theme.warning; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
+                            Text { width: parent.width; text: "Overwrites this machine's theme, dock, wallpaper, window-rule, display-profile and app-list settings, then reloads the shell config live."; color: Theme.warning; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
                             Row {
                                 spacing: 10
                                 Pill { label: "Restore"; primary: true; onGo: Google.applyRestore() }

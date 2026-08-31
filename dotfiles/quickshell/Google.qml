@@ -264,7 +264,15 @@ QtObject {
         HyprMon.atomicWrite(goo._metaWriter, goo.syncMetaPath,
             JSON.stringify({ autoSync: goo.autoSync, lastSync: goo.lastSync, lastHash: goo.lastHash }))
     }
-    function setAutoSync(v) { goo.autoSync = v; goo._saveSyncMeta() }
+    function setAutoSync(v) {
+        goo.autoSync = v; goo._saveSyncMeta()
+        // one switch, both engines: [sync].enabled gates ewe-conf's own
+        // write-triggered auto push; without this the two flags disagreed
+        // forever (the RFC's opt-in was wired to nothing)
+        Quickshell.execDetached(["sh", "-c",
+            '"$HOME/.config/quickshell/../../bin/ewe-conf" set --no-hooks sync.enabled '
+            + (v ? "true" : "false")])
+    }
 
     property Connections _sessionHooks: Connections {
         target: goo
@@ -293,10 +301,26 @@ QtObject {
     // in the Drive bundle — secrets never sync, RFC-001 rule 4).
     readonly property string eweConf: Quickshell.env("HOME") + "/.config/quickshell/../../bin/ewe-conf"
     property bool _autoPushing: false
+    property string _pendingHash: ""
     function syncNow() {
         if (!goo.signedIn || goo.syncState === "syncing") return
         goo.syncState = "syncing"; goo.syncError = ""; goo.restoreSummary = ""
-        _pushProc.running = false; _pushProc.running = true
+        // hash gate: an auto push with an unchanged file is a no-op — this is
+        // what makes the login-time syncSoon() free when nothing moved
+        _hashProc.running = false; _hashProc.running = true
+    }
+    property Process _hashProc: Process {
+        command: ["sh", "-c", 'sha256sum "$HOME/.config/ewe/ewe.conf" 2>/dev/null | cut -d" " -f1']
+        stdout: StdioCollector {
+            onStreamFinished: {
+                var h = this.text.trim()
+                if (goo._autoPushing && h !== "" && h === goo.lastHash) {
+                    goo._autoPushing = false; goo.syncState = "idle"; return
+                }
+                goo._pendingHash = h
+                _pushProc.running = false; _pushProc.running = true
+            }
+        }
     }
     property Process _pushProc: Process {
         command: [goo.eweConf, "push"]
@@ -304,12 +328,40 @@ QtObject {
             onStreamFinished: {
                 var j = null
                 try { j = JSON.parse(this.text) } catch (e) {}
+                var wasAuto = goo._autoPushing
                 goo._autoPushing = false
                 if (j && j.ok) {
+                    if (goo._pendingHash) { goo.lastHash = goo._pendingHash; goo._pendingHash = "" }
                     goo.lastSync = new Date().toISOString(); goo._saveSyncMeta()
                     goo.syncState = "idle"
                     goo.checkCloud()
+                } else if (j && j.error === "remote-newer") {
+                    // another machine saved a newer document — never clobber it
+                    // silently; the Settings pane offers Restore / "push anyway"
+                    goo.syncState = "error"
+                    goo.syncError = "Another machine saved newer settings — restore them, or push anyway to overwrite."
+                    goo.checkCloud()
+                } else if (wasAuto) {
+                    // auto pushes fail quietly (offline is normal); the next
+                    // debounce retries
+                    goo.syncState = "idle"
                 } else goo._syncFail(j && j.error ? j.error : "push failed")
+            }
+        }
+    }
+    function pushForce() {
+        if (!goo.signedIn || goo.syncState === "syncing") return
+        goo.syncState = "syncing"; goo.syncError = ""
+        _pushForceProc.running = false; _pushForceProc.running = true
+    }
+    property Process _pushForceProc: Process {
+        command: [goo.eweConf, "push", "--force"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                var j = null
+                try { j = JSON.parse(this.text) } catch (e) {}
+                if (j && j.ok) { goo.lastSync = new Date().toISOString(); goo._saveSyncMeta(); goo.syncState = "idle"; goo.checkCloud() }
+                else goo._syncFail(j && j.error ? j.error : "push failed")
             }
         }
     }
@@ -328,7 +380,10 @@ QtObject {
                 var j = null
                 try { j = JSON.parse(this.text) } catch (e) {}
                 var ok = !!(j && j.ok && j.remote)
-                goo.cloudInfo = ok ? { device: "your account", updatedAt: j.remote.modifiedTime || "" } : null
+                goo.cloudInfo = ok ? {
+                    device: (j.remote.appProperties && j.remote.appProperties.machine) || "your account",
+                    updatedAt: j.remote.modifiedTime || ""
+                } : null
                 var cb = goo._statusCb; goo._statusCb = null
                 if (cb) cb(ok)
             }
