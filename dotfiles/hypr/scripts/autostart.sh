@@ -165,9 +165,18 @@ fi
 ) >/dev/null 2>&1 &
 
 # ── Google Drive folder: remount at login when the user set it up ────────────
-# (ewe-drive mount is a silent no-op when unconfigured or already mounted)
+# (ewe-drive mount is a silent no-op when unconfigured or already mounted).
+# Resolve the binary — PATH (packaged installs symlink it into ~/.local/bin),
+# then the tarball/dev trees. The old hardcoded ~/.local/bin path made the
+# mount structurally dead on a git checkout, and run_once's command-v guard
+# swallowed the failure without a trace.
 if [ -r "${XDG_CONFIG_HOME:-$HOME/.config}/ewe/rclone-drive.conf" ]; then
-    run_once "rclone.*ewedrive" "$HOME/.local/bin/ewe-drive" mount
+    _drive="$(command -v ewe-drive 2>/dev/null)"
+    [ -n "$_drive" ] || for _d in "$HOME/.local/share/ewe/bin/ewe-drive" \
+                                 "$(dirname "$(dirname "$(realpath "$0")")")/../../bin/ewe-drive"; do
+        [ -x "$_d" ] && { _drive="$_d"; break; }
+    done
+    [ -n "$_drive" ] && run_once "rclone.*ewedrive" "$_drive" mount
 fi
 
 # ── First-launch warm-up: pre-fault the big apps' working set at idle so the

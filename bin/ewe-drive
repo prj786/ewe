@@ -113,13 +113,26 @@ mount)
     [ -r "$CONF" ] || exit 0                       # not set up — silent no-op
     command -v rclone >/dev/null 2>&1 || exit 0
     mounted && exit 0
+    # a dead FUSE endpoint ("Transport endpoint is not connected", e.g. after
+    # a killed rclone) blocks everything until lazily unmounted — it fails
+    # even stat/-d, so probe with ls and heal on ANY failure (a plain missing
+    # dir makes fusermount fail harmlessly and mkdir recreate it)
+    if ! ls "$MOUNT" >/dev/null 2>&1; then
+        fusermount3 -uz "$MOUNT" 2>/dev/null || fusermount -uz "$MOUNT" 2>/dev/null || true
+    fi
     mkdir -p "$MOUNT"
     say "mounting Google Drive"
-    rclone --config "$CONF" mount "$REMOTE-all:" "$MOUNT" \
-        --daemon --vfs-cache-mode writes --dir-cache-time 1m \
+    # Background it ourselves and poll for readiness — rclone's own --daemon
+    # never returned on this stack (the parent waits on a ready signal that
+    # doesn't arrive; the identical foreground mount works). setsid detaches
+    # it from the login session so a shell restart doesn't kill the mount.
+    ( setsid rclone --config "$CONF" mount "$REMOTE-all:" "$MOUNT" \
+        --vfs-cache-mode writes --dir-cache-time 1m \
         --poll-interval 30s --drive-skip-gdocs=false \
+        >/dev/null 2>&1 & )
+    for _ in $(seq 1 40); do mounted && break; sleep 0.25; done
+    mounted && say "mounted at $MOUNT" \
         || die "mount failed (see: rclone --config $CONF lsd $REMOTE:)"
-    say "mounted at $MOUNT"
     ;;
 
 unmount)
