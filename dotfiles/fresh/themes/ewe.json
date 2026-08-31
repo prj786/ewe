@@ -1,0 +1,54 @@
+{
+  "name": "ewe",
+  "editor": {
+    "bg": [2, 2, 2],
+    "fg": [242, 242, 247],
+    "cursor": [94, 92, 230],
+    "selection_bg": [34, 33, 81],
+    "line_number": [99, 99, 102],
+    "line_number_active": [242, 242, 247],
+    "current_line_bg": [16, 16, 18]
+  },
+  "syntax": {
+    "keyword": [251, 73, 52],
+    "string": [184, 187, 38],
+    "comment": [142, 142, 147],
+    "function": [131, 165, 152],
+    "type": [250, 189, 47],
+    "number": [211, 134, 155],
+    "constant": [254, 128, 25],
+    "operator": [213, 196, 161],
+    "variable": [242, 242, 247],
+    "property": [142, 192, 124],
+    "tag": [251, 73, 52],
+    "attribute": [250, 189, 47],
+    "punctuation": [142, 142, 147]
+  },
+  "ui": {
+    "panel_bg": [10, 10, 12],
+    "border": [34, 34, 37],
+    "accent": [94, 92, 230],
+    "status_bar_bg": [16, 16, 18],
+    "status_bar_fg": [242, 242, 247],
+    "tab_active_bg": [16, 16, 18],
+    "tab_active_fg": [242, 242, 247],
+    "tab_inactive_bg": [10, 10, 12],
+    "tab_inactive_fg": [142, 142, 147],
+    "menu_bg": [10, 10, 12],
+    "menu_fg": [242, 242, 247],
+    "menu_selected_bg": [94, 92, 230],
+    "menu_selected_fg": [255, 255, 255]
+  },
+  "search": {
+    "match_bg": [250, 189, 47],
+    "match_fg": [2, 2, 2],
+    "current_match_bg": [254, 128, 25],
+    "current_match_fg": [2, 2, 2]
+  },
+  "diagnostics": {
+    "error": [251, 73, 52],
+    "warning": [250, 189, 47],
+    "info": [131, 165, 152],
+    "hint": [142, 142, 147]
+  }
+}

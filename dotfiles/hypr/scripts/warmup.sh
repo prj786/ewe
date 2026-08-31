@@ -43,6 +43,7 @@ for f in \
     /usr/lib/libgtk-3.so* /usr/lib/libgtk-4.so* /usr/lib/libglib-2.0.so* \
     /usr/lib/libQt6Core.so* /usr/lib/libQt6Gui.so* /usr/lib/libQt6Qml.so* \
     /usr/bin/kitty /usr/bin/zathura /usr/bin/imv /usr/bin/galculator \
+    /usr/bin/zeditor \
     /usr/bin/engrampa /usr/bin/guvcview ; do
     warm "$f"
 done

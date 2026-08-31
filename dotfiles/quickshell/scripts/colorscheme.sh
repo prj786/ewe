@@ -62,7 +62,7 @@ CFG="${XDG_CONFIG_HOME:-$HOME/.config}"
 STYLE="$(sed -n 's/.*"themeName": *"\([a-z]*\)".*/\1/p' "$CFG/quickshell/user-theme.json" 2>/dev/null | head -n1)"
 
 # the style's neutral surface tokens (mirrors Theme.qml flock/pitchBlack) —
-# consumed by kitty + Fresh below so the terminal/editor follow the shell style
+# consumed by kitty + Zed below so the terminal/editor follow the shell style
 if [ "$STYLE" = "blacksheep" ]; then
     S_BG="020202"; S_PANEL="0a0a0c"; S_ELEV="101012"; S_STROKE="222225"
 else
@@ -187,67 +187,83 @@ set recolor-lightcolor      "#${S_BG}"
 set recolor-darkcolor       "#f2f2f7"
 EOF
 
-# ── Fresh (the terminal IDE) — generated theme following style + accent.
-#    config.json (committed) points at ewe.json; this file is gitignored like
-#    kitty's flock.conf. Fresh reads the theme at startup — running sessions
-#    keep the old palette until relaunched. Syntax colours stay Gruvbox (same
-#    ANSI family as kitty); only the chrome + accent follow the shell. ──
-mkdir -p "$CFG/fresh/themes"
-if [ "$ACC_FG" = "1c1c1e" ]; then ACC_FG_DEC="28, 28, 30"; else ACC_FG_DEC="255, 255, 255"; fi
-cat > "$CFG/fresh/themes/ewe.json" <<EOF
+# ── Zed (the editor) — generated theme following style + accent.
+#    settings.json (committed, dotfiles/zed) points at "ewe"; this file is
+#    gitignored like kitty's flock.conf. Zed watches its themes dir, so a
+#    running window recolours on the next write. Syntax colours stay Gruvbox
+#    (same ANSI family as kitty); only the chrome + accent follow the shell. ──
+mkdir -p "$CFG/zed/themes"
+cat > "$CFG/zed/themes/ewe.json" <<EOF
 {
+  "\$schema": "https://zed.dev/schema/themes/v0.2.0.json",
   "name": "ewe",
-  "editor": {
-    "bg": [$S_BG_R, $S_BG_G, $S_BG_B],
-    "fg": [242, 242, 247],
-    "cursor": [$AR, $AG, $AB],
-    "selection_bg": [$SR, $SG, $SB],
-    "line_number": [99, 99, 102],
-    "line_number_active": [242, 242, 247],
-    "current_line_bg": [$S_EL_R, $S_EL_G, $S_EL_B]
-  },
-  "syntax": {
-    "keyword": [251, 73, 52],
-    "string": [184, 187, 38],
-    "comment": [142, 142, 147],
-    "function": [131, 165, 152],
-    "type": [250, 189, 47],
-    "number": [211, 134, 155],
-    "constant": [254, 128, 25],
-    "operator": [213, 196, 161],
-    "variable": [242, 242, 247],
-    "property": [142, 192, 124],
-    "tag": [251, 73, 52],
-    "attribute": [250, 189, 47],
-    "punctuation": [142, 142, 147]
-  },
-  "ui": {
-    "panel_bg": [$S_PN_R, $S_PN_G, $S_PN_B],
-    "border": [$S_ST_R, $S_ST_G, $S_ST_B],
-    "accent": [$AR, $AG, $AB],
-    "status_bar_bg": [$S_EL_R, $S_EL_G, $S_EL_B],
-    "status_bar_fg": [242, 242, 247],
-    "tab_active_bg": [$S_EL_R, $S_EL_G, $S_EL_B],
-    "tab_active_fg": [242, 242, 247],
-    "tab_inactive_bg": [$S_PN_R, $S_PN_G, $S_PN_B],
-    "tab_inactive_fg": [142, 142, 147],
-    "menu_bg": [$S_PN_R, $S_PN_G, $S_PN_B],
-    "menu_fg": [242, 242, 247],
-    "menu_selected_bg": [$AR, $AG, $AB],
-    "menu_selected_fg": [$ACC_FG_DEC]
-  },
-  "search": {
-    "match_bg": [250, 189, 47],
-    "match_fg": [$S_BG_R, $S_BG_G, $S_BG_B],
-    "current_match_bg": [254, 128, 25],
-    "current_match_fg": [$S_BG_R, $S_BG_G, $S_BG_B]
-  },
-  "diagnostics": {
-    "error": [251, 73, 52],
-    "warning": [250, 189, 47],
-    "info": [131, 165, 152],
-    "hint": [142, 142, 147]
-  }
+  "author": "ewe",
+  "themes": [
+    {
+      "name": "ewe",
+      "appearance": "dark",
+      "style": {
+        "background": "#${S_PANEL}",
+        "surface.background": "#${S_PANEL}",
+        "elevated_surface.background": "#${S_ELEV}",
+        "editor.background": "#${S_BG}",
+        "editor.foreground": "#f2f2f7",
+        "editor.gutter.background": "#${S_BG}",
+        "editor.line_number": "#636366",
+        "editor.active_line_number": "#f2f2f7",
+        "editor.active_line.background": "#${S_ELEV}",
+        "border": "#${S_STROKE}",
+        "border.variant": "#${S_STROKE}",
+        "panel.background": "#${S_PANEL}",
+        "status_bar.background": "#${S_ELEV}",
+        "title_bar.background": "#${S_PANEL}",
+        "toolbar.background": "#${S_BG}",
+        "tab_bar.background": "#${S_PANEL}",
+        "tab.active_background": "#${S_ELEV}",
+        "tab.inactive_background": "#${S_PANEL}",
+        "element.background": "#${S_ELEV}",
+        "element.hover": "#${S_STROKE}",
+        "element.selected": "#${ACC}40",
+        "ghost_element.hover": "#${S_ELEV}",
+        "ghost_element.selected": "#${ACC}40",
+        "drop_target.background": "#${ACC}30",
+        "text": "#f2f2f7",
+        "text.muted": "#8e8e93",
+        "text.placeholder": "#636366",
+        "text.accent": "#${ACC}",
+        "icon.accent": "#${ACC}",
+        "link_text.hover": "#${ACC}",
+        "scrollbar.thumb.background": "#8e8e9340",
+        "scrollbar.track.background": "#${S_BG}",
+        "terminal.background": "#${S_BG}",
+        "terminal.foreground": "#f2f2f7",
+        "error": "#fb4934",
+        "warning": "#fabd2f",
+        "info": "#83a598",
+        "hint": "#8e8e93",
+        "players": [
+          { "cursor": "#${ACC}", "selection": "#${ACC}59", "background": "#${ACC}" }
+        ],
+        "syntax": {
+          "keyword":     { "color": "#fb4934" },
+          "string":      { "color": "#b8bb26" },
+          "comment":     { "color": "#8e8e93" },
+          "comment.doc": { "color": "#8e8e93" },
+          "function":    { "color": "#83a598" },
+          "type":        { "color": "#fabd2f" },
+          "number":      { "color": "#d3869b" },
+          "constant":    { "color": "#fe8019" },
+          "boolean":     { "color": "#fe8019" },
+          "operator":    { "color": "#d5c4a1" },
+          "variable":    { "color": "#f2f2f7" },
+          "property":    { "color": "#8ec07c" },
+          "tag":         { "color": "#fb4934" },
+          "attribute":   { "color": "#fabd2f" },
+          "punctuation": { "color": "#8e8e93" }
+        }
+      }
+    }
+  ]
 }
 EOF
 

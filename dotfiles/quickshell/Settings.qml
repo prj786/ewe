@@ -1701,7 +1701,7 @@ Scope {
                     Item {
                         width: parent.width; height: 20
                         SectionTitle { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "SSH HOSTS" }
-                        Text { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; text: "Edit config"; color: Theme.accent; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold; MouseArea { anchors.fill: parent; anchors.margins: -6; cursorShape: Qt.PointingHandCursor; onClicked: Quickshell.execDetached(["kitty", "-e", "sh", "-c", "${EDITOR:-fresh} ~/.ssh/config"]) } }
+                        Text { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; text: "Edit config"; color: Theme.accent; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold; MouseArea { anchors.fill: parent; anchors.margins: -6; cursorShape: Qt.PointingHandCursor; onClicked: Quickshell.execDetached(["kitty", "-e", "sh", "-c", "${EDITOR:-micro} ~/.ssh/config"]) } }
                     }
                     Card {
                         Text { width: parent.width; visible: root.sshHosts.length === 0; text: "No hosts in ~/.ssh/config. Add one with “Edit config”."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; wrapMode: Text.Wrap }

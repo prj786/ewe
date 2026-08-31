@@ -111,9 +111,13 @@ unzip
 7zip                     # provides 7z (p7zip was dropped from the Arch repos)
 
 # ── browser + editor ──────────────────────────────────────────────────────────
-# Terminal IDE is Fresh (AUR: fresh-editor, see aur.list) — the default text/code
-# editor. neovim/vim dropped; no GUI text editor ships (Fresh covers it).
+# Zed (official repo) is THE editor/IDE — GUI, default handler for every text
+# mime, themed by colorscheme.sh (~/.config/zed/themes/ewe.json). micro covers
+# $EDITOR in a TTY (git commit, visudo, ssh) — a GUI editor can't. neovim/vim
+# stay dropped.
 firefox
+zed
+micro
 
 # ── desktop utilities ────────────────────────────────────────────────────────
 swaybg

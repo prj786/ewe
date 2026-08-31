@@ -23,11 +23,12 @@ phase_userconfig() {
             done
         fi
     fi
-    # Install our Fresh launcher (runs `fresh` inside kitty) so it can be the GUI
-    # default text/code editor. Shipped in the repo; copied to the user apps dir.
-    if [ -r "$DOTREPO/system/applications/fresh.desktop" ]; then
+    # Zed's shipped desktop entry declares only text/plain; our override (same
+    # name, user apps dir wins) carries the full text/code MimeType list so
+    # "Open With" offers Zed for JSON/YAML/Rust/… too.
+    if [ -r "$DOTREPO/system/applications/dev.zed.Zed.desktop" ]; then
         run mkdir -p "$HOME/.local/share/applications"
-        run cp -f "$DOTREPO/system/applications/fresh.desktop" "$HOME/.local/share/applications/fresh.desktop"
+        run cp -f "$DOTREPO/system/applications/dev.zed.Zed.desktop" "$HOME/.local/share/applications/dev.zed.Zed.desktop"
         run update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
     fi
 
@@ -59,8 +60,8 @@ phase_userconfig() {
     }
     if command -v xdg-mime >/dev/null 2>&1; then
         _mime nemo.desktop             inode/directory
-        # Fresh IDE is the default text + code editor (terminal IDE; no GUI editor ships).
-        _mime fresh.desktop text/plain text/markdown text/html text/css text/javascript \
+        # Zed is the default text + code editor (micro covers \$EDITOR in a TTY).
+        _mime dev.zed.Zed.desktop text/plain text/markdown text/html text/css text/javascript \
               application/json application/javascript application/xml text/xml application/x-yaml \
               text/x-python text/x-csrc text/x-chdr text/x-c++src application/x-shellscript \
               text/x-rust text/x-go
@@ -77,7 +78,7 @@ phase_userconfig() {
 
     # GTK/GIO reads ~/.config/mimeapps.list directly — there is no KDE ksycoca cache
     # to rebuild. Just refresh the desktop-file/mimeinfo cache so "Open With" lists
-    # are current (covers Fresh, which we copied into the user apps dir above).
+    # are current (covers the Zed override we copied into the user apps dir above).
     if command -v update-desktop-database >/dev/null 2>&1; then
         run update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
     fi
@@ -174,7 +175,7 @@ phase_userconfig() {
     local rc="$HOME/.profile"
     if [ -w "$rc" ] || [ ! -e "$rc" ]; then
         if ! grep -q 'hypr-shell: default editor\|ewe: default editor' "$rc" 2>/dev/null; then
-            run sh -c "printf '\n# ewe: default editor\nexport EDITOR=fresh VISUAL=fresh\n' >> '$rc'"
+            run sh -c "printf '\n# ewe: default editor (terminal — a GUI editor cannot serve a TTY)\nexport EDITOR=micro VISUAL=micro\n' >> '$rc'"
         fi
     fi
 
@@ -182,7 +183,7 @@ phase_userconfig() {
     # mise owns Node here. Provision Node LTS + pnpm + the front-end language
     # servers/formatter declared in dotfiles/mise/config.toml, and wire mise into
     # the shells. The shims dir is also added to PATH by start-hyprland.sh so
-    # GUI-launched Fresh finds the servers without an interactive shell.
+    # GUI-launched apps (Zed, kitty tools) find them without an interactive shell.
     if [ "${DEV:-0}" != "1" ]; then
         info "dev toolchain: skipped (opt-in) — re-run with --dev to provision the Node/LSP stack via mise."
     elif command -v mise >/dev/null 2>&1; then

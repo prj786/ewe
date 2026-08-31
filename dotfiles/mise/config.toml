@@ -1,21 +1,22 @@
 # mise global config — managed by ewe.
-# mise OWNS the Node toolchain (no system nodejs package). `mise install`
+# mise OWNS the dev Node toolchain (zed pulls a system nodejs as a hard dep,
+# but mise shims front the PATH for dev work). `mise install`
 # (run by phase 60) provisions Node LTS, pnpm, and the front-end language
 # servers + formatter as npm-backed tools. Their shims live in
-# ~/.local/share/mise/shims, which start-hyprland.sh puts on PATH so Fresh
+# ~/.local/share/mise/shims, which start-hyprland.sh puts on PATH so Zed
 # (and anything launched from the session) finds them automatically.
 [tools]
 node = "lts"
 "npm:pnpm" = "latest"
 
-# front-end language servers (Fresh auto-detects servers on PATH)
+# front-end language servers (Zed auto-detects servers on PATH)
 "npm:typescript" = "latest"                      # tsserver / tsc
 "npm:typescript-language-server" = "latest"      # TS + JS
 "npm:vscode-langservers-extracted" = "latest"    # HTML, CSS, JSON, ESLint
 "npm:@tailwindcss/language-server" = "latest"    # Tailwind CSS
 "npm:@vue/language-server" = "latest"            # Vue
 "npm:svelte-language-server" = "latest"          # Svelte
-"npm:prettier" = "latest"                        # formatter (used by Fresh)
+"npm:prettier" = "latest"                        # formatter (used by Zed)
 
 [settings]
 # auto-install missing tool versions when entering a project (e.g. a repo that

@@ -275,7 +275,7 @@ def do_import():
         sysd["gaming"] = True
     else:
         sysd.setdefault("gaming", False)
-    if shutil.which("mise") and shutil.which("fresh"):
+    if shutil.which("mise") and shutil.which("zeditor"):
         sysd["development"] = True
     else:
         sysd.setdefault("development", False)

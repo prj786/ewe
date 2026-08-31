@@ -52,8 +52,8 @@ deploy_dotfiles() {
     seed_state
     link_tree "$DOTREPO/dotfiles/hypr"       "$HOME/.config/hypr"
     link_tree "$DOTREPO/dotfiles/quickshell" "$HOME/.config/quickshell"
-    # dev environment: Fresh IDE, kitty, oh-my-posh, mise (themed to the DE palette)
-    link_tree "$DOTREPO/dotfiles/fresh"      "$HOME/.config/fresh"
+    # dev environment: Zed, kitty, oh-my-posh, mise (themed to the DE palette)
+    link_tree "$DOTREPO/dotfiles/zed"        "$HOME/.config/zed"
     link_tree "$DOTREPO/dotfiles/kitty"      "$HOME/.config/kitty"
     link_tree "$DOTREPO/dotfiles/oh-my-posh" "$HOME/.config/oh-my-posh"
     link_tree "$DOTREPO/dotfiles/mise"       "$HOME/.config/mise"

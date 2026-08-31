@@ -95,7 +95,8 @@ phase_postcheck() {
     else
         _note "gaming: not installed (opt-in — re-run with --gaming)"
     fi
-    _check "editor: Fresh (fresh) on PATH"        sh -c 'command -v fresh'
+    _check "editor: Zed (zeditor) on PATH"        sh -c 'command -v zeditor'
+    _check "editor: micro (\$EDITOR) on PATH"     sh -c 'command -v micro'
     _check "terminal: kitty installed"            sh -c 'command -v kitty'
     # dev toolchain is opt-in (--dev); only verify it when mise was actually installed.
     if pkg_present mise; then

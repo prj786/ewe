@@ -1,0 +1,16 @@
+[Desktop Entry]
+# ewe override of Zed's shipped entry (same name — the user apps dir wins).
+# Upstream declares only text/plain; this carries the full text/code list so
+# "Open With" offers Zed everywhere phase 60 makes it the default.
+# inode/directory stays OUT on purpose: folders belong to Nemo.
+Type=Application
+Name=Zed
+GenericName=Text Editor
+Comment=A high-performance, multiplayer code editor
+TryExec=zeditor
+StartupNotify=true
+Exec=zeditor %U
+Icon=zed
+Categories=Utility;TextEditor;Development;IDE;
+Keywords=zed;editor;code;
+MimeType=text/plain;text/markdown;text/html;text/css;text/javascript;application/json;application/javascript;application/xml;text/xml;application/x-yaml;text/x-python;text/x-csrc;text/x-chdr;text/x-c++src;application/x-shellscript;text/x-rust;text/x-go;application/x-zerosize;x-scheme-handler/zed;

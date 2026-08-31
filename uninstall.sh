@@ -25,14 +25,14 @@ restore() {
 step "uninstall"
 restore "$HOME/.config/hypr"
 restore "$HOME/.config/quickshell"
-restore "$HOME/.config/fresh"
+restore "$HOME/.config/zed"
 restore "$HOME/.config/kitty"
 restore "$HOME/.config/oh-my-posh"
 restore "$HOME/.config/mise"
 
-# the Fresh launcher we copied into the user apps dir
-if [ -e "$HOME/.local/share/applications/fresh.desktop" ]; then
-    run rm -f "$HOME/.local/share/applications/fresh.desktop"; ok "removed fresh.desktop"
+# the Zed mime-override we copied into the user apps dir
+if [ -e "$HOME/.local/share/applications/dev.zed.Zed.desktop" ]; then
+    run rm -f "$HOME/.local/share/applications/dev.zed.Zed.desktop"; ok "removed dev.zed.Zed.desktop"
 fi
 
 if [ -e "$HOME/.config/systemd/user/hyprland-session.target" ]; then
