@@ -41,11 +41,22 @@ echo "$now" > "$STAMP"
 # Greek hotspot geolocating to London moved a real machine to Europe/London)
 tz1="$(curl -sf --max-time 7 https://ipinfo.io/timezone | tr -d '[:space:]')"
 tz2="$(curl -sf --max-time 7 https://ipapi.co/timezone | tr -d '[:space:]')"
-[ -n "$tz1" ] && [ "$tz1" = "$tz2" ] || exit 0
+if [ -z "$tz1" ] || [ "$tz1" != "$tz2" ]; then
+    # A failed attempt must not burn the 60s window: the `up` event often
+    # fires before DNS is usable, and the connectivity-change that follows
+    # (seconds later) is the retry that would actually succeed.
+    echo 0 > "$STAMP"
+    logger -t ewe-auto-timezone "providers unusable (ipinfo='${tz1:-}' ipapi='${tz2:-}') — will retry on next network event"
+    exit 0
+fi
 tz="$tz1"
 
-case "$tz" in *[!A-Za-z0-9_+/-]*) exit 0 ;; esac        # charset guard
-[ -e "/usr/share/zoneinfo/$tz" ] || exit 0               # must be a real zone
+case "$tz" in *[!A-Za-z0-9_+/-]*)
+    logger -t ewe-auto-timezone "rejected provider answer '$tz' (charset)"; exit 0 ;;
+esac
+if [ ! -e "/usr/share/zoneinfo/$tz" ]; then
+    logger -t ewe-auto-timezone "rejected provider answer '$tz' (not in zoneinfo)"; exit 0
+fi
 
 cur="$(timedatectl show -p Timezone --value 2>/dev/null)"
 [ "$tz" = "$cur" ] && exit 0
