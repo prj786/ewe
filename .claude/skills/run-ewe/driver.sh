@@ -43,23 +43,27 @@ cmd_up() {
   command -v Hyprland >/dev/null || die "Hyprland not found"
   command -v qs >/dev/null       || die "qs (quickshell) not found"
 
-  cat > "$WORK/hypr-min.conf" <<'EOF'
-# minimal compositor just to host the shell — no autostart, no keybinds.
-# The aquamarine Wayland-backend output is named WAYLAND-1; the wildcard rule
-# pins ANY output to a sane size so screenshots are consistent (without it the
-# nested output defaults to a tiny ~350x420 and panels render off-viewport).
-monitor = , 1920x1200@60, 0x0, 1
-misc {
-    disable_hyprland_logo = true
-    disable_splash_rendering = true
-    disable_watchdog_warning = true
-    force_default_wallpaper = 0
-}
+  cat > "$WORK/hypr-min.lua" <<'EOF'
+-- minimal compositor just to host the shell — no autostart, no keybinds.
+-- Lua, not .conf: the .conf format warns (and dies in 0.57), and the banner
+-- polluted every screenshot. The aquamarine Wayland-backend output is named
+-- WAYLAND-1; the wildcard rule pins ANY output to a sane size so screenshots
+-- are consistent (without it the nested output defaults to a tiny ~350x420
+-- and panels render off-viewport).
+hl.monitor({ output = "", mode = "1920x1200@60", position = "0x0", scale = 1 })
+hl.config({
+    misc = {
+        disable_hyprland_logo = true,
+        disable_splash_rendering = true,
+        disable_watchdog_warning = true,
+        force_default_wallpaper = 0,
+    },
+})
 EOF
 
   local before after sock
   before="$(ls "$XDG_RUNTIME_DIR"/wayland-* 2>/dev/null)"
-  Hyprland --config "$WORK/hypr-min.conf" > "$WORK/hypr.log" 2>&1 &
+  Hyprland --config "$WORK/hypr-min.lua" > "$WORK/hypr.log" 2>&1 &
   local hpid=$!
   # wait for the new wayland socket the nested compositor opens
   for _ in $(seq 1 30); do

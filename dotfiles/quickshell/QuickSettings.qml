@@ -529,9 +529,11 @@ Scope {
             //   opened — its list is expanded → raised surface + accent border
             //            + a turned chevron. Opening a list never paints the
             //            tile accent, and an on-service never looks "opened".
-            // Split button: the body toggles/acts, the chevron zone (hasMenu)
+            // Split button: the body toggles/acts, the detail zone (hasMenu)
             // expands the section — so Wi-Fi can be switched off without ever
-            // opening the network list.
+            // opening the network list. The caret is HIDDEN at rest (clean
+            // tiles), fades in on hover, and turns from › to ⌄ while open —
+            // no permanent chevron clutter.
             component Tile: Rectangle {
                 id: tile
                 property string ic: ""
@@ -542,13 +544,15 @@ Scope {
                 property bool hasMenu: false
                 property bool busy: false            // section is loading (scan in flight)
                 signal clicked()                     // body
-                signal menu()                        // chevron zone
+                signal menu()                        // detail zone
                 width: (inner.width - 10) / 2
                 height: 62
                 radius: Theme.radiusInner
                 // opened = BORDER ONLY — the fill never changes for opening a
                 // list, so accent fill stays unambiguous: "the service is on"
-                color: active ? Theme.accent : Theme.elevated
+                color: tile.active
+                    ? (bodyMa.containsMouse ? Qt.lighter(Theme.accent, 1.10) : Theme.accent)
+                    : (bodyMa.containsMouse ? Theme.hover : Theme.elevated)
                 border.color: opened ? (active ? Qt.rgba(1, 1, 1, 0.85) : Theme.accent) : "transparent"
                 border.width: opened ? 2 : 0
                 Behavior on color { ColorAnimation { duration: 150 } }
@@ -558,8 +562,8 @@ Scope {
                     Text { width: parent.width; text: tile.label; color: tile.active ? Theme.accentText : Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold; elide: Text.ElideRight }
                 }
                 Text { anchors.right: parent.right; anchors.rightMargin: tile.hasMenu ? 30 : 11; anchors.bottom: parent.bottom; anchors.bottomMargin: 11; text: tile.sub; color: tile.active ? Theme.accentText : Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 10; elide: Text.ElideRight }
-                MouseArea { anchors.fill: parent; anchors.rightMargin: tile.hasMenu ? 28 : 0; cursorShape: Qt.PointingHandCursor; onClicked: tile.clicked() }
-                // chevron zone — its own hover, its own hit area
+                MouseArea { id: bodyMa; anchors.fill: parent; anchors.rightMargin: tile.hasMenu ? 28 : 0; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: tile.clicked() }
+                // detail zone — its own hover, its own hit area
                 Rectangle {
                     visible: tile.hasMenu
                     anchors.right: parent.right; anchors.top: parent.top; anchors.bottom: parent.bottom
@@ -567,6 +571,14 @@ Scope {
                     radius: Theme.radiusInner
                     color: chevMa.containsMouse ? (tile.active ? Qt.rgba(1, 1, 1, 0.18) : Theme.hover) : "transparent"
                     Behavior on color { ColorAnimation { duration: 120 } }
+                    // hairline seam between body and detail zone, shown only
+                    // while the affordance itself shows
+                    Rectangle {
+                        width: 1; height: parent.height - 24
+                        anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter
+                        color: tile.active ? Qt.rgba(1, 1, 1, 0.30) : Theme.hover
+                        opacity: caret.opacity
+                    }
                     Spinner {
                         visible: tile.busy
                         anchors.centerIn: parent
@@ -576,9 +588,14 @@ Scope {
                         color: tile.active ? Theme.accentText : Theme.fg
                     }
                     Text {
+                        id: caret
                         visible: !tile.busy
                         anchors.centerIn: parent
-                        text: tile.opened ? Theme.icChevronUp : Theme.icChevronDown
+                        text: Theme.icChevronRight
+                        rotation: tile.opened ? 90 : 0
+                        Behavior on rotation { NumberAnimation { duration: 170; easing.type: Easing.OutCubic } }
+                        opacity: tile.opened || chevMa.containsMouse || bodyMa.containsMouse ? 1 : 0
+                        Behavior on opacity { NumberAnimation { duration: 140 } }
                         font.family: Theme.fontIcons; font.pixelSize: 12
                         color: tile.opened ? (tile.active ? Theme.accentText : Theme.accent)
                              : tile.active ? Theme.accentText : Theme.fgDim
@@ -718,8 +735,17 @@ Scope {
                                 text: Pipewire.defaultAudioSink ? (Pipewire.defaultAudioSink.description || Pipewire.defaultAudioSink.nickname || "") : ""
                                 color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 10; elide: Text.ElideRight
                             }
-                            Text { anchors.right: parent.right; anchors.rightMargin: 12; anchors.verticalCenter: parent.verticalCenter; text: root.expanded === "audio" ? Theme.icChevronUp : Theme.icChevronDown; font.family: Theme.fontIcons; font.pixelSize: 12; color: root.expanded === "audio" ? Theme.accent : Theme.fgDim }
-                            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.expanded = root.expanded === "audio" ? "" : "audio" }
+                            Text {
+                                anchors.right: parent.right; anchors.rightMargin: 12; anchors.verticalCenter: parent.verticalCenter
+                                text: Theme.icChevronRight
+                                rotation: root.expanded === "audio" ? 90 : 0
+                                Behavior on rotation { NumberAnimation { duration: 170; easing.type: Easing.OutCubic } }
+                                opacity: root.expanded === "audio" || audioMa.containsMouse ? 1 : 0
+                                Behavior on opacity { NumberAnimation { duration: 140 } }
+                                font.family: Theme.fontIcons; font.pixelSize: 12
+                                color: root.expanded === "audio" ? Theme.accent : Theme.fgDim
+                            }
+                            MouseArea { id: audioMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.expanded = root.expanded === "audio" ? "" : "audio" }
                         }
                         Column {
                             id: audioCol
