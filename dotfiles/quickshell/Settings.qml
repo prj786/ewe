@@ -995,7 +995,10 @@ Scope {
             }
         }
     }
-    Process { id: wpDirProbe; command: ["sh", "-c", 'for d in "$HOME/Pictures/Wallpapers" "$HOME/Pictures" "$HOME"; do [ -d "$d" ] && { echo "$d"; exit; }; done']; stdout: StdioCollector { onStreamFinished: { var d = this.text.trim(); if (d !== "") root.wpList(d) } } }
+    // the shipped ewe set opens first (resolved through the config farm so
+    // git checkouts, tarballs and the /usr/share/ewe package all find their
+    // own copy); the user's own folders follow
+    Process { id: wpDirProbe; command: ["sh", "-c", 'for d in "$(realpath "$HOME/.config/quickshell" 2>/dev/null)/../../system/branding/wallpapers" /usr/share/ewe/system/branding/wallpapers "$HOME/Pictures/Wallpapers" "$HOME/Pictures" "$HOME"; do d="$(realpath "$d" 2>/dev/null)"; [ -n "$d" ] && [ -d "$d" ] && { echo "$d"; exit; }; done']; stdout: StdioCollector { onStreamFinished: { var d = this.text.trim(); if (d !== "") root.wpList(d) } } }
     Process { id: wpLs; stdout: StdioCollector { onStreamFinished: root.wpFiles = this.text.split("\n").filter(function (x) { return x !== "" }) } }
     Process { id: wpWriter }
     // apply runs through a collecting Process so wallpaper.sh's error:/note:
