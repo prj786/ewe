@@ -267,6 +267,75 @@ cat > "$CFG/zed/themes/ewe.json" <<EOF
 }
 EOF
 
+# ── asyar (the Raycast-style launcher) — generated theme extension. Only
+#    when asyar has ever run (its data dir exists): the extension appears in
+#    its Theme settings as "ewe" and follows style + accent live, exactly
+#    like kitty/zed. Everything additive — asyar without the theme selected
+#    is untouched. ──
+ASYAR_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/org.asyar.app"
+if [ -d "$ASYAR_DIR" ]; then
+    AEXT="$ASYAR_DIR/extensions/org.ewe.theme"
+    mkdir -p "$AEXT"
+    cat > "$AEXT/manifest.json" <<EOF
+{
+  "id": "org.ewe.theme",
+  "name": "ewe",
+  "version": "1.0.0",
+  "description": "The ewe desktop's own look — follows your style and accent.",
+  "author": "ewe",
+  "type": "theme",
+  "icon": "icon:palette",
+  "asyarSdk": "^4.3.0",
+  "platforms": ["linux"]
+}
+EOF
+    if [ "$STYLE" = "blacksheep" ]; then A_SEL="26, 26, 28"; else A_SEL="58, 58, 60"; fi
+    cat > "$AEXT/theme.json" <<EOF
+{
+  "variables": {
+    "--bg-primary": "rgba($S_PN_R, $S_PN_G, $S_PN_B, 0.96)",
+    "--bg-secondary": "#${S_BG}",
+    "--bg-tertiary": "#${S_BG}",
+    "--bg-hover": "rgba($A_SEL, 0.6)",
+    "--bg-selected": "rgba($A_SEL, 0.9)",
+    "--bg-popup": "rgba($S_PN_R, $S_PN_G, $S_PN_B, 0.97)",
+    "--bg-secondary-full-opacity": "#${S_ELEV}",
+    "--text-primary": "#f2f2f7",
+    "--text-secondary": "#aeaeb2",
+    "--text-tertiary": "#8e8e93",
+    "--border-color": "#${S_STROKE}",
+    "--separator": "#${S_STROKE}",
+    "--accent-primary": "#${ACC}",
+    "--accent-primary-rgb": "$AR, $AG, $AB",
+    "--accent-success": "#30d158",
+    "--accent-warning": "#ff9f0a",
+    "--accent-danger": "#ff453a",
+    "--shadow-color": "rgba(0, 0, 0, 0.6)",
+    "--shadow-xs": "0 1px 2px var(--shadow-color)",
+    "--shadow-sm": "0 2px 4px var(--shadow-color)",
+    "--shadow-md": "0 4px 8px var(--shadow-color)",
+    "--shadow-lg": "0 8px 16px var(--shadow-color)",
+    "--shadow-xl": "0 12px 24px var(--shadow-color)",
+    "--shadow-popup": "0 8px 32px rgba(0, 0, 0, 0.35), 0 2px 8px rgba(0, 0, 0, 0.25)",
+    "--shadow-focus": "0 0 0 3px rgba($AR, $AG, $AB, 0.4)",
+    "--radius-xs": "3px",
+    "--radius-sm": "6px",
+    "--radius-md": "8px",
+    "--radius-lg": "12px",
+    "--radius-xl": "16px",
+    "--radius-full": "9999px",
+    "--font-ui": "\"Ubuntu\", \"system-ui\", sans-serif",
+    "--font-mono": "\"JetBrainsMono Nerd Font\", \"ui-monospace\", monospace",
+    "--asyar-brand": "#${ACC}",
+    "--asyar-brand-hover": "#${ACC}",
+    "--asyar-brand-muted": "rgba($AR, $AG, $AB, 0.15)",
+    "--asyar-brand-subtle": "rgba($AR, $AG, $AB, 0.08)",
+    "--scrollbar-thumb": "#${S_STROKE}"
+  }
+}
+EOF
+fi
+
 # ── gsettings — live nudge for libadwaita/GTK + cursor ──
 if command -v gsettings >/dev/null 2>&1; then
     gsettings set org.gnome.desktop.interface color-scheme "$CS"        2>/dev/null || true
