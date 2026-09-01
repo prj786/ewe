@@ -3,8 +3,23 @@
 # greeter. No Xorg. After you pick "Ewe" and log in, ReGreet exec's the
 # session's wrapper (start-hyprland.sh) — also pure Wayland.
 [terminal]
-# The VT the greeter owns. vt = "next" picks a free one automatically.
-vt = "next"
+# The VT the greeter owns — VT1, plymouth's VT, on purpose (2026-09-01).
+#
+# `vt = "next"` (the old value) picked a free VT (tty2) and chvt'd to it,
+# which is the one visible seam left in the boot: plymouth quits on tty1,
+# the kernel repaints tty1's console for a frame or two (a getty flash or a
+# black frame), and only then does the VT switch to the greeter land. Taking
+# over tty1 itself means cage becomes DRM master on the very VT plymouth
+# just released — no switch, no repaint, splash → greeter is one cut.
+#
+# PROVEN on the live ISO 2026-09-01 (headless QEMU + the human test drive):
+# the ISO's greetd has run with vt = 1 since 0.6-alpha and the handoff is
+# seamless. The two things that make it safe are in the greetd drop-in
+# (system/greetd/plymouth.conf, installed by phase 35): greetd is ordered
+# after plymouth-quit-wait and it Conflicts= getty@tty1, so nothing else ever
+# claims tty1's screen. The rescue console moves to tty3 (Ctrl+Alt+F3, enabled
+# by phase 30) — tty2/4/5/6 still get a getty on demand via logind's autovt.
+vt = 1
 
 [default_session]
 # cage -s prints its socket info and runs regreet fullscreen; regreet talks to

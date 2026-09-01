@@ -158,6 +158,21 @@ phase_services() {
         if command -v qs >/dev/null 2>&1 || command -v quickshell >/dev/null 2>&1 || command -v regreet >/dev/null 2>&1 || pkg_present quickshell; then
             _enable_system greetd.service
             info "greetd → cage → Quickshell greeter (regreet fallback), lists 'Ewe'. Disable any other display-manager.service first."
+            # ── rescue console on tty3 (2026-09-01) ──
+            # config.toml puts the greeter on VT1 (plymouth's VT — the seamless
+            # handoff proven on the live ISO) and the greetd drop-in Conflicts=
+            # getty@tty1, so tty1 is no longer a place to log in when the
+            # greeter is broken. Give the rescue console a fixed home on tty3
+            # (Ctrl+Alt+F3), exactly as the ISO does. logind's autovt would
+            # spawn a getty on any of tty2–6 on demand anyway; enabling this
+            # one explicitly makes the rescue path deterministic and documented.
+            # `_enable_system` can't see template instances (list-unit-files
+            # lists getty@.service, not getty@tty3.service), so check the
+            # template and enable the instance by hand.
+            if systemctl list-unit-files getty@.service 2>/dev/null | grep -q '^getty@\.service'; then
+                sudo_run systemctl enable getty@tty3.service && ok "rescue console: getty on tty3 (Ctrl+Alt+F3)" \
+                    || warn "could not enable getty@tty3.service — Ctrl+Alt+F3 still gets a getty via logind autovt"
+            fi
         else
             warn "no greeter found (quickshell/regreet) — NOT enabling greetd.service to avoid a broken boot."
             warn "Install with:  sudo pacman -S quickshell greetd-regreet  &&  sudo systemctl enable greetd.service"

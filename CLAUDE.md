@@ -150,8 +150,9 @@ through to apps behind it.
 
 ### Theming (single source: `scripts/colorscheme.sh`)
 
-`colorscheme.sh <dark|light> [accent-hex]` writes *every* toolkit's config in one
-pass — GTK is **primary** (adw-gtk3 + gsettings + `gtk-3.0/4.0/settings.ini`); Qt
+`colorscheme.sh <mode> [accent-hex]` writes *every* toolkit's config in one
+pass — ewe is **dark-only by decision (2026-09-01)**; the mode argument is
+accepted and ignored for caller compatibility. GTK is **primary** (adw-gtk3 + gsettings + `gtk-3.0/4.0/settings.ini`); Qt
 gets a dark Fusion palette via `qt6ct` (`QT_QPA_PLATFORMTHEME=qt6ct`) as a fallback
 for stray Qt apps; a `kdeglobals` fallback covers any KDE app added later; plus the
 Reversal icon theme (hue-matched to the accent) and the Mocu cursor. It is `set -u`

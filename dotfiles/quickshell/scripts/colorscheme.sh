@@ -1,6 +1,7 @@
 #!/bin/bash
-# colorscheme.sh <dark|light> [accent-hex] — apply a light/dark appearance,
-# tinted with the shell accent, across the whole app ecosystem:
+# colorscheme.sh <mode> [accent-hex] — apply the ewe appearance (DARK ONLY —
+# ewe is dark-only by decision, 2026-09-01; the light branches were deleted, not
+# shipped), tinted with the shell accent, across the whole app ecosystem:
 #   • GTK 3/4 + libadwaita   (settings.ini + gsettings)        ← PRIMARY (first-party apps)
 #   • Qt 5/6                 (qt6ct/qt5ct, Fusion + dark palette) ← any stray Qt app
 #   • KDE / KF6              (kdeglobals)                       ← only if you add a KDE app
@@ -16,8 +17,9 @@
 # so a stray non-zero line never aborts before every file is written.
 set -u
 
-MODE="${1:-dark}"
-case "$MODE" in dark|light) ;; *) MODE=dark ;; esac
+# $1 (the former <dark|light> mode) is accepted and IGNORED so every existing
+# caller — Globals.applyColorScheme, Settings → Theme, ewe-conf apply, phase 60,
+# ewe-setup — keeps working unchanged. The mode is always dark.
 
 # accent → 6 lowercase hex (fallback system blue) + decimal R,G,B
 ACC="$(printf '%s' "${2:-}" | tr -dc 'a-fA-F0-9' | tr 'A-F' 'a-f')"
@@ -48,11 +50,7 @@ RC="$(reversal_color)"
 # Mocu theme names are Mocu-{White,Black}-{Right,Left}; white reads best on dark.
 CURSOR="Mocu-White-Right"; CURSOR_SIZE=24
 
-if [ "$MODE" = "dark" ]; then
-    GTK_THEME="adw-gtk3-dark"; PREFER_DARK=1; CS="prefer-dark"; ICONS="Reversal-${RC}-dark"
-else
-    GTK_THEME="adw-gtk3";      PREFER_DARK=0; CS="default";     ICONS="Reversal-${RC}"
-fi
+GTK_THEME="adw-gtk3-dark"; PREFER_DARK=1; CS="prefer-dark"; ICONS="Reversal-${RC}-dark"
 
 CFG="${XDG_CONFIG_HOME:-$HOME/.config}"
 
@@ -107,7 +105,7 @@ if [ $(( (AR * 299 + AG * 587 + AB * 114) / 1000 )) -gt 140 ]; then ACC_FG="1c1c
 # Black Sheep — absolute-black surfaces (mirrors the shell's Theme.pitchBlack).
 # libadwaita and adw-gtk3 both read these named colors; flock leaves them stock.
 BS_CSS=""
-if [ "$MODE" = "dark" ] && [ "$STYLE" = "blacksheep" ]; then
+if [ "$STYLE" = "blacksheep" ]; then
     BS_CSS='
 /* Black Sheep surfaces */
 @define-color window_bg_color #020202;
@@ -135,7 +133,7 @@ done
 # ── kitty — the style + accent chrome lives in flock.conf (included at the
 #    end of kitty.conf, so it overrides the committed fallbacks). The terminal
 #    is DE chrome: it follows the shell style (flock greys / blacksheep black)
-#    and the accent, staying dark in both modes. SIGUSR1 makes every running
+#    and the accent. SIGUSR1 makes every running
 #    kitty re-read its config live. ──
 mkdir -p "$CFG/kitty"
 # selection: accent blended 35 % into the terminal background
@@ -363,15 +361,10 @@ active_colors=#ffdcdcdc, #ff2d2d2d, #ff3a3a3a, #ff333333, #ff1a1a1a, #ff262626, 
 inactive_colors=#ffdcdcdc, #ff2d2d2d, #ff3a3a3a, #ff333333, #ff1a1a1a, #ff262626, #ffdcdcdc, #ffffffff, #ffdcdcdc, #ff1e1e1e, #ff2a2a2a, #ff000000, #ff3a3a3a, #ffdcdcdc, #ff${ACC}, #ffb38aff, #ff242424, #ff2d2d2d, #ffdcdcdc, #ff7f7f7f
 disabled_colors=#ff6f6f6f, #ff2d2d2d, #ff3a3a3a, #ff333333, #ff1a1a1a, #ff262626, #ff6f6f6f, #ffffffff, #ff6f6f6f, #ff1e1e1e, #ff2a2a2a, #ff000000, #ff3a3a3a, #ff9f9f9f, #ff${ACC}, #ffb38aff, #ff242424, #ff2d2d2d, #ff6f6f6f, #ff5f5f5f
 EOF
-cat > "$COLORS/ewe-light.conf" <<EOF
-[ColorScheme]
-active_colors=#ff1a1a1a, #ffefefef, #ffffffff, #fff5f5f5, #ffb0b0b0, #ffc8c8c8, #ff1a1a1a, #ffffffff, #ff1a1a1a, #ffffffff, #ffefefef, #ff000000, #ff${ACC}, #ffffffff, #ff${ACC}, #ff6f42c1, #fff7f7f7, #ffffffdc, #ff1a1a1a, #ff808080
-inactive_colors=#ff1a1a1a, #ffefefef, #ffffffff, #fff5f5f5, #ffb0b0b0, #ffc8c8c8, #ff1a1a1a, #ffffffff, #ff1a1a1a, #ffffffff, #ffefefef, #ff000000, #ff${ACC}, #ffffffff, #ff${ACC}, #ff6f42c1, #fff7f7f7, #ffffffdc, #ff1a1a1a, #ff808080
-disabled_colors=#ffa0a0a0, #ffefefef, #ffffffff, #fff5f5f5, #ffb0b0b0, #ffc8c8c8, #ffa0a0a0, #ffffffff, #ffa0a0a0, #ffffffff, #ffefefef, #ff000000, #ff${ACC}, #ffe0e0e0, #ff${ACC}, #ff6f42c1, #fff7f7f7, #ffffffdc, #ffa0a0a0, #ffb0b0b0
-EOF
-SCHEME="$COLORS/ewe-$MODE.conf"
-# migrate: drop the pre-rename scheme files so qt6ct never lists both
-rm -f "$COLORS/hyprshell-dark.conf" "$COLORS/hyprshell-light.conf" 2>/dev/null
+SCHEME="$COLORS/ewe-dark.conf"
+# migrate: drop the pre-rename scheme files (and the deleted light scheme) so
+# qt6ct never lists a stale entry
+rm -f "$COLORS/hyprshell-dark.conf" "$COLORS/hyprshell-light.conf" "$COLORS/ewe-light.conf" 2>/dev/null
 for q in qt6ct qt5ct; do
     mkdir -p "$CFG/$q"
     cat > "$CFG/$q/$q.conf" <<EOF
@@ -388,15 +381,9 @@ done
 # We ship no KDE apps, but writing this keeps any KColorScheme-aware app you install
 # later dark (incl. its item views) instead of falling back to a light default.
 # Accent = Selection + Decoration*.
-if [ "$MODE" = "dark" ]; then
-    C_WIN="42,42,42";  C_WINA="36,36,36";  C_VIEW="30,30,30";  C_VIEWA="36,36,36"
-    C_BTN="45,45,45";  C_FG="220,220,220";  C_FGI="130,130,130"; C_TIP="45,45,45"
-    C_VIS="150,120,200"
-else
-    C_WIN="239,239,239"; C_WINA="247,247,247"; C_VIEW="255,255,255"; C_VIEWA="247,247,247"
-    C_BTN="232,232,232"; C_FG="26,26,26";       C_FGI="130,130,130"; C_TIP="255,255,220"
-    C_VIS="100,80,160"
-fi
+C_WIN="42,42,42";  C_WINA="36,36,36";  C_VIEW="30,30,30";  C_VIEWA="36,36,36"
+C_BTN="45,45,45";  C_FG="220,220,220";  C_FGI="130,130,130"; C_TIP="45,45,45"
+C_VIS="150,120,200"
 A="$AR,$AG,$AB"
 _cgroup() {  # $1 bg  $2 bgAlt
     cat <<EOF

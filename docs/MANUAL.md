@@ -112,9 +112,9 @@ sees your installed apps, with no KDE `ksycoca` cache to rebuild. Manage it from
 **Settings → Default Apps**. Right-click **Compress… / Extract Here** in Nemo
 ship as `system/nemo-actions/*.nemo_action` (calling engrampa).
 
-**Appearance** (light/dark + accent) is applied by
-`dotfiles/quickshell/scripts/colorscheme.sh` and toggled live in **Settings →
-Theme** (defaults to dark):
+**Appearance** (dark + accent — ewe is dark-only by decision; there is no light
+mode) is applied by `dotfiles/quickshell/scripts/colorscheme.sh` and changed
+live in **Settings → Theme**:
 
 - **GTK** (primary) — gsettings + `gtk-3.0/4.0/settings.ini` (adw-gtk3[-dark]);
   accent changes recolour GTK apps live.

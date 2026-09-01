@@ -218,6 +218,8 @@ def _wj(name, data):
 
 
 THEME_MAP = [  # ewe.conf key ↔ user-theme.json key (with defaults)
+    # always "dark" — ewe is dark-only by decision (2026-09-01); the key stays
+    # because Komble reads user-theme.json's colorScheme to follow the DE
     ("desktop.theme.color_scheme", "colorScheme", "dark"),
     ("desktop.theme.accent", "accent", "#0a84ff"),
     ("desktop.theme.theme_name", "themeName", "flock"),

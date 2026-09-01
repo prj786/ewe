@@ -2062,8 +2062,7 @@ Scope {
                             color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11
                         }
                     }
-                    // (Light mode is parked until it is actually fully light —
-                    // the DE is dark-only for now, so no Light/Dark toggle.)
+                    // dark-only by decision (2026-09-01): light mode was deleted, so no Light/Dark toggle.
                     SectionTitle { text: "ACCENT COLOUR" }
                     Card {
                         Flow {

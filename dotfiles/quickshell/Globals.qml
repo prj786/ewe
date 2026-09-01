@@ -259,10 +259,10 @@ QtObject {
     property real animationSpeed: 1.0
 
     // ── App appearance (GTK + Qt) ──────────────────────────────────────────────
-    // Dark only for now: light mode is parked until it is actually fully light,
-    // so the Settings toggle is gone and a persisted "light" is ignored on load.
-    // The property (and the colorscheme.sh mode arg) stay so bringing light
-    // back later is a UI change, not plumbing.
+    // Dark-only by decision (2026-09-01): light mode was deleted, not shipped.
+    // The property stays because user-theme.json's "colorScheme" key is read by
+    // Komble to follow the DE's app colour scheme — it is always "dark"; a
+    // persisted "light" is ignored on load. colorscheme.sh ignores its mode arg.
     property string colorScheme: "dark"
     property Process _csApply: Process {}
     function applyColorScheme() {
@@ -467,7 +467,7 @@ QtObject {
                     if (j && j.dockAutohide !== undefined) g.dockAutohide = j.dockAutohide
                     if (j && j.dockIconSize) g.dockIconSize = j.dockIconSize
                     if (j && j.animationSpeed !== undefined) g.animationSpeed = j.animationSpeed
-                    // dark-only: ignore a persisted "light" (parked feature)
+                    // dark-only by decision (2026-09-01): a persisted "light" is ignored
                     if (j && j.avatarShape) g.avatarShape = j.avatarShape
                     if (j && j.lidDockedSuspend !== undefined) g.lidDockedSuspend = j.lidDockedSuspend
                     if (j && j.lowPowerEnabled !== undefined) g.lowPowerEnabled = j.lowPowerEnabled

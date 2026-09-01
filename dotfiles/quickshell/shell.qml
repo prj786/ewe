@@ -79,5 +79,6 @@ ShellRoot {
     Screensaver {}
     Osd {}
     Overview {}
+    Welcome {}
     Battery {}
 }

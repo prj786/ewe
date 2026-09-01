@@ -62,7 +62,7 @@ Version of this document's shape. Bumped only when a key changes meaning.
 
 | key | type | default | meaning |
 |---|---|---|---|
-| `color_scheme` | `"dark"` | `"dark"` | light is parked, by design |
+| `color_scheme` | `"dark"` | `"dark"` | always `"dark"` — ewe is dark-only by decision (2026-09-01); the key stays because Komble reads it to follow the DE |
 | `accent` | hex string | `"#0a84ff"` | recolours the whole shell live |
 | `theme_name` | `"flock"` \| `"blacksheep"` | `"flock"` | soft greys vs absolute black |
 | `tint_borders` | bool | `true` | accent-tinted window borders |

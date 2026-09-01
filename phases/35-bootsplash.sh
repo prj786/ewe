@@ -108,11 +108,13 @@ phase_bootsplash() {
         || warn "plymouth-set-default-theme -R failed — check the initramfs generator output."
 
     # ── greeter handoff: start greetd only after plymouth has cleanly quit, so the
-    # splash → greeter transition doesn't flash a TTY or fight over the DRM master ─
+    # splash → greeter transition doesn't flash a TTY or fight over the DRM master.
+    # Since 2026-09-01 the drop-in also keeps getty@tty1 off the greeter's VT
+    # (config.toml: vt = 1 — the seamless handoff proven on the live ISO) ─
     if systemctl list-unit-files greetd.service >/dev/null 2>&1; then
         sudo_run install -d /etc/systemd/system/greetd.service.d
         sudo_run install -m 644 "$DOTREPO/system/greetd/plymouth.conf" /etc/systemd/system/greetd.service.d/plymouth.conf \
-            && ok "ordered greetd after the plymouth splash (+ black-screen guard)"
+            && ok "ordered greetd after the plymouth splash (+ black-screen guard, tty1 kept for the greeter)"
         run systemctl daemon-reload 2>/dev/null || true
     fi
 
