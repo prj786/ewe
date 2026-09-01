@@ -85,7 +85,22 @@ Scope {
     }
 
     // which section is expanded: "" | "audio" | "wifi" | "bt" | "vpn" | "ssh" | "mobile" | "mail"
-    property string expanded: ""
+    // ── tabs (the 2026-09 revamp): home is the toggle grid, every list
+    //    lives on its own tab; `expanded` survives as a read-only alias so
+    //    the section visibles below keep working unchanged ──
+    property string tab: "home"
+    readonly property string expanded: tab === "home" ? "" : tab
+    function setTab(t) {
+        if (t !== "bt" && Bluetooth.defaultAdapter) Bluetooth.defaultAdapter.discovering = false
+        root.tab = t
+        if (t === "wifi") { wifiScan.running = true; wifiSavedScan.running = true }
+        if (t === "bt" && Bluetooth.defaultAdapter) Bluetooth.defaultAdapter.discovering = true
+        if (t === "vpn") vpnScan.running = true
+        if (t === "ssh") sshScan.running = true
+        if (t === "mobile") { root.mobileView = "notifs"; KdeConnect.refresh() }
+        if (t === "mail" && Google.signedIn) Google.fetchMail()
+        if (t === "cast") Globals.castCommand("scan", "")
+    }
 
     // mobile (KDE Connect) sub-state
     property string mobileView: "notifs"      // "notifs" | "msgs"
@@ -102,6 +117,7 @@ Scope {
     property bool wifiOn: true
     property bool wiredUp: false   // a wired (ethernet) link is the active connection
     property string pwTarget: ""
+    property bool pwShow: false        // reveal the Wi-Fi password while typing
     property string pwText: ""
     function curSsid() { for (var i = 0; i < wifiList.length; i++) if (wifiList[i].active) return wifiList[i].ssid; return "" }
 
@@ -130,7 +146,7 @@ Scope {
         var d = new Date()
         Globals.openDd = ""   // never reopen with a stale dropdown expanded
         root.today = d; root.calYear = d.getFullYear(); root.calMonth = d.getMonth(); root.calDate = d.getDate()
-        wifiState.running = true; wiredState.running = true; brightnessProc.running = true; volumeProc.running = true
+        wifiState.running = true; wiredState.running = true; brightnessProc.running = true; volumeProc.running = true; wifiSavedScan.running = true
         sshScan.running = true   // always: the SSH tile's sub-label needs the host count
         if (root.expanded === "wifi") wifiScan.running = true
         if (root.expanded === "vpn") vpnScan.running = true
@@ -183,11 +199,18 @@ Scope {
     }
     property string wifiPending: ""   // SSID being joined — its row + the bar show a spinner
     function connectWifi(ssid, sec) {
-        if (sec && sec !== "" && root.pwText === "") {
+        // already on this network → nothing to do (clicking the active row
+        // used to pop a password box, which read as "why is it asking AGAIN")
+        if (root.curSsid() === ssid && root.pwTarget !== ssid) return
+        // a saved profile joins without a prompt — NetworkManager has the key
+        var known = root.wifiSaved[ssid] === true
+        if (sec && sec !== "" && !known && root.pwText === "") {
             root.pwTarget = (root.pwTarget === ssid) ? "" : ssid   // toggle the password field
             return
         }
-        var cmd = ["nmcli", "device", "wifi", "connect", ssid]
+        var cmd = (known && root.pwText === "")
+            ? ["nmcli", "connection", "up", "id", ssid]
+            : ["nmcli", "device", "wifi", "connect", ssid]
         if (root.pwText !== "") cmd = cmd.concat(["password", root.pwText])
         // through a tracked Process, not execDetached: joining can take seconds
         // and used to look like nothing was happening until the list refreshed
@@ -295,7 +318,7 @@ Scope {
         root.confirmTitle = title; root.confirmVerb = verb; root.confirmAction = action
     }
 
-    Connections { target: Globals; function onQuickSettingsOpenChanged() { if (Globals.quickSettingsOpen) root.refresh() } }
+    Connections { target: Globals; function onQuickSettingsOpenChanged() { if (Globals.quickSettingsOpen) { root.tab = "home"; root.refresh() } } }
     IpcHandler {
         target: "quicksettings"
         function toggle(): void { Globals.quickSettingsOpen = !Globals.quickSettingsOpen }
@@ -305,8 +328,27 @@ Scope {
         // the key so a stray tap can't hard-poweroff): open the panel with the
         // shutdown confirmation already up.
         function powerdialog(): void { Globals.quickSettingsOpen = true; root.askPower("poweroff", "Shut down this computer?", "Shut Down") }
+        // jump straight to a tab (also how the test driver screenshots them)
+        function tab(name: string): void { Globals.quickSettingsOpen = true; root.setTab(name) }
     }
 
+    // saved Wi-Fi profiles — joining one of these never needs a password
+    property var wifiSaved: ({})
+    Process {
+        id: wifiSavedScan
+        command: ["nmcli", "-t", "-f", "NAME,TYPE", "connection", "show"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                var m = {}, ls = this.text.split("\n")
+                for (var i = 0; i < ls.length; i++) {
+                    var f = ls[i].split(":")
+                    if (f.length >= 2 && f[f.length - 1] === "802-11-wireless")
+                        m[f.slice(0, f.length - 1).join(":")] = true
+                }
+                root.wifiSaved = m
+            }
+        }
+    }
     Process {
         id: wifiScan
         command: ["nmcli", "-t", "-f", "IN-USE,SIGNAL,SECURITY,SSID", "device", "wifi", "list"]
@@ -435,6 +477,9 @@ Scope {
             rescanTimer.restart()
             if (exitCode !== 0) {
                 var msg = (wifiConnErr.text || "").trim()
+                // stale/keyless saved profile: offer the password box instead
+                // of only shouting — the retry then carries a fresh secret
+                if (/secrets|no key|password|802-1x|auth/i.test(msg)) root.pwTarget = failed
                 Quickshell.execDetached(["notify-send", "-u", "critical", "-a", "Wi-Fi", "Joining " + failed + " failed", msg !== "" ? msg : ("nmcli exited with code " + exitCode)])
             }
         }
@@ -714,10 +759,49 @@ Scope {
                         }
                     }
 
-                    // ── Audio box — output & input devices, expandable like the
-                    //    network tiles (opened = raised + accent border, no accent
-                    //    fill: there is nothing to "activate" here) ──
+                    // ── tab rail: home (toggle grid) + one tab per list.
+                    //    Icons only, active pill in accent — the reference
+                    //    layout in our palette. ──
                     Rectangle {
+                        width: parent.width; height: 44; radius: Theme.radiusInner; color: Theme.elevated
+                        Row {
+                            anchors.centerIn: parent
+                            spacing: 2
+                            readonly property var tabs: [
+                                { key: "home",   icon: Theme.icApps },
+                                { key: "wifi",   icon: Theme.icWifi },
+                                { key: "bt",     icon: Theme.icBluetooth },
+                                { key: "vpn",    icon: Theme.icVpn },
+                                { key: "ssh",    icon: Theme.icSsh },
+                                { key: "audio",  icon: Theme.icVolHigh },
+                                { key: "cast",   icon: Theme.icCast },
+                                { key: "mobile", icon: Theme.icPhone },
+                                { key: "mail",   icon: Theme.icMail }
+                            ]
+                            Repeater {
+                                model: parent.tabs
+                                delegate: Rectangle {
+                                    required property var modelData
+                                    visible: modelData.key !== "mail" || Google.signedIn
+                                    width: 36; height: 32; radius: 9
+                                    readonly property bool current: root.tab === modelData.key
+                                    color: current ? Theme.accent : (tbMa.containsMouse ? Theme.hover : "transparent")
+                                    Behavior on color { ColorAnimation { duration: 130 } }
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: modelData.icon; font.family: Theme.fontIcons; font.pixelSize: 15
+                                        color: parent.current ? Theme.accentText : Theme.fg
+                                    }
+                                    MouseArea { id: tbMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.setTab(modelData.key) }
+                                }
+                            }
+                        }
+                    }
+
+                    // ── Audio box — output & input devices; lives on the audio
+                    //    tab (its inner sections still key off `expanded`) ──
+                    Rectangle {
+                        visible: root.tab === "audio"
                         width: parent.width
                         radius: Theme.radiusInner
                         color: Theme.elevated
@@ -745,7 +829,7 @@ Scope {
                                 font.family: Theme.fontIcons; font.pixelSize: 12
                                 color: root.expanded === "audio" ? Theme.accent : Theme.fgDim
                             }
-                            MouseArea { id: audioMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.expanded = root.expanded === "audio" ? "" : "audio" }
+                            MouseArea { id: audioMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.setTab("home") }
                         }
                         Column {
                             id: audioCol
@@ -810,9 +894,10 @@ Scope {
                         }
                     }
 
-                    // ── quick toggles — a tile's options expand INLINE, in a box right
-                    //    under the row holding that tile (pushes the rows below down) ──
+                    // ── home tab: the toggle grid — a tile's body toggles, its
+                    //    caret jumps to the matching tab ──
                     Row {
+                        visible: root.tab === "home"
                         width: parent.width; spacing: 10
                         Tile {
                             // adapts to the live link: shows the wired/ethernet glyph + "Wired"
@@ -828,7 +913,7 @@ Scope {
                             // body = the switch (no list needed to turn Wi-Fi off);
                             // chevron = the network list
                             onClicked: { Quickshell.execDetached(["nmcli", "radio", "wifi", root.wifiOn ? "off" : "on"]); rescanTimer.restart() }
-                            onMenu: { root.expanded = root.expanded === "wifi" ? "" : "wifi"; if (root.expanded === "wifi") wifiScan.running = true }
+                            onMenu: root.setTab("wifi")
                         }
                         Tile {
                             ic: Theme.icBluetooth; label: "Bluetooth"
@@ -838,10 +923,7 @@ Scope {
                             busy: root.expanded === "bt" && Bluetooth.defaultAdapter && Bluetooth.defaultAdapter.discovering
                             sub: (Bluetooth.defaultAdapter && Bluetooth.defaultAdapter.enabled) ? "On" : "Off"
                             onClicked: if (Bluetooth.defaultAdapter) Bluetooth.defaultAdapter.enabled = !Bluetooth.defaultAdapter.enabled
-                            onMenu: {
-                                root.expanded = root.expanded === "bt" ? "" : "bt"
-                                if (Bluetooth.defaultAdapter) Bluetooth.defaultAdapter.discovering = (root.expanded === "bt")
-                            }
+                            onMenu: root.setTab("bt")
                         }
                     }
 
@@ -916,14 +998,16 @@ Scope {
                                                 anchors.fill: parent; anchors.topMargin: 2; anchors.bottomMargin: 4; radius: 7; color: Theme.bg; border.color: Theme.accent; border.width: 1
                                                 TextInput {
                                                     id: pwInput
-                                                    anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 56; verticalAlignment: TextInput.AlignVCenter
-                                                    echoMode: TextInput.Password; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
+                                                    anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 84; verticalAlignment: TextInput.AlignVCenter
+                                                    echoMode: root.pwShow ? TextInput.Normal : TextInput.Password; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
                                                     onTextChanged: root.pwText = text
                                                     Component.onCompleted: if (root.pwTarget === modelData.ssid) forceActiveFocus()
                                                     onAccepted: root.connectWifi(modelData.ssid, modelData.sec)
                                                     Keys.onEscapePressed: Globals.quickSettingsOpen = false
                                                     Text { anchors.verticalCenter: parent.verticalCenter; visible: pwInput.text.length === 0; text: "Password"; color: Theme.fgDim; font: pwInput.font }
                                                 }
+                                                // show/hide the password while typing
+                                                Text { anchors.right: parent.right; anchors.rightMargin: 46; anchors.verticalCenter: parent.verticalCenter; text: root.pwShow ? Theme.icEyeOff : Theme.icEye; font.family: Theme.fontIcons; font.pixelSize: 13; color: root.pwShow ? Theme.accent : Theme.fgDim; MouseArea { anchors.fill: parent; anchors.margins: -6; cursorShape: Qt.PointingHandCursor; onClicked: root.pwShow = !root.pwShow } }
                                                 Text { anchors.right: parent.right; anchors.rightMargin: 12; anchors.verticalCenter: parent.verticalCenter; text: "Join"; color: Theme.accent; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold; MouseArea { anchors.fill: parent; anchors.margins: -6; cursorShape: Qt.PointingHandCursor; onClicked: root.connectWifi(modelData.ssid, modelData.sec) } }
                                             }
                                         }
@@ -980,6 +1064,7 @@ Scope {
                     }
 
                     Row {
+                        visible: root.tab === "home"
                         width: parent.width; spacing: 10
                         Tile {
                             id: vpnTile
@@ -989,7 +1074,7 @@ Scope {
                             hasMenu: true
                             busy: root.vpnBusyName !== ""
                             sub: root.vpnBusyName !== "" ? "Connecting…" : (Globals.vpnActive ? "On" : "Off")
-                            function openList() { root.expanded = root.expanded === "vpn" ? "" : "vpn"; if (root.expanded === "vpn") vpnScan.running = true }
+                            function openList() { root.setTab("vpn") }
                             // body: GNOME semantics — disconnect the active VPN /
                             // reconnect the single configured one; only when the
                             // choice is ambiguous does the body open the list
@@ -1011,8 +1096,8 @@ Scope {
                                : root.sshList.length > 0 ? root.sshList.length + (root.sshList.length === 1 ? " host" : " hosts")
                                : "Not set up"
                             // hosts are a list, not a switch — body and chevron both open
-                            onClicked: { root.expanded = root.expanded === "ssh" ? "" : "ssh"; if (root.expanded === "ssh") sshScan.running = true }
-                            onMenu: { root.expanded = root.expanded === "ssh" ? "" : "ssh"; if (root.expanded === "ssh") sshScan.running = true }
+                            onClicked: root.setTab("ssh")
+                            onMenu: root.setTab("ssh")
                         }
                     }
 
@@ -1195,8 +1280,9 @@ Scope {
                         }
                     }
 
-                    // ── row 3: Mobile (KDE Connect) / Mail (Gmail) ──
+                    // ── row 3 retired: Mobile and Mail live on the tab rail now ──
                     Row {
+                        visible: false
                         width: parent.width; spacing: 10
                         Tile {
                             ic: Theme.icPhone; label: "Mobile"
@@ -1208,14 +1294,8 @@ Scope {
                                                         : KdeConnect.device.batteryCharge >= 0 ? KdeConnect.device.batteryCharge + "%" : "Connected")
                                : (KdeConnect.device && KdeConnect.device.isPaired) ? "Offline" : "Not connected"
                             // a phone is not a switch — body and chevron both open
-                            onClicked: {
-                                root.expanded = root.expanded === "mobile" ? "" : "mobile"
-                                if (root.expanded === "mobile") { root.mobileView = "notifs"; KdeConnect.refresh() }
-                            }
-                            onMenu: {
-                                root.expanded = root.expanded === "mobile" ? "" : "mobile"
-                                if (root.expanded === "mobile") { root.mobileView = "notifs"; KdeConnect.refresh() }
-                            }
+                            onClicked: root.setTab("mobile")
+                            onMenu: root.setTab("mobile")
                         }
                         Tile {
                             // freedom by absence: no Google account, no Google
@@ -1228,14 +1308,8 @@ Scope {
                             hasMenu: true
                             sub: Google.mailState === "offline" ? "Offline"
                                : Google.mailUnread > 0 ? Google.mailUnread + " unread" : "No unread"
-                            onClicked: {
-                                root.expanded = root.expanded === "mail" ? "" : "mail"
-                                if (root.expanded === "mail" && Google.signedIn) Google.fetchMail()
-                            }
-                            onMenu: {
-                                root.expanded = root.expanded === "mail" ? "" : "mail"
-                                if (root.expanded === "mail" && Google.signedIn) Google.fetchMail()
-                            }
+                            onClicked: root.setTab("mail")
+                            onMenu: root.setTab("mail")
                         }
                     }
 
@@ -1841,6 +1915,7 @@ Scope {
                     }
 
                     Row {
+                        visible: root.tab === "home"
                         width: parent.width; spacing: 10
                         Tile {
                             ic: Theme.icDnd; label: "Do Not Disturb"; active: Globals.dnd
@@ -1858,8 +1933,9 @@ Scope {
                     //    click → sink list from ewe-castd (Miracast + Chromecast),
                     //    pick a TV → SharePicker → streaming. No foreign window.
                     Column {
+                        visible: root.tab === "cast"
                         width: parent.width; spacing: 6
-                        property bool castOpen: false
+                        property bool castOpen: root.tab === "cast"
                         id: castCard
                         Row {
                             width: parent.width; spacing: 10
@@ -1934,6 +2010,7 @@ Scope {
 
                     // ── system load (CPU + memory; RunCat reads the same CPU value) ──
                     Rectangle {
+                        visible: root.tab === "home"
                         width: parent.width; height: sysCol.implicitHeight + 24; radius: Theme.radiusInner; color: Theme.elevated
                         Column {
                             id: sysCol
