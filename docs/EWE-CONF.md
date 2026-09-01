@@ -136,22 +136,30 @@ file said.
 *email* may appear here so a restored machine knows whose Drive to ask.
 Tokens live in the keyring behind `ewe-auth`, never in this file.
 
-## SSH & VPN (planned — the `[network]` domain)
+## SSH & VPN — the `[network]` domain
 
-The question comes up: "my SSH hosts and VPN setup are part of my machine —
-why don't they restore too?" They will, with a firm line through the middle:
+"My SSH hosts and VPN setup are part of my machine — why don't they restore
+too?" They do, with a firm line through the middle:
 
 **Config syncs. Credentials never do.**
 
-- `[network.ssh]` will carry your `~/.ssh/config` *host definitions* — the
-  aliases, hostnames, users, ports, and per-host options. Not the keys.
-  A restored machine gets every `ssh work`-style alias back and asks you to
-  provide or regenerate keys once; new key fingerprints are announced so the
-  server side can be updated deliberately.
-- `[network.vpn]` will carry NetworkManager VPN/WireGuard *profile
-  definitions* — server, type, username, routes. Not the private keys or
-  passwords, which NetworkManager already stores in the keyring; on first
-  connect after a restore it prompts once and re-stores them locally.
+- `[[network.ssh.hosts]]` carries your `~/.ssh/config` *host definitions* —
+  aliases, hostnames, users, ports, per-host options (an `IdentityFile` line
+  is a path, not a key). `import` adopts every single-name host; every push
+  re-adopts, so hand edits ride along. On restore, `apply` writes them into
+  a marker-bounded **managed block** at the end of `~/.ssh/config` — your
+  own lines are never touched, and hosts you already define yourself are
+  skipped (first match wins in ssh config). Keys are yours to bring; the
+  aliases just work again.
+- `[[network.vpn]]` carries NetworkManager VPN *profile definitions* — name,
+  type, service, and the non-secret `vpn.data` property string. On restore,
+  missing profiles are recreated as skeletons; NetworkManager prompts for
+  the password on first connect and keeps it in the keyring. WireGuard is
+  recorded by name only — its peer config holds key material, so
+  re-importing your `.conf` is the honest path there.
+- Deletions go through `ewe-conf unset` (adoption is a union — removing a
+  host locally doesn't remove it from the file, because it may belong to
+  another machine).
 
 Why not sync the secrets too, encrypted? Because the synced file then
 becomes a vault, and a vault needs key management, passphrase UX, rotation,

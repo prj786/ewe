@@ -16,6 +16,7 @@ trap 'kill $MOCK 2>/dev/null || true; rm -rf "$WORK"' EXIT
 
 export XDG_CONFIG_HOME="$WORK/config"
 export EWE_CONF_TEST_TOKEN="test-token-abcdefghijklmnop"
+export EWE_CONF_SSH_CONFIG="$WORK/ssh-config"   # never the real ~/.ssh/config
 mkdir -p "$WORK/config/ewe"
 
 PORT=$(( (RANDOM % 20000) + 30000 ))

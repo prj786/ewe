@@ -8,6 +8,7 @@ cd "$(dirname "$0")/.."
 
 SRC="${1:-dotfiles/quickshell}"
 SANDBOX="$(mktemp -d)"
+export EWE_CONF_SSH_CONFIG="$SANDBOX/ssh-config"   # never the real ~/.ssh/config
 trap 'rm -rf "$SANDBOX"' EXIT
 export XDG_CONFIG_HOME="$SANDBOX"
 mkdir -p "$SANDBOX/quickshell"
