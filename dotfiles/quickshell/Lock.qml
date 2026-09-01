@@ -37,9 +37,9 @@ Scope {
 
     IpcHandler {
         target: "lock"
-        function lock(): void { lock.locked = true }
-        function unlock(): void { lock.locked = false }   // emergency only
-        function toggle(): void { lock.locked = !lock.locked }
+        function lock(): void { root.locked = true }
+        function unlock(): void { root.locked = false }   // emergency only
+        function toggle(): void { root.locked = !root.locked }
     }
 
     // ── logind ────────────────────────────────────────────────────────────────
@@ -49,19 +49,22 @@ Scope {
     // the Lock signal and there was no unlock path at all.
     Connections {
         target: Logind
-        function onLockRequested() { lock.locked = true }
-        function onUnlockRequested() { lock.locked = false }
+        function onLockRequested() { root.locked = true }
+        function onUnlockRequested() { root.locked = false }
         // We hold a logind delay inhibitor, so this runs BEFORE the machine
         // suspends rather than racing it. Lock, then release immediately — the
         // lock surface is up synchronously, so there is nothing to wait for.
         function onAboutToSleep() {
-            lock.locked = true
+            root.locked = true
             Logind.sleepReady()
         }
     }
-    // one source of truth for "is the screen locked": mirror it onto the session
-    // so loginctl and anything else on the system agree with us
-    readonly property bool locked: lock.locked
+    // One source of truth for "is the screen locked": OUR property, which the
+    // WlSessionLock follows via binding. quickshell 0.3.1's WlSessionLock.locked
+    // reads back what you set but emits no change signal, so anything bound to
+    // it (the clock Timer, the LockedHint mirror) silently froze — never bind
+    // to lock.locked, bind to root.locked.
+    property bool locked: false
     onLockedChanged: {
         Globals.locked = root.locked                    // one shell-wide source of truth
         Logind.setLockedHint(root.locked)
@@ -80,7 +83,7 @@ Scope {
     // minute-aligned — the lock clock shows "h:mm", so a 1 s tick bought nothing
     Timer {
         id: lockClock
-        interval: 1000; running: lock.locked; repeat: true; triggeredOnStart: true
+        interval: 1000; running: root.locked; repeat: true; triggeredOnStart: true
         onTriggered: {
             root.tick()
             lockClock.interval = 60000 - (Date.now() % 60000)
@@ -94,7 +97,7 @@ Scope {
         onCompleted: function (result) {
             root.busy = false
             root.pw = ""
-            if (result === PamResult.Success) { root.err = ""; lock.locked = false }
+            if (result === PamResult.Success) { root.err = ""; root.locked = false }
             else if (result === PamResult.MaxTries) root.err = "Too many attempts — wait a moment"
             else root.err = "Incorrect password"
         }
@@ -103,7 +106,7 @@ Scope {
 
     WlSessionLock {
         id: lock
-        locked: false
+        locked: root.locked
 
         WlSessionLockSurface {
             id: surf
