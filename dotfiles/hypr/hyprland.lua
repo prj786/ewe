@@ -407,14 +407,22 @@ hl.bind(mainMod .. " + T",         hl.dsp.layout("togglesplit"))                
 -- Scrolling layout (Settings → Layout → Window layout, Hyprland ≥ 0.55's
 -- PaperWM-style tape). These are layout messages: on dwindle/master they are
 -- ignored, so the binds are always present and only mean something on scroll.
-hl.bind(mainMod .. " + ALT + bracketleft",  hl.dsp.layout("move -col"))   -- scroll the tape one column left
-hl.bind(mainMod .. " + ALT + bracketright", hl.dsp.layout("move +col"))   -- … right
-hl.bind(mainMod .. " + ALT + comma", hl.dsp.layout("swapcol l"))          -- swap with the column to the left
-hl.bind(mainMod .. " + ALT + period",hl.dsp.layout("swapcol r"))          -- … right
-hl.bind(mainMod .. " + ALT + R",     hl.dsp.layout("colresize +conf"))    -- cycle the column width presets
-hl.bind(mainMod .. " + ALT + F",     hl.dsp.layout("fit visible"))        -- fit every visible column on screen
-hl.bind(mainMod .. " + ALT + P",     hl.dsp.layout("promote"))            -- window → its own column
-hl.bind(mainMod .. " + ALT + C",     hl.dsp.layout("consume_or_expel next"))  -- merge into / split from the neighbour
+-- Each bind checks the live layout first: a scrolling layoutmsg fired on
+-- dwindle/master raises an on-screen error, so off the scrolling layout
+-- these are silent no-ops instead.
+local function onscroll(msg)
+    return hl.dsp.exec_cmd(
+        [[ [ "$(hyprctl getoption general:layout -j | jq -r .str)" = scrolling ] ]]
+        .. [[ && hyprctl dispatch 'hl.dsp.layout("]] .. msg .. [[")' || true]])
+end
+hl.bind(mainMod .. " + ALT + bracketleft",  onscroll("move -col"))   -- scroll the tape one column left
+hl.bind(mainMod .. " + ALT + bracketright", onscroll("move +col"))   -- … right
+hl.bind(mainMod .. " + ALT + comma", onscroll("swapcol l"))          -- swap with the column to the left
+hl.bind(mainMod .. " + ALT + period",onscroll("swapcol r"))          -- … right
+hl.bind(mainMod .. " + ALT + R",     onscroll("colresize +conf"))    -- cycle the column width presets
+hl.bind(mainMod .. " + ALT + F",     onscroll("fit visible"))        -- fit every visible column on screen
+hl.bind(mainMod .. " + ALT + P",     onscroll("promote"))            -- window → its own column
+hl.bind(mainMod .. " + ALT + C",     onscroll("consume_or_expel next"))  -- merge into / split from the neighbour
 hl.bind(mainMod .. " + Tab",         hl.dsp.window.cycle_next())
 hl.bind(mainMod .. " + SHIFT + Tab", hl.dsp.window.cycle_next({ prev = true }))
 
@@ -462,8 +470,17 @@ for i = 1, 8 do
 end
 
 -- Scroll over an empty area / hold Super to cycle workspaces.
-hl.bind(mainMod .. " + mouse_down", hl.dsp.focus({ workspace = "e+1" }))
-hl.bind(mainMod .. " + mouse_up",   hl.dsp.focus({ workspace = "e-1" }))
+-- Super + wheel adapts to the layout: on the scrolling layout it nudges the
+-- tape (in gentle pixel steps, not whole columns — a notch a column was far
+-- too fast); on dwindle/master it cycles workspaces as always.
+local function superwheel(px, ws)
+    return hl.dsp.exec_cmd(
+        [[if [ "$(hyprctl getoption general:layout -j | jq -r .str)" = scrolling ]; then ]]
+        .. [[hyprctl dispatch 'hl.dsp.layout("move ]] .. px .. [[")'; ]]
+        .. [[else hyprctl dispatch 'hl.dsp.focus({ workspace = "]] .. ws .. [[" })'; fi]])
+end
+hl.bind(mainMod .. " + mouse_down", superwheel("+120", "e+1"))
+hl.bind(mainMod .. " + mouse_up",   superwheel("-120", "e-1"))
 
 -- Mouse: Super + drag to move (LMB) / resize (RMB) ---------------------------
 hl.bind(mainMod .. " + mouse:272", hl.dsp.window.drag(),   { mouse = true })

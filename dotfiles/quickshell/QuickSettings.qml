@@ -585,8 +585,24 @@ Scope {
                     anchors.top: parent.top; anchors.topMargin: 12
                     anchors.horizontalCenter: parent.horizontalCenter
                     spacing: 3
-                    // the flock dot — small brand accent, like the reference
-                    Rectangle { width: 10; height: 10; radius: 5; color: Theme.accent; anchors.horizontalCenter: parent.horizontalCenter }
+                    // the flock mark — the ewe, tinted to the accent
+                    Item {
+                        width: 22; height: 22
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        Image {
+                            id: sheepMark
+                            anchors.fill: parent
+                            source: Qt.resolvedUrl("assets/sheep.svg")
+                            sourceSize.width: 44; sourceSize.height: 44
+                            visible: false
+                        }
+                        MultiEffect {
+                            anchors.fill: sheepMark
+                            source: sheepMark
+                            colorization: 1
+                            colorizationColor: Theme.accent
+                        }
+                    }
                     Item { width: 1; height: 8 }
                     Repeater {
                         model: [
