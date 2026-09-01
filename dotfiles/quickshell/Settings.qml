@@ -1073,79 +1073,9 @@ Scope {
         return isNaN(d.getTime()) ? (iso || "—") : Qt.formatDateTime(d, "d MMM · h:mm AP")
     }
 
-    // ── packages-from-backup review: diff the cloud bundle against pacman -Qq
-    // and offer a checkbox install (runs visibly in kitty; AUR via paru) ───────
-    property var pkgReview: null      // { repo: [{name,on}], aur: [{name,on}] } | null = closed
-    property var _manifest: null
-    function reviewPackages() {
-        // RFC-002: the app list is ewe.conf's [apps.installed] (read through
-        // ewe-conf, same source as Komble's For You)
-        manifestProbe.running = false; manifestProbe.running = true
-    }
-    Process {
-        id: manifestProbe
-        command: [Globals.eweConf, "get", "apps.installed"]
-        stdout: StdioCollector {
-            onStreamFinished: {
-                var m = null
-                try { m = JSON.parse(this.text) } catch (e) {}
-                if (!m || !m.packages) { root.errorMsg = "No synced app list yet — restore the machine file first (or install something through Komble)."; return }
-                root._manifest = m
-                pkgProbe.running = false; pkgProbe.running = true
-            }
-        }
-    }
-    Process {
-        id: pkgProbe
-        command: ["pacman", "-Qq"]
-        stdout: StdioCollector {
-            onStreamFinished: {
-                var installed = {}, ls = this.text.split("\n")
-                for (var i = 0; i < ls.length; i++) if (ls[i] !== "") installed[ls[i]] = true
-                var repo = [], aur = []
-                var pk = (root._manifest && root._manifest.packages) || []
-                for (var j = 0; j < pk.length; j++) {
-                    if (!pk[j].package || installed[pk[j].package]) continue
-                    (pk[j].source === "aur" ? aur : repo).push({ name: pk[j].package, on: true })
-                }
-                root.pkgReview = { repo: repo, aur: aur }
-            }
-        }
-    }
-    function pkgToggle(kind, idx) {
-        var r = JSON.parse(JSON.stringify(root.pkgReview))
-        r[kind][idx].on = !r[kind][idx].on
-        root.pkgReview = r
-    }
-    function pkgSetAll(on) {
-        var r = JSON.parse(JSON.stringify(root.pkgReview))
-        for (var i = 0; i < r.repo.length; i++) r.repo[i].on = on
-        for (var j = 0; j < r.aur.length; j++) r.aur[j].on = on
-        root.pkgReview = r
-    }
-    function pkgSelectedCount() {
-        if (!root.pkgReview) return 0
-        var n = 0
-        for (var i = 0; i < root.pkgReview.repo.length; i++) if (root.pkgReview.repo[i].on) n++
-        for (var j = 0; j < root.pkgReview.aur.length; j++) if (root.pkgReview.aur[j].on) n++
-        return n
-    }
-    function pkgInstallSelected() {
-        var repo = [], aur = []
-        for (var i = 0; i < root.pkgReview.repo.length; i++) if (root.pkgReview.repo[i].on) repo.push(root.pkgReview.repo[i].name)
-        for (var j = 0; j < root.pkgReview.aur.length; j++) if (root.pkgReview.aur[j].on) aur.push(root.pkgReview.aur[j].name)
-        if (repo.length === 0 && aur.length === 0) return
-        var cmd = ""
-        if (repo.length > 0) cmd += "sudo pacman -S --needed " + repo.join(" ")
-        if (aur.length > 0) cmd += (cmd !== "" ? " && " : "") + "paru -S --needed " + aur.join(" ")
-        Quickshell.execDetached(["kitty", "--title", "ewe package restore", "-e", "sh", "-c",
-            cmd + '; s=$?; echo; if [ $s -eq 0 ]; then echo "── done ──"; else echo "── exited with status $s ──"; fi; read -n 1 -s -p "press any key to close"'])
-    }
-    // after a cloud restore lands, open the review so the user sees what's missing
-    Connections {
-        target: Google
-        function onRestoreSummaryChanged() { if (Google.restoreSummary !== "" && Globals.settingsOpen) root.reviewPackages() }
-    }
+    // (the packages-from-backup review surface retired in 0.6 — Komble's
+    // For-you pane owns app restore; installs there enter its registry and
+    // re-enter [apps.installed], which this side-channel never did)
     Process {
         id: userInfoProbe
         command: ["sh", "-c",
@@ -2858,7 +2788,6 @@ Scope {
                             Pill { label: "Restore from cloud…"; onGo: Google.requestRestore() }
                             // only offered when the conflict guard refused a push
                             Pill { visible: Google.syncError.indexOf("Another machine") === 0; label: "Push anyway"; onGo: Google.pushForce() }
-                            Pill { label: "Packages from backup…"; onGo: root.reviewPackages() }
                         }
                         Text { width: parent.width; text: "The machine file (ewe.conf) syncs to Drive's hidden app storage: theme + accent, dock, animations, power, display profiles, window rules, wallpapers, pinned/startup apps, places, and Komble's installed-apps list (reinstalling from it is always opt-in). Credentials never sync — that's the rule the file is built on."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
                         Text { visible: Google.syncError !== ""; width: parent.width; text: Google.syncError; color: Theme.danger; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
@@ -2884,72 +2813,6 @@ Scope {
                                 Pill { label: "Restore"; primary: true; onGo: Google.applyRestore() }
                                 Pill { label: "Cancel"; onGo: Google.cancelRestore() }
                             }
-                        }
-                    }
-
-                    // packages-from-backup — checkbox picker for what's not installed here
-                    Rectangle {
-                        visible: root.pkgReview !== null
-                        width: parent.width
-                        implicitHeight: pkgCol.implicitHeight + 24
-                        radius: Theme.radiusInner; color: Theme.elevated
-                        border.color: Theme.accent; border.width: 1
-                        Column {
-                            id: pkgCol
-                            anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 12; spacing: 8
-                            Text { text: "Packages from the backup"; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsBody; font.weight: Font.DemiBold }
-                            Text {
-                                width: parent.width
-                                readonly property int missing: root.pkgReview ? (root.pkgReview.repo.length + root.pkgReview.aur.length) : 0
-                                text: missing === 0 ? "Everything from the backup is already installed on this machine."
-                                                    : missing + " captured packages are not installed here — pick what to install:"
-                                color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; wrapMode: Text.Wrap
-                            }
-                            component PkgRow: Item {
-                                property string kind: "repo"
-                                property int idx: 0
-                                property var entry: null
-                                width: parent ? parent.width : 0; height: 26
-                                Rectangle {
-                                    id: pkBox
-                                    anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter
-                                    width: 16; height: 16; radius: 4
-                                    color: entry && entry.on ? Theme.accent : "transparent"
-                                    border.color: entry && entry.on ? Theme.accent : Theme.stroke; border.width: 1
-                                    Text { anchors.centerIn: parent; visible: entry && entry.on; text: Theme.icCheck; font.family: Theme.fontIcons; font.pixelSize: 10; color: Theme.accentText }
-                                }
-                                Text { anchors.left: pkBox.right; anchors.leftMargin: 9; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; text: (entry ? entry.name : "") + (kind === "aur" ? "   · AUR" : ""); color: Theme.fg; font.family: Theme.fontMono; font.pixelSize: 11; elide: Text.ElideRight }
-                                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.pkgToggle(kind, idx) }
-                            }
-                            Rectangle {
-                                width: parent.width
-                                visible: root.pkgReview !== null && (root.pkgReview.repo.length + root.pkgReview.aur.length) > 0
-                                height: visible ? Math.min(pkgListCol.implicitHeight + 10, 240) : 0
-                                radius: 7; color: Theme.bg; border.color: Theme.stroke; border.width: 1
-                                Flickable {
-                                    anchors.fill: parent; anchors.margins: 5
-                                    contentHeight: pkgListCol.implicitHeight; clip: true; boundsBehavior: Flickable.StopAtBounds
-                                    Column {
-                                        id: pkgListCol; width: parent.width
-                                        Repeater {
-                                            model: root.pkgReview ? root.pkgReview.repo : []
-                                            delegate: PkgRow { required property var modelData; required property int index; kind: "repo"; idx: index; entry: modelData }
-                                        }
-                                        Repeater {
-                                            model: root.pkgReview ? root.pkgReview.aur : []
-                                            delegate: PkgRow { required property var modelData; required property int index; kind: "aur"; idx: index; entry: modelData }
-                                        }
-                                    }
-                                }
-                            }
-                            Row {
-                                spacing: 10
-                                Pill { visible: root.pkgSelectedCount() > 0; label: "Install selected (" + root.pkgSelectedCount() + ") in terminal"; primary: true; onGo: root.pkgInstallSelected() }
-                                Pill { visible: root.pkgReview !== null && (root.pkgReview.repo.length + root.pkgReview.aur.length) > 0; label: "All"; onGo: root.pkgSetAll(true) }
-                                Pill { visible: root.pkgReview !== null && (root.pkgReview.repo.length + root.pkgReview.aur.length) > 0; label: "None"; onGo: root.pkgSetAll(false) }
-                                Pill { label: "Close"; onGo: root.pkgReview = null }
-                            }
-                            Text { visible: root.pkgReview !== null && (root.pkgReview.repo.length + root.pkgReview.aur.length) > 0; width: parent.width; text: "Opens a terminal running sudo pacman -S --needed (AUR entries via paru) — you authenticate there and watch it happen. Nothing installs silently."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
                         }
                     }
 
