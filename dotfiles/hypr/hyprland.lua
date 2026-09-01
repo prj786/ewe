@@ -442,8 +442,16 @@ hl.bind(mainMod .. " + period",        hl.dsp.exec_cmd("qs ipc call clipboard to
 hl.bind(mainMod .. " + grave",     hl.dsp.workspace.toggle_special("pen"))
 hl.bind(mainMod .. " + S",         hl.dsp.workspace.toggle_special("pen"))
 hl.bind(mainMod .. " + Z",         hl.dsp.workspace.toggle_special("pen"))   -- same, muscle-memory alias
-hl.bind(mainMod .. " + SHIFT + S", hl.dsp.window.move({ workspace = "special:pen" }))
-hl.bind(mainMod .. " + SHIFT + Z", hl.dsp.window.move({ workspace = "special:pen" }))
+-- Stash is a TOGGLE: in the normal flow it sends the window to the Pen; on a
+-- window already in the Pen it sends it home to the current desktop. Needs a
+-- runtime decision, so it shells out (jq ships with the DE).
+local stash = [[w=$(hyprctl activewindow -j | jq -r .workspace.name); ]]
+           .. [[if [ "${w#special}" != "$w" ]; then ]]
+           .. [[ws=$(hyprctl monitors -j | jq -r '.[] | select(.focused).activeWorkspace.id'); ]]
+           .. [[hyprctl dispatch "hl.dsp.window.move({ workspace = $ws })"; ]]
+           .. [[else hyprctl dispatch 'hl.dsp.window.move({ workspace = "special:pen" })'; fi]]
+hl.bind(mainMod .. " + SHIFT + S", hl.dsp.exec_cmd(stash))
+hl.bind(mainMod .. " + SHIFT + Z", hl.dsp.exec_cmd(stash))
 
 -- Workspaces 1–8 (Qtile groups) ----------------------------------------------
 --   Super + N         → switch to workspace N

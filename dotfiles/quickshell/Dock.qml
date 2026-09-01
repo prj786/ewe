@@ -54,6 +54,12 @@ Scope {
                 Hyprland.refreshToplevels()
                 root.claimRev++
             }
+            // entering/leaving the Pen — the monitor's specialWorkspace field
+            // only lives in lastIpcObject, so refetch it on the raw event
+            if (n === "activespecial") {
+                Hyprland.refreshMonitors()
+                root.claimRev++
+            }
         }
     }
 
@@ -112,6 +118,13 @@ Scope {
         // A toplevel whose IPC object hasn't arrived yet counts as claiming —
         // better a dock that ducks a beat early than one sitting over a tile.
         readonly property var hyMon: Hyprland.monitorFor(win.screen)
+        // the second flow: the Pen is OPEN on this screen — the dock then
+        // shows only the Pen box, no numbered desktops (you are elsewhere)
+        readonly property bool penOpen: {
+            var rev = root.claimRev
+            var o = win.hyMon ? win.hyMon.lastIpcObject : null
+            return !!(o && o.specialWorkspace && String(o.specialWorkspace.name).indexOf("special") === 0)
+        }
         readonly property bool wsClaimed: {
             var rev = root.claimRev
             var wid = win.hyMon && win.hyMon.activeWorkspace ? win.hyMon.activeWorkspace.id : -1
@@ -220,12 +233,13 @@ Scope {
                 //    the Pen; Super+Z stashes/toggles from the keyboard. ──
                 Rectangle {
                     id: penBox
-                    visible: root.penWins.length > 0
+                    visible: root.penWins.length > 0 || win.penOpen
                     anchors.verticalCenter: parent.verticalCenter
                     height: win.cell; radius: Math.round(13 * win.k)
                     width: Math.max(win.cell, penRow.implicitWidth + 16)
-                    color: penMa.containsMouse ? Theme.hover : Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.07)
-                    border.color: Theme.stroke; border.width: 1
+                    color: win.penOpen ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.16)
+                         : penMa.containsMouse ? Theme.hover : Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.07)
+                    border.color: win.penOpen ? Theme.accent : Theme.stroke; border.width: 1
                     Behavior on color { ColorAnimation { duration: 150 } }
                     MouseArea { id: penMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
                         onClicked: Hyprland.dispatch('hl.dsp.workspace.toggle_special("pen")') }
@@ -236,7 +250,7 @@ Scope {
                         Text {
                             anchors.verticalCenter: parent.verticalCenter
                             text: Theme.icPen
-                            color: Theme.fgDim
+                            color: win.penOpen ? Theme.accent : Theme.fgDim
                             font.family: Theme.fontIcons; font.pixelSize: Math.round(14 * win.k)
                         }
                         Repeater {
@@ -245,8 +259,8 @@ Scope {
                                 required property var modelData
                                 anchors.verticalCenter: parent.verticalCenter
                                 width: Math.round(34 * win.k); height: Math.round(30 * win.k); radius: 8
-                                color: Theme.hover
-                                opacity: penTileMa.containsMouse ? 1 : 0.75
+                                color: modelData.activated && win.penOpen ? Theme.accent : Theme.hover
+                                opacity: win.penOpen || penTileMa.containsMouse ? 1 : 0.75
                                 scale: penTileMa.containsMouse ? 1.1 : 1.0
                                 Behavior on scale { NumberAnimation { duration: Theme.durFast; easing.type: Easing.OutBack; easing.overshoot: 2 } }
                                 Image {
@@ -257,16 +271,26 @@ Scope {
                                 MouseArea {
                                     id: penTileMa
                                     anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                                    onClicked: { if (modelData.wayland) modelData.wayland.activate() }
+                                    acceptedButtons: Qt.LeftButton | Qt.MiddleButton
+                                    // left: go to that window (inside the Pen);
+                                    // middle: send it home to the normal flow
+                                    onClicked: function (m) {
+                                        if (m.button === Qt.MiddleButton) {
+                                            var ws = Hyprland.focusedWorkspace ? Hyprland.focusedWorkspace.id : 1
+                                            if (modelData.wayland) modelData.wayland.activate()
+                                            Hyprland.dispatch('hl.dsp.window.move({ workspace = ' + ws + ' })')
+                                        } else if (modelData.wayland) modelData.wayland.activate()
+                                    }
                                 }
                             }
                         }
                     }
                 }
 
-                // ── workspace boxes ──
+                // ── workspace boxes (hidden while the Pen flow is open —
+                //    one flow at a time, exactly what you see) ──
                 Repeater {
-                    model: root.wsList
+                    model: win.penOpen ? [] : root.wsList
                     delegate: Rectangle {
                         id: wsBox
                         required property var modelData

@@ -66,8 +66,8 @@ on save). Ported from the old Qtile bindings so most muscle memory carries over.
 
 | Shortcut | Action |
 |---|---|
-| `Super` + `` ` `` / `S` / `Z` | Show or hide the Pen (the hidden workspace) |
-| `Super` + `Shift` + `S` / `Z` | Stash the window in the Pen (dock shows it) |
+| `Super` + `` ` `` / `S` / `Z` | Enter / leave the Pen — the second flow (the dock shows only it while inside) |
+| `Super` + `Shift` + `S` / `Z` | Stash ⇄ unstash: to the Pen from a desktop, back home from the Pen |
 
 ## Session
 
