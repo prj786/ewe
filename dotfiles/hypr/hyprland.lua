@@ -404,6 +404,17 @@ hl.bind(mainMod .. " + SHIFT + F", hl.dsp.window.fullscreen({ mode = 1 }))  -- m
 hl.bind(mainMod .. " + V",         hl.dsp.window.float({ action = "toggle" }))  -- (moved off Space → Launcher)
 hl.bind(mainMod .. " + SHIFT + V", hl.dsp.window.pseudo())
 hl.bind(mainMod .. " + T",         hl.dsp.layout("togglesplit"))                       -- dwindle split
+-- Scrolling layout (Settings → Layout → Window layout, Hyprland ≥ 0.55's
+-- PaperWM-style tape). These are layout messages: on dwindle/master they are
+-- ignored, so the binds are always present and only mean something on scroll.
+hl.bind(mainMod .. " + ALT + bracketleft",  hl.dsp.layout("move -col"))   -- scroll the tape one column left
+hl.bind(mainMod .. " + ALT + bracketright", hl.dsp.layout("move +col"))   -- … right
+hl.bind(mainMod .. " + ALT + comma", hl.dsp.layout("swapcol l"))          -- swap with the column to the left
+hl.bind(mainMod .. " + ALT + period",hl.dsp.layout("swapcol r"))          -- … right
+hl.bind(mainMod .. " + ALT + R",     hl.dsp.layout("colresize +conf"))    -- cycle the column width presets
+hl.bind(mainMod .. " + ALT + F",     hl.dsp.layout("fit visible"))        -- fit every visible column on screen
+hl.bind(mainMod .. " + ALT + P",     hl.dsp.layout("promote"))            -- window → its own column
+hl.bind(mainMod .. " + ALT + C",     hl.dsp.layout("consume_or_expel next"))  -- merge into / split from the neighbour
 hl.bind(mainMod .. " + Tab",         hl.dsp.window.cycle_next())
 hl.bind(mainMod .. " + SHIFT + Tab", hl.dsp.window.cycle_next({ prev = true }))
 

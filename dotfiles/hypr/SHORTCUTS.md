@@ -38,6 +38,12 @@ on save). Ported from the old Qtile bindings so most muscle memory carries over.
 | `Super` + `V` | Toggle floating |
 | `Super` + `Shift` + `V` | Pseudo-tile |
 | `Super` + `T` | Toggle split direction (dwindle) |
+| `Super` + `Alt` + `[` / `]` | Scrolling layout: scroll the tape one column left / right |
+| `Super` + `Alt` + `,` / `.` | Scrolling layout: swap column with its left / right neighbour |
+| `Super` + `Alt` + `R` | Scrolling layout: cycle the column width presets |
+| `Super` + `Alt` + `F` | Scrolling layout: fit every visible column on screen |
+| `Super` + `Alt` + `P` | Scrolling layout: give the window its own column |
+| `Super` + `Alt` + `C` | Scrolling layout: merge into / split from the next column |
 | `Super` + `Tab` / `Super` + `Shift` + `Tab` | Cycle to next / previous window |
 
 ### Mouse (hold `Super`)

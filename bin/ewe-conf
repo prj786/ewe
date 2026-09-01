@@ -636,6 +636,15 @@ def gen_user_lua(doc):
         gen += ', col = { active_border = "rgba(%sff)" }' % _hex6(gv("desktop.theme.accent", "#0a84ff"))
     s += gen + " } })\n"
     s += "hl.config({ decoration = { rounding = %s } })\n" % _lua_num(lay.get("rounding", 12))
+    # window layout (0.8): dwindle is hyprland.lua's default and emits nothing;
+    # master and scrolling (Hyprland >= 0.55's PaperWM-style tape) override
+    # general.layout here, scrolling with its column width alongside
+    mode = str(lay.get("mode", "dwindle"))
+    if mode in ("master", "scrolling"):
+        s += 'hl.config({ general = { layout = "%s" } })\n' % mode
+    if mode == "scrolling":
+        s += ("hl.config({ scrolling = { column_width = %s, follow_focus = true, "
+              "fullscreen_on_one_column = true } })\n") % _lua_num(lay.get("column_width", 0.5))
     s += ("hl.config({ decoration = { active_opacity = 1.0, inactive_opacity = %s } })\n"
           % ("0.97" if gv("desktop.theme.window_transparency", False) else "1.0"))
     speed = gv("desktop.animations.speed", 1)
@@ -657,6 +666,12 @@ def parse_user_lua(text):
         return None
     out = {"gaps_in": int(m.group(1)), "gaps_out": int(m.group(2)),
            "border_size": int(m.group(3))}
+    lm = re.search(r'general = \{ layout = "(\w+)" \}', text)
+    if lm:
+        out["mode"] = lm.group(1)
+    cw = re.search(r"column_width = ([0-9.]+)", text)
+    if cw:
+        out["column_width"] = float(cw.group(1))
     if r:
         out["rounding"] = int(r.group(1))
     return out

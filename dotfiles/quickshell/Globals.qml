@@ -92,7 +92,7 @@ QtObject {
             var c = (o && (o.class || o.initialClass)) || (t.wayland && t.wayland.appId) || ""
             if (c.toLowerCase() !== klass) continue
             if (t.wayland) t.wayland.activate()
-            else if (o && o.address) Hyprland.dispatch("focuswindow address:" + o.address)
+            else if (o && o.address) Hyprland.dispatch('hl.dsp.focus({ window = "address:' + o.address + '" })')
             return true
         }
         return false
@@ -129,7 +129,7 @@ QtObject {
         }
         if (!best) return false
         if (best.wayland) best.wayland.activate()
-        else if (best.address) Hyprland.dispatch("focuswindow address:" + best.address)
+        else if (best.address) Hyprland.dispatch('hl.dsp.focus({ window = "address:' + best.address + '" })')
         return true
     }
 

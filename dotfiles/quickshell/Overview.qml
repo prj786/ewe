@@ -231,7 +231,7 @@ Scope {
     function launchApp(a) { if (a) a.execute(); root.close() }
     function jump(tl) {
         if (tl && tl.wayland) tl.wayland.activate()
-        else if (tl && tl.address) Hyprland.dispatch("focuswindow address:" + tl.address)
+        else if (tl && tl.address) Hyprland.dispatch('hl.dsp.focus({ window = "address:' + tl.address + '" })')
         root.close()
     }
     function addrOf(tl) {

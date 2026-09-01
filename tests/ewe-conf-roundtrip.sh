@@ -82,8 +82,19 @@ for g in animations.lua windowrules.lua wallpapers.conf input.lua user.lua; do
 done
 
 # set/get semantics
-./bin/ewe-conf set desktop.theme.accent '"#ff0000"' >/dev/null 2>&1 || ./bin/ewe-conf set desktop.theme.accent '#ff0000'
+# --no-hooks: the hooks poke the LIVE shell (settings reload), which is how a
+# sandboxed test run reset the real accent twice on 2026-09-01
+./bin/ewe-conf set --no-hooks desktop.theme.accent '"#ff0000"' >/dev/null 2>&1 || ./bin/ewe-conf set --no-hooks desktop.theme.accent '#ff0000'
 [ "$(./bin/ewe-conf get desktop.theme.accent)" = "#ff0000" ] && echo "ok  set/get"
 python3 -c "import json; d=json.load(open('$SANDBOX/quickshell/user-theme.json')); assert d['accent']=='#ff0000'" \
     && echo "ok  set propagates to user-theme.json"
+# window layout (0.8): scrolling mode lands in user.lua with its column width;
+# dwindle emits nothing (byte-identical to the pre-0.8 file)
+./bin/ewe-conf set --no-hooks desktop.layout.mode '"scrolling"' >/dev/null 2>&1
+./bin/ewe-conf set --no-hooks desktop.layout.column_width 0.6 >/dev/null 2>&1
+grep -q 'general = { layout = "scrolling" }' "$SANDBOX/hypr/generated/user.lua" \
+    && grep -q 'column_width = 0.6' "$SANDBOX/hypr/generated/user.lua" \
+    && echo "ok  scrolling layout → user.lua" || { echo "FAIL scrolling layout not in user.lua"; exit 1; }
+./bin/ewe-conf set --no-hooks desktop.layout.mode '"dwindle"' >/dev/null 2>&1
+grep -q 'layout = ' "$SANDBOX/hypr/generated/user.lua" && { echo "FAIL dwindle must emit no layout line"; exit 1; } || echo "ok  dwindle emits nothing"
 echo "ALL PASS"
