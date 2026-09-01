@@ -580,6 +580,14 @@ hl.window_rule({
     size   = { 880, 620 },
 })
 
+-- The gnome-keyring / gcr password prompt: a compact floating card, not a
+-- full-width sheet (it looked terrible mid-sign-in, 2026-09-02). Mostly
+-- extinct anyway: the login keyring is created by PAM with the login
+-- password, so it unlocks silently — this rule covers the rare rest.
+for _, klass in ipairs({ "gcr-prompter", "Gcr-prompter", "org.gnome.keyring.SystemPrompter" }) do
+    hl.window_rule({ name = "gcr-" .. klass, match = { class = klass }, float = true, center = true, size = { 440, 240 } })
+end
+
 -- Fix XWayland drag ghosts (from the upstream example).
 hl.window_rule({
     name     = "fix-xwayland-drags",

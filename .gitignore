@@ -46,3 +46,6 @@ docs/media/
 # the shipped Google OAuth client is injected at package build (ewe-repo CI
 # secret EWE_OAUTH_CLIENT) — never committed; see docs/GOOGLE-CLIENT.md
 system/oauth-client.json
+# mpv runtime theming (colorscheme.sh writes through the ~/.config symlink)
+dotfiles/mpv/theme.conf
+dotfiles/mpv/script-opts/

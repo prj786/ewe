@@ -14,3 +14,4 @@ gnome-network-displays     # Cast to TV — Miracast (Samsung "Screen Mirroring"
                            # GNOME. Needs NetworkManager + wpa_supplicant for Wi-Fi P2P (not iwd) and
                            # avahi-daemon for Chromecast discovery (phase 30). Driven by Cast.qml.
 helium-browser-bin      # THE browser: Chromium-based, private, vertical tabs — themed by helium-theme.sh
+mpv-uosc-git            # uosc controller for mpv — themed by colorscheme.sh (script-opts/uosc.conf)
