@@ -27,6 +27,10 @@ if [ -e "$GEN_SRC/wallpapers.conf" ]; then
     mkdir -p "$SANDBOX/hypr/generated"
     cp "$GEN_SRC/wallpapers.conf" "$SANDBOX/hypr/generated/"
 fi
+if [ -e "$GEN_SRC/input.lua" ]; then
+    mkdir -p "$SANDBOX/hypr/generated"
+    cp "$GEN_SRC/input.lua" "$SANDBOX/hypr/generated/"
+fi
 
 ./bin/ewe-conf import >/dev/null
 python3 -c "import tomllib,sys; tomllib.load(open('$SANDBOX/ewe/ewe.conf','rb'))" \
@@ -64,7 +68,7 @@ EOF
 # Phase 4: generated artifacts must be BYTE-identical to what the UIs wrote.
 # Goldens come from this machine's real generated files when present.
 GEN="${EWE_TEST_GEN:-$HOME/.config/hypr/generated}"
-for g in animations.lua windowrules.lua wallpapers.conf; do
+for g in animations.lua windowrules.lua wallpapers.conf input.lua; do
     if [ -e "$GEN/$g" ] && [ -e "$SANDBOX/hypr/generated/$g" ]; then
         if diff -q "$GEN/$g" "$SANDBOX/hypr/generated/$g" >/dev/null; then
             echo "ok  $g byte-identical to the live UI-generated file"
