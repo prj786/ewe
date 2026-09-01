@@ -19,6 +19,15 @@ Scope {
     function iconFor(t) { var e = DesktopEntries.heuristicLookup(root.clsOf(t)); return Quickshell.iconPath(e && e.icon ? e.icon : root.clsOf(t), "application-x-executable") }
     function goWorkspace(id) { Hyprland.dispatch("hl.dsp.focus({workspace=" + id + "})") }
 
+    // the Pen: windows stashed on the special workspace (id < 0) — Super+Z
+    readonly property var penWins: {
+        var rev = root.claimRev
+        var out = []
+        var tls = Hyprland.toplevels ? Hyprland.toplevels.values : []
+        for (var i = 0; i < tls.length; i++) { var t = tls[i]; if (t.workspace && t.workspace.id < 0) out.push(t) }
+        return out
+    }
+
     // workspaces (id>0) that have windows, plus the focused one — sorted, each with its toplevels
     readonly property var wsList: {
         var byws = {}
@@ -204,6 +213,56 @@ Scope {
                 DockBtn { id: mediaBtn; visible: Globals.mediaPlayer !== null; glyph: Theme.icMusic; activeState: Globals.mediaOpen; anchors.verticalCenter: parent.verticalCenter; onGo: { Globals.mediaAnchorX = mediaBtn.mapToItem(null, mediaBtn.width / 2, 0).x; Globals.launcherOpen = false; Globals.storeOpen = false; Globals.placesOpen = false; Globals.mediaOpen = !Globals.mediaOpen } }
 
                 Rectangle { anchors.verticalCenter: parent.verticalCenter; width: 1; height: Math.round(40 * win.k); color: Theme.stroke }
+
+                // ── the Pen — ewe's hidden workspace (special:pen). Appears
+                //    only while something is stashed: package glyph + a tile
+                //    per window. Tile → fetch that window; box → show/hide
+                //    the Pen; Super+Z stashes/toggles from the keyboard. ──
+                Rectangle {
+                    id: penBox
+                    visible: root.penWins.length > 0
+                    anchors.verticalCenter: parent.verticalCenter
+                    height: win.cell; radius: Math.round(13 * win.k)
+                    width: Math.max(win.cell, penRow.implicitWidth + 16)
+                    color: penMa.containsMouse ? Theme.hover : Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.07)
+                    border.color: Theme.stroke; border.width: 1
+                    Behavior on color { ColorAnimation { duration: 150 } }
+                    MouseArea { id: penMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                        onClicked: Hyprland.dispatch('hl.dsp.workspace.toggle_special("pen")') }
+                    Row {
+                        id: penRow
+                        anchors.centerIn: parent
+                        spacing: 5
+                        Text {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: Theme.icPen
+                            color: Theme.fgDim
+                            font.family: Theme.fontIcons; font.pixelSize: Math.round(14 * win.k)
+                        }
+                        Repeater {
+                            model: root.penWins
+                            delegate: Rectangle {
+                                required property var modelData
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: Math.round(34 * win.k); height: Math.round(30 * win.k); radius: 8
+                                color: Theme.hover
+                                opacity: penTileMa.containsMouse ? 1 : 0.75
+                                scale: penTileMa.containsMouse ? 1.1 : 1.0
+                                Behavior on scale { NumberAnimation { duration: Theme.durFast; easing.type: Easing.OutBack; easing.overshoot: 2 } }
+                                Image {
+                                    anchors.centerIn: parent
+                                    width: Math.round(20 * win.k); height: Math.round(20 * win.k); sourceSize.width: 40; sourceSize.height: 40; mipmap: true
+                                    source: root.iconFor(modelData)
+                                }
+                                MouseArea {
+                                    id: penTileMa
+                                    anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                                    onClicked: { if (modelData.wayland) modelData.wayland.activate() }
+                                }
+                            }
+                        }
+                    }
+                }
 
                 // ── workspace boxes ──
                 Repeater {

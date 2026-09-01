@@ -66,8 +66,8 @@ on save). Ported from the old Qtile bindings so most muscle memory carries over.
 
 | Shortcut | Action |
 |---|---|
-| `Super` + `` ` `` (backtick) or `Super` + `S` | Toggle the scratchpad |
-| `Super` + `Shift` + `S` | Send focused window to the scratchpad |
+| `Super` + `` ` `` / `S` / `Z` | Show or hide the Pen (the hidden workspace) |
+| `Super` + `Shift` + `S` / `Z` | Stash the window in the Pen (dock shows it) |
 
 ## Session
 

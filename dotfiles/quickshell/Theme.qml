@@ -192,6 +192,7 @@ QtObject {
     readonly property string icWarning:     ic(0xE4E0)  // warning (danger rows)
     readonly property string icApps:        ic(0xE1FC)  // dots-nine (dock app grid)
     readonly property string icStack:       ic(0xE466)  // stack (dock overview)
+    readonly property string icPen:         ic(0xE390)  // package — the Pen (dock: stashed windows)
     readonly property string icDownload:    ic(0xE20C)  // download-simple (dock downloads)
     readonly property string icKeyboard:    ic(0xE2D8)  // keyboard
     readonly property string icPlus:        ic(0xE3D4)  // plus

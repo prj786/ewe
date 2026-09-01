@@ -435,11 +435,15 @@ hl.bind("switch:off:Lid Switch", hl.dsp.exec_cmd(scripts .. "/lid.sh open"),  { 
 -- hl.bind(mainMod .. " + SHIFT + Space", hl.dsp.exec_cmd("hyprctl switchxkblayout current next"))
 hl.bind(mainMod .. " + period",        hl.dsp.exec_cmd("qs ipc call clipboard toggle"))          -- clipboard + emoji
 
--- Scratchpad (Hyprland "special" workspace) ----------------------------------
--- Super+grave kept from Qtile muscle memory; Super+S is the Hyprland default.
-hl.bind(mainMod .. " + grave",     hl.dsp.workspace.toggle_special("scratch"))
-hl.bind(mainMod .. " + S",         hl.dsp.workspace.toggle_special("scratch"))
-hl.bind(mainMod .. " + SHIFT + S", hl.dsp.window.move({ workspace = "special:scratch" }))
+-- The Pen (Hyprland "special" workspace) -------------------------------------
+-- ewe's hidden workspace: stash a window out of sight, get it back later. The
+-- dock grows a Pen box (package glyph) whenever something is inside — click a
+-- tile to fetch that window, click the box to show/hide the whole Pen.
+hl.bind(mainMod .. " + grave",     hl.dsp.workspace.toggle_special("pen"))
+hl.bind(mainMod .. " + S",         hl.dsp.workspace.toggle_special("pen"))
+hl.bind(mainMod .. " + Z",         hl.dsp.workspace.toggle_special("pen"))   -- same, muscle-memory alias
+hl.bind(mainMod .. " + SHIFT + S", hl.dsp.window.move({ workspace = "special:pen" }))
+hl.bind(mainMod .. " + SHIFT + Z", hl.dsp.window.move({ workspace = "special:pen" }))
 
 -- Workspaces 1–8 (Qtile groups) ----------------------------------------------
 --   Super + N         → switch to workspace N
