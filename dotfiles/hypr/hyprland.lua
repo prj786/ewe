@@ -606,6 +606,9 @@ pcall(dofile, home .. "/.config/hypr/generated/input.lua")
 pcall(dofile, home .. "/.config/hypr/generated/monitors.lua")
 pcall(dofile, home .. "/.config/hypr/generated/windowrules.lua")
 pcall(dofile, home .. "/.config/hypr/generated/animations.lua")
+-- user keybinds from ewe.conf's [[desktop.keybinds]] (ewe-conf generates;
+-- exec binds only — they sync with the machine file like everything else)
+pcall(dofile, home .. "/.config/hypr/generated/keybinds.lua")
 
 -- Window-group chrome LAST: group-theme.lua shares the window corner radius, so
 -- it must read decoration.rounding AFTER the generated files above have had
