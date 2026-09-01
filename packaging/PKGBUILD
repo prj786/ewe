@@ -16,7 +16,7 @@
 
 pkgname=ewe
 pkgver=0.9.4
-pkgrel=1
+pkgrel=2   # 2: carries the injected oauth-client.json
 pkgdesc="ewe — a clean, dark Hyprland + Quickshell desktop environment"
 arch=('any')
 url="https://github.com/prj786/ewe"
@@ -57,6 +57,15 @@ package() {
     cp -a dotfiles systemd system packages phases lib templates docs bin \
           install.sh update.sh uninstall.sh VERSION VERSIONS README.md LICENSE \
           "$pkgdir/usr/share/ewe/"
+
+    # The shipped Google client is injected by CI into the CHECKOUT — it is
+    # never in git, so the tag tarball unpacked above can NOT carry it (that
+    # assumption shipped 0.9.x packages with no client at all: "Not
+    # configured" in Settings → User). Pick it up from the build tree.
+    if [ -f "$startdir/../system/oauth-client.json" ]; then
+        install -Dm644 "$startdir/../system/oauth-client.json" \
+            "$pkgdir/usr/share/ewe/system/oauth-client.json"
+    fi
 
     install -Dm755 "$srcdir/ewe-setup" "$pkgdir/usr/bin/ewe-setup"
     # RFC-001: the ONE writer of the ONE file
