@@ -45,7 +45,9 @@ setup)
         command -v rclone >/dev/null 2>&1 || die "rclone is not installed (pacman -S rclone fuse3)"
     fi
     # 1 · make sure the signed-in identity carries the Drive scope
-    if [ "${2:-}" != "--offline" ]; then
+    #     (--have-scope: the caller's login already requested it — the shell
+    #      signs in with --with-drive, so no second browser consent here)
+    if [ "${2:-}" != "--offline" ] && [ "${2:-}" != "--have-scope" ]; then
         say "Google will ask once to allow Drive access…"
         r="$(ewe_auth login --with-drive)"
         echo "$r" | grep -q '"ok": true' || die "sign-in failed: $r"

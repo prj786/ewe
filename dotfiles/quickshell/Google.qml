@@ -139,7 +139,9 @@ QtObject {
         goo.busy = ""
     }
     property Process _loginProc: Process {
-        command: ["python3", goo.helper, "login"]
+        // --with-drive: ONE consent covers files too, so ~/Google Drive can be
+        // mounted right after sign-in with no second browser round-trip
+        command: ["python3", goo.helper, "login", "--with-drive"]
         stdout: StdioCollector {
             onStreamFinished: {
                 if (goo.busy === "signin") goo.busy = ""
@@ -153,6 +155,10 @@ QtObject {
                         goo._expiresAt = j.expires_at * 1000
                         goo.error = ""
                         goo.sessionReady()
+                        // one sign-in, files too: the fresh token carries the
+                        // Drive scope, so finish the ~/Google Drive plumbing
+                        // (rclone remote + Nemo bookmark + mount) consent-free
+                        Quickshell.execDetached(["bash", Quickshell.env("HOME") + "/.config/quickshell/../../bin/ewe-drive", "setup", "--have-scope"])
                     } else {
                         goo.error = goo._loginErrMsg(j.error)
                     }

@@ -82,11 +82,28 @@ QtObject {
     property bool kombleInstalled: false
     property bool settingsAppInstalled: false
     property string settingsAppBin: "ewe-settings"
+    // an already-open Settings/Komble window is FOCUSED, never doubled —
+    // clicking the gear twice should land you on the window you had
+    function focusWindowByClass(klass) {
+        var tls = Hyprland.toplevels ? Hyprland.toplevels.values : []
+        for (var i = 0; i < tls.length; i++) {
+            var t = tls[i]
+            var o = t.lastIpcObject
+            var c = (o && (o.class || o.initialClass)) || (t.wayland && t.wayland.appId) || ""
+            if (c.toLowerCase() !== klass) continue
+            if (t.wayland) t.wayland.activate()
+            else if (o && o.address) Hyprland.dispatch("focuswindow address:" + o.address)
+            return true
+        }
+        return false
+    }
     function openSettings() {
+        if (g.focusWindowByClass("ewe-settings") || g.focusWindowByClass("hypr-settings")) return
         if (g.settingsAppInstalled) Quickshell.execDetached([g.settingsAppBin])
         else g.settingsOpen = true
     }
     function openStore() {
+        if (g.focusWindowByClass("komble")) return
         if (g.kombleInstalled) Quickshell.execDetached(["komble"])
         else g.storeOpen = true
     }

@@ -98,4 +98,11 @@ if [ "${DE_SOFTWARE_RENDER:-0}" = "1" ]; then
     export WLR_RENDERER_ALLOW_SOFTWARE=1
 fi
 
+# WebKitGTK's DMA-BUF renderer aborts (SIGABRT) under VM GPUs (virtio/llvmpipe)
+# — Komble kept "closing automatically" in QEMU testing. The standard Tauri/
+# WebKitGTK remedy: disable that renderer inside VMs; bare metal is untouched.
+if systemd-detect-virt --vm --quiet 2>/dev/null; then
+    export WEBKIT_DISABLE_DMABUF_RENDERER=1
+fi
+
 exec Hyprland
