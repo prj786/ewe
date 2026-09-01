@@ -5,11 +5,17 @@ it can (and honestly cannot) fix.
 
 Two implementations follow this contract: the standalone **ewe-settings**
 (Tauri, its own repo — THE settings UI when installed) and the in-shell
-Quickshell panel (the fallback while the binary is absent). Both write the
-same files with the same generators — byte-identical output — and the
-standalone app then calls `qs ipc call settings reload`, which re-reads
-user-theme.json/pinned lists **and display-profiles.json** (HyprMon must never
-re-assert from a stale in-memory copy after an out-of-process commit).
+Quickshell panel (the fallback while the binary is absent). Persistence goes
+through **`ewe-conf`** (RFC-001): the panes send state objects, and ewe-conf
+generates every artifact — since 0.9.7 that includes `input.lua` +
+`input-devices.json` (`set desktop.input`) and `user.lua`
+(`set desktop.layout`). The old "byte-identical twin generators" contract
+survives only for the runtime-reactive files the shell still generates
+itself (`hypridle.conf`, `monitors.lua`) and for the LIVE-apply `hyprctl
+eval` strings, which each UI builds locally. The standalone app calls
+`qs ipc call settings reload` after commits, which re-reads
+user-theme.json/pinned lists **and display-profiles.json** (HyprMon must
+never re-assert from a stale in-memory copy after an out-of-process commit).
 
 ## Two-layer apply model
 

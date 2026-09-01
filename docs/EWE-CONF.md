@@ -111,6 +111,29 @@ One block per app: `name`, `class` (matched case-insensitively), `workspace`
 · `[desktop.wallpapers.outputs]` per-output overrides. Images, GIFs, and
 videos are all valid paths.
 
+### `[desktop.input]`
+
+Keyboard and pointer, whole: `kb_layout`/`kb_variant` (comma-joined parallel
+lists), `kb_options`, repeat rate/delay, numlock, sensitivity, acceleration
+profile, natural scroll, scroll factors, the eight touchpad switches, and
+`[desktop.input.devices]` — per-device overrides keyed by device name.
+`apply` generates both `hypr/generated/input.lua` and
+`quickshell/input-devices.json` from this.
+
+### `[desktop.layout]`
+
+Four numbers — `gaps_in`, `gaps_out`, `border_size`, `rounding`. Everything
+else in `generated/user.lua` (border tint + accent, window transparency,
+animation speed fallback, the tiling float rule) is derived from the other
+domains, so changing any of them regenerates the file.
+
+### `[[desktop.keybinds]]`
+
+Your own launch bindings: one `{combo, exec}` record each, e.g.
+`{combo = "SUPER + T", exec = "kitty"}` → `generated/keybinds.lua`. Exec
+binds only — a bind that launches something is data and syncs; rebinding
+the DE's own dispatchers stays in Lua territory.
+
 ### `[apps]`
 
 `pinned` — the dock's pinned launcher list, in order.
