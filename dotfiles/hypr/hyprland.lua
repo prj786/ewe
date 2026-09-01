@@ -19,10 +19,10 @@ local terminal    = "kitty"
 local fileManager = "nemo"
 -- Open whatever the user set as the default web browser (Settings → Default Apps
 -- writes it via `xdg-settings set default-web-browser`). We resolve the .desktop
--- and launch it with `gio launch` (glib2, always present); fall back to firefox.
+-- and launch it with `gio launch` (glib2, always present); fall back to Helium.
 local browser     = 'b="$(xdg-settings get default-web-browser 2>/dev/null)"; '
                  .. 'f="$HOME/.local/share/applications/$b"; [ -f "$f" ] || f="/usr/share/applications/$b"; '
-                 .. 'if [ -n "$b" ] && [ -f "$f" ]; then exec gio launch "$f"; else exec firefox; fi'
+                 .. 'if [ -n "$b" ] && [ -f "$f" ]; then exec gio launch "$f"; else exec helium-browser; fi'
 local applauncher = "qs ipc call applauncher toggle"  -- Quickshell launcher (QML)
 
 local mainMod = "SUPER"   -- the Super / Windows key

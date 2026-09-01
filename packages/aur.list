@@ -13,3 +13,4 @@ gnome-network-displays     # Cast to TV — Miracast (Samsung "Screen Mirroring"
                            # xdg-desktop-portal ScreenCast (the hyprland portal), so it works outside
                            # GNOME. Needs NetworkManager + wpa_supplicant for Wi-Fi P2P (not iwd) and
                            # avahi-daemon for Chromecast discovery (phase 30). Driven by Cast.qml.
+helium-browser-bin      # THE browser: Chromium-based, private, vertical tabs — themed by helium-theme.sh

@@ -18,7 +18,7 @@ phase_userconfig() {
         if _desktop_ok "$cur_browser"; then
             info "default browser: keeping your choice ($cur_browser)"
         else
-            for b in firefox.desktop firefox-esr.desktop org.mozilla.firefox.desktop; do
+            for b in helium.desktop firefox.desktop firefox-esr.desktop org.mozilla.firefox.desktop; do
                 [ -r "/usr/share/applications/$b" ] && { run xdg-settings set default-web-browser "$b" && break; }
             done
         fi

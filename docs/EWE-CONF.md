@@ -203,3 +203,10 @@ A syntax error fails `apply` loudly and changes nothing — the generated
 files are only replaced by a successful run. If the file and reality ever
 disagree (a fresh machine, a repair), `ewe-conf import` rebuilds the
 document from the live system.
+
+## desktop.browser — Helium
+
+| key | default | meaning |
+|---|---|---|
+| `desktop.browser.layout` | `"vertical"` | Helium tab layout: `"vertical"` (ewe's default) or `"horizontal"`. Applied by `helium-theme.sh` (run by every theme change) the next time the browser starts while closed; the browser chrome itself always follows `desktop.theme` (flock/blacksheep surface + accent). |
+

@@ -437,4 +437,8 @@ if command -v hyprctl >/dev/null 2>&1 && [ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}"
     hyprctl eval 'package.loaded["colors"]=nil package.loaded["group-theme"]=nil require("group-theme")' >/dev/null 2>&1 || true
 fi
 
+# ── Helium (the DE browser): chrome surface + vertical tabs ──────────────────
+HT="$(dirname "$0")/helium-theme.sh"
+[ -x "$HT" ] && "$HT" "${STYLE:-flock}" "$ACC" || true
+
 exit 0
