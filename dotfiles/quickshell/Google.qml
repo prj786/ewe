@@ -386,8 +386,24 @@ QtObject {
                 } : null
                 var cb = goo._statusCb; goo._statusCb = null
                 if (cb) cb(ok)
+                if (ok) goo._maybeOfferRestore()
             }
         }
+    }
+
+    // ── first-login restore offer — "log in, get your machine back" ─────────
+    // A machine that has NEVER synced (no lastSync) but finds a backup in the
+    // account's Drive is a fresh install: offer the restore once, out loud,
+    // instead of hoping the user discovers Settings → Account. The Settings
+    // card (pendingRestore) is pre-armed so the pane opens ready to confirm.
+    property bool _restoreOffered: false
+    function _maybeOfferRestore() {
+        if (goo._restoreOffered || goo.lastSync !== "" || !goo.cloudInfo) return
+        goo._restoreOffered = true
+        goo.pendingRestore = { updatedAt: goo.cloudInfo.updatedAt, device: goo.cloudInfo.device }
+        Quickshell.execDetached(["notify-send", "-a", "ewe", "-i", "cloud",
+            "Restore this machine?",
+            "A backup from “" + goo.cloudInfo.device + "” is in your Drive — open Settings → Account to bring your desktop and apps back."])
     }
 
     // auto-sync: debounce-push after Settings closes
