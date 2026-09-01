@@ -73,7 +73,4 @@ package() {
     # RFC-002: the ONE Google identity for every ewe app
     install -Dm755 bin/ewe-auth "$pkgdir/usr/bin/ewe-auth"
     install -Dm755 bin/ewe-drive "$pkgdir/usr/bin/ewe-drive"
-    # the project OAuth client is NOT in git (docs/GOOGLE-CLIENT.md) — the
-    # ewe-repo publish workflow injects system/oauth-client.json before
-    # makepkg, and the cp -a of the tree above carries it into the package
 }
