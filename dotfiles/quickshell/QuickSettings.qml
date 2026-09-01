@@ -300,7 +300,15 @@ Scope {
         if (Logind.setBrightness(v)) return
         Quickshell.execDetached(["brightnessctl", "set", Math.round(v * 100) + "%"])
     }
-    function setVolume(v) { root.volumeVal = v; Quickshell.execDetached(["wpctl", "set-volume", "-l", "1.0", "@DEFAULT_AUDIO_SINK@", Math.round(v * 100) + "%"]) }
+    function setVolume(v) { root.volumeVal = v; Quickshell.execDetached(["wpctl", "set-volume", "-l", "1.0", "@DEFAULT_AUDIO_SINK@", Math.round(v * 100) + "%"]); volSndTimer.restart() }
+    // GNOME-style feedback blip once the slider settles (not per pixel)
+    property Timer volSndTimer: Timer { interval: 180; onTriggered: Globals.playSound("audio-volume-change") }
+    // persist the event-sounds switch through the one file (debounced)
+    property Timer writePrefsPoke: Timer {
+        interval: 400
+        onTriggered: Quickshell.execDetached(["sh", "-c",
+            '"$HOME/.config/quickshell/../../bin/ewe-conf" set --no-hooks desktop.sound.event_sounds ' + (Globals.eventSounds ? "true" : "false")])
+    }
     // ── power actions ──
     // All session/power actions go through ~/.config/hypr/scripts/power.sh: one
     // tested, distro-agnostic path per action (logout via loginctl, not the
@@ -839,6 +847,18 @@ Scope {
                             anchors.topMargin: 40; anchors.leftMargin: 10; anchors.rightMargin: 10
                             spacing: 4
 
+                            // GNOME-style: one switch for every event chime
+                            Item {
+                                width: parent.width; height: 26
+                                Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Event sounds"; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold }
+                                Rectangle {
+                                    anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
+                                    width: 38; height: 22; radius: 11; color: Globals.eventSounds ? Theme.accent : Theme.hover
+                                    Behavior on color { ColorAnimation { duration: 150 } }
+                                    Rectangle { width: 18; height: 18; radius: 9; color: "white"; anchors.verticalCenter: parent.verticalCenter; x: Globals.eventSounds ? parent.width-width-2 : 2; Behavior on x { NumberAnimation { duration: 150 } } }
+                                    MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { Globals.eventSounds = !Globals.eventSounds; root.writePrefsPoke.restart(); if (Globals.eventSounds) Globals.playSound("audio-volume-change") } }
+                                }
+                            }
                             Text { text: "Output"; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold; topPadding: 2; bottomPadding: 2 }
                             Rectangle {
                                 width: parent.width

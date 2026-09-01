@@ -65,6 +65,7 @@ Scope {
         Component.onCompleted: Globals.server = server
         onNotification: function (n) {
             n.tracked = true                 // keep in trackedNotifications (history)
+            if (!Globals.dnd) Globals.playSound("message-new-instant")
             if (!Globals.dnd) root.pushPopup(n)
         }
     }

@@ -4,6 +4,14 @@
 #
 # Usage: screenshot.sh full | region | window
 
+# camera shutter — honours the event-sounds switch (ewe.conf); silent no-op
+# without the freedesktop sound theme
+shutter() {
+    [ "$("$HOME/.config/quickshell/../../bin/ewe-conf" get desktop.sound.event_sounds 2>/dev/null)" = "false" ] && return 0
+    f=/usr/share/sounds/freedesktop/stereo/camera-shutter.oga
+    [ -r "$f" ] && { pw-play "$f" 2>/dev/null || paplay "$f" 2>/dev/null; } &
+}
+
 set -u
 mode="${1:-region}"
 
@@ -16,11 +24,13 @@ case "$mode" in
         # the focused monitor (not every screen). Fallback: whole layout.
         mon="$(hyprctl monitors -j 2>/dev/null | jq -r '.[] | select(.focused==true) | .name')"
         if [ -n "$mon" ]; then grim -o "$mon" "$file"; else grim "$file"; fi
+        shutter
         ;;
     region)
         geom="$(slurp 2>/dev/null)" || exit 0   # cancelled selection
         [ -z "$geom" ] && exit 0
         grim -g "$geom" "$file"
+        shutter
         ;;
     window)
         # Feed every mapped window's box to slurp; hovering highlights a window,
@@ -31,6 +41,7 @@ case "$mode" in
         geom="$(printf '%s\n' "$boxes" | slurp 2>/dev/null)" || exit 0
         [ -z "$geom" ] && exit 0
         grim -g "$geom" "$file"
+        shutter
         ;;
     activewindow)
         # the currently focused window, captured instantly (no selection).
@@ -38,6 +49,7 @@ case "$mode" in
             | jq -r 'if .at and .size then "\(.at[0]),\(.at[1]) \(.size[0])x\(.size[1])" else empty end')"
         [ -z "$geom" ] && { command -v notify-send >/dev/null 2>&1 && notify-send "Screenshot" "No focused window to capture."; exit 0; }
         grim -g "$geom" "$file"
+        shutter
         ;;
     *)
         echo "usage: screenshot.sh full|region|window|activewindow" >&2; exit 2 ;;

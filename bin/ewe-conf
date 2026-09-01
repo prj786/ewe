@@ -229,6 +229,7 @@ THEME_MAP = [  # ewe.conf key ↔ user-theme.json key (with defaults)
     ("desktop.dock.icon_size", "dockIconSize", "medium"),
     ("desktop.animations.speed", "animationSpeed", 1),
     ("desktop.tiling.enabled", "tilingEnabled", True),
+    ("desktop.sound.event_sounds", "eventSounds", True),
     ("desktop.power.low_power", "lowPowerEnabled", True),
     ("desktop.power.lid_docked_suspend", "lidDockedSuspend", False),
     ("desktop.power.saver", "saver",

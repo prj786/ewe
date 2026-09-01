@@ -151,6 +151,7 @@ noto-fonts-emoji
 ttf-jetbrains-mono-nerd
 ttf-nerd-fonts-symbols-mono
 inter-font
+sound-theme-freedesktop  # event chimes (notifications, volume, shutter) — Globals.playSound
 ttf-ubuntu-font-family  # THE DE face (Theme.fontText/Display + GTK font); Georgian
                         # falls back to Noto Sans Georgian via dotfiles/fontconfig
 

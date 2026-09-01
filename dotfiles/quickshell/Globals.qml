@@ -15,6 +15,10 @@ QtObject {
     // that wakes for nothing is not free — it costs real battery. Anything that
     // can be lazier on battery reads `lowPower`.
     readonly property bool onBattery: UPower.onBattery
+    // plug/unplug feedback — guarded so the initial binding can't chime at login
+    property bool _powerSoundReady: false
+    property Timer _powerSoundArm: Timer { interval: 4000; running: true; onTriggered: g._powerSoundReady = true }
+    onOnBatteryChanged: if (g._powerSoundReady) g.playSound(g.onBattery ? "power-unplug" : "power-plug")
     property bool lowPowerEnabled: true
     readonly property bool lowPower: onBattery && lowPowerEnabled
 
@@ -27,6 +31,16 @@ QtObject {
     // VERSION file (the canonical source used for git tags / releases). Semver, with
     // an -alpha/-beta pre-release suffix until the first stable cut.
     readonly property string version: "0.9.8"
+
+    // ── event sounds (GNOME-style; the freedesktop sound theme, one toggle) ──
+    // playSound("message-new-instant") etc — names are theme event ids from
+    // /usr/share/sounds/freedesktop/stereo. Missing theme = silent no-op.
+    property bool eventSounds: true
+    function playSound(name) {
+        if (!g.eventSounds) return
+        Quickshell.execDetached(["sh", "-c",
+            'f="/usr/share/sounds/freedesktop/stereo/' + name + '.oga"; [ -r "$f" ] || exit 0; pw-play "$f" 2>/dev/null || paplay "$f" 2>/dev/null'])
+    }
 
     property bool barVisible: true          // the top bar (Super+Shift+B toggles)
     property bool quickSettingsOpen: false  // the Quick Settings panel
@@ -441,6 +455,7 @@ QtObject {
                     if (j && j.lidDockedSuspend !== undefined) g.lidDockedSuspend = j.lidDockedSuspend
                     if (j && j.lowPowerEnabled !== undefined) g.lowPowerEnabled = j.lowPowerEnabled
                     if (j && j.tilingEnabled !== undefined) g.tilingEnabled = j.tilingEnabled
+                    if (j && j.eventSounds !== undefined) g.eventSounds = j.eventSounds
                     if (j && j.saver) {
                         if (j.saver.enabled !== undefined) g.saverEnabled = j.saver.enabled
                         if (j.saver.min !== undefined) g.saverMin = j.saver.min

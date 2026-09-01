@@ -234,6 +234,7 @@ Scope {
         o.lidDockedSuspend = Globals.lidDockedSuspend
         o.lowPowerEnabled = Globals.lowPowerEnabled
         o.tilingEnabled = Globals.tilingEnabled
+        o.eventSounds = Globals.eventSounds
         // merge into any existing saver block for the same reason
         var sv = {}
         if (Globals.prefsRaw && Globals.prefsRaw.saver) for (k in Globals.prefsRaw.saver) sv[k] = Globals.prefsRaw.saver[k]
