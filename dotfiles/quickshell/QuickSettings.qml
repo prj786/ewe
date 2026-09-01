@@ -148,6 +148,7 @@ Scope {
         root.today = d; root.calYear = d.getFullYear(); root.calMonth = d.getMonth(); root.calDate = d.getDate()
         wifiState.running = true; wiredState.running = true; brightnessProc.running = true; volumeProc.running = true; wifiSavedScan.running = true
         sshScan.running = true   // always: the SSH tile's sub-label needs the host count
+        vpnScan.running = true   // always: the VPN card only exists when profiles do
         if (root.expanded === "wifi") wifiScan.running = true
         if (root.expanded === "vpn") vpnScan.running = true
     }
@@ -1068,6 +1069,9 @@ Scope {
                         width: parent.width; spacing: 10
                         Tile {
                             id: vpnTile
+                            // overview shows only what exists: no VPN profiles
+                            // configured and nothing active → no card
+                            visible: root.vpnList.length > 0 || Globals.vpnActive
                             ic: Theme.icVpn; label: "VPN"
                             active: Globals.vpnActive
                             opened: root.expanded === "vpn"
@@ -1088,6 +1092,7 @@ Scope {
                             onMenu: vpnTile.openList()
                         }
                         Tile {
+                            visible: root.sshList.length > 0 || Globals.sshTunnelUp
                             ic: Theme.icSsh; label: "SSH"
                             active: Globals.sshTunnelUp
                             opened: root.expanded === "ssh"
@@ -1929,6 +1934,17 @@ Scope {
                             onClicked: Globals.caffeine = !Globals.caffeine
                         }
                     }
+                    // an active cast earns an overview card; clicking it hangs
+                    // up and the card leaves with the session
+                    Row {
+                        visible: root.tab === "home" && Globals.casting
+                        width: parent.width; spacing: 10
+                        Tile {
+                            ic: Theme.icCast; label: "Cast"; active: true
+                            sub: Globals.castState === "streaming" ? Globals.castSinkName : "Connecting…"
+                            onClicked: Globals.castCommand("stop", "")
+                        }
+                    }
                     // ── Cast to TV — the whole flow lives here now (RFC-004):
                     //    click → sink list from ewe-castd (Miracast + Chromecast),
                     //    pick a TV → SharePicker → streaming. No foreign window.
@@ -1937,19 +1953,28 @@ Scope {
                         width: parent.width; spacing: 6
                         property bool castOpen: root.tab === "cast"
                         id: castCard
-                        Row {
-                            width: parent.width; spacing: 10
-                            Tile {
-                                ic: Theme.icCast; label: "Cast"; active: Globals.casting
-                                sub: Globals.castState === "streaming" ? Globals.castSinkName
-                                   : Globals.casting ? "Connecting…" : "Off"
-                                onClicked: {
-                                    if (Globals.casting) { Globals.castCommand("stop", ""); castCard.castOpen = false }
-                                    else {
-                                        castCard.castOpen = !castCard.castOpen
-                                        if (castCard.castOpen) Globals.castCommand("scan", "")
-                                    }
+                        // flat header, wifi-tab style: name of the session when
+                        // one runs, and a checked box that hangs up on click
+                        Item {
+                            width: parent.width; height: 26
+                            Row {
+                                anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; spacing: 8
+                                Text { anchors.verticalCenter: parent.verticalCenter; text: Theme.icCast; font.family: Theme.fontIcons; font.pixelSize: 13; color: Globals.casting ? Theme.accent : Theme.fgDim }
+                                Text {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: Globals.castState === "streaming" ? "Casting · " + Globals.castSinkName
+                                        : Globals.casting ? "Cast · connecting…" : "Cast"
+                                    color: Globals.casting ? Theme.accent : Theme.fgDim
+                                    font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold
                                 }
+                            }
+                            Rectangle {
+                                visible: Globals.casting
+                                anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
+                                width: 18; height: 18; radius: 5
+                                color: Theme.accent
+                                Text { anchors.centerIn: parent; text: Theme.icCheck; font.family: Theme.fontIcons; font.pixelSize: 11; color: Theme.accentText }
+                                MouseArea { anchors.fill: parent; anchors.margins: -6; cursorShape: Qt.PointingHandCursor; onClicked: Globals.castCommand("stop", "") }
                             }
                         }
                         // while a session is being built, narrate the daemon's state
