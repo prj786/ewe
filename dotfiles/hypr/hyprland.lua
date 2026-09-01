@@ -490,6 +490,7 @@ for _, klass in ipairs({
     "nm-connection-editor", "blueman-manager",
     "org.gnome.Calculator", "engrampa",
     "jetbrains-toolbox",
+    "ewe-installer",        -- ISO live session: the installer floats like the settings app
 }) do
     hl.window_rule({ name = "float-" .. klass, match = { class = klass }, float = true, center = true })
 end

@@ -519,9 +519,15 @@ Scope {
 
         Rectangle {
             id: panel
-            width: 380
-            y: 10                              // equal gap top & bottom (matches the 10px right inset)
-            height: parent.height - 20
+            width: 426                         // 48px icon rail + the old 380 panel's content width
+            y: 10
+            // Wrap the content instead of spanning the desktop: the panel is as
+            // tall as the open tab needs (the rail sets the floor), capped to
+            // the screen, and every tab switch animates the resize.
+            readonly property real railNeed: railTop.implicitHeight + railBottom.implicitHeight + 56
+            readonly property real wantH: hdrItem.height + inner.implicitHeight + slidersBox.height + 50
+            height: Math.min(parent.height - 20, Math.max(wantH, railNeed, 430))
+            Behavior on height { NumberAnimation { duration: Theme.durBase; easing.type: Theme.ease } }
             radius: Theme.radius
             color: Theme.panel
             border.color: Theme.stroke
@@ -547,6 +553,142 @@ Scope {
                 function onQuickSettingsOpenChanged() { if (Globals.quickSettingsOpen) keyCatcher.forceActiveFocus() }
             }
 
+            // ── one rail button ──
+            component RailBtn: Rectangle {
+                id: rb
+                property string ic: ""
+                property bool current: false
+                property color glyph: Theme.fg
+                property bool dot: false               // tiny badge (pending notifications)
+                signal go()
+                width: 34; height: 34; radius: 10
+                color: current ? Theme.accent : (rbMa.containsMouse ? Theme.hover : "transparent")
+                Behavior on color { ColorAnimation { duration: 130 } }
+                Text { anchors.centerIn: parent; text: rb.ic; font.family: Theme.fontIcons; font.pixelSize: 15; color: rb.current ? Theme.accentText : rb.glyph }
+                Rectangle { visible: rb.dot && !rb.current; anchors.top: parent.top; anchors.right: parent.right; anchors.margins: 4; width: 6; height: 6; radius: 3; color: Theme.accent }
+                MouseArea { id: rbMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: rb.go() }
+            }
+
+            // ── icon rail (the reference layout): tabs down the left edge,
+            //    settings + power pinned at its foot. VPN/SSH/Mail icons obey
+            //    the same "only what exists" rule as their overview cards. ──
+            Rectangle {
+                id: rail
+                width: 48
+                anchors.left: parent.left; anchors.top: parent.top; anchors.bottom: parent.bottom
+                topLeftRadius: Theme.radius; bottomLeftRadius: Theme.radius
+                color: Theme.bg
+                Rectangle { anchors.right: parent.right; width: 1; height: parent.height; color: Theme.stroke; opacity: 0.5 }
+
+                Column {
+                    id: railTop
+                    anchors.top: parent.top; anchors.topMargin: 12
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    spacing: 3
+                    // the flock dot — small brand accent, like the reference
+                    Rectangle { width: 10; height: 10; radius: 5; color: Theme.accent; anchors.horizontalCenter: parent.horizontalCenter }
+                    Item { width: 1; height: 8 }
+                    Repeater {
+                        model: [
+                            { key: "home",   icon: Theme.icApps },
+                            { key: "wifi",   icon: Theme.icWifi },
+                            { key: "bt",     icon: Theme.icBluetooth },
+                            { key: "audio",  icon: Theme.icVolHigh },
+                            { key: "vpn",    icon: Theme.icVpn },
+                            { key: "ssh",    icon: Theme.icSsh },
+                            { key: "cast",   icon: Theme.icCast },
+                            { key: "mobile", icon: Theme.icPhone },
+                            { key: "mail",   icon: Theme.icMail },
+                            { key: "cal",    icon: Theme.icCalendar },
+                            { key: "notifs", icon: Theme.icBell }
+                        ]
+                        delegate: RailBtn {
+                            required property var modelData
+                            visible: modelData.key === "mail" ? Google.signedIn
+                                   : modelData.key === "vpn"  ? (root.vpnList.length > 0 || Globals.vpnActive)
+                                   : modelData.key === "ssh"  ? (root.sshList.length > 0 || Globals.sshTunnelUp)
+                                   : true
+                            ic: modelData.icon
+                            current: root.tab === modelData.key
+                            dot: modelData.key === "notifs" && Globals.server && Globals.server.trackedNotifications.values.length > 0
+                            onGo: root.setTab(modelData.key)
+                        }
+                    }
+                }
+                Column {
+                    id: railBottom
+                    anchors.bottom: parent.bottom; anchors.bottomMargin: 12
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    spacing: 3
+                    RailBtn { ic: Theme.icCog; onGo: { Globals.quickSettingsOpen = false; Globals.openSettings() } }
+                    // red glyph, never a red slab — the danger is in the icon
+                    RailBtn { ic: Theme.icPower; glyph: Theme.danger; current: root.powerOpen; onGo: root.powerOpen = !root.powerOpen }
+                }
+            }
+
+            // ── header: date left, battery right (gear/power live on the rail) ──
+            Item {
+                id: hdrItem
+                anchors.top: parent.top; anchors.left: rail.right; anchors.right: parent.right
+                anchors.topMargin: 14; anchors.leftMargin: 14; anchors.rightMargin: 14
+                height: hdrCol.implicitHeight
+                Column {
+                    id: hdrCol
+                    spacing: 0
+                    Text { text: Qt.formatDateTime(root.today, "dddd"); color: Theme.accent; font.family: Theme.fontDisplay; font.pixelSize: Theme.fsBody; font.weight: Font.Bold }
+                    Text { text: Qt.formatDateTime(root.today, "d MMMM"); color: Theme.fg; font.family: Theme.fontDisplay; font.pixelSize: Theme.fsLarge; font.weight: Font.Bold }
+                }
+                Row {
+                    anchors.right: parent.right; anchors.verticalCenter: hdrCol.verticalCenter; spacing: 5
+                    visible: UPower.displayDevice && UPower.displayDevice.isLaptopBattery
+                    property var dev: UPower.displayDevice
+                    property real pct: dev ? (dev.percentage <= 1 ? dev.percentage * 100 : dev.percentage) : 0
+                    property bool charging: dev && (dev.state === UPowerDeviceState.Charging || dev.state === UPowerDeviceState.FullyCharged)
+                    Text { anchors.verticalCenter: parent.verticalCenter; text: Math.round(parent.pct) + "%"; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold }
+                    Text { anchors.verticalCenter: parent.verticalCenter; text: parent.charging ? Theme.icBolt : (parent.pct >= 60 ? Theme.icBattFull : parent.pct >= 30 ? Theme.icBatt50 : Theme.icBattEmpty); font.family: Theme.fontIcons; font.pixelSize: 13; color: parent.charging ? Theme.success : (parent.pct <= 15 ? Theme.danger : Theme.fgDim) }
+                }
+            }
+
+            // ── sliders pinned at the foot, Vol · Lux side by side (reference) ──
+            Rectangle {
+                id: slidersBox
+                anchors.left: rail.right; anchors.right: parent.right; anchors.bottom: parent.bottom
+                anchors.leftMargin: 14; anchors.rightMargin: 14; anchors.bottomMargin: 14
+                height: sldRow.implicitHeight + 20
+                radius: Theme.radiusInner; color: Theme.elevated
+                Row {
+                    id: sldRow
+                    anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 10
+                    spacing: 14
+                    Column {
+                        width: (sldRow.width - 14) / 2; spacing: 5
+                        Item {
+                            width: parent.width; height: 14
+                            Row {
+                                anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; spacing: 6
+                                Text { anchors.verticalCenter: parent.verticalCenter; text: Theme.icVolHigh; font.family: Theme.fontIcons; font.pixelSize: 12; color: Theme.fgDim }
+                                Text { anchors.verticalCenter: parent.verticalCenter; text: "Vol"; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold }
+                            }
+                            Text { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; text: Math.round(root.volumeVal * 100) + "%"; color: Theme.accent; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.Bold }
+                        }
+                        Slider { width: parent.width; value: root.volumeVal; onMoved: function (v) { root.setVolume(v) } }
+                    }
+                    Column {
+                        width: (sldRow.width - 14) / 2; spacing: 5
+                        Item {
+                            width: parent.width; height: 14
+                            Row {
+                                anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; spacing: 6
+                                Text { anchors.verticalCenter: parent.verticalCenter; text: Theme.icSun; font.family: Theme.fontIcons; font.pixelSize: 12; color: Theme.fgDim }
+                                Text { anchors.verticalCenter: parent.verticalCenter; text: "Lux"; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold }
+                            }
+                            Text { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; text: Math.round(root.brightnessVal * 100) + "%"; color: Theme.accent; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.Bold }
+                        }
+                        Slider { width: parent.width; value: root.brightnessVal; onMoved: function (v) { root.setBrightness(v) } }
+                    }
+                }
+            }
+
             // ── round close button (centered MDI glyph) ──
             component CloseBtn: Rectangle {
                 id: cb
@@ -568,11 +710,14 @@ Scope {
                 width: parent ? parent.width : 200
                 height: 32
                 radius: 9
-                color: pitMa.containsMouse ? (danger ? Theme.danger : Theme.accent) : "transparent"
+                // quiet hover for every row — danger lives in the ICON's colour,
+                // never in a red slab behind it
+                color: pitMa.containsMouse ? Theme.hover : "transparent"
+                Behavior on color { ColorAnimation { duration: 120 } }
                 Row {
                     anchors.left: parent.left; anchors.leftMargin: 9; anchors.verticalCenter: parent.verticalCenter; spacing: 11
-                    Text { anchors.verticalCenter: parent.verticalCenter; width: 16; text: root.g(pit.ic); font.family: Theme.fontIcons; font.pixelSize: 14; color: pitMa.containsMouse ? Theme.accentText : (pit.danger ? Theme.danger : Theme.fg) }
-                    Text { anchors.verticalCenter: parent.verticalCenter; text: pit.label; color: pitMa.containsMouse ? Theme.accentText : (pit.danger ? Theme.danger : Theme.fg); font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.Medium }
+                    Text { anchors.verticalCenter: parent.verticalCenter; width: 16; text: root.g(pit.ic); font.family: Theme.fontIcons; font.pixelSize: 14; color: pit.danger ? Theme.danger : Theme.fg }
+                    Text { anchors.verticalCenter: parent.verticalCenter; text: pit.label; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.Medium }
                 }
                 MouseArea { id: pitMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: pit.go() }
             }
@@ -665,10 +810,10 @@ Scope {
                 property real value: 0
                 signal moved(real v)
                 height: 26
-                Text { id: sIco; anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; width: 20; text: sld.icon; font.family: Theme.fontIcons; font.pixelSize: 14; color: Theme.fgDim }
+                Text { id: sIco; anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; width: sld.icon === "" ? 0 : 20; visible: sld.icon !== ""; text: sld.icon; font.family: Theme.fontIcons; font.pixelSize: 14; color: Theme.fgDim }
                 Rectangle {
                     id: trk
-                    anchors.left: sIco.right; anchors.leftMargin: 8; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
+                    anchors.left: sIco.right; anchors.leftMargin: sld.icon === "" ? 0 : 8; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
                     height: 8; radius: 4; color: Theme.hover
                     Rectangle { height: parent.height; radius: 4; width: parent.width * Math.max(0, Math.min(1, sld.value)); color: Theme.accent }
                     Rectangle { width: 14; height: 14; radius: 7; color: "white"; anchors.verticalCenter: parent.verticalCenter; x: Math.max(0, Math.min(trk.width - width, trk.width * sld.value - width / 2)) }
@@ -682,8 +827,10 @@ Scope {
 
             Flickable {
                 id: flick
-                anchors.fill: parent
-                anchors.margins: 14
+                anchors.top: hdrItem.bottom; anchors.topMargin: 10
+                anchors.left: rail.right; anchors.leftMargin: 14
+                anchors.right: parent.right; anchors.rightMargin: 14
+                anchors.bottom: slidersBox.top; anchors.bottomMargin: 12
                 contentHeight: inner.implicitHeight
                 clip: true
                 boundsBehavior: Flickable.StopAtBounds
@@ -693,119 +840,9 @@ Scope {
                     width: flick.width
                     spacing: 13
 
-                    // ── header: date + battery ──
-                    Item {
-                        width: parent.width; height: hdr.implicitHeight
-                        Column {
-                            id: hdr
-                            spacing: 0
-                            Text { text: Qt.formatDateTime(root.today, "dddd"); color: Theme.accent; font.family: Theme.fontDisplay; font.pixelSize: Theme.fsBody; font.weight: Font.Bold }
-                            Text { text: Qt.formatDateTime(root.today, "d MMMM"); color: Theme.fg; font.family: Theme.fontDisplay; font.pixelSize: Theme.fsLarge; font.weight: Font.Bold }
-                        }
-                        Row {
-                            anchors.right: parent.right; anchors.verticalCenter: hdr.verticalCenter; spacing: 10
-                            // battery (only on a laptop)
-                            Row {
-                                anchors.verticalCenter: parent.verticalCenter; spacing: 5
-                                visible: UPower.displayDevice && UPower.displayDevice.isLaptopBattery
-                                property var dev: UPower.displayDevice
-                                property real pct: dev ? (dev.percentage <= 1 ? dev.percentage * 100 : dev.percentage) : 0
-                                property bool charging: dev && (dev.state === UPowerDeviceState.Charging || dev.state === UPowerDeviceState.FullyCharged)
-                                Text { anchors.verticalCenter: parent.verticalCenter; text: Math.round(parent.pct) + "%"; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold }
-                                Text { anchors.verticalCenter: parent.verticalCenter; text: parent.charging ? Theme.icBolt : (parent.pct >= 60 ? Theme.icBattFull : parent.pct >= 30 ? Theme.icBatt50 : Theme.icBattEmpty); font.family: Theme.fontIcons; font.pixelSize: 13; color: parent.charging ? Theme.success : (parent.pct <= 15 ? Theme.danger : Theme.fgDim) }
-                            }
-                            // settings gear → Globals.openSettings(): the
-                            // standalone ewe-settings app, with the in-shell
-                            // panel only as a fallback while the binary is absent.
-                            Rectangle {
-                                id: gearBtn
-                                anchors.verticalCenter: parent.verticalCenter
-                                width: 28; height: 28; radius: 14
-                                color: gbMa.containsMouse ? Theme.hover : Theme.elevated
-                                Behavior on color { ColorAnimation { duration: 120 } }
-                                Text { anchors.centerIn: parent; text: Theme.icCog; font.family: Theme.fontIcons; font.pixelSize: 15; color: Theme.fg }
-                                MouseArea {
-                                    id: gbMa
-                                    anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
-                                        Globals.quickSettingsOpen = false
-                                        Globals.openSettings()
-                                    }
-                                }
-                            }
-                            // power button → opens the floating power menu
-                            Rectangle {
-                                id: powerBtn
-                                anchors.verticalCenter: parent.verticalCenter
-                                width: 28; height: 28; radius: 14
-                                color: (pbMa.containsMouse || root.powerOpen) ? Theme.hover : Theme.elevated
-                                Behavior on color { ColorAnimation { duration: 120 } }
-                                Text { anchors.centerIn: parent; text: Theme.icPower; font.family: Theme.fontIcons; font.pixelSize: 15; color: root.powerOpen ? Theme.accent : Theme.fg }
-                                MouseArea { id: pbMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.powerOpen = !root.powerOpen }
-                            }
-                        }
-                    }
-
-                    // ── sliders FIRST: volume and brightness are what a hand
-                    //    reaches for most, so they sit above everything and do
-                    //    exactly one job each (devices live in the Audio box) ──
-                    Rectangle {
-                        width: parent.width; height: topSliders.implicitHeight + 24; radius: Theme.radiusInner; color: Theme.elevated
-                        Column {
-                            id: topSliders
-                            anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 12; spacing: 8
-                            Slider { width: parent.width; icon: Theme.icVolHigh; value: root.volumeVal; onMoved: function (v) { root.setVolume(v) } }
-                            // which output that volume is driving
-                            Text {
-                                width: parent.width
-                                leftPadding: 28
-                                visible: Pipewire.defaultAudioSink !== null
-                                text: Pipewire.defaultAudioSink ? (Pipewire.defaultAudioSink.description || Pipewire.defaultAudioSink.nickname || Pipewire.defaultAudioSink.name || "") : ""
-                                color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 10
-                                elide: Text.ElideRight
-                            }
-                            Slider { width: parent.width; icon: Theme.icSun; value: root.brightnessVal; onMoved: function (v) { root.setBrightness(v) } }
-                        }
-                    }
-
-                    // ── tab rail: home (toggle grid) + one tab per list.
-                    //    Icons only, active pill in accent — the reference
-                    //    layout in our palette. ──
-                    Rectangle {
-                        width: parent.width; height: 44; radius: Theme.radiusInner; color: Theme.elevated
-                        Row {
-                            anchors.centerIn: parent
-                            spacing: 2
-                            readonly property var tabs: [
-                                { key: "home",   icon: Theme.icApps },
-                                { key: "wifi",   icon: Theme.icWifi },
-                                { key: "bt",     icon: Theme.icBluetooth },
-                                { key: "vpn",    icon: Theme.icVpn },
-                                { key: "ssh",    icon: Theme.icSsh },
-                                { key: "audio",  icon: Theme.icVolHigh },
-                                { key: "cast",   icon: Theme.icCast },
-                                { key: "mobile", icon: Theme.icPhone },
-                                { key: "mail",   icon: Theme.icMail }
-                            ]
-                            Repeater {
-                                model: parent.tabs
-                                delegate: Rectangle {
-                                    required property var modelData
-                                    visible: modelData.key !== "mail" || Google.signedIn
-                                    width: 36; height: 32; radius: 9
-                                    readonly property bool current: root.tab === modelData.key
-                                    color: current ? Theme.accent : (tbMa.containsMouse ? Theme.hover : "transparent")
-                                    Behavior on color { ColorAnimation { duration: 130 } }
-                                    Text {
-                                        anchors.centerIn: parent
-                                        text: modelData.icon; font.family: Theme.fontIcons; font.pixelSize: 15
-                                        color: parent.current ? Theme.accentText : Theme.fg
-                                    }
-                                    MouseArea { id: tbMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.setTab(modelData.key) }
-                                }
-                            }
-                        }
-                    }
+                    // (header, sliders and the tab rail live OUTSIDE this scroll
+                    //  column now: rail on the left edge, header above, sliders
+                    //  pinned at the panel's foot)
 
                     // ── Audio box — output & input devices; lives on the audio
                     //    tab (its inner sections still key off `expanded`) ──
@@ -2081,9 +2118,10 @@ Scope {
                         }
                     }
 
-                    // ── calendar (compact) ──
+                    // ── calendar — its own tab (rail: calendar icon) ──
                     Rectangle {
-                        width: parent.width; height: calCol.implicitHeight + 20; radius: Theme.radiusInner; color: Theme.elevated
+                        visible: root.tab === "cal"
+                        width: parent.width; height: visible ? calCol.implicitHeight + 20 : 0; radius: Theme.radiusInner; color: Theme.elevated
                         Column {
                             id: calCol
                             anchors.fill: parent; anchors.margins: 10; spacing: 5
@@ -2150,19 +2188,20 @@ Scope {
                         }
                     }
 
-                    // ── notifications ──
+                    // ── notifications — their own tab (rail: bell, dot = pending) ──
                     Item {
-                        width: parent.width; height: 20
+                        visible: root.tab === "notifs"
+                        width: parent.width; height: visible ? 20 : 0
                         Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Notifications"; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold }
                         Text { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; visible: Globals.server && Globals.server.trackedNotifications.values.length > 0; text: "Clear All"; color: Theme.accent; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.clearAll() } }
                     }
-                    Text { width: parent.width; visible: !Globals.server || Globals.server.trackedNotifications.values.length === 0; text: "No Notifications"; horizontalAlignment: Text.AlignHCenter; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; topPadding: 6; bottomPadding: 6 }
+                    Text { width: parent.width; visible: root.tab === "notifs" && (!Globals.server || Globals.server.trackedNotifications.values.length === 0); text: "No Notifications"; horizontalAlignment: Text.AlignHCenter; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; topPadding: 6; bottomPadding: 6 }
                     // One card per APP. A card holding several notifications shows the
                     // latest + a count badge; clicking it expands every notification
                     // of that app (each closable / clickable). A single-notification
                     // card jumps straight to the window that notified.
                     Repeater {
-                        model: root.noteGroups
+                        model: root.tab === "notifs" ? root.noteGroups : []
                         delegate: Rectangle {
                             id: nGroup
                             required property var modelData
@@ -2253,9 +2292,10 @@ Scope {
                 visible: root.powerOpen || ppCloseTimer.running
                 width: 232
                 height: ppCol.implicitHeight + 16
-                anchors.top: parent.top; anchors.topMargin: 56
-                anchors.right: parent.right; anchors.rightMargin: 14
-                transformOrigin: Item.TopRight
+                // rises from the rail's power button (bottom-left corner now)
+                anchors.bottom: parent.bottom; anchors.bottomMargin: 14
+                anchors.left: parent.left; anchors.leftMargin: 52
+                transformOrigin: Item.BottomLeft
                 opacity: root.powerOpen ? 1 : 0
                 scale: root.powerOpen ? 1 : 0.9
                 Behavior on opacity { NumberAnimation { duration: Theme.durFast; easing.type: Theme.ease } }
