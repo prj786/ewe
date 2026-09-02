@@ -388,11 +388,18 @@ Scope {
                                         if (m.button === Qt.RightButton) {
                                             if (it.hasMenu) trayDelegate.openMenu()
                                         } else if (m.button === Qt.MiddleButton) {
-                                            it.secondaryActivate()
+                                            it.activate()   // the app's own Activate (window), for menu-on-left apps
                                         } else {
                                             // left-click: primary activate; menu-only items
-                                            // (Steam, 1Password) have no activate → show menu
-                                            if (it.onlyMenu && it.hasMenu) trayDelegate.openMenu()
+                                            // (Steam, 1Password) have no activate → show menu.
+                                            // Some Qt apps answer Activate by opening their OWN
+                                            // menu as a stray toplevel, which lands centred and
+                                            // dead under a layer-shell tray (Nextcloud client,
+                                            // metal 2026-09-02) — for those the themed menu is
+                                            // the left-click too; middle-click still activates.
+                                            var key = String(it.id || it.title || "").toLowerCase()
+                                            var menuOnLeft = ["nextcloud"].some(function (k) { return key.indexOf(k) >= 0 })
+                                            if (it.hasMenu && (it.onlyMenu || menuOnLeft)) trayDelegate.openMenu()
                                             else it.activate()
                                         }
                                     }

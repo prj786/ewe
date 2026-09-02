@@ -136,9 +136,14 @@ ewe-settings 0.10.0, ISO 0.9-alpha.
 2. Folder name in the account (proposed `ewe/`).
 3. Whether Google Calendar stays reachable through the optional client
    (proposed: no — calendar is CalDAV only; fewer scopes, fewer surprises).
-4. Whether the Nextcloud desktop client (`nextcloud-desktop`, Qt) ships as
-   an optional package for full-folder sync, or `ewe-files` (rclone mount)
-   is the only path (proposed: rclone only, consistent with the GTK-only
-   app set; the desktop client stays one Komble click away).
+4. ~~Desktop client or rclone mount~~ — **decided 2026-09-02: the official
+   Nextcloud desktop client (`nextcloud-client`, Arch extra) ships with ewe
+   and is the files path.** After the ewe sign-in the shell hands the same
+   account to the client through its `nextcloud://login/server:…&user:…&
+   password:…` scheme, so the user signs in once; the sync folder is
+   `~/Nextcloud`, bookmarked in Nemo. `ewe-files` (rclone) stays only as
+   the fallback when the client is absent. The shell's tray opens the
+   themed menu on left-click for menu-on-activate apps (the client's own
+   Qt menu is unusable under a layer-shell tray).
 5. A test account for phase 6, and whether the owner's own account may be
    used for it.
