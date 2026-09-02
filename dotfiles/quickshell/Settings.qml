@@ -53,7 +53,7 @@ Scope {
         else if (k === "saver") { saverToolProbe.running = false; saverToolProbe.running = true }
         else if (k === "power") { Power.refresh(); Logind.refreshBrightness(); Logind.refreshInhibitors() }
         else if (k === "startup") { saLoad.running = false; saLoad.running = true }
-        else if (k === "user") { Globals.recheckFace(); userInfoProbe.running = false; userInfoProbe.running = true; Google.refresh(); Accounts.refresh() }
+        else if (k === "user") { Globals.recheckFace(); userInfoProbe.running = false; userInfoProbe.running = true; Cloud.refresh(); Google.refresh(); Mail.probe(); Accounts.refresh() }
     }
     onPaneChanged: root.paneProbes()
 
@@ -1077,6 +1077,13 @@ Scope {
     // ── User: AccountsService identity + session facts ────────────────────────
     property string userRealName: ""
     property var sysFacts: ({})
+    function fmtBytes(n) {
+        n = Number(n || 0)
+        if (n >= 1e12) return (n / 1e12).toFixed(1) + " TB"
+        if (n >= 1e9) return (n / 1e9).toFixed(1) + " GB"
+        if (n >= 1e6) return (n / 1e6).toFixed(0) + " MB"
+        return (n / 1e3).toFixed(0) + " kB"
+    }
     function fmtSyncTime(iso) {
         var d = new Date(iso)
         return isNaN(d.getTime()) ? (iso || "—") : Qt.formatDateTime(d, "d MMM · h:mm AP")
@@ -2719,30 +2726,161 @@ Scope {
                         KV { k: "Uptime"; v: root.sysFacts.up || "—" }
                     }
 
-                    SectionTitle { text: "GOOGLE ACCOUNT" }
-                    // not configured yet — actionable, never a spinner
+                    SectionTitle { text: "YOUR ACCOUNT  ·  NEXTCLOUD" }
+                    // signed out → the server field + sign in (RFC-005: the ewe
+                    // account is the user's own Nextcloud; nothing is baked in)
                     Card {
-                        visible: Google.probed && !Google.configured
-                        Text { width: parent.width; text: "Google client ID not configured. Create a Google Cloud OAuth client of type “Desktop app” (enable the Calendar and Drive APIs) and save it as ~/.config/quickshell/google-oauth.json:"; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; wrapMode: Text.Wrap }
-                        Text { width: parent.width; text: '{ "client_id": "…apps.googleusercontent.com", "client_secret": "…" }'; color: Theme.fgSecondary; font.family: Theme.fontMono; font.pixelSize: 11 }
-                        Text { width: parent.width; text: "The file is gitignored; tokens end up only in the system keyring. Full steps: README → Google account."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
+                        visible: Cloud.probed && !Cloud.signedIn
+                        Text { width: parent.width; text: "Sign in to your Nextcloud — a server you run, or a hosted account (Murena, Disroot, Infomaniak…) — and ewe lights up around it: your machine kept in sync as one file, your apps restorable through Komble, your calendar in the Control Center, your files in ~/Nextcloud. ewe never sees your password: the server hands it an app password you can revoke any time."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; wrapMode: Text.Wrap }
+                        Item {
+                            width: parent.width; height: 34
+                            Rectangle {
+                                anchors.left: parent.left; anchors.right: ncSignIn.left; anchors.rightMargin: 10; height: 34; radius: 8
+                                color: Theme.bg; border.color: ncSrv.activeFocus ? Theme.accent : Theme.stroke; border.width: 1
+                                TextInput {
+                                    id: ncSrv
+                                    anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10
+                                    verticalAlignment: TextInput.AlignVCenter
+                                    text: Cloud.lastServer
+                                    color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
+                                    clip: true; selectByMouse: true
+                                    onAccepted: if (text.trim() !== "") Cloud.signIn(text)
+                                    Text { visible: ncSrv.text === "" && !ncSrv.activeFocus; anchors.verticalCenter: parent.verticalCenter; text: "https://cloud.example.org"; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
+                                }
+                            }
+                            Pill { id: ncSignIn; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; visible: Cloud.busy !== "signin"; label: "Sign in"; primary: true; onGo: Cloud.signIn(ncSrv.text) }
+                            Pill { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; visible: Cloud.busy === "signin"; label: "Cancel"; onGo: Cloud.cancelSignIn() }
+                        }
+                        Text { visible: Cloud.busy === "signin"; width: parent.width; text: "Waiting for the browser — sign in on your server's page and grant access to ewe…"; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; wrapMode: Text.Wrap }
+                        Row {
+                            visible: Cloud.loginUrl !== ""; spacing: 10
+                            Pill { label: "Open the sign-in page"; onGo: Cloud.openLoginUrl() }
+                            Pill { label: "Copy the link"; onGo: Cloud.copyLoginUrl() }
+                        }
+                        Text { visible: Cloud.reason === "revoked"; width: parent.width; text: "This machine's access was revoked on the server — sign in again."; color: Theme.warning; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; wrapMode: Text.Wrap }
+                        Text { visible: Cloud.keyringPromptExpected; width: parent.width; text: Cloud.keyringState === "locked" ? "Your keyring is locked: an “Unlock keyring” prompt will appear during sign-in — answer it with your login password." : "A “Choose password for new keyring” prompt will appear during sign-in — use your login password so it unlocks by itself at every login."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
+                        Text { visible: Google.legacyGoogleSync; width: parent.width; text: "Settings sync now uses a Nextcloud account — sign in to keep your backups going. Your Google Drive backup stays where it is, untouched."; color: Theme.warning; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
                     }
+                    // signed in → identity + what the account provides + sign out
                     Card {
-                        visible: Google.probed && Google.configured && !Google.keyringOk
-                        Text { width: parent.width; text: "No Secret Service keyring found — the refresh token has nowhere safe to live. Install and enable gnome-keyring, then retry."; color: Theme.warning; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; wrapMode: Text.Wrap }
+                        visible: Cloud.signedIn
+                        Item {
+                            width: parent.width; height: 46
+                            Rectangle {
+                                anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter
+                                width: 40; height: 40; radius: 20; color: Theme.hover
+                                Text { anchors.centerIn: parent; visible: ncAv.status !== Image.Ready; text: (Cloud.displayName || "?").charAt(0).toUpperCase(); color: Theme.fg; font.family: Theme.fontText; font.pixelSize: 16; font.weight: Font.DemiBold }
+                                Image {
+                                    id: ncAv
+                                    anchors.fill: parent
+                                    source: Cloud.avatarPath !== "" ? "file://" + Cloud.avatarPath : ""
+                                    fillMode: Image.PreserveAspectCrop
+                                    visible: status === Image.Ready
+                                    layer.enabled: true
+                                    layer.effect: MultiEffect { maskEnabled: true; maskSource: ncAvMask; maskThresholdMin: 0.5; maskSpreadAtMin: 1.0 }
+                                }
+                                Item { id: ncAvMask; anchors.fill: parent; layer.enabled: true; visible: false; Rectangle { anchors.fill: parent; radius: 20; antialiasing: true } }
+                            }
+                            Column {
+                                anchors.left: parent.left; anchors.leftMargin: 52; anchors.right: ncOut.left; anchors.rightMargin: 10; anchors.verticalCenter: parent.verticalCenter; spacing: 1
+                                Text { width: parent.width; text: Cloud.displayName || "Nextcloud account"; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsBody; font.weight: Font.DemiBold; elide: Text.ElideRight }
+                                Text { width: parent.width; text: (Cloud.email !== "" ? Cloud.email + " · " : "") + Cloud.serverHost; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; elide: Text.ElideRight }
+                            }
+                            Pill { id: ncOut; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; label: "Sign out"; onGo: Cloud.signOut() }
+                        }
+                        KV { k: "Server"; v: Cloud.serverHost + (Cloud.offline ? " · not reachable right now" : ""); dot: Cloud.offline ? "info" : "ok" }
+                        KV { k: "Storage"; v: Cloud.quota && Cloud.quota.total > 0 ? (root.fmtBytes(Cloud.quota.used) + " of " + root.fmtBytes(Cloud.quota.total) + " · " + Math.round(Cloud.quota.relative || 0) + "%") : (Cloud.quota ? root.fmtBytes(Cloud.quota.used) + " used" : "—") }
+                        KV { k: "Files"; v: Cloud.filesApp ? "the Nextcloud app syncs ~/Nextcloud" : (Cloud.filesMounted ? "mounted at " + Cloud.filesPath : "not mounted"); dot: (Cloud.filesApp || Cloud.filesMounted) ? "ok" : "info"; action: !Cloud.filesApp && !Cloud.filesMounted; actionLabel: "Mount"; onAct: Cloud.mountFiles() }
+                        KV { k: "Calendar"; v: Cloud.calState === "offline" ? "offline — showing the last fetch" : (Cloud.events.length + " upcoming in the Control Center"); dot: Cloud.calState === "offline" ? "info" : "ok" }
+                        KV { k: "Mail"; v: Mail.source === "imap" ? Mail.imapUser : (Mail.source === "gmail" ? "Gmail (Google extra)" : "none — add an IMAP account in the Settings app"); dot: Mail.available ? "ok" : "info" }
                     }
-                    // configured, signed out → connect
+                    Text {
+                        visible: Cloud.error !== ""
+                        width: parent.width; text: Cloud.error; color: Theme.danger; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap
+                    }
+                    // the keyring rejects the login password → replace it (PAM
+                    // recreates `login` with the login password at the next login)
                     Card {
-                        visible: Google.probed && Google.configured && !Google.signedIn
-                        Text { width: parent.width; text: "Connect your Google account and ewe lights up around it: calendar in Quick Settings, your machine synced as one file, app restore through Komble — and, if you choose, your Drive as a folder in Files. Until then, nothing Google appears anywhere: this button is the only trace."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; wrapMode: Text.Wrap }
+                        visible: !Cloud.signedIn && (Cloud.keyringTrouble || Cloud.keyringResetDone)
+                        KV { visible: !Cloud.keyringResetDone; k: "Keyring"; v: Cloud.keyringState === "locked" ? "locked — PAM could not unlock it" : "refused the app password"; dot: "bad"; action: true; actionLabel: "Reset the keyring"; onAct: Cloud.resetKeyring() }
+                        KV { visible: Cloud.keyringResetDone; k: "Keyring"; v: "reset — log out and back in, then sign in"; dot: "info"; action: true; actionLabel: "Log out now"; onAct: Cloud.logOut() }
+                    }
+
+                    SectionTitle { visible: Cloud.signedIn; text: "SETTINGS SYNC" }
+                    Card {
+                        visible: Cloud.signedIn
+                        // two facts, kept apart: who SAVED the backup, and when THIS
+                        // machine last talked to it
+                        KV { k: "Backup in your account"; v: Cloud.cloudInfo ? ("saved by “" + Cloud.cloudInfo.device + "” · " + root.fmtSyncTime(Cloud.cloudInfo.updatedAt)) : "none yet" }
+                        KV { k: "This machine last synced"; v: (Cloud.localSyncedAt !== "" ? root.fmtSyncTime(Cloud.localSyncedAt) : (Cloud.lastSync !== "" ? root.fmtSyncTime(Cloud.lastSync) : "never — nothing is uploaded until you back it up")) + (Cloud.inSync && Cloud.lastSync !== "" ? " · up to date" : "") }
+                        ToggleRow {
+                            title: "Auto-sync"
+                            sub: Cloud.lastSync === "" ? "Starts after the first backup from this machine; every change to the one file — Settings, Komble, the terminal — pushes ~20 s later." : "Every change to the one file — Settings, Komble, the terminal — pushes ~20 s later."
+                            on: Cloud.autoSync
+                            onToggled: Cloud.setAutoSync(!Cloud.autoSync)
+                        }
                         Row {
                             spacing: 10
-                            Pill { visible: Google.busy !== "signin"; label: "Connect Google account"; primary: true; onGo: Google.signIn() }
+                            // a never-synced machine never auto-pushes: its first upload is this button
+                            Pill { label: Cloud.syncState === "syncing" ? "Syncing…" : (Cloud.lastSync === "" ? "Back up this machine" : "Sync now"); primary: true; onGo: Cloud.syncNow() }
+                            Pill { label: "Restore from the account…"; onGo: Cloud.requestRestore() }
+                            // only offered when the server refused a push
+                            Pill { visible: Cloud.syncConflict; label: "Push anyway"; onGo: Cloud.pushForce() }
+                        }
+                        Text { width: parent.width; text: "The machine file (ewe.conf) lives in the ewe/ folder of your account: theme + accent, dock, animations, power, display profiles, window rules, wallpapers, pinned/startup apps, places, VPN and SSH definitions, and Komble's installed-apps list (reinstalling from it is always opt-in). Credentials never sync — that is the rule the file is built on."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
+                        Text { visible: Cloud.syncError !== ""; width: parent.width; text: Cloud.syncError; color: Theme.danger; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
+                        Text { visible: Cloud.restoreSummary !== ""; width: parent.width; text: Cloud.restoreSummary; color: Theme.success; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
+                    }
+                    // restore confirmation — explicit, summarises what will change
+                    Rectangle {
+                        visible: Cloud.pendingRestore !== null
+                        width: parent.width
+                        implicitHeight: restCol.implicitHeight + 24
+                        radius: Theme.radiusInner; color: Theme.elevated
+                        border.color: Theme.accent; border.width: 1
+                        Column {
+                            id: restCol
+                            anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 12; spacing: 8
+                            Text { text: "Restore settings from the backup in your account?"; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsBody; font.weight: Font.DemiBold }
+                            KV { k: "Saved on"; v: Cloud.pendingRestore ? ("“" + (Cloud.pendingRestore.device || "?") + "” · " + root.fmtSyncTime(Cloud.pendingRestore.updatedAt || "")) : "" }
+                            KV { k: "Restores"; v: "the machine file (ewe.conf) — theme, dock, displays, rules, apps list; your current file is kept as a timestamped backup" }
+                            KV { k: "Applications"; v: "reinstall offers appear in Komble → For you (never auto-installed)" }
+                            Text { width: parent.width; text: "Overwrites this machine's theme, dock, wallpaper, window-rule, display-profile and app-list settings, then reloads the shell config live."; color: Theme.warning; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
+                            Row {
+                                spacing: 10
+                                Pill { label: "Restore"; primary: true; onGo: Cloud.applyRestore() }
+                                Pill { label: "Cancel"; onGo: Cloud.cancelRestore() }
+                            }
+                        }
+                    }
+
+                    SectionTitle { text: "GOOGLE  ·  OPTIONAL" }
+                    // ewe ships no Google client (RFC-005): the extra exists only
+                    // for people who bring their own OAuth client file
+                    Card {
+                        visible: !Google.personalClient
+                        Text { width: parent.width; text: "For Gmail in the Control Center and Google Drive as a folder. ewe ships no Google client: create your own OAuth client of type “Desktop app” (docs/GOOGLE-CLIENT.md), save it as the file below, and this card turns into Connect."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; wrapMode: Text.Wrap }
+                        Text { width: parent.width; text: Google.clientPath; color: Theme.fgSecondary; font.family: Theme.fontMono; font.pixelSize: 11; elide: Text.ElideMiddle }
+                    }
+                    Card {
+                        visible: Google.personalClient && Google.probed && !Google.configured
+                        Text { width: parent.width; text: "The client file is there but the broker could not read a client_id from it — check docs/GOOGLE-CLIENT.md for the expected JSON."; color: Theme.warning; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; wrapMode: Text.Wrap }
+                    }
+                    Card {
+                        visible: Google.probed && Google.configured && !Google.signedIn
+                        Text { width: parent.width; text: "Your client file is in place. Connect to get Gmail in the Control Center and ~/Google Drive in Files. Settings sync never goes through Google."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; wrapMode: Text.Wrap }
+                        Row {
+                            spacing: 10
+                            Pill { visible: Google.busy !== "signin"; label: "Connect Google"; primary: true; onGo: Google.signIn() }
                             Text { visible: Google.busy === "signin"; anchors.verticalCenter: parent.verticalCenter; text: "Waiting for the browser sign-in…"; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
                             Pill { visible: Google.busy === "signin"; label: "Cancel"; onGo: Google.cancelSignIn() }
                         }
+                        Row {
+                            visible: Google.consentUrl !== ""; spacing: 10
+                            Pill { label: "Open the sign-in page"; onGo: Google.openConsentUrl() }
+                            Pill { label: "Copy the link"; onGo: Google.copyConsentUrl() }
+                        }
                     }
-                    // signed in → profile + services + sign out
                     Card {
                         visible: Google.signedIn
                         Item {
@@ -2768,71 +2906,20 @@ Scope {
                                 Text { width: parent.width; text: (Google.profile && Google.profile.name) || "Google account"; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsBody; font.weight: Font.DemiBold; elide: Text.ElideRight }
                                 Text { width: parent.width; text: (Google.profile && Google.profile.email) || ""; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; elide: Text.ElideRight }
                             }
-                            Pill { id: gOut; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; label: "Sign out"; onGo: Google.signOut() }
+                            Pill { id: gOut; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; label: "Disconnect"; onGo: Google.signOut() }
                         }
-                        KV { k: "Calendar"; v: "connected · read-only"; dot: "ok" }
-                        KV { k: "Settings sync (Drive app data)"; v: "connected"; dot: "ok" }
+                        KV { k: "Gmail"; v: Mail.source === "gmail" ? "in the Control Center" : "an IMAP account is set up — it takes precedence"; dot: Mail.source === "gmail" ? "ok" : "info" }
+                        KV { k: "Google Drive"; v: "~/Google Drive in Files"; dot: "ok" }
                         KV { visible: Google.profile && Google.profile.picture; k: "Google profile photo"; action: true; actionLabel: "Use as avatar"; onAct: root.useGooglePhoto() }
                     }
                     Text {
                         visible: Google.error !== ""
                         width: parent.width; text: Google.error; color: Theme.danger; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap
                     }
-                    // the keyring rejects the login password → replace it (PAM
-                    // recreates `login` with the login password at the next login)
                     Card {
                         visible: Google.configured && !Google.signedIn && (Google.keyringTrouble || Google.keyringResetDone)
                         KV { visible: !Google.keyringResetDone; k: "Keyring"; v: Google.keyringState === "locked" ? "locked — PAM could not unlock it" : "refused the token"; dot: "bad"; action: true; actionLabel: "Reset the keyring"; onAct: Google.resetKeyring() }
                         KV { visible: Google.keyringResetDone; k: "Keyring"; v: "reset — log out and back in, then sign in"; dot: "info"; action: true; actionLabel: "Log out now"; onAct: Google.logOut() }
-                    }
-
-                    SectionTitle { visible: Google.signedIn; text: "SETTINGS SYNC" }
-                    Card {
-                        visible: Google.signedIn
-                        // two facts, kept apart: who SAVED the backup, and when THIS
-                        // machine last talked to it (a fresh machine used to wear the
-                        // old PC's push time as its own)
-                        KV { k: "Backup in Drive"; v: Google.cloudInfo ? ("saved by “" + Google.cloudInfo.device + "” · " + root.fmtSyncTime(Google.cloudInfo.updatedAt)) : "none yet" }
-                        KV { k: "This machine last synced"; v: (Google.localSyncedAt !== "" ? root.fmtSyncTime(Google.localSyncedAt) : (Google.lastSync !== "" ? root.fmtSyncTime(Google.lastSync) : "never — nothing is uploaded until you back it up")) + (Google.inSync && Google.lastSync !== "" ? " · up to date" : "") }
-                        ToggleRow {
-                            title: "Auto-sync"
-                            sub: Google.lastSync === "" ? "Starts after the first backup from this machine; pushes ~20 s after closing Settings whenever something changed." : "Pushes ~20 s after closing Settings whenever something changed."
-                            on: Google.autoSync
-                            onToggled: Google.setAutoSync(!Google.autoSync)
-                        }
-                        Row {
-                            spacing: 10
-                            // a never-synced machine never auto-pushes: its first upload is this button
-                            Pill { label: Google.syncState === "syncing" ? "Syncing…" : (Google.lastSync === "" ? "Back up this machine" : "Sync now"); primary: true; onGo: Google.syncNow() }
-                            Pill { label: "Restore from cloud…"; onGo: Google.requestRestore() }
-                            // only offered when the conflict guard refused a push
-                            Pill { visible: Google.syncConflict; label: "Push anyway"; onGo: Google.pushForce() }
-                        }
-                        Text { width: parent.width; text: "The machine file (ewe.conf) syncs to Drive's hidden app storage: theme + accent, dock, animations, power, display profiles, window rules, wallpapers, pinned/startup apps, places, and Komble's installed-apps list (reinstalling from it is always opt-in). Credentials never sync — that's the rule the file is built on."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
-                        Text { visible: Google.syncError !== ""; width: parent.width; text: Google.syncError; color: Theme.danger; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
-                        Text { visible: Google.restoreSummary !== ""; width: parent.width; text: Google.restoreSummary; color: Theme.success; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
-                    }
-                    // restore confirmation — explicit, summarises what will change
-                    Rectangle {
-                        visible: Google.pendingRestore !== null
-                        width: parent.width
-                        implicitHeight: restCol.implicitHeight + 24
-                        radius: Theme.radiusInner; color: Theme.elevated
-                        border.color: Theme.accent; border.width: 1
-                        Column {
-                            id: restCol
-                            anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 12; spacing: 8
-                            Text { text: "Restore settings from the cloud backup?"; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsBody; font.weight: Font.DemiBold }
-                            KV { k: "Saved on"; v: Google.pendingRestore ? ("“" + (Google.pendingRestore.device || "?") + "” · " + root.fmtSyncTime(Google.pendingRestore.updatedAt || "")) : "" }
-                            KV { k: "Restores"; v: "the machine file (ewe.conf) — theme, dock, displays, rules, apps list; your current file is kept as a timestamped backup" }
-                            KV { k: "Applications"; v: "reinstall offers appear in Komble → For you (never auto-installed)" }
-                            Text { width: parent.width; text: "Overwrites this machine's theme, dock, wallpaper, window-rule, display-profile and app-list settings, then reloads the shell config live."; color: Theme.warning; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
-                            Row {
-                                spacing: 10
-                                Pill { label: "Restore"; primary: true; onGo: Google.applyRestore() }
-                                Pill { label: "Cancel"; onGo: Google.cancelRestore() }
-                            }
-                        }
                     }
 
                     SectionTitle { visible: Accounts.contacts.length > 0; text: "CONTACTS  ·  " + Accounts.contacts.length }

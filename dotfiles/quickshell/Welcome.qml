@@ -9,13 +9,14 @@ import Quickshell.Wayland
 //   1 welcome · 2 get online (0.9.16-2) · 3 updates (0.9.19: a fresh install
 //   must be current before anything can be installed — the sync database it
 //   was born with points at packages the mirrors have already dropped) ·
-//   4 one sign-in (Google) · 5 restore offer (only when the account holds a
-//   backup from another machine) · 6 the 60-second tour.
+//   4 sign in to your Nextcloud (RFC-005 — the ewe account) · 5 restore offer
+//   (only when the account holds a backup from another machine) · 6 the
+//   60-second tour. Google is not on this screen at all.
 // Re-open any time:  qs ipc call welcome toggle   (reset: … welcome reset)
 //
 // 0.9.16-2, the first bare-metal install: this overlay sat on the Overlay
 // layer above EVERYTHING — the Control Center (so no Wi-Fi could be joined
-// to reach the Google step), the keyring prompt and the browser it had just
+// to reach the sign-in step), the keyring prompt and the browser it had just
 // asked for. It now carries its own network step and steps aside while a
 // sign-in is in flight.
 Scope {
@@ -85,11 +86,11 @@ Scope {
     }
 
     // a restore is worth offering when the account has a backup and THIS
-    // machine has never synced — the same rule Google._maybeOfferRestore uses
-    readonly property bool restoreWorthIt: Google.signedIn && Google.cloudInfo !== null && Google.lastSync === ""
+    // machine has never synced — the same rule Cloud._maybeOfferRestore uses
+    readonly property bool restoreWorthIt: Cloud.signedIn && Cloud.cloudInfo !== null && Cloud.lastSync === ""
     readonly property bool online: wifi.online
     // the browser and the keyring prompt must be clickable: get out of the way
-    readonly property bool yielding: Google.busy === "signin"
+    readonly property bool yielding: Cloud.busy === "signin"
 
     onOpenChanged: Globals.welcomeOpen = root.open
 
@@ -125,17 +126,19 @@ Scope {
     // enough to read "Connected"
     Timer { id: autoAdvance; interval: 900; onTriggered: if (root.open && root.step === root.stepNetwork && wifi.online) root.next() }
 
-    // sign-in landed while the account step is up → move on by itself
+    // sign-in landed while the account step is up → show "signed in as …" for
+    // a beat, learn whether the account holds a backup, then move on
     Connections {
-        target: Google
+        target: Cloud
         function onSignedInChanged() {
-            if (root.open && root.step === root.stepSignIn && Google.signedIn) Google.checkCloud(function (ok) { root.next() })
+            if (root.open && root.step === root.stepSignIn && Cloud.signedIn) Cloud.checkCloud(function (ok) { signedInAdvance.restart() })
         }
         function onSyncStateChanged() {
-            if (root.open && root.step === root.stepRestore && root._restoring && Google.syncState !== "syncing") { root._restoring = false; root.step = root.stepTour }
-            if (root._backingUp && Google.syncState !== "syncing") root._backingUp = false
+            if (root.open && root.step === root.stepRestore && root._restoring && Cloud.syncState !== "syncing") { root._restoring = false; root.step = root.stepTour }
+            if (root._backingUp && Cloud.syncState !== "syncing") root._backingUp = false
         }
     }
+    Timer { id: signedInAdvance; interval: 1600; onTriggered: if (root.open && root.step === root.stepSignIn && Cloud.signedIn) root.next() }
     property bool _restoring: false
     property bool _backingUp: false
 
@@ -272,14 +275,14 @@ Scope {
                     width: parent.width; spacing: 16
                     Glyph { anchors.horizontalCenter: parent.horizontalCenter; ic: Theme.icWifi }
                     Title { text: "Connect to the internet" }
-                    Body { text: "The next step signs you in with Google and can bring a backup down from your Drive — both need a connection. A cable just works; Wi-Fi is joined right here." }
+                    Body { text: "The next steps bring the system up to date and sign you in to your Nextcloud, which can bring a backup down to this machine — all of that needs a connection. A cable just works; Wi-Fi is joined right here." }
                     WifiPicker {
                         id: wifi
                         width: parent.width
                         active: root.open && root.step === root.stepNetwork
                         onOnlineChanged: if (online && root.open && root.step === root.stepNetwork) autoAdvance.restart()
                     }
-                    Note { visible: !root.online; text: "You can also continue offline — Google sign-in and the restore stay available later in Settings → User." }
+                    Note { visible: !root.online; text: "You can also continue offline — the sign-in and the restore stay available later in Settings → Account." }
                 }
 
                 // ── 3 · updates ──
@@ -324,58 +327,93 @@ Scope {
                     }
                 }
 
-                // ── 4 · one sign-in ──
+                // ── 4 · your account: Nextcloud ──
                 Column {
                     visible: root.step === root.stepSignIn
                     width: parent.width; spacing: 16
-                    Glyph { anchors.horizontalCenter: parent.horizontalCenter; ic: Theme.icUser }
-                    Title { text: "One sign-in for the whole desktop" }
-                    Body { text: "Sign in with Google once and ewe lights up around it: calendar and mail in the Control Center, your machine kept in sync as one file, your apps restorable through Komble, and your Drive as a folder in Files.\n\nSkip it and nothing Google appears anywhere — you can sign in later in Settings → User." }
-                    Text {
-                        visible: Google.probed && !Google.configured
-                        width: parent.width; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.Wrap
-                        text: "Sign-in is unavailable on this build (no Google client shipped)."
-                        color: Theme.warning; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
+                    Rectangle {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        width: 64; height: 64; radius: 20
+                        color: Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.16)
+                        Image { anchors.centerIn: parent; source: Qt.resolvedUrl("assets/nextcloud.svg"); width: 40; height: 40; sourceSize.width: 80; sourceSize.height: 80; fillMode: Image.PreserveAspectFit; opacity: 0.92 }
+                    }
+                    Title { text: Cloud.signedIn ? "Signed in" : "Your account: Nextcloud" }
+                    Body {
+                        visible: !Cloud.signedIn
+                        text: "ewe keeps your machine in sync as one file, restores your apps through Komble, shows your calendar in the Control Center and keeps your files in ~/Nextcloud — all in YOUR Nextcloud: a server you run, or a hosted account (Murena, Disroot, Infomaniak…). Nothing about it is baked into ewe.\n\nSkip it and nothing changes; you can sign in later in Settings → Account."
+                    }
+                    // signed in: who, and what just got set up
+                    Row {
+                        visible: Cloud.signedIn
+                        anchors.horizontalCenter: parent.horizontalCenter; spacing: 12
+                        Rectangle {
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: 40; height: 40; radius: 20; color: Theme.hover
+                            Text { anchors.centerIn: parent; visible: wAv.status !== Image.Ready; text: (Cloud.displayName || "?").charAt(0).toUpperCase(); color: Theme.fg; font.family: Theme.fontText; font.pixelSize: 16; font.weight: Font.DemiBold }
+                            Image { id: wAv; anchors.fill: parent; source: Cloud.avatarPath !== "" ? "file://" + Cloud.avatarPath : ""; fillMode: Image.PreserveAspectCrop; visible: status === Image.Ready }
+                        }
+                        Column {
+                            anchors.verticalCenter: parent.verticalCenter; spacing: 2
+                            Text { text: Cloud.displayName; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsBody; font.weight: Font.DemiBold }
+                            Text { text: (Cloud.email !== "" ? Cloud.email + " · " : "") + Cloud.serverHost; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
+                        }
+                    }
+                    Note { visible: Cloud.signedIn; text: Cloud.filesApp ? "Your files sync to ~/Nextcloud with the Nextcloud app." : "Your files are mounted at ~/Nextcloud." }
+                    // the server address — remembered between attempts
+                    Rectangle {
+                        visible: !Cloud.signedIn && Cloud.busy !== "signin"
+                        width: parent.width; height: 40; radius: 10
+                        color: Theme.bg; border.color: srvField.activeFocus ? Theme.accent : Theme.stroke; border.width: 1
+                        TextInput {
+                            id: srvField
+                            anchors.fill: parent; anchors.leftMargin: 12; anchors.rightMargin: 12
+                            verticalAlignment: TextInput.AlignVCenter
+                            text: Cloud.lastServer
+                            color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsBody
+                            clip: true; selectByMouse: true
+                            onAccepted: if (root.online && text.trim() !== "") Cloud.signIn(text)
+                            Text { visible: srvField.text === "" && !srvField.activeFocus; anchors.verticalCenter: parent.verticalCenter; text: "https://cloud.example.org"; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsBody }
+                        }
                     }
                     Text {
-                        visible: !root.online && Google.busy !== "signin"
+                        visible: !root.online && Cloud.busy !== "signin" && !Cloud.signedIn
                         width: parent.width; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.Wrap
                         text: "You are offline — sign-in needs a connection. Go back to connect, or skip for now."
                         color: Theme.warning; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
                     }
                     Note {
-                        visible: root.online && Google.configured && Google.keyringPromptExpected
-                        text: Google.keyringState === "locked"
+                        visible: root.online && !Cloud.signedIn && Cloud.keyringPromptExpected
+                        text: Cloud.keyringState === "locked"
                             ? "Your keyring is locked: a small “Unlock keyring” prompt will appear during sign-in — answer it with your login password."
                             : "A small “Choose password for new keyring” prompt will appear during sign-in — use your login password so it unlocks by itself at every login."
                     }
                     Row {
-                        visible: Google.busy === "signin"
+                        visible: Cloud.busy === "signin"
                         anchors.horizontalCenter: parent.horizontalCenter; spacing: 8
                         Spinner { anchors.verticalCenter: parent.verticalCenter; font.pixelSize: 13 }
-                        Text { anchors.verticalCenter: parent.verticalCenter; text: "Waiting for the browser…"; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
+                        Text { anchors.verticalCenter: parent.verticalCenter; text: "Waiting for the browser — sign in on your server's page and grant access to ewe…"; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
                     }
                     Text {
-                        visible: Google.error !== ""
+                        visible: Cloud.error !== ""
                         width: parent.width; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.Wrap
-                        text: Google.error; color: Theme.danger; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
+                        text: Cloud.error; color: Theme.danger; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
                     }
                     // the link itself, for when the browser hand-off did not
                     // happen (no default browser, odd session)
                     Row {
-                        visible: Google.consentUrl !== "" && !Google.signedIn
+                        visible: Cloud.loginUrl !== "" && !Cloud.signedIn
                         anchors.horizontalCenter: parent.horizontalCenter; spacing: 18
-                        LinkBtn { label: "Open the sign-in page"; onGo: Google.openConsentUrl() }
-                        LinkBtn { label: "Copy the link"; onGo: Google.copyConsentUrl() }
+                        LinkBtn { label: "Open the sign-in page"; onGo: Cloud.openLoginUrl() }
+                        LinkBtn { label: "Copy the link"; onGo: Cloud.copyLoginUrl() }
                     }
                     // a keyring that rejects the login password can only be
                     // replaced: PAM makes a fresh one at the next login
                     Row {
-                        visible: root.online && Google.configured && !Google.signedIn && Google.busy !== "signin"
-                                 && (Google.keyringTrouble || Google.keyringResetDone)
+                        visible: root.online && !Cloud.signedIn && Cloud.busy !== "signin"
+                                 && (Cloud.keyringTrouble || Cloud.keyringResetDone)
                         anchors.horizontalCenter: parent.horizontalCenter; spacing: 18
-                        LinkBtn { visible: !Google.keyringResetDone; label: "Reset the keyring"; onGo: Google.resetKeyring() }
-                        LinkBtn { visible: Google.keyringResetDone; label: "Log out now"; onGo: Google.logOut() }
+                        LinkBtn { visible: !Cloud.keyringResetDone; label: "Reset the keyring"; onGo: Cloud.resetKeyring() }
+                        LinkBtn { visible: Cloud.keyringResetDone; label: "Log out now"; onGo: Cloud.logOut() }
                     }
                 }
 
@@ -384,10 +422,10 @@ Scope {
                     visible: root.step === root.stepRestore
                     width: parent.width; spacing: 16
                     Glyph { anchors.horizontalCenter: parent.horizontalCenter; ic: Theme.icDownload }
-                    Title { text: "Your desktop is in your Drive" }
+                    Title { text: "Your desktop is in your account" }
                     Body {
-                        text: "A backup from “" + (Google.cloudInfo ? Google.cloudInfo.device : "another machine") + "”"
-                            + (Google.cloudInfo && Google.cloudInfo.updatedAt ? " (saved " + Qt.formatDateTime(new Date(Google.cloudInfo.updatedAt), "d MMMM, h:mm AP") + ")" : "")
+                        text: "A backup from “" + (Cloud.cloudInfo ? Cloud.cloudInfo.device : "another machine") + "”"
+                            + (Cloud.cloudInfo && Cloud.cloudInfo.updatedAt ? " (saved " + Qt.formatDateTime(new Date(Cloud.cloudInfo.updatedAt), "d MMMM, h:mm AP") + ")" : "")
                             + " is waiting. Restore it and your layout, theme, keybinds and network profiles come back to this machine; your apps line up in Komble, one click from reinstalled."
                     }
                     Row {
@@ -397,9 +435,9 @@ Scope {
                         Text { anchors.verticalCenter: parent.verticalCenter; text: "Restoring…"; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
                     }
                     Text {
-                        visible: Google.syncError !== "" && !root._restoring
+                        visible: Cloud.syncError !== "" && !root._restoring
                         width: parent.width; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.Wrap
-                        text: Google.syncError; color: Theme.danger; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
+                        text: Cloud.syncError; color: Theme.danger; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
                     }
                 }
 
@@ -410,7 +448,7 @@ Scope {
                     Title { text: "The sixty-second tour" }
                     // what the restore left for Komble
                     Rectangle {
-                        visible: Google.restoreApps > 0
+                        visible: Cloud.restoreApps > 0
                         width: parent.width; height: appsRow.implicitHeight + 20
                         radius: Theme.radiusInner; color: Theme.elevated; border.color: Theme.accent; border.width: 1
                         Row {
@@ -421,16 +459,16 @@ Scope {
                                 anchors.verticalCenter: parent.verticalCenter
                                 width: parent.width - 24 - 12 - openKomble.width - 12
                                 wrapMode: Text.Wrap
-                                text: Google.restoreApps + (Google.restoreApps === 1 ? " app is" : " apps are") + " waiting in Komble → For you: repository apps install in one go, AUR apps go through the PKGBUILD review first. Never automatic."
+                                text: Cloud.restoreApps + (Cloud.restoreApps === 1 ? " app is" : " apps are") + " waiting in Komble → For you: repository apps install in one go, AUR apps go through the PKGBUILD review first. Never automatic."
                                 color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
                             }
                             Btn { id: openKomble; anchors.verticalCenter: parent.verticalCenter; label: "Open Komble"; onGo: Globals.openStore() }
                         }
                     }
                     // the explicit first backup — a never-synced machine never
-                    // pushes on its own (see Google.autoPushAllowed)
+                    // pushes on its own (see Cloud.autoPushAllowed)
                     Rectangle {
-                        visible: Google.signedIn && Google.lastSync === ""
+                        visible: Cloud.signedIn && Cloud.lastSync === ""
                         width: parent.width; height: bkRow.implicitHeight + 20
                         radius: Theme.radiusInner; color: Theme.elevated; border.color: Theme.stroke; border.width: 1
                         Row {
@@ -441,10 +479,10 @@ Scope {
                                 anchors.verticalCenter: parent.verticalCenter
                                 width: parent.width - 24 - 12 - bkBtn.width - 12
                                 wrapMode: Text.Wrap
-                                text: root._backingUp ? "Backing this machine up to your Drive…" : "This machine is not backed up yet. Nothing is uploaded until you say so."
+                                text: root._backingUp ? "Backing this machine up to your account…" : "This machine is not backed up yet. Nothing is uploaded until you say so."
                                 color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
                             }
-                            Btn { id: bkBtn; anchors.verticalCenter: parent.verticalCenter; label: root._backingUp ? "Backing up…" : "Back up now"; enabled: !root._backingUp; onGo: { root._backingUp = true; Google.backUpNow() } }
+                            Btn { id: bkBtn; anchors.verticalCenter: parent.verticalCenter; label: root._backingUp ? "Backing up…" : "Back up now"; enabled: !root._backingUp; onGo: { root._backingUp = true; Cloud.backUpNow() } }
                         }
                     }
                     Column {
@@ -476,9 +514,9 @@ Scope {
                         // step-specific secondary
                         Btn { visible: root.step === root.stepNetwork && !root.online; label: "Continue offline"; onGo: root.next() }
                         Btn { visible: root.step === root.stepUpdates && (root.updState === "pending" || root.updState === "failed" || root.updState === "unknown"); label: "Later"; onGo: root.next() }
-                        Btn { visible: root.step === root.stepSignIn && Google.busy !== "signin"; label: "Skip for now"; onGo: root.next() }
-                        Btn { visible: root.step === root.stepSignIn && !root.online && Google.busy !== "signin"; label: "Back"; onGo: root.step = root.stepNetwork }
-                        Btn { visible: root.step === root.stepSignIn && Google.busy === "signin"; label: "Cancel"; onGo: Google.cancelSignIn() }
+                        Btn { visible: root.step === root.stepSignIn && Cloud.busy !== "signin" && !Cloud.signedIn; label: "Skip for now"; onGo: root.next() }
+                        Btn { visible: root.step === root.stepSignIn && !root.online && Cloud.busy !== "signin" && !Cloud.signedIn; label: "Back"; onGo: root.step = root.stepNetwork }
+                        Btn { visible: root.step === root.stepSignIn && Cloud.busy === "signin"; label: "Cancel"; onGo: Cloud.cancelSignIn() }
                         Btn { visible: root.step === root.stepRestore && !root._restoring; label: "Start fresh"; onGo: root.next() }
                         // step-specific primary
                         Btn { visible: root.step === 0; primary: true; label: "Get started"; onGo: root.next() }
@@ -487,9 +525,10 @@ Scope {
                         Btn { visible: root.step === root.stepUpdates && root.updState === "failed"; primary: true; label: "Retry"; onGo: root.installUpdates() }
                         Btn { visible: root.step === root.stepUpdates && root.updBusy; primary: true; enabled: false; label: root.updState === "checking" ? "Checking…" : "Installing…" }
                         Btn { visible: root.step === root.stepUpdates && (root.updState === "done" || root.updState === "current"); primary: true; label: "Continue"; onGo: root.next() }
-                        Btn { visible: root.step === root.stepSignIn && Google.busy !== "signin"; primary: true; enabled: Google.configured && root.online; label: "Sign in with Google"; onGo: Google.signIn() }
+                        Btn { visible: root.step === root.stepSignIn && Cloud.busy !== "signin" && !Cloud.signedIn; primary: true; enabled: root.online && srvField.text.trim() !== ""; label: "Sign in"; onGo: Cloud.signIn(srvField.text) }
+                        Btn { visible: root.step === root.stepSignIn && Cloud.signedIn; primary: true; label: "Continue"; onGo: root.next() }
                         Btn { visible: root.step === root.stepRestore && !root._restoring; primary: true; label: "Restore my desktop"
-                              onGo: { root._restoring = true; Google.pendingRestore = { updatedAt: Google.cloudInfo.updatedAt, device: Google.cloudInfo.device }; Google.applyRestore() } }
+                              onGo: { root._restoring = true; Cloud.pendingRestore = { updatedAt: Cloud.cloudInfo.updatedAt, device: Cloud.cloudInfo.device }; Cloud.applyRestore() } }
                         Btn { visible: root.step === root.stepTour; primary: true; label: "Finish"; onGo: root.finish() }
                     }
                 }
