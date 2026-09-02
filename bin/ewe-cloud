@@ -1,0 +1,506 @@
+#!/usr/bin/env python3
+"""ewe-cloud — the ewe account is a Nextcloud account (RFC-005).
+
+One sign-in to the user's OWN Nextcloud (self-hosted or a hosted provider)
+through Nextcloud's browser login flow; the app password it hands back is
+the only credential, and it lives in the keyring. Every command prints one
+JSON object and exits 0, so callers never hang on it:
+
+  login <server-url>   Login Flow v2: opens the browser, waits for the user,
+                       stores the app password -> {ok, server, user,
+                       display_name, email, quota}
+  status               {signed_in, server, user, display_name, email, quota,
+                       keyring, keyring_state} — never prompts
+  token [--json]       the app password (bare line, or JSON) for rclone/the shell
+  webdav-url           <server>/remote.php/dav/files/<user>/
+  avatar               caches the account avatar -> prints its path
+  logout               revokes the app password server-side, clears the keyring
+
+Non-secret account facts live in ~/.config/ewe/cloud.json {server, user,
+login_name, display_name, email, logged_in_at}; the app password ONLY in the
+keyring (service ewe-cloud). Real servers must be https; the plain-http
+exception (EWE_CLOUD_SERVER_INSECURE=1, loopback only) exists for the mock
+server the test suite runs.
+"""
+import base64
+import json
+import os
+import re
+import socket
+import subprocess
+import sys
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+
+CFG_DIR = os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
+CACHE_DIR = os.path.join(os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache"), "ewe")
+RUN_DIR = os.environ.get("XDG_RUNTIME_DIR") or "/tmp"
+CLOUD_META = os.path.join(CFG_DIR, "ewe", "cloud.json")      # server + user, non-secret
+LOGIN_URL_FILE = os.path.join(RUN_DIR, "ewe-cloud-login-url")  # the login in flight
+AVATAR = os.path.join(CACHE_DIR, "cloud-avatar.png")
+
+FAKE_KEYRING = os.environ.get("EWE_CLOUD_FAKE_KEYRING")   # tests only
+LOGIN_TIMEOUT = 300
+POLL_EVERY = 2
+KEYRING_TIMEOUT = 10
+HTTP_TIMEOUT = 30
+USER_AGENT = "ewe (%s)" % (socket.gethostname() or "desktop")
+
+
+def out(obj):
+    print(json.dumps(obj))
+    sys.exit(0)
+
+
+def fail(code, message, **extra):
+    out({"ok": False, "error": code, "message": message, **extra})
+
+
+# ── server URL ──────────────────────────────────────────────────────────────
+
+def normalize_server(url):
+    """'cloud.example.org' -> 'https://cloud.example.org'; strips paths of
+    the index.php/login kind people paste, and the trailing slash."""
+    url = (url or "").strip()
+    if not url:
+        return ""
+    if "://" not in url:
+        host = url.split("/", 1)[0].split(":", 1)[0]
+        insecure = (os.environ.get("EWE_CLOUD_SERVER_INSECURE") == "1"
+                    and host in ("127.0.0.1", "localhost", "::1"))
+        url = ("http://" if insecure else "https://") + url
+    p = urllib.parse.urlsplit(url)
+    path = re.sub(r"/(index\.php|login|apps|remote\.php).*$", "", p.path).rstrip("/")
+    return urllib.parse.urlunsplit((p.scheme, p.netloc, path, "", ""))
+
+
+def server_allowed(url):
+    p = urllib.parse.urlsplit(url)
+    if p.scheme == "https":
+        return True
+    return (p.scheme == "http" and os.environ.get("EWE_CLOUD_SERVER_INSECURE") == "1"
+            and p.hostname in ("127.0.0.1", "localhost", "::1"))
+
+
+# ── files ───────────────────────────────────────────────────────────────────
+
+def read_json(path):
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return None
+
+
+def write_json(path, data, mode=None):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = path + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(data, f)
+    if mode is not None:
+        os.chmod(tmp, mode)
+    os.replace(tmp, path)
+
+
+def meta():
+    m = read_json(CLOUD_META)
+    return m if isinstance(m, dict) and m.get("server") and m.get("login_name") else None
+
+
+# ── keyring (same shape as ewe-auth's; the account is the lookup key) ───────
+
+def keyring_args(server, login_name):
+    return ["service", "ewe-cloud", "server", server, "user", login_name]
+
+
+def _classify_keyring_failure(stderr, timed_out=False):
+    if timed_out:
+        return ("keyring-timeout",
+                "The keyring did not answer in time — if a keyring password "
+                "prompt is open, answer it (use your login password) and retry.")
+    e = (stderr or "").strip()
+    low = e.lower()
+    if ("not provided by any .service" in low or "failed to execute" in low
+            or "cannot autolaunch" in low or "no such interface" in low
+            or "connection refused" in low or "was not provided" in low
+            or "not activatable" in low):
+        return ("keyring-unavailable",
+                "No Secret Service keyring is running — gnome-keyring must be "
+                "installed and started for this session.")
+    if "cancel" in low or "dismiss" in low:
+        return ("keyring-cancelled",
+                "The keyring prompt was dismissed — sign in again and unlock "
+                "the keyring with your login password.")
+    return ("keyring-store-failed",
+            "The keyring refused to store the app password" + (": " + e if e else "."))
+
+
+def keyring_store(server, login_name, secret, timeout=KEYRING_TIMEOUT):
+    """-> (ok, error-code, message). May legitimately block on a gcr prompt;
+    login passes a long timeout so a pending prompt is never torn down."""
+    if FAKE_KEYRING is not None:
+        with open(FAKE_KEYRING, "w") as f:
+            f.write(secret)
+        return True, "", ""
+    try:
+        r = subprocess.run(["secret-tool", "store", "--label=ewe cloud",
+                            *keyring_args(server, login_name)],
+                           input=secret, capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        code, msg = _classify_keyring_failure("", timed_out=True)
+        return False, code, msg
+    except OSError as e:
+        return False, "keyring-unavailable", "secret-tool is not installed (%s)." % e
+    if r.returncode == 0:
+        return True, "", ""
+    code, msg = _classify_keyring_failure(r.stderr)
+    return False, code, msg
+
+
+def keyring_get(server, login_name):
+    if FAKE_KEYRING is not None:
+        try:
+            return open(FAKE_KEYRING).read().strip()
+        except OSError:
+            return ""
+    try:
+        r = subprocess.run(["secret-tool", "lookup", *keyring_args(server, login_name)],
+                           capture_output=True, text=True, timeout=KEYRING_TIMEOUT)
+        return r.stdout.strip() if r.returncode == 0 else ""
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+
+
+def keyring_clear(server, login_name):
+    if FAKE_KEYRING is not None:
+        try:
+            os.remove(FAKE_KEYRING)
+        except OSError:
+            pass
+        return
+    try:
+        subprocess.run(["secret-tool", "clear", *keyring_args(server, login_name)],
+                       capture_output=True, text=True, timeout=KEYRING_TIMEOUT)
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+
+
+def _busctl(args, timeout=5):
+    try:
+        r = subprocess.run(["busctl", "--user", *args], capture_output=True,
+                           text=True, timeout=timeout)
+    except (OSError, subprocess.TimeoutExpired):
+        return None, ""
+    return r.returncode, (r.stdout or "").strip() + ("\n" + r.stderr.strip() if r.stderr else "")
+
+
+def keyring_probe():
+    """ok | missing | locked | unavailable — asked over the bus, never prompts."""
+    if FAKE_KEYRING is not None:
+        return {"state": "ok", "collection": "fake"}
+    rc, outp = _busctl(["call", "org.freedesktop.secrets", "/org/freedesktop/secrets",
+                        "org.freedesktop.Secret.Service", "ReadAlias", "s", "default"])
+    if rc is None or rc != 0:
+        return {"state": "unavailable", "collection": "", "detail": outp[-200:]}
+    m = re.search(r'"(/[^"]*)"', outp)
+    path = m.group(1) if m else "/"
+    if path == "/":
+        return {"state": "missing", "collection": ""}
+    rc, outp = _busctl(["get-property", "org.freedesktop.secrets", path,
+                        "org.freedesktop.Secret.Collection", "Locked"])
+    if rc == 0 and outp.split()[-1:] == ["true"]:
+        return {"state": "locked", "collection": path}
+    return {"state": "ok", "collection": path}
+
+
+# ── HTTP ────────────────────────────────────────────────────────────────────
+
+class HttpFailed(Exception):
+    def __init__(self, code, message):
+        super().__init__(message)
+        self.code, self.message = code, message
+
+
+def http(method, url, headers=None, data=None, auth=None, timeout=HTTP_TIMEOUT):
+    """-> (status, headers, body bytes). HTTP errors come back as a status,
+    not an exception; only transport failures raise HttpFailed('network')."""
+    h = {"User-Agent": USER_AGENT, **(headers or {})}
+    if auth:
+        h["Authorization"] = "Basic " + base64.b64encode(("%s:%s" % auth).encode()).decode()
+    req = urllib.request.Request(url, method=method, data=data, headers=h)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return resp.status, dict(resp.headers), resp.read()
+    except urllib.error.HTTPError as e:
+        return e.code, dict(e.headers), e.read()
+    except (urllib.error.URLError, OSError) as e:
+        raise HttpFailed("network", "network: %s" % getattr(e, "reason", e))
+
+
+def ocs_get(server, auth, path):
+    code, _, body = http("GET", server + path + ("&" if "?" in path else "?") + "format=json",
+                         headers={"OCS-APIRequest": "true", "Accept": "application/json"},
+                         auth=auth)
+    if code == 401:
+        raise HttpFailed("unauthorized", "The app password was rejected — it may have been revoked in Nextcloud → Settings → Security.")
+    if code != 200:
+        raise HttpFailed("http-%d" % code, "Nextcloud answered %d to %s" % (code, path))
+    try:
+        return json.loads(body.decode())["ocs"]["data"]
+    except (ValueError, KeyError, TypeError):
+        raise HttpFailed("bad-reply", "Nextcloud's answer to %s was not OCS JSON" % path)
+
+
+def user_info(server, auth):
+    """OCS cloud/user: display name, email, quota — the account card's facts."""
+    d = ocs_get(server, auth, "/ocs/v2.php/cloud/user")
+    q = d.get("quota") or {}
+    quota = {"used": int(q.get("used") or 0), "total": int(q.get("total") or 0)
+             if str(q.get("total", "")).lstrip("-").isdigit() else 0,
+             "relative": float(q.get("relative") or 0)}
+    return {"user": d.get("id") or "", "display_name": d.get("displayname") or d.get("display-name") or "",
+            "email": d.get("email") or "", "quota": quota}
+
+
+# ── browser hand-off (verbatim from ewe-auth) ───────────────────────────────
+
+def _launch(cmd, settle=2.5):
+    try:
+        p = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                             stdin=subprocess.DEVNULL, start_new_session=True)
+    except OSError:
+        return False
+    try:
+        rc = p.wait(timeout=settle)
+    except subprocess.TimeoutExpired:
+        return True
+    return rc == 0
+
+
+def open_browser(url):
+    if os.environ.get("EWE_CLOUD_NO_BROWSER") or os.environ.get("EWE_AUTH_NO_BROWSER"):
+        return True
+    if _launch(["xdg-open", url]):
+        return True
+    for desk in ("helium.desktop", "helium-browser.desktop"):
+        for base in ("/usr/share/applications", os.path.expanduser("~/.local/share/applications")):
+            path = os.path.join(base, desk)
+            if os.path.exists(path) and _launch(["gio", "launch", path, url]):
+                return True
+    for binary in ("helium-browser", "helium", "firefox", "chromium"):
+        if _launch([binary, url]):
+            return True
+    return False
+
+
+# ── commands ────────────────────────────────────────────────────────────────
+
+def cmd_login(argv):
+    server = normalize_server(argv[0] if argv else "")
+    if not server:
+        fail("no-server", "Give the address of your Nextcloud, e.g. cloud.example.org.")
+    if not server_allowed(server):
+        fail("insecure-server", "Only https:// servers are accepted (%s)." % server)
+    kp = keyring_probe()
+    if kp["state"] == "unavailable":
+        fail("keyring-unavailable", "No Secret Service keyring is running — gnome-keyring must "
+             "be installed and started for this session.", server=server, keyring=kp["state"])
+    # 1 · start the flow
+    try:
+        code, _, body = http("POST", server + "/index.php/login/v2", data=b"")
+    except HttpFailed as e:
+        fail(e.code, e.message, server=server)
+    if code != 200:
+        fail("not-nextcloud", "%s did not answer like a Nextcloud (HTTP %d on /index.php/login/v2)."
+             % (server, code), server=server)
+    try:
+        flow = json.loads(body.decode())
+        login_url, poll = flow["login"], flow["poll"]
+        token, endpoint = poll["token"], poll["endpoint"]
+    except (ValueError, KeyError, TypeError):
+        fail("bad-reply", "The login flow reply was not what Nextcloud sends.", server=server)
+    # the URL rides on stderr and in the runtime dir the moment it exists,
+    # so a UI can offer "open the sign-in page" / "copy the link"
+    print("login-url: " + login_url, file=sys.stderr, flush=True)
+    try:
+        with open(LOGIN_URL_FILE, "w") as f:
+            f.write(login_url)
+        os.chmod(LOGIN_URL_FILE, 0o600)
+    except OSError:
+        pass
+    browser_ok = open_browser(login_url)
+    # 2 · wait for the person
+    deadline = time.time() + LOGIN_TIMEOUT
+    grant = None
+    while time.time() < deadline:
+        try:
+            code, _, body = http("POST", endpoint,
+                                 data=urllib.parse.urlencode({"token": token}).encode(),
+                                 headers={"Content-Type": "application/x-www-form-urlencoded"})
+        except HttpFailed as e:
+            fail(e.code, e.message, server=server, login_url=login_url)
+        if code == 200:
+            try:
+                grant = json.loads(body.decode())
+            except ValueError:
+                fail("bad-reply", "The login poll reply was not JSON.", server=server)
+            break
+        if code != 404:
+            fail("http-%d" % code, "Nextcloud answered %d while waiting for the sign-in." % code,
+                 server=server, login_url=login_url)
+        time.sleep(POLL_EVERY)
+    if grant is None:
+        fail("timeout", "Sign-in timed out — nothing came back from the browser within 5 minutes."
+             + ("" if browser_ok else " No browser opened; use the login link."),
+             server=server, login_url=login_url, browser_failed=not browser_ok)
+    login_name, app_pw = grant.get("loginName", ""), grant.get("appPassword", "")
+    granted_server = normalize_server(grant.get("server") or server)
+    if granted_server and server_allowed(granted_server):
+        server = granted_server
+    if not login_name or not app_pw:
+        fail("bad-reply", "Nextcloud finished the sign-in without an app password.", server=server)
+    # 3 · store the secret (long timeout: a keyring prompt may be pending)
+    ok, code, msg = keyring_store(server, login_name, app_pw, timeout=LOGIN_TIMEOUT)
+    if not ok:
+        fail(code, msg, server=server, keyring=kp["state"])
+    # 4 · who is this
+    auth = (login_name, app_pw)
+    info = {"user": login_name, "display_name": "", "email": "", "quota": {}}
+    try:
+        info = user_info(server, auth)
+    except HttpFailed:
+        pass
+    write_json(CLOUD_META, {"server": server, "user": info["user"] or login_name,
+                            "login_name": login_name, "display_name": info["display_name"],
+                            "email": info["email"],
+                            "logged_in_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())})
+    try:
+        os.remove(LOGIN_URL_FILE)
+    except OSError:
+        pass
+    out({"ok": True, "server": server, "user": info["user"] or login_name,
+         "login_name": login_name, "display_name": info["display_name"],
+         "email": info["email"], "quota": info["quota"], "keyring": kp["state"]})
+
+
+def _session():
+    """(meta, app password) or (meta, "") — never prompts."""
+    m = meta()
+    if not m:
+        return None, ""
+    return m, keyring_get(m["server"], m["login_name"])
+
+
+def cmd_status():
+    kp = keyring_probe()
+    m, pw = _session()
+    base = {"ok": True, "signed_in": False, "server": m["server"] if m else "",
+            "user": m.get("user", "") if m else "", "display_name": m.get("display_name", "") if m else "",
+            "email": m.get("email", "") if m else "", "quota": {},
+            "keyring": kp["state"] != "unavailable", "keyring_state": kp["state"],
+            "keyring_locked": kp["state"] == "locked"}
+    if not m:
+        out(base)
+    if not pw:
+        out({**base, "reason": "no-app-password" if kp["state"] in ("ok", "missing") else "keyring-" + kp["state"]})
+    try:
+        info = user_info(m["server"], (m["login_name"], pw))
+    except HttpFailed as e:
+        if e.code == "unauthorized":
+            out({**base, "reason": "revoked", "message": e.message})
+        # offline or a hiccup: still signed in, facts from the last login
+        out({**base, "signed_in": True, "offline": True, "reason": e.code})
+    if (info["display_name"], info["email"]) != (m.get("display_name"), m.get("email")):
+        write_json(CLOUD_META, {**m, "display_name": info["display_name"], "email": info["email"]})
+    out({**base, "signed_in": True, "user": info["user"] or m["user"],
+         "display_name": info["display_name"], "email": info["email"], "quota": info["quota"]})
+
+
+def cmd_token(argv):
+    m, pw = _session()
+    if not pw:
+        if "--json" in argv:
+            out({"ok": False, "error": "not-signed-in"})
+        sys.exit(1)
+    if "--json" in argv:
+        out({"ok": True, "token": pw, "server": m["server"], "user": m["login_name"]})
+    print(pw)
+    sys.exit(0)
+
+
+def webdav_url(m):
+    return "%s/remote.php/dav/files/%s/" % (m["server"], urllib.parse.quote(m["login_name"], safe=""))
+
+
+def cmd_webdav_url():
+    m = meta()
+    if not m:
+        print(json.dumps({"ok": False, "error": "not-signed-in"}))
+        sys.exit(1)
+    print(webdav_url(m))
+    sys.exit(0)
+
+
+def cmd_avatar():
+    m, pw = _session()
+    if not pw:
+        fail("not-signed-in", "Sign in to a Nextcloud first.")
+    try:
+        code, headers, body = http("GET", "%s/index.php/avatar/%s/128"
+                                   % (m["server"], urllib.parse.quote(m["login_name"], safe="")),
+                                   auth=(m["login_name"], pw))
+    except HttpFailed as e:
+        fail(e.code, e.message)
+    if code != 200 or not body:
+        fail("no-avatar", "Nextcloud has no avatar for %s (HTTP %d)." % (m["login_name"], code))
+    os.makedirs(CACHE_DIR, exist_ok=True)
+    tmp = AVATAR + ".tmp"
+    with open(tmp, "wb") as f:
+        f.write(body)
+    os.replace(tmp, AVATAR)
+    out({"ok": True, "path": AVATAR, "bytes": len(body),
+         "type": headers.get("Content-Type", "")})
+
+
+def cmd_logout():
+    m, pw = _session()
+    revoked = False
+    if m and pw:
+        try:
+            code, _, _ = http("DELETE", m["server"] + "/ocs/v2.php/core/apppassword",
+                              headers={"OCS-APIRequest": "true"}, auth=(m["login_name"], pw))
+            revoked = code == 200
+        except HttpFailed:
+            pass
+    if m:
+        keyring_clear(m["server"], m["login_name"])
+    for p in (CLOUD_META, AVATAR, LOGIN_URL_FILE):
+        try:
+            os.remove(p)
+        except OSError:
+            pass
+    out({"ok": True, "revoked": revoked})
+
+
+if __name__ == "__main__":
+    argv = sys.argv[1:]
+    cmd = argv[0] if argv else "status"
+    try:
+        if cmd == "login":
+            cmd_login(argv[1:])
+        elif cmd == "token":
+            cmd_token(argv[1:])
+        elif cmd == "webdav-url":
+            cmd_webdav_url()
+        elif cmd == "avatar":
+            cmd_avatar()
+        elif cmd == "logout":
+            cmd_logout()
+        else:
+            cmd_status()
+    except SystemExit:
+        raise
+    except Exception as e:  # absolute backstop: still emit parseable JSON
+        print(json.dumps({"ok": False, "error": "internal: %s" % e}))
