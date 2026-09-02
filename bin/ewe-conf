@@ -852,11 +852,30 @@ def _nmcli(args):
         return None
 
 
+def _vpn_data_definition(data):
+    """vpn.data as nmcli prints it ("k = v, k = v"), minus the *-flags entries:
+    password-flags / ipsec-psk-flags say WHERE a secret is stored on THIS
+    machine (0 = in the profile), which is machine state, not a definition.
+    A restored skeleton must come up without them so the first connect asks
+    for credentials through the shell's / Settings' inline form (L2TP, 2026-09-02)."""
+    keep = []
+    for part in str(data or "").split(","):
+        k, sep, v = part.partition("=")
+        if not sep or not k.strip():
+            continue
+        if k.strip().endswith("-flags"):
+            continue
+        keep.append("%s = %s" % (k.strip(), v.strip()))
+    return ", ".join(keep)
+
+
 def import_vpn(doc):
     """NM VPN/WireGuard profile DEFINITIONS: name + type, plus the vpn.data
     property string for plugin VPNs (never vpn.secrets — nmcli masks them and
-    we don't ask). WireGuard records name-only: its peers hold key material,
-    so 're-import your .conf' is the honest restore for it."""
+    we don't ask; *-flags entries are dropped too, see _vpn_data_definition).
+    WireGuard records name-only: its peers hold key material, so 're-import
+    your .conf' is the honest restore for it. L2TP/IPsec (gateway, user,
+    ipsec-enabled) round-trips like any plugin VPN."""
     out = _nmcli(["-t", "-f", "NAME,TYPE", "connection", "show"])
     if out is None:
         return
@@ -873,7 +892,9 @@ def import_vpn(doc):
                 if rows and rows[0]:
                     rec["service"] = rows[0]
                 if len(rows) > 1 and rows[1]:
-                    rec["data"] = rows[1]
+                    data = _vpn_data_definition(rows[1])
+                    if data:
+                        rec["data"] = data
         profiles.append(rec)
     if not profiles:
         return
@@ -902,7 +923,11 @@ def apply_vpn(profiles):
         args = ["connection", "add", "type", "vpn", "con-name", name,
                 "vpn-type", p["service"].rsplit(".", 1)[-1]]
         if p.get("data"):
-            args += ["vpn.data", p["data"]]
+            # never carry *-flags into a skeleton: the credentials form sets
+            # them (to 0, stored in the profile) together with the secrets
+            data = _vpn_data_definition(p["data"])
+            if data:
+                args += ["vpn.data", data]
         _nmcli(args)
 
 

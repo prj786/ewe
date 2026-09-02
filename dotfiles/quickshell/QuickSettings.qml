@@ -288,9 +288,52 @@ Scope {
     function toggleVpn(name, up) {
         root.vpnPending = (up ? "Connecting to " : "Disconnecting from ") + name
         root.vpnBusyName = name
+        vpnUpProc.name = name
         Globals.netBusy = "vpn"
         vpnUpProc.command = ["nmcli", "connection", up ? "up" : "down", name]
         vpnUpProc.running = true
+    }
+    // ── VPN credentials, inline ──
+    // Nothing in ewe is a NetworkManager secret agent, so a profile without
+    // stored secrets can only fail with "secrets were required … --ask". The
+    // row then opens a credentials form; the secrets are written INTO the
+    // profile (password-flags=0 — GNOME's "store for all users", root-only
+    // file under /etc/NetworkManager) and the toggle just works from then on.
+    // L2TP/IPsec (the corporate kind: server + user + password + PSK) is the
+    // case that surfaced this (metal, 2026-09-02); OpenVPN gets the same form.
+    property string vpnCredTarget: ""    // profile whose form is open
+    property string vpnCredService: ""   // …l2tp | …openvpn | …
+    property bool vpnCredNeedsPsk: false
+    property string vpnCredUser: ""
+    property string vpnCredPass: ""
+    property string vpnCredPsk: ""
+    property string vpnCredError: ""
+    property bool vpnCredShow: false
+    function vpnAskCredentials(name) {
+        root.vpnCredTarget = name; root.vpnCredError = ""; root.vpnCredPass = ""; root.vpnCredPsk = ""
+        root.vpnCredService = ""; root.vpnCredNeedsPsk = false
+        vpnInfoProc.command = ["nmcli", "-t", "-g", "vpn.service-type,vpn.data", "connection", "show", name]
+        vpnInfoProc.running = true
+    }
+    function vpnCloseCredentials() { root.vpnCredTarget = ""; root.vpnCredPass = ""; root.vpnCredPsk = ""; root.vpnCredError = "" }
+    function nmEsc(v) { return String(v).replace(/,/g, "\\,") }   // nmcli splits dict values on ','
+    function vpnSaveCredentials() {
+        var name = root.vpnCredTarget
+        if (name === "" || root.vpnCredUser === "" || root.vpnCredPass === "") { root.vpnCredError = "Username and password are required."; return }
+        var l2tp = /l2tp$/.test(root.vpnCredService), ovpn = /openvpn$/.test(root.vpnCredService)
+        var args = ["nmcli", "connection", "modify", name, "vpn.user-name", root.vpnCredUser, "+vpn.data", "password-flags=0"]
+        if (l2tp) args.push("+vpn.data", "user=" + root.nmEsc(root.vpnCredUser))
+        if (ovpn) args.push("+vpn.data", "username=" + root.nmEsc(root.vpnCredUser))
+        args.push("+vpn.secrets", "password=" + root.nmEsc(root.vpnCredPass))
+        if (l2tp && root.vpnCredPsk !== "") {
+            args.push("+vpn.data", "ipsec-enabled=yes", "+vpn.data", "ipsec-psk-flags=0")
+            args.push("+vpn.secrets", "ipsec-psk=" + root.nmEsc(root.vpnCredPsk))
+        }
+        root.vpnCredError = ""
+        root.vpnBusyName = name; Globals.netBusy = "vpn"
+        vpnCredProc.name = name
+        vpnCredProc.command = args
+        vpnCredProc.running = true
     }
     // logind writes the backlight for us (no udev rule, no setuid helper); fall
     // back to brightnessctl when the bridge is down or the machine has no
@@ -464,6 +507,7 @@ Scope {
     // brings a VPN up/down; on failure raises a system notification with the error
     Process {
         id: vpnUpProc
+        property string name: ""
         stderr: StdioCollector { id: vpnErr }
         onExited: function (exitCode, exitStatus) {
             root.vpnBusyName = ""
@@ -471,8 +515,44 @@ Scope {
             vpnRescan.restart()
             if (exitCode !== 0) {
                 var msg = (vpnErr.text || "").trim()
+                // no stored secrets (and no secret agent to ask): open the
+                // credentials form on that row instead of only shouting
+                if (/secrets|--ask|no agents|agent/i.test(msg)) { root.setTab("vpn"); root.vpnAskCredentials(vpnUpProc.name); return }
+                if (root.vpnCredTarget === vpnUpProc.name) { root.vpnCredError = msg !== "" ? msg.split("\n")[0] : ("nmcli exited with code " + exitCode); return }
                 Quickshell.execDetached(["notify-send", "-u", "critical", "-a", "VPN", root.vpnPending + " failed", msg !== "" ? msg : ("nmcli exited with code " + exitCode)])
             }
+        }
+    }
+    // what kind of profile is asking: service type decides the fields (L2TP
+    // gets a pre-shared key), vpn.data prefills the username
+    Process {
+        id: vpnInfoProc
+        stdout: StdioCollector {
+            onStreamFinished: {
+                var rows = this.text.split("\n")
+                root.vpnCredService = (rows[0] || "").trim()
+                var data = rows[1] || "", user = ""
+                var m = /(?:^|,)\s*user(?:name)?\s*=\s*([^,]*)/.exec(data)
+                if (m) user = m[1].trim()
+                root.vpnCredUser = user
+                root.vpnCredNeedsPsk = /l2tp$/.test(root.vpnCredService)
+            }
+        }
+    }
+    // writes the credentials into the profile, then brings it up
+    Process {
+        id: vpnCredProc
+        property string name: ""
+        stderr: StdioCollector { id: vpnCredErr }
+        onExited: function (exitCode, exitStatus) {
+            if (exitCode !== 0) {
+                root.vpnBusyName = ""; Globals.netBusy = ""
+                var msg = (vpnCredErr.text || "").trim()
+                root.vpnCredError = msg !== "" ? msg.split("\n")[0] : ("nmcli exited with code " + exitCode)
+                return
+            }
+            root.vpnCloseCredentials()
+            root.toggleVpn(vpnCredProc.name, true)
         }
     }
     // joins a Wi-Fi network; same deal — spinner while running, notify on failure
@@ -1207,15 +1287,72 @@ Scope {
                                         anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 5
                                         Repeater {
                                             model: root.vpnList
-                                            delegate: Item {
+                                            delegate: Column {
                                                 required property var modelData
-                                                width: vpnOptCol.width; height: 28
-                                                Rectangle { anchors.fill: parent; radius: 6; color: vMa.containsMouse ? Theme.hover : "transparent" }
-                                                Text { anchors.left: parent.left; anchors.leftMargin: 8; anchors.verticalCenter: parent.verticalCenter; text: Theme.icVpn; font.family: Theme.fontIcons; font.pixelSize: 12; color: modelData.active ? Theme.accent : Theme.fgDim }
-                                                Text { anchors.left: parent.left; anchors.leftMargin: 30; anchors.right: parent.right; anchors.rightMargin: 26; anchors.verticalCenter: parent.verticalCenter; text: modelData.name; color: modelData.active ? Theme.accent : Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: modelData.active ? Font.DemiBold : Font.Normal; elide: Text.ElideRight }
-                                                Text { anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter; visible: modelData.active && root.vpnBusyName !== modelData.name; text: Theme.icCheck; font.family: Theme.fontIcons; font.pixelSize: 11; color: Theme.accent }
-                                                Spinner { anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter; visible: root.vpnBusyName === modelData.name; font.pixelSize: 12 }
-                                                MouseArea { id: vMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.toggleVpn(modelData.name, !modelData.active) }
+                                                width: vpnOptCol.width
+                                                Item {
+                                                    width: parent.width; height: 28
+                                                    Rectangle { anchors.fill: parent; radius: 6; color: vMa.containsMouse ? Theme.hover : "transparent" }
+                                                    Text { anchors.left: parent.left; anchors.leftMargin: 8; anchors.verticalCenter: parent.verticalCenter; text: Theme.icVpn; font.family: Theme.fontIcons; font.pixelSize: 12; color: modelData.active ? Theme.accent : Theme.fgDim }
+                                                    Text { anchors.left: parent.left; anchors.leftMargin: 30; anchors.right: parent.right; anchors.rightMargin: 26; anchors.verticalCenter: parent.verticalCenter; text: modelData.name; color: modelData.active ? Theme.accent : Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: modelData.active ? Font.DemiBold : Font.Normal; elide: Text.ElideRight }
+                                                    Text { anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter; visible: modelData.active && root.vpnBusyName !== modelData.name; text: Theme.icCheck; font.family: Theme.fontIcons; font.pixelSize: 11; color: Theme.accent }
+                                                    Spinner { anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter; visible: root.vpnBusyName === modelData.name; font.pixelSize: 12 }
+                                                    MouseArea { id: vMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: (root.vpnCredTarget === modelData.name) ? root.vpnCloseCredentials() : root.toggleVpn(modelData.name, !modelData.active) }
+                                                }
+                                                // credentials form: username · password · (L2TP) pre-shared key.
+                                                // Stored in the profile on Connect, so the toggle works from then on.
+                                                Column {
+                                                    width: parent.width; spacing: 4; visible: root.vpnCredTarget === modelData.name
+                                                    topPadding: 2; bottomPadding: 4
+                                                    Text { width: parent.width; wrapMode: Text.Wrap; text: "This VPN needs your credentials once — they are kept in the profile."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
+                                                    Rectangle {
+                                                        width: parent.width; height: 30; radius: 7; color: Theme.bg; border.color: Theme.accent; border.width: 1
+                                                        TextInput {
+                                                            id: vUser
+                                                            anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10; verticalAlignment: TextInput.AlignVCenter
+                                                            text: root.vpnCredUser; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
+                                                            onTextChanged: root.vpnCredUser = text
+                                                            Component.onCompleted: if (root.vpnCredTarget === modelData.name && text === "") forceActiveFocus()
+                                                            Keys.onEscapePressed: root.vpnCloseCredentials()
+                                                            Text { anchors.verticalCenter: parent.verticalCenter; visible: vUser.text.length === 0; text: "Username"; color: Theme.fgDim; font: vUser.font }
+                                                        }
+                                                    }
+                                                    Rectangle {
+                                                        width: parent.width; height: 30; radius: 7; color: Theme.bg; border.color: Theme.stroke; border.width: 1
+                                                        TextInput {
+                                                            id: vPass
+                                                            anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 40; verticalAlignment: TextInput.AlignVCenter
+                                                            echoMode: root.vpnCredShow ? TextInput.Normal : TextInput.Password; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
+                                                            text: root.vpnCredPass
+                                                            onTextChanged: root.vpnCredPass = text
+                                                            Component.onCompleted: if (root.vpnCredTarget === modelData.name && root.vpnCredUser !== "") forceActiveFocus()
+                                                            onAccepted: root.vpnCredNeedsPsk ? vPsk.forceActiveFocus() : root.vpnSaveCredentials()
+                                                            Keys.onEscapePressed: root.vpnCloseCredentials()
+                                                            Text { anchors.verticalCenter: parent.verticalCenter; visible: vPass.text.length === 0; text: "Password"; color: Theme.fgDim; font: vPass.font }
+                                                        }
+                                                        Text { anchors.right: parent.right; anchors.rightMargin: 12; anchors.verticalCenter: parent.verticalCenter; text: root.vpnCredShow ? Theme.icEyeOff : Theme.icEye; font.family: Theme.fontIcons; font.pixelSize: 13; color: root.vpnCredShow ? Theme.accent : Theme.fgDim; MouseArea { anchors.fill: parent; anchors.margins: -6; cursorShape: Qt.PointingHandCursor; onClicked: root.vpnCredShow = !root.vpnCredShow } }
+                                                    }
+                                                    Rectangle {
+                                                        visible: root.vpnCredNeedsPsk
+                                                        width: parent.width; height: visible ? 30 : 0; radius: 7; color: Theme.bg; border.color: Theme.stroke; border.width: 1
+                                                        TextInput {
+                                                            id: vPsk
+                                                            anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10; verticalAlignment: TextInput.AlignVCenter
+                                                            echoMode: root.vpnCredShow ? TextInput.Normal : TextInput.Password; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
+                                                            text: root.vpnCredPsk
+                                                            onTextChanged: root.vpnCredPsk = text
+                                                            onAccepted: root.vpnSaveCredentials()
+                                                            Keys.onEscapePressed: root.vpnCloseCredentials()
+                                                            Text { anchors.verticalCenter: parent.verticalCenter; visible: vPsk.text.length === 0; text: "Pre-shared key (IPsec) — leave empty if none"; color: Theme.fgDim; font: vPsk.font }
+                                                        }
+                                                    }
+                                                    Text { visible: root.vpnCredError !== ""; width: parent.width; wrapMode: Text.Wrap; text: root.vpnCredError; color: Theme.danger; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
+                                                    Row {
+                                                        anchors.right: parent.right; spacing: 14
+                                                        Text { text: "Cancel"; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; MouseArea { anchors.fill: parent; anchors.margins: -6; cursorShape: Qt.PointingHandCursor; onClicked: root.vpnCloseCredentials() } }
+                                                        Text { text: root.vpnBusyName === modelData.name ? "Connecting…" : "Connect"; color: Theme.accent; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold; MouseArea { anchors.fill: parent; anchors.margins: -6; cursorShape: Qt.PointingHandCursor; enabled: root.vpnBusyName === ""; onClicked: root.vpnSaveCredentials() } }
+                                                    }
+                                                }
                                             }
                                         }
                                     }

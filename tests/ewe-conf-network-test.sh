@@ -17,9 +17,13 @@ cat > "$WORK/bin/nmcli" <<'EOF'
 #!/usr/bin/env bash
 case "$*" in
     "-t -f NAME,TYPE connection show")
-        printf 'office:vpn\nwg-home:wireguard\nWiFi-1:802-11-wireless\n' ;;
+        printf 'office:vpn\nwork:vpn\nwg-home:wireguard\nWiFi-1:802-11-wireless\n' ;;
     "-t -g vpn.service-type,vpn.data connection show office")
         printf 'org.freedesktop.NetworkManager.openvpn\nremote = vpn.example.com, port = 1194\n' ;;
+    "-t -g vpn.service-type,vpn.data connection show work")
+        # an L2TP/IPsec profile whose credentials are stored in the profile:
+        # the *-flags entries are THIS machine's storage choice, not a definition
+        printf 'org.freedesktop.NetworkManager.l2tp\ngateway = vpn.corp.example, user = scubba, ipsec-enabled = yes, password-flags = 0, ipsec-psk-flags = 0\n' ;;
     "-t -f NAME connection show")
         printf 'WiFi-1\n' ;;   # fresh machine: no VPNs yet
     "connection add "*)
@@ -62,6 +66,11 @@ grep -q '"name": "office"' <<<"$v" && grep -q 'openvpn' <<<"$v" || fail "vpn not
 grep -q '"wg-home"' <<<"$v" || fail "wireguard name not recorded: $v"
 grep -qi 'secret\|password' <<<"$v" && fail "secrets leaked into vpn defs"
 ok "import adopts ssh hosts + vpn definitions (no wildcards, no secrets)"
+# 1b · the L2TP profile round-trips as a definition: gateway/user/ipsec, never the flags
+grep -q '"name": "work"' <<<"$v" && grep -q 'NetworkManager.l2tp' <<<"$v" || fail "l2tp not adopted: $v"
+grep -q 'gateway = vpn.corp.example' <<<"$v" && grep -q 'ipsec-enabled = yes' <<<"$v" || fail "l2tp data lost: $v"
+grep -q 'flags' <<<"$v" && fail "secret-storage flags leaked into vpn defs: $v"
+ok "l2tp profile adopted as a definition (gateway, user, ipsec — no storage flags)"
 
 # 2 · apply on the SAME machine: hosts already defined outside the block are
 #     skipped — the config gains only the empty managed block, own lines intact
@@ -86,7 +95,9 @@ ok "fresh machine gets every host back, mode 0600"
 grep -q 'con-name office' "$WORK/nmcli-add.log" || fail "openvpn profile not recreated"
 grep -q 'vpn-type openvpn' "$WORK/nmcli-add.log" || fail "vpn-type wrong: $(cat "$WORK/nmcli-add.log")"
 grep -q 'wg-home' "$WORK/nmcli-add.log" && fail "wireguard wrongly recreated"
-ok "restore recreates plugin VPNs only, as skeletons"
+grep -q 'con-name work' "$WORK/nmcli-add.log" && grep -q 'vpn-type l2tp' "$WORK/nmcli-add.log" || fail "l2tp profile not recreated: $(cat "$WORK/nmcli-add.log")"
+grep -q 'flags' "$WORK/nmcli-add.log" && fail "skeleton carries storage flags: $(cat "$WORK/nmcli-add.log")"
+ok "restore recreates plugin VPNs only, as skeletons (l2tp included, flag-free)"
 
 # 5 · re-apply is idempotent
 before=$(cat "$WORK/ssh-config-fresh")

@@ -214,11 +214,15 @@ too?" They do, with a firm line through the middle:
   skipped (first match wins in ssh config). Keys are yours to bring; the
   aliases just work again.
 - `[[network.vpn]]` carries NetworkManager VPN *profile definitions* — name,
-  type, service, and the non-secret `vpn.data` property string. On restore,
-  missing profiles are recreated as skeletons; NetworkManager prompts for
-  the password on first connect and keeps it in the keyring. WireGuard is
-  recorded by name only — its peer config holds key material, so
-  re-importing your `.conf` is the honest path there.
+  type, service, and the non-secret `vpn.data` property string (OpenVPN's
+  remote/port, L2TP/IPsec's gateway/user/ipsec-enabled; the `*-flags`
+  entries that say where THIS machine stores a secret are dropped). On
+  restore, missing profiles are recreated as skeletons; the first connect
+  from the Control Center or Settings → Network opens an inline credentials
+  form (username, password, and the IPsec pre-shared key for L2TP) and
+  stores them in the profile — the toggle just works from then on.
+  WireGuard is recorded by name only — its peer config holds key material,
+  so re-importing your `.conf` is the honest path there.
 - Deletions go through `ewe-conf unset` (adoption is a union — removing a
   host locally doesn't remove it from the file, because it may belong to
   another machine).

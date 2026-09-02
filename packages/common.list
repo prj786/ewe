@@ -54,6 +54,7 @@ alsa-utils              # alsactl (restore mixer @ boot) + alsamixer / aplay -l 
 # ── network / bluetooth / power ──────────────────────────────────────────────
 networkmanager
 networkmanager-openvpn  # OpenVPN profiles (the most common VPN type)
+networkmanager-l2tp     # L2TP/IPsec profiles (server + user + password + PSK — the corporate/ISP kind); strongswan + xl2tpd ride along
 networkmanager-l2tp     # L2TP/IPsec profiles (needs strongswan below)
 strongswan              # IPsec for networkmanager-l2tp
 # Cast to TV (the control-centre "Cast" tile → gnome-network-displays, aur.list):

@@ -199,6 +199,18 @@ revokes the token at Google and clears the keyring. Helper:
 `dotfiles/quickshell/scripts/google-auth.py` (stdlib-only Python). Everything
 degrades cleanly when signed out or offline.
 
+## VPN
+
+ewe ships the NetworkManager plugins for **OpenVPN** and **L2TP/IPsec**
+(the corporate/ISP kind: server, username, password, pre-shared key);
+WireGuard is native. Add a VPN in **Settings → Network → Add VPN** — an
+L2TP one from its four facts, an OpenVPN or WireGuard one from its file —
+or import from a terminal (`nmcli connection import type openvpn file
+x.ovpn`). Then toggle it in the **Control Center → VPN** card. The first
+connect asks for the credentials once, inline, and keeps them in the
+profile (root-only, under `/etc/NetworkManager`); the one file records the
+definition, never the secrets, so a restored machine asks once again.
+
 ## Phone (KDE Connect, optional)
 
 The control centre has a **Mobile** card that pairs your Android phone through
