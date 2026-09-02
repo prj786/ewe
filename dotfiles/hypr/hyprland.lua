@@ -63,11 +63,15 @@ hl.config({
         gaps_out    = 14,
         border_size = 1,           -- no chunky borders; the shadow carries the depth
 
-        -- Active border: Gruvbox yellow → orange gradient. Inactive: a quiet
-        -- surface tone so unfocused windows recede.
+        -- Active border: the user's accent (colors.lua reads user-theme.json,
+        -- so this tracks the shell live on every reload). Inactive: the
+        -- flock/blacksheep hairline so unfocused windows recede. Both used
+        -- to be Gruvbox leftovers (yellow→orange gradient, warm grey) — the
+        -- "border is a different colour than the accent" of the first metal
+        -- install whenever generated/user.lua had not been written yet.
         col = {
-            active_border   = { colors = { c.rgba(c.yellow, 0xee), c.rgba(c.orange, 0xee) }, angle = 45 },
-            inactive_border = c.rgba(c.bg2, 0xaa),
+            active_border   = c.rgba(c.accent, 0xee),
+            inactive_border = c.rgba(c.s_stroke, 0xaa),
         },
 
         resize_on_border = true,

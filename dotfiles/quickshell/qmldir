@@ -41,3 +41,4 @@ TrayMenu 1.0 TrayMenu.qml
 Battery 1.0 Battery.qml
 IpcHub 1.0 IpcHub.qml
 Welcome 1.0 Welcome.qml
+WifiPicker 1.0 WifiPicker.qml

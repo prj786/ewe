@@ -358,11 +358,17 @@ Scope {
         Quickshell.execDetached(["sh", "-c", "\"" + root.home + "/.config/quickshell/scripts/colorscheme.sh\" "
             + Globals.colorScheme + " " + String(Theme.accent).replace("#", "")])
     }
+    // Live-only: the border COLOUR is theme state (ewe-conf's gen_user_lua
+    // emits it from tint_borders + accent), not one of the four layout
+    // numbers. This used to also call writeOverrides(), which wrote this
+    // pane's CACHED gaps/border/rounding back into desktop.layout — and
+    // right after a restore those were the pre-restore values (layoutProc
+    // only runs on open), so the restored layout was clobbered on disk and
+    // then auto-pushed to Drive. 0.9.16-2.
     function applyBorder() {
         if (Globals.tintBorders)
             Quickshell.execDetached(["hyprctl", "eval",
                 "hl.config({ general = { col = { active_border = \"rgba(" + root.hex6(Theme.accent) + "ff)\" } } })"])
-        root.writeOverrides()
     }
 
     // ── Displays — state, apply, persistence and the hotplug/power guard all ──
@@ -557,8 +563,10 @@ Scope {
     function refresh() { diagProc.running = true; layoutProc.running = true; HyprMon.refresh(); defProc.running = true; choicesProc.running = true; root.paneProbes() }
     Connections { target: Globals; function onSettingsOpenChanged() { if (Globals.settingsOpen) root.refresh() } }
     // applyColorScheme() is already done by the reader itself; the border is not,
-    // because it is Hyprland state rather than toolkit state.
-    Connections { target: Globals; function onPrefsReloaded() { root.applyBorder() } }
+    // because it is Hyprland state rather than toolkit state. A prefs reload
+    // usually means a restore/apply just rewrote the runtime files: re-read the
+    // live layout numbers FIRST, so nothing in this pane can write stale ones.
+    Connections { target: Globals; function onPrefsReloaded() { layoutProc.running = true; root.applyBorder() } }
     // Quick Settings toggles tiling by flipping the Globals bool (the in-shell
     // idiom); persisting and applying it belongs here, with the other generators.
     Connections {
@@ -2774,20 +2782,24 @@ Scope {
                     SectionTitle { visible: Google.signedIn; text: "SETTINGS SYNC" }
                     Card {
                         visible: Google.signedIn
-                        KV { k: "Cloud backup"; v: Google.cloudInfo ? ("saved on “" + Google.cloudInfo.device + "” · " + root.fmtSyncTime(Google.cloudInfo.updatedAt)) : "none yet" }
-                        KV { k: "Last synced from this device"; v: Google.lastSync !== "" ? root.fmtSyncTime(Google.lastSync) : "never" }
+                        // two facts, kept apart: who SAVED the backup, and when THIS
+                        // machine last talked to it (a fresh machine used to wear the
+                        // old PC's push time as its own)
+                        KV { k: "Backup in Drive"; v: Google.cloudInfo ? ("saved by “" + Google.cloudInfo.device + "” · " + root.fmtSyncTime(Google.cloudInfo.updatedAt)) : "none yet" }
+                        KV { k: "This machine last synced"; v: (Google.localSyncedAt !== "" ? root.fmtSyncTime(Google.localSyncedAt) : (Google.lastSync !== "" ? root.fmtSyncTime(Google.lastSync) : "never — nothing is uploaded until you back it up")) + (Google.inSync && Google.lastSync !== "" ? " · up to date" : "") }
                         ToggleRow {
                             title: "Auto-sync"
-                            sub: "Pushes ~20 s after closing Settings whenever something changed."
+                            sub: Google.lastSync === "" ? "Starts after the first backup from this machine; pushes ~20 s after closing Settings whenever something changed." : "Pushes ~20 s after closing Settings whenever something changed."
                             on: Google.autoSync
                             onToggled: Google.setAutoSync(!Google.autoSync)
                         }
                         Row {
                             spacing: 10
-                            Pill { label: Google.syncState === "syncing" ? "Syncing…" : "Sync now"; primary: true; onGo: Google.syncNow() }
+                            // a never-synced machine never auto-pushes: its first upload is this button
+                            Pill { label: Google.syncState === "syncing" ? "Syncing…" : (Google.lastSync === "" ? "Back up this machine" : "Sync now"); primary: true; onGo: Google.syncNow() }
                             Pill { label: "Restore from cloud…"; onGo: Google.requestRestore() }
                             // only offered when the conflict guard refused a push
-                            Pill { visible: Google.syncError.indexOf("Another machine") === 0; label: "Push anyway"; onGo: Google.pushForce() }
+                            Pill { visible: Google.syncConflict; label: "Push anyway"; onGo: Google.pushForce() }
                         }
                         Text { width: parent.width; text: "The machine file (ewe.conf) syncs to Drive's hidden app storage: theme + accent, dock, animations, power, display profiles, window rules, wallpapers, pinned/startup apps, places, and Komble's installed-apps list (reinstalling from it is always opt-in). Credentials never sync — that's the rule the file is built on."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
                         Text { visible: Google.syncError !== ""; width: parent.width; text: Google.syncError; color: Theme.danger; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }

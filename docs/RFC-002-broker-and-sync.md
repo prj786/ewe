@@ -46,8 +46,15 @@ through the broker). One client id, one consent screen, one sign-out.
     `[sync].enabled`;
   - download on demand only — `ewe-conf pull` (and the greeter/first-login
     "restore this machine?" flow) — never silent overwrite in the background;
-  - conflicts: newest-wins with the loser saved as `ewe.conf.<timestamp>.bak`
-    beside the file. One file makes conflict recovery a diff, not a hunt.
+  - conflicts: every push and pull records the remote's id + `modifiedTime`
+    locally; a push is refused when the remote no longer matches the record
+    (someone else saved since we last synced) — `pull` adopts theirs with
+    the loser saved as `ewe.conf.<timestamp>.bak` beside the file, `--force`
+    overwrites. A never-synced machine may push only into an empty Drive;
+    otherwise it restores first. No clocks or hostnames in the rule (the
+    original "newest-wins by mtime + machine name" broke on a skewed fresh
+    install and on two machines sharing a name, 2026-09-02). One file makes
+    conflict recovery a diff, not a hunt.
 - Restore: `ewe-conf pull && ewe-conf apply` rebuilds the desktop; komble
   reads `[apps.installed]` and offers the reinstall list (explicit confirm —
   a restored file must never silently install software).

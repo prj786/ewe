@@ -20,6 +20,15 @@ QtObject {
     property var profile: null           // { name, email, picture } (cached on disk, non-secret)
     property string busy: ""             // "" | "signin" | "refresh"
     property string error: ""            // last auth-level error, human-readable ("" = none)
+    // 0.9.16-2 (first metal install): the keyring and the browser were both
+    // invisible behind the Welcome overlay and ewe-auth killed its own
+    // prompt. The broker now reports what the keyring will do and hands the
+    // consent URL back, so the UI can say so and offer the link itself.
+    property string keyringState: "ok"   // ok | missing | locked | unavailable (from ewe-auth status/login)
+    property string consentUrl: ""       // the sign-in page of the login in flight / that just failed
+    readonly property bool keyringPromptExpected: keyringState === "missing" || keyringState === "locked"
+    function openConsentUrl() { if (goo.consentUrl !== "") Quickshell.execDetached(["xdg-open", goo.consentUrl]) }
+    function copyConsentUrl() { if (goo.consentUrl !== "") Quickshell.execDetached(["sh", "-c", 'printf %s "$1" | wl-copy', "sh", goo.consentUrl]) }
 
     signal sessionReady()                // fired on sign-in and on startup when already signed in
     signal sessionClosed()               // fired on sign-out / server-side revocation
@@ -62,9 +71,11 @@ QtObject {
         function status(): string {
             return JSON.stringify({
                 probed: goo.probed, configured: goo.configured, keyringOk: goo.keyringOk,
+                keyringState: goo.keyringState, consentUrl: goo.consentUrl,
                 signedIn: goo.signedIn, busy: goo.busy, error: goo.error,
-                syncState: goo.syncState, syncError: goo.syncError,
-                lastSync: goo.lastSync, autoSync: goo.autoSync,
+                syncState: goo.syncState, syncError: goo.syncError, syncConflict: goo.syncConflict, inSync: goo.inSync,
+                lastSync: goo.lastSync, localSyncedAt: goo.localSyncedAt, autoSync: goo.autoSync,
+                restoreApps: goo.restoreApps,
                 profile: goo.profile
             })
         }
@@ -81,6 +92,7 @@ QtObject {
                     var j = JSON.parse(this.text)
                     goo.configured = !!j.configured
                     goo.keyringOk = j.keyring !== false
+                    if (j.keyring_state) goo.keyringState = String(j.keyring_state)
                     var was = goo.signedIn
                     goo.signedIn = !!j.signed_in
                     goo.profile = j.profile || null
@@ -130,6 +142,7 @@ QtObject {
     function signIn() {
         if (goo.busy === "signin" || !goo.configured) return
         goo.error = ""
+        goo.consentUrl = ""
         goo.busy = "signin"
         _loginProc.running = false; _loginProc.running = true
     }
@@ -142,12 +155,23 @@ QtObject {
         // --with-drive: ONE consent covers files too, so ~/Google Drive can be
         // mounted right after sign-in with no second browser round-trip
         command: ["python3", goo.helper, "login", "--with-drive"]
+        // the consent URL rides on stderr the moment it exists — long before
+        // the JSON result — so "open / copy the link" works while waiting
+        stderr: StdioCollector {
+            onStreamFinished: {
+                var ls = this.text.split("\n")
+                for (var i = 0; i < ls.length; i++)
+                    if (ls[i].indexOf("consent-url: ") === 0) goo.consentUrl = ls[i].slice(13).trim()
+            }
+        }
         stdout: StdioCollector {
             onStreamFinished: {
                 if (goo.busy === "signin") goo.busy = ""
                 if (this.text.trim() === "") return   // cancelled — process killed mid-flight
                 try {
                     var j = JSON.parse(this.text)
+                    if (j.consent_url) goo.consentUrl = String(j.consent_url)
+                    if (j.keyring) goo.keyringState = String(j.keyring)
                     if (j.ok) {
                         goo.signedIn = true
                         goo.profile = j.profile
@@ -160,16 +184,21 @@ QtObject {
                         // (rclone remote + Nemo bookmark + mount) consent-free
                         Quickshell.execDetached(["bash", Quickshell.env("HOME") + "/.config/quickshell/../../bin/ewe-drive", "setup", "--have-scope"])
                     } else {
-                        goo.error = goo._loginErrMsg(j.error)
+                        goo.error = goo._loginErrMsg(j.error, j.message)
+                        Log.warn("google", "sign-in failed:", j.error, j.message || "")
                     }
                 } catch (e) { goo.error = "Sign-in failed — could not parse the helper output." }
             }
         }
     }
-    function _loginErrMsg(e) {
+    function _loginErrMsg(e, detail) {
         if (e === "access_denied") return "Sign-in was cancelled in the browser."
-        if (e === "timeout") return "Sign-in timed out — no response from the browser within 5 minutes."
-        if (e === "keyring-unavailable" || e === "keyring-store-failed") return "No Secret Service keyring available — install/enable gnome-keyring, then retry."
+        if (e === "timeout") return "Sign-in timed out — no response from the browser within 5 minutes. Use “Open the sign-in page” if no tab appeared."
+        if (e === "browser-failed") return "No browser opened for the sign-in page — use “Open the sign-in page” or copy the link into any browser."
+        if (e === "keyring-unavailable") return "No Secret Service keyring is running — gnome-keyring must be installed and started for this session."
+        if (e === "keyring-cancelled") return "The keyring prompt was dismissed — sign in again and unlock the keyring with your login password."
+        if (e === "keyring-timeout") return "The keyring did not answer — if a keyring password prompt is open, answer it with your login password, then sign in again."
+        if (e === "keyring-store-failed") return detail ? String(detail) : "The keyring refused to store the token — see Troubleshooting → Google sign-in."
         if (e === "not-configured") return "Google client ID not configured — see README → Google account."
         if (e === "no-refresh-token") return "Google returned no refresh token — remove the app at myaccount.google.com/permissions and retry."
         return "Sign-in failed: " + e
@@ -241,6 +270,10 @@ QtObject {
     // ══════════════════════════════════════════════════════════════════════════
     property string syncState: "idle"    // idle | syncing | error
     property string syncError: ""
+    // the push was refused by the conflict guard (remote-newer / remote-exists):
+    // the UI offers Restore / "Push anyway" only then
+    property bool syncConflict: false
+    property bool inSync: false          // ewe-conf's verdict: the recorded remote version is current
     property string restoreSummary: ""   // success line after a restore
     property string lastSync: ""         // ISO — last successful push/restore from THIS device
     property string lastHash: ""         // content hash of the last pushed bundle (skip no-op pushes)
@@ -248,6 +281,12 @@ QtObject {
     // promise — the toggle in Settings/Komble is the opt-out
     property bool autoSync: true
     property var cloudInfo: null         // { device, updatedAt } of the cloud copy
+    // ewe-conf's own sync record (sync.json — 0.9.16-2): when THIS machine
+    // last talked to Drive. Distinct from cloudInfo, which is who SAVED the
+    // backup — a fresh machine used to show the old PC's push time as its
+    // own "last synced".
+    property string localSyncedAt: ""
+    property int restoreApps: 0          // apps the last restore left waiting in Komble
     property var pendingRestore: null    // remote-file marker awaiting explicit confirmation
     readonly property string syncMetaPath: Quickshell.env("HOME") + "/.config/quickshell/google-sync.json"
 
@@ -310,7 +349,7 @@ QtObject {
     property string _pendingHash: ""
     function syncNow() {
         if (!goo.signedIn || goo.syncState === "syncing") return
-        goo.syncState = "syncing"; goo.syncError = ""; goo.restoreSummary = ""
+        goo.syncState = "syncing"; goo.syncError = ""; goo.restoreSummary = ""; goo.syncConflict = false
         // hash gate: an auto push with an unchanged file is a no-op — this is
         // what makes the login-time syncSoon() free when nothing moved
         _hashProc.running = false; _hashProc.running = true
@@ -339,13 +378,20 @@ QtObject {
                 if (j && j.ok) {
                     if (goo._pendingHash) { goo.lastHash = goo._pendingHash; goo._pendingHash = "" }
                     goo.lastSync = new Date().toISOString(); goo._saveSyncMeta()
+                    goo.localSyncedAt = j.local_synced_at ? String(j.local_synced_at) : goo.lastSync
                     goo.syncState = "idle"
                     goo.checkCloud()
-                } else if (j && j.error === "remote-newer") {
-                    // another machine saved a newer document — never clobber it
-                    // silently; the Settings pane offers Restore / "push anyway"
+                } else if (j && (j.error === "remote-newer" || j.error === "remote-exists")) {
+                    // the conflict guard refused: another machine saved a newer
+                    // document, or this never-synced machine found a backup it
+                    // has not restored — never clobber either silently; the
+                    // Settings pane offers Restore / "push anyway"
+                    var who = (j.remote && j.remote.appProperties && j.remote.appProperties.machine) || j.remote_machine || (goo.cloudInfo && goo.cloudInfo.device) || "another machine"
                     goo.syncState = "error"
-                    goo.syncError = "Another machine saved newer settings — restore them, or push anyway to overwrite."
+                    goo.syncConflict = true
+                    goo.syncError = j.error === "remote-exists"
+                        ? "A backup from “" + who + "” already exists — restore it first, or push anyway to overwrite it."
+                        : "Another machine (“" + who + "”) saved newer settings — restore them, or push anyway to overwrite."
                     goo.checkCloud()
                 } else if (wasAuto) {
                     // auto pushes fail quietly (offline is normal); the next
@@ -357,7 +403,7 @@ QtObject {
     }
     function pushForce() {
         if (!goo.signedIn || goo.syncState === "syncing") return
-        goo.syncState = "syncing"; goo.syncError = ""
+        goo.syncState = "syncing"; goo.syncError = ""; goo.syncConflict = false
         _pushForceProc.running = false; _pushForceProc.running = true
     }
     property Process _pushForceProc: Process {
@@ -366,8 +412,11 @@ QtObject {
             onStreamFinished: {
                 var j = null
                 try { j = JSON.parse(this.text) } catch (e) {}
-                if (j && j.ok) { goo.lastSync = new Date().toISOString(); goo._saveSyncMeta(); goo.syncState = "idle"; goo.checkCloud() }
-                else goo._syncFail(j && j.error ? j.error : "push failed")
+                if (j && j.ok) {
+                    goo.lastSync = new Date().toISOString(); goo._saveSyncMeta()
+                    goo.localSyncedAt = j.local_synced_at ? String(j.local_synced_at) : goo.lastSync
+                    goo.syncState = "idle"; goo.checkCloud()
+                } else goo._syncFail(j && j.error ? j.error : "push failed")
             }
         }
     }
@@ -386,10 +435,16 @@ QtObject {
                 var j = null
                 try { j = JSON.parse(this.text) } catch (e) {}
                 var ok = !!(j && j.ok && j.remote)
+                // tolerant of both shapes: the remote file's appProperties
+                // (always there) and ewe-conf's sync record (0.9.16-2+)
+                var rec = (j && (j.sync || j.local)) || {}
                 goo.cloudInfo = ok ? {
-                    device: (j.remote.appProperties && j.remote.appProperties.machine) || "your account",
-                    updatedAt: j.remote.modifiedTime || ""
+                    device: (j.remote.appProperties && j.remote.appProperties.machine) || j.remote_machine || rec.remote_machine || "your account",
+                    updatedAt: j.remote.modifiedTime || j.remote_modified || rec.remote_modified || ""
                 } : null
+                var ls = (j && (j.local_synced_at || rec.local_synced_at)) || ""
+                if (ls) goo.localSyncedAt = String(ls)
+                if (j && j.in_sync !== undefined) goo.inSync = !!j.in_sync
                 var cb = goo._statusCb; goo._statusCb = null
                 if (cb) cb(ok)
                 if (ok) goo._maybeOfferRestore()
@@ -413,20 +468,35 @@ QtObject {
     }
 
     // auto-sync: debounce-push after Settings closes
+    //
+    // NEVER from a machine that has not synced yet (lastSync === ""), nor
+    // while a restore is on offer or the Welcome flow is up. The first
+    // bare-metal install (2026-09-02) proved why: sign-in armed a push 20 s
+    // later, the fresh near-empty ewe.conf went to Drive, and the restore
+    // then pulled that back — the old PC's backup was gone. A never-synced
+    // machine pushes only when the user says so (Welcome / Settings →
+    // "Back up this machine"), which also stamps it as synced.
+    function autoPushAllowed() {
+        return goo.autoSync && goo.signedIn && goo.lastSync !== ""
+            && goo.pendingRestore === null && !Globals.welcomeOpen
+    }
     property Connections _autoHook: Connections {
         target: Globals
         function onSettingsOpenChanged() {
-            if (!Globals.settingsOpen && goo.autoSync && goo.signedIn) goo._autoPushTimer.restart()
+            if (!Globals.settingsOpen && goo.autoPushAllowed()) goo._autoPushTimer.restart()
         }
     }
     function syncSoon() {
-        if (!goo.autoSync || !goo.signedIn) return
+        if (!goo.autoPushAllowed()) return
         goo._autoPushTimer.restart()
     }
     property Timer _autoPushTimer: Timer {
         interval: 20000
-        onTriggered: { if (goo.autoSync && goo.signedIn && goo.syncState !== "syncing") { goo._autoPushing = true; goo.syncNow() } }
+        onTriggered: { if (goo.autoPushAllowed() && goo.syncState !== "syncing") { goo._autoPushing = true; goo.syncNow() } }
     }
+    // the explicit first backup from a never-synced machine (a plain
+    // syncNow, named so the buttons read honestly)
+    function backUpNow() { goo.syncNow() }
 
     // ── restore (explicit, confirmed): pull the file, apply, reload ──────────
     function requestRestore() {
@@ -460,12 +530,47 @@ QtObject {
                         'hyprctl reload >/dev/null 2>&1; "$HOME/.config/hypr/scripts/wallpaper.sh" --reapply >/dev/null 2>&1; pkill -x hypridle; sleep 0.6; hypridle -c "$HOME/.config/hypr/generated/hypridle.conf" >/dev/null 2>&1'])
                     Wallpaper.reapplied()
                 }
-                goo.lastSync = j.modified || new Date().toISOString(); goo._saveSyncMeta()
-                goo.syncState = "idle"
-                goo.restoreSummary = "Restored the machine file from Drive"
+                // NOW, not the remote's modifiedTime: that was the OLD
+                // machine's push time masquerading as ours
+                goo.lastSync = new Date().toISOString(); goo._saveSyncMeta()
+                goo.localSyncedAt = goo.lastSync
+                goo.syncState = "idle"; goo.syncConflict = false
+                goo.restoreSummary = "Restored the machine file" + (j.machine ? " saved by “" + j.machine + "”" : "") + " from Drive"
                     + (j.backup ? " (previous kept as " + j.backup.split("/").pop() + ")" : "") + "."
+                goo._manifestProc.running = false; goo._manifestProc.running = true
             }
         }
+    }
+    // after a restore: how many apps does the pulled file want back? ewe
+    // itself never installs anything — Komble's For-you pane does, and only
+    // when asked — so SAY that the list is waiting instead of leaving the
+    // user to discover an empty desktop (the "I could not install anything"
+    // of the first metal install)
+    property Process _manifestProc: Process {
+        command: [goo.eweConf, "get", "apps.installed"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                var n = 0
+                try {
+                    var m = JSON.parse(this.text)
+                    if (m && typeof m === "object") {
+                        if (Array.isArray(m.packages)) n += m.packages.length
+                        if (Array.isArray(m.appimages)) n += m.appimages.length
+                    }
+                } catch (e) {}
+                goo.restoreApps = n
+                if (n === 0) { Log.info("google", "restore: the backup carries no app manifest — nothing for Komble"); return }
+                goo._appsNotify.running = false; goo._appsNotify.running = true
+            }
+        }
+    }
+    // notify-send -A blocks until the toast is acted on and prints the
+    // chosen action — a tracked Process turns that into openStore()
+    property Process _appsNotify: Process {
+        command: ["notify-send", "-a", "Komble", "-i", "system-software-install", "-A", "open=Open Komble",
+                  goo.restoreApps + (goo.restoreApps === 1 ? " app is" : " apps are") + " waiting in Komble",
+                  "Your backup lists them under For you — reinstalling is one click, never automatic."]
+        stdout: StdioCollector { onStreamFinished: if (this.text.trim() === "open") Globals.openStore() }
     }
 
     // ══════════════════════════════════════════════════════════════════════════

@@ -14,7 +14,11 @@ artifact of `ewe-conf apply`.
     ewe-conf import                   build ewe.conf FROM the live runtime files
     ewe-conf apply [--only DOMAIN] [--no-hooks]
                                       regenerate artifacts (+ colorscheme +
-                                      settings-reload poke unless --no-hooks)
+                                      settings-reload poke + hyprctl reload
+                                      unless --no-hooks)
+    ewe-conf push [--force]           upload the file to Drive (RFC-002)
+    ewe-conf pull [--out PATH]        download it — then `apply` to make it live
+    ewe-conf sync-status              the remote copy + this machine's sync record
 
 Python stdlib only: tomllib reads, the constrained emitter below writes (our
 schema is tables, arrays, scalars — nothing exotic). Writes are atomic
@@ -38,6 +42,9 @@ CFG_DIR = os.path.join(os.environ.get("XDG_CONFIG_HOME")
 EWE_DIR = os.path.join(CFG_DIR, "ewe")
 CONF = os.path.join(EWE_DIR, "ewe.conf")
 QS = os.path.join(CFG_DIR, "quickshell")
+STATE_DIR = os.path.join(os.environ.get("XDG_STATE_HOME")
+                         or os.path.join(os.path.expanduser("~"), ".local", "state"), "ewe")
+SYNC_STATE = os.path.join(STATE_DIR, "sync.json")
 
 HEADER = """\
 # ewe.conf — the machine as one file (RFC-001).
@@ -274,11 +281,17 @@ def do_import():
     try:
         with open(os.path.join(HYPR_GEN, "user.lua")) as f:
             lay = parse_user_lua(f.read())
-        if lay is not None:
-            node, last = dig(doc, "desktop.layout", create=True)
-            node[last] = lay
     except FileNotFoundError:
-        pass
+        lay = None
+    node, last = dig(doc, "desktop.layout", create=True)
+    if lay is not None:
+        node[last] = lay
+    elif not isinstance(node.get(last), dict):
+        # a fresh machine's user.lua is the comment-only stub: seed the
+        # defaults so the section always EXISTS — it is what syncs, and what
+        # apply regenerates user.lua (gaps, border colour) from
+        node[last] = dict(LAYOUT_DEFAULTS)
+    seed_installed(doc)
     try:
         with open(os.path.join(HYPR_GEN, "input.lua")) as f:
             parsed = parse_input_lua(f.read())
@@ -318,6 +331,41 @@ def do_import():
     doc.setdefault("sync", {}).setdefault("enabled", False)
     save(doc)
     return doc
+
+
+LAYOUT_DEFAULTS = {"gaps_in": 6, "gaps_out": 14, "border_size": 1, "rounding": 12}
+
+
+def seed_installed(doc):
+    """[apps.installed] baseline from pacman: every EXPLICITLY installed
+    package (source "aur" when no sync db carries it), unioned with what the
+    file already has (existing entries win per name, AppImages untouched).
+    Komble mirrors its own registry into this section — but a machine that
+    never ran Komble, or installed with pacman by hand, must still restore."""
+    import shutil
+    if not shutil.which("pacman"):
+        return
+    try:
+        q = subprocess.run(["pacman", "-Qe"], capture_output=True, text=True, timeout=30)
+        m = subprocess.run(["pacman", "-Qmq"], capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.TimeoutExpired):
+        return
+    if q.returncode != 0:
+        return
+    foreign = set(m.stdout.split()) if m.returncode == 0 else set()
+    node, last = dig(doc, "apps.installed", create=True)
+    man = node.get(last) if isinstance(node.get(last), dict) else {}
+    pkgs = [e for e in (man.get("packages") or []) if isinstance(e, dict)]
+    have = {e.get("package") for e in pkgs}
+    for line in q.stdout.splitlines():
+        parts = line.split()
+        if len(parts) != 2 or parts[0] in have:
+            continue
+        pkgs.append({"package": parts[0], "version": parts[1],
+                     "source": "aur" if parts[0] in foreign else "repo"})
+    man["packages"] = pkgs
+    man.setdefault("appimages", man.get("appimages") or [])
+    node[last] = man
 
 
 def do_apply(doc, only=None, hooks=True):
@@ -368,13 +416,13 @@ def do_apply(doc, only=None, hooks=True):
             _wtext(os.path.join(HYPR_GEN, "wallpapers.conf"),
                    gen_wallpapers_conf(node[last]) + "\n")
     # user.lua depends on layout AND theme/animations/tiling — any of them
-    # changing regenerates it. Gated on desktop.layout existing, so machines
-    # that haven't migrated keep their UI-written file untouched.
+    # changing regenerates it. ALWAYS (2026-09-02 metal hotfix): a pulled
+    # file without [desktop.layout] used to leave a stale user.lua behind,
+    # so the window border kept the previous accent while the shell wore
+    # the new one; gen_user_lua falls back to LAYOUT_DEFAULTS.
     if want("theme") or want("animations") or want("layout"):
-        node, last = dig(doc, "desktop.layout")
-        if node and last in node:
-            # trailing extra \n matches the shell's heredoc atomicWrite
-            _wtext(os.path.join(HYPR_GEN, "user.lua"), gen_user_lua(doc) + "\n")
+        # trailing extra \n matches the shell's heredoc atomicWrite
+        _wtext(os.path.join(HYPR_GEN, "user.lua"), gen_user_lua(doc) + "\n")
     if want("network"):
         node, last = dig(doc, "network.ssh.hosts")
         if node and last in node and isinstance(node[last], list):
@@ -410,6 +458,16 @@ def do_apply(doc, only=None, hooks=True):
                                capture_output=True, timeout=120)
         subprocess.run(["qs", "ipc", "call", "settings", "reload"],
                        capture_output=True, timeout=10)
+        # Hyprland reads the generated lua only on reload — without this a
+        # CLI `pull && apply` changed gaps/border colour at the NEXT login.
+        # Only inside a live session; failures are nobody's problem.
+        if os.environ.get("HYPRLAND_INSTANCE_SIGNATURE") and (
+                want("theme") or want("animations") or want("layout")
+                or want("window_rules") or want("keybinds") or want("input")):
+            try:
+                subprocess.run(["hyprctl", "reload"], capture_output=True, timeout=10)
+            except (OSError, subprocess.TimeoutExpired):
+                pass
 
 
 # ── Phase-4 generators: static lua/conf artifacts derived purely from the ──
@@ -627,15 +685,14 @@ def gen_user_lua(doc):
         node, last = dig(doc, key)
         return (node or {}).get(last, dflt) if node else dflt
 
-    lay = gv("desktop.layout", {}) or {}
+    lay = {**LAYOUT_DEFAULTS, **(gv("desktop.layout", {}) or {})}
     s = "-- AUTO-GENERATED by the Quickshell Settings app. Do not edit by hand.\n"
     gen = "hl.config({ general = { gaps_in = %s, gaps_out = %s, border_size = %s" % (
-        _lua_num(lay.get("gaps_in", 6)), _lua_num(lay.get("gaps_out", 14)),
-        _lua_num(lay.get("border_size", 1)))
+        _lua_num(lay["gaps_in"]), _lua_num(lay["gaps_out"]), _lua_num(lay["border_size"]))
     if gv("desktop.theme.tint_borders", True):
         gen += ', col = { active_border = "rgba(%sff)" }' % _hex6(gv("desktop.theme.accent", "#0a84ff"))
     s += gen + " } })\n"
-    s += "hl.config({ decoration = { rounding = %s } })\n" % _lua_num(lay.get("rounding", 12))
+    s += "hl.config({ decoration = { rounding = %s } })\n" % _lua_num(lay["rounding"])
     # window layout (0.8): dwindle is hyprland.lua's default and emits nothing;
     # master and scrolling (Hyprland >= 0.55's PaperWM-style tape) override
     # general.layout here, scrolling with its column width alongside
@@ -937,9 +994,20 @@ def _wtext(path, text):
 
 # ── RFC-002: sync of the one file (Drive appDataFolder via ewe-auth) ────────
 # Boring by design: push after writes (30s debounce, only when [sync].enabled
-# and signed in), pull ONLY on demand, newest-wins with the loser kept as
+# and signed in), pull ONLY on demand, the loser of a conflict kept as
 # ewe.conf.<ts>.bak. appDataFolder is app-scoped hidden storage — the file
 # never appears in the user's visible Drive.
+#
+# Conflict guard (2026-09-02, after the first metal install): every push
+# and pull RECORDS the remote's id + modifiedTime in $XDG_STATE_HOME/ewe/
+# sync.json. A push is refused when the remote's modifiedTime is not the one
+# we recorded — somebody else saved since we last synced. No clocks, no
+# hostnames: the old "remote newer than local mtime AND other machine" rule
+# broke on a fresh install with a skewed clock (every push refused forever)
+# and on two machines both called "ewe" (each clobbered the other). A
+# machine that has never synced may push only when Drive holds no file yet;
+# otherwise it must pull (restore) first or --force — this is what stops a
+# fresh install's auto-push from erasing the backup it was about to restore.
 
 # EWE_CONF_DRIVE_BASE: tests point this at a local mock Drive
 # (tests/ewe-conf-sync-test.sh) — production never sets it.
@@ -1007,6 +1075,38 @@ def _machine():
     return socket.gethostname() or "unknown"
 
 
+def _sync_state():
+    try:
+        with open(SYNC_STATE) as f:
+            j = json.load(f)
+        return j if isinstance(j, dict) else {}
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _sync_record(remote_id, remote_modified, remote_machine):
+    """what this machine last saw on Drive — the whole conflict guard"""
+    import time as _t
+    os.makedirs(STATE_DIR, exist_ok=True)
+    st = {"id": remote_id, "remote_modified": remote_modified,
+          "remote_machine": remote_machine,
+          "local_synced_at": _t.strftime("%Y-%m-%dT%H:%M:%SZ", _t.gmtime())}
+    fd, tmp = tempfile.mkstemp(dir=STATE_DIR, prefix=".sync.json.")
+    with os.fdopen(fd, "w") as f:
+        json.dump(st, f, indent=2)
+        f.write("\n")
+    os.replace(tmp, SYNC_STATE)
+    return st
+
+
+def _multipart(meta, content):
+    boundary = "eweconfboundary"
+    body = (f"--{boundary}\r\nContent-Type: application/json\r\n\r\n{json.dumps(meta)}\r\n"
+            f"--{boundary}\r\nContent-Type: application/toml\r\n\r\n").encode() \
+        + content + f"\r\n--{boundary}--".encode()
+    return body, f"multipart/related; boundary={boundary}"
+
+
 def _adopt_network():
     """hand-edited ~/.ssh/config hosts and freshly added NM profiles ride
     along on every push, so the cloud copy never carries stale definitions
@@ -1036,37 +1136,50 @@ def do_push(quiet=False, force=False):
     remote, err = _remote_find(token)
     if err:
         return {"ok": False, "error": err}
-    # Conflict guard (RFC-002 newest-wins): a remote SAVED AFTER our local
-    # file was last edited means another machine has the newer document —
-    # pushing would clobber it. Refuse; `push --force` overrides, `pull`
-    # adopts theirs (and keeps ours as .bak).
+    rec = _sync_state()
     if remote and not force:
-        rt = _rfc3339_epoch(remote.get("modifiedTime", ""))
-        if rt > local_mtime + 5 and remote.get("appProperties", {}).get("machine") != _machine():
-            return {"ok": False, "error": "remote-newer", "remote": remote,
+        if rec.get("id") == remote.get("id") and rec.get("remote_modified"):
+            # we have synced with THIS file before: refuse if it moved since
+            if remote.get("modifiedTime") != rec["remote_modified"]:
+                return {"ok": False, "error": "remote-newer", "remote": remote,
+                        "local_mtime": local_mtime,
+                        "recorded_remote_modified": rec["remote_modified"]}
+        else:
+            # never synced here, but Drive already holds a backup: restoring
+            # is the safe move, overwriting is a decision (--force)
+            return {"ok": False, "error": "remote-exists", "remote": remote,
                     "local_mtime": local_mtime}
     props = {"machine": _machine(), "schema": "1"}
+    fields = "fields=id,modifiedTime,appProperties"
     if remote:
-        j, err = _drive("PATCH", f"{DRIVE_UPLOAD}/{remote['id']}?uploadType=media",
-                        token, content, "application/toml")
-        if not err:
-            # media upload can't carry metadata — stamp the manifest after
-            _drive("PATCH", f"{DRIVE_FILES}/{remote['id']}", token,
-                   json.dumps({"appProperties": props}).encode())
+        # ONE multipart PATCH: content + manifest together. The old media
+        # upload followed by a separate metadata stamp could land the file
+        # and lose the stamp, after which the guard misread every push.
+        body, ctype = _multipart({"appProperties": props}, content)
+        j, err = _drive("PATCH", f"{DRIVE_UPLOAD}/{remote['id']}?uploadType=multipart&{fields}",
+                        token, body, ctype)
     else:
-        boundary = "eweconfboundary"
-        meta = json.dumps({"name": "ewe.conf", "parents": ["appDataFolder"],
-                           "appProperties": props})
-        body = (f"--{boundary}\r\nContent-Type: application/json\r\n\r\n{meta}\r\n"
-                f"--{boundary}\r\nContent-Type: application/toml\r\n\r\n").encode()                + content + f"\r\n--{boundary}--".encode()
-        j, err = _drive("POST", f"{DRIVE_UPLOAD}?uploadType=multipart",
-                        token, body, f"multipart/related; boundary={boundary}")
+        body, ctype = _multipart({"name": "ewe.conf", "parents": ["appDataFolder"],
+                                  "appProperties": props}, content)
+        j, err = _drive("POST", f"{DRIVE_UPLOAD}?uploadType=multipart&{fields}",
+                        token, body, ctype)
     if err:
         return {"ok": False, "error": err}
+    if not isinstance(j, dict) or not j.get("id"):
+        return {"ok": False, "error": "upload: no file id in the response"}
+    if (j.get("appProperties") or {}).get("machine") != props["machine"]:
+        return {"ok": False, "error": "stamp-missing", "id": j.get("id", "")}
+    modified = j.get("modifiedTime") or ""
+    if not modified:
+        # a Drive that ignored `fields`: ask again rather than record nothing
+        again, _ = _remote_find(token)
+        modified = (again or {}).get("modifiedTime", "")
+    st = _sync_record(j["id"], modified, props["machine"])
     with open(PUSH_STAMP, "w") as f:
         f.write(str(int(__import__("time").time())))
-    return {"ok": True, "id": j.get("id", ""), "bytes": len(content),
-            "machine": props["machine"]}
+    return {"ok": True, "id": j["id"], "bytes": len(content),
+            "machine": props["machine"], "modified": modified,
+            "local_synced_at": st["local_synced_at"]}
 
 
 def do_pull(out_path=None):
@@ -1086,15 +1199,40 @@ def do_pull(out_path=None):
     tomllib.loads(raw.decode())          # never write a document we can't read
     target = out_path or CONF
     backed_up = ""
-    if not out_path and os.path.exists(CONF):
-        import time as _t
-        backed_up = CONF + "." + _t.strftime("%Y%m%d-%H%M%S") + ".bak"
-        os.replace(CONF, backed_up)
-    os.makedirs(os.path.dirname(target), exist_ok=True)
-    with open(target, "wb") as f:
-        f.write(raw)
+    if out_path:
+        os.makedirs(os.path.dirname(os.path.abspath(target)), exist_ok=True)
+        _wbytes(target, raw)
+        return {"ok": True, "bytes": len(raw), "modified": remote.get("modifiedTime", ""),
+                "backup": "", "written": target}
+    # Under the same lock every writer takes, and tmp+rename like save():
+    # a concurrent `set` (Komble mirrors its manifest at startup) used to
+    # load the pre-pull document and save it straight back over the pull.
+    # The backup is a COPY, so the file never vanishes between two renames.
+    import shutil
+    import time as _t
+    with locked():
+        if os.path.exists(CONF):
+            backed_up = CONF + "." + _t.strftime("%Y%m%d-%H%M%S") + ".bak"
+            shutil.copy2(CONF, backed_up)
+        _wbytes(CONF, raw)
+        st = _sync_record(remote.get("id", ""), remote.get("modifiedTime", ""),
+                          (remote.get("appProperties") or {}).get("machine", ""))
     return {"ok": True, "bytes": len(raw), "modified": remote.get("modifiedTime", ""),
-            "backup": backed_up, "written": target}
+            "machine": st["remote_machine"], "backup": backed_up, "written": target,
+            "local_synced_at": st["local_synced_at"]}
+
+
+def _wbytes(path, data):
+    d = os.path.dirname(os.path.abspath(path))
+    os.makedirs(d, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=d, prefix=".ewe.conf.pull.")
+    try:
+        with os.fdopen(fd, "wb") as f:
+            f.write(data)
+        os.replace(tmp, path)
+    except BaseException:
+        os.unlink(tmp)
+        raise
 
 
 def maybe_auto_push(doc):
@@ -1137,6 +1275,10 @@ def main(argv):
     elif cmd == "get" and len(argv) == 2:
         node, last = dig(load(), argv[1])
         if node is None or last not in node:
+            # exit 1 stays (Komble keys on it); stderr says WHICH failure so
+            # callers can tell "no manifest yet" from a broken tool
+            print(json.dumps({"error": "no-manifest" if argv[1] == "apps.installed" else "no-key",
+                              "key": argv[1]}), file=sys.stderr)
             return 1
         v = node[last]
         print(json.dumps(v) if isinstance(v, (dict, list, bool)) else v)
@@ -1179,10 +1321,20 @@ def main(argv):
             local_mtime = int(os.path.getmtime(CONF))
         except OSError:
             pass
+        rec = _sync_state()
+        rprops = (remote or {}).get("appProperties") or {}
         print(json.dumps({"ok": err is None,
                           "error": err,
                           "remote": remote,
-                          "local_mtime": local_mtime}))
+                          "local_mtime": local_mtime,
+                          # who saved the backup that is on Drive right now
+                          "remote_machine": rprops.get("machine", ""),
+                          "remote_modified": (remote or {}).get("modifiedTime", ""),
+                          # when THIS machine last pushed or pulled
+                          "local_synced_at": rec.get("local_synced_at", ""),
+                          "recorded_remote_modified": rec.get("remote_modified", ""),
+                          "in_sync": bool(remote and rec.get("id") == remote.get("id")
+                                          and rec.get("remote_modified") == remote.get("modifiedTime"))}))
     elif cmd == "push":
         print(json.dumps(do_push(quiet="--quiet" in argv, force="--force" in argv)))
     elif cmd == "pull":

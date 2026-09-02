@@ -55,6 +55,51 @@ What the 2026-08-21 investigation found, in the order it bit:
 Run `~/.config/hypr/scripts/cast-check.sh` any time — it checks all of the
 above and prints the fix for each.
 
+## Google sign-in: no keyring prompt, "keyring not showing up", no browser
+
+What the first bare-metal install (2026-09-02) taught, and what 0.9.16-2
+changed. The refresh token lives in the Secret Service keyring
+(`gnome-keyring`), which PAM is supposed to create and unlock with your
+login password at the greeter. Three things can go wrong:
+
+1. **No prompt ever appears / the sign-in seems to hang.** Before 0.9.16-2
+   the first-run Welcome overlay sat above every other window — including
+   the keyring prompt and the browser it had just opened — and the sign-in
+   helper killed its own keyring prompt after 10 s. Now Welcome steps aside
+   while a sign-in runs, and the helper waits as long as the login does.
+   If you are on an older shell: press **Esc** on Welcome (it can be
+   reopened with `qs ipc call welcome toggle`), then sign in from
+   Settings → User.
+2. **A "Choose password for new keyring" or "Unlock keyring" prompt
+   appears.** PAM did not create/unlock a login keyring for this account.
+   Answer it with your **login password** — that is what lets it unlock by
+   itself at every later login. Check the PAM side with
+   `grep gkr-pam <(journalctl -b _COMM=greetd)` (expected: *"gnome-keyring-daemon
+   started properly and unlocked keyring"*) and `cat /etc/pam.d/greetd`
+   (it must carry the `pam_gnome_keyring.so` auth + session lines from
+   `system/pam.d/greetd`; `install.sh` phase 30 re-installs it).
+3. **Wrong keyring password, or the shell says "signed out" at every
+   login.** A keyring created with a password other than your login
+   password stays locked until you type it. Reset it — this deletes only
+   the keyring, nothing else — and sign in again:
+
+   ```sh
+   rm -rf ~/.local/share/keyrings
+   # log out and back in, then Settings → User → Sign in with Google
+   ```
+
+**The browser never opened** (no tab, "Waiting for the browser…"): the
+helper now tries `xdg-open`, then the shipped browser by desktop id, then by
+binary, and reports `browser-failed` instead of waiting five minutes. The
+sign-in page's link is always available — **Open the sign-in page** /
+**Copy the link** in Welcome and in Settings → User — and is also written to
+`$XDG_RUNTIME_DIR/ewe-auth-consent-url` for the length of the attempt.
+
+Diagnose from a terminal: `ewe-auth status` (`keyring_state` is one of
+`ok` · `missing` · `locked` · `unavailable`) and `ewe-auth login` (its
+stderr carries the `consent-url:` line; the JSON result names the exact
+failure). `install.sh --check-only` prints the same keyring notes.
+
 ## The laptop hard-freezes (must force power-off)
 
 A full freeze — pointer stuck, keyboard dead, REISUB does nothing — is almost

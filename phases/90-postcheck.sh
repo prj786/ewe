@@ -86,6 +86,24 @@ phase_postcheck() {
         _check "screenshot: grim can capture"         sh -c 'grim - 2>/dev/null | head -c1 | grep -q .'
     fi
     _check "keyring agent running"                pgrep -f gnome-keyring-daemon
+    # The first metal install (2026-09-02): the daemon was running (D-Bus
+    # activation satisfies the check above) but PAM had created no login
+    # keyring, so the first Google sign-in popped a "new keyring" prompt
+    # nobody could see. Notes, not failures — a first login before any
+    # keyring exists is legitimate; the point is to SAY what will happen.
+    if [ -r "$HOME/.local/share/keyrings/login.keyring" ]; then
+        _note "keyring: login keyring present (PAM unlocks it at the greeter)"
+    else
+        _note "keyring: no login keyring yet — the first Google sign-in will ask you to create one; use your LOGIN password (docs/TROUBLESHOOTING.md → Google sign-in)"
+    fi
+    if command -v secret-tool >/dev/null 2>&1; then
+        timeout 5 secret-tool lookup service ewe account google >/dev/null 2>&1
+        case $? in
+            0|1) _note "keyring: Secret Service answers promptly" ;;
+            124) _note "keyring: Secret Service did NOT answer within 5 s — a locked keyring or a stuck prompt; see docs/TROUBLESHOOTING.md → Google sign-in" ;;
+            *)   _note "keyring: secret-tool could not reach a Secret Service (is gnome-keyring installed?)" ;;
+        esac
+    fi
     _check "kb layout: english (us)"              sh -c 'hyprctl getoption input:kb_layout 2>/dev/null | grep -qw us'
     # gaming is opt-in (--gaming); only verify it when it was actually installed,
     # so a normal install never shows a red ✗ for packages it deliberately skipped.

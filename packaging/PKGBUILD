@@ -16,7 +16,7 @@
 
 pkgname=ewe
 pkgver=0.9.4
-pkgrel=2   # 2: carries the injected oauth-client.json
+pkgrel=3   # 3: sync guard + layout/manifest hotfix
 pkgdesc="ewe — a clean, dark Hyprland + Quickshell desktop environment"
 arch=('any')
 url="https://github.com/prj786/ewe"

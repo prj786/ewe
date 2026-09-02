@@ -11,6 +11,8 @@ SANDBOX="$(mktemp -d)"
 export EWE_CONF_SSH_CONFIG="$SANDBOX/ssh-config"   # never the real ~/.ssh/config
 trap 'rm -rf "$SANDBOX"' EXIT
 export XDG_CONFIG_HOME="$SANDBOX"
+export XDG_STATE_HOME="$SANDBOX/state"   # sync record sandbox
+unset HYPRLAND_INSTANCE_SIGNATURE   # apply hooks must never reload the host's Hyprland
 mkdir -p "$SANDBOX/quickshell"
 
 for f in user-theme.json pinned-apps.json places.json startup-apps.json \
@@ -24,6 +26,13 @@ done
 
 # wallpapers.conf import source (live machine's, when present)
 GEN_SRC="${EWE_TEST_GEN:-$HOME/.config/hypr/generated}"
+# the user.lua golden below embeds the live machine's accent: when that
+# golden exists, seed the sandbox theme from the same machine (read-only)
+# so the byte-identical check compares like with like
+QS_SRC="${EWE_TEST_QS:-$HOME/.config/quickshell}"
+if [ -e "$GEN_SRC/user.lua" ] && [ -e "$QS_SRC/user-theme.json" ]; then
+    cp "$QS_SRC/user-theme.json" "$SANDBOX/quickshell/user-theme.json"
+fi
 if [ -e "$GEN_SRC/wallpapers.conf" ]; then
     mkdir -p "$SANDBOX/hypr/generated"
     cp "$GEN_SRC/wallpapers.conf" "$SANDBOX/hypr/generated/"

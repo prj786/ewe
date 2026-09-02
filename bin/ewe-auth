@@ -33,6 +33,7 @@ import fcntl
 import hashlib
 import json
 import os
+import re
 import secrets as pysecrets
 import subprocess
 import sys
@@ -53,6 +54,9 @@ AUTH_META = os.path.join(CFG_DIR, "ewe", "auth.json")        # client_id + email
 PROFILE_CACHE = os.path.join(CFG_DIR, "quickshell", "google-profile.json")
 RUN_DIR = os.environ.get("XDG_RUNTIME_DIR") or "/tmp"
 TOKEN_CACHE = os.path.join(RUN_DIR, "ewe-auth-token.json")
+# the consent URL of the login in flight — so a shell/UI can offer "open the
+# sign-in page" / "copy the link" when the browser hand-off fails
+CONSENT_FILE = os.path.join(RUN_DIR, "ewe-auth-consent-url")
 
 AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 TOKEN_URL = os.environ.get("EWE_AUTH_TOKEN_URL", "https://oauth2.googleapis.com/token")
@@ -78,6 +82,9 @@ KEYRING_ARGS = ["service", "ewe", "account", "google"]
 OLD_KEYRING_ARGS = ["service", "hypr-shell", "account", "google"]
 FAKE_KEYRING = os.environ.get("EWE_AUTH_FAKE_KEYRING")   # tests only
 LOGIN_TIMEOUT = 300
+# a bare secret-tool call that needs no prompt answers in milliseconds; a
+# short cap keeps `status`/`token` from hanging on a wedged daemon
+KEYRING_TIMEOUT = 10
 
 
 def out(obj):
@@ -127,13 +134,56 @@ def keyring_get():
         return ""
 
 
-def keyring_set(token):
+def _classify_keyring_failure(stderr, timed_out=False):
+    """secret-tool's stderr → (error-code, human message). The first metal
+    install taught us the three ways a store fails, and each needs a
+    different sentence on screen."""
+    if timed_out:
+        return ("keyring-timeout",
+                "The keyring did not answer in time — if a keyring password "
+                "prompt is open, answer it (use your login password) and retry.")
+    e = (stderr or "").strip()
+    low = e.lower()
+    if ("not provided by any .service" in low or "failed to execute" in low
+            or "cannot autolaunch" in low or "no such interface" in low
+            or "connection refused" in low or "was not provided" in low
+            or "not activatable" in low):
+        return ("keyring-unavailable",
+                "No Secret Service keyring is running — gnome-keyring must be "
+                "installed and started for this session.")
+    if "cancel" in low or "dismiss" in low:
+        return ("keyring-cancelled",
+                "The keyring prompt was dismissed — sign in again and unlock "
+                "the keyring with your login password.")
+    return ("keyring-store-failed",
+            "The keyring refused to store the token" + (": " + e if e else "."))
+
+
+def keyring_store(token, timeout=KEYRING_TIMEOUT):
+    """→ (ok, error-code, message). A store can legitimately BLOCK on a
+    gcr prompt (no login keyring yet / locked keyring); callers that expect
+    a human at the keyboard pass a long timeout — killing secret-tool
+    mid-prompt tears the prompt down, which is exactly what looked like
+    "the keyring never shows up" on the first real install."""
     if FAKE_KEYRING is not None:
         open(FAKE_KEYRING, "w").write(token)
-        return True
-    r = subprocess.run(["secret-tool", "store", "--label=ewe Google", *KEYRING_ARGS],
-                       input=token, capture_output=True, text=True, timeout=10)
-    return r.returncode == 0
+        return True, "", ""
+    try:
+        r = subprocess.run(["secret-tool", "store", "--label=ewe Google", *KEYRING_ARGS],
+                           input=token, capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        code, msg = _classify_keyring_failure("", timed_out=True)
+        return False, code, msg
+    except OSError as e:
+        return False, "keyring-unavailable", "secret-tool is not installed (%s)." % e
+    if r.returncode == 0:
+        return True, "", ""
+    code, msg = _classify_keyring_failure(r.stderr)
+    return False, code, msg
+
+
+def keyring_set(token):
+    return keyring_store(token)[0]
 
 
 def keyring_clear():
@@ -143,8 +193,49 @@ def keyring_clear():
         except OSError:
             pass
         return
-    subprocess.run(["secret-tool", "clear", *KEYRING_ARGS],
-                   capture_output=True, text=True, timeout=10)
+    try:
+        subprocess.run(["secret-tool", "clear", *KEYRING_ARGS],
+                       capture_output=True, text=True, timeout=KEYRING_TIMEOUT)
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+
+
+def _busctl(args, timeout=5):
+    try:
+        r = subprocess.run(["busctl", "--user", *args], capture_output=True,
+                           text=True, timeout=timeout)
+    except (OSError, subprocess.TimeoutExpired):
+        return None, ""
+    return r.returncode, (r.stdout or "").strip() + ("\n" + r.stderr.strip() if r.stderr else "")
+
+
+def keyring_probe():
+    """Ask the Secret Service itself, WITHOUT triggering a prompt:
+      {"state": "ok" | "missing" | "locked" | "unavailable", "collection": path}
+    ok        a default (login) collection exists and is unlocked
+    missing   the service is up but no default collection exists yet — the
+              first store will pop "Choose password for new keyring"
+    locked    the login keyring exists but PAM did not unlock it — the
+              first store will pop "Unlock keyring"
+    unavailable  no service on the bus and D-Bus could not start one
+    The call itself D-Bus-activates gnome-keyring-daemon when it is merely
+    not running yet — the same thing secret-tool would have done."""
+    if FAKE_KEYRING is not None:
+        return {"state": "ok", "collection": "fake"}
+    rc, outp = _busctl(["call", "org.freedesktop.secrets", "/org/freedesktop/secrets",
+                        "org.freedesktop.Secret.Service", "ReadAlias", "s", "default"])
+    if rc is None or rc != 0:
+        return {"state": "unavailable", "collection": "", "detail": outp[-200:]}
+    # reply looks like:  o "/org/freedesktop/secrets/collection/login"
+    m = re.search(r'"(/[^"]*)"', outp)
+    path = m.group(1) if m else "/"
+    if path == "/":
+        return {"state": "missing", "collection": ""}
+    rc, outp = _busctl(["get-property", "org.freedesktop.secrets", path,
+                        "org.freedesktop.Secret.Collection", "Locked"])
+    if rc == 0 and outp.split()[-1:] == ["true"]:
+        return {"state": "locked", "collection": path}
+    return {"state": "ok", "collection": path}
 
 
 def read_json(path):
@@ -231,13 +322,13 @@ def do_refresh(cid, csec):
 
 def cmd_status():
     cid, _, which = read_client()
-    keyring_ok = True
-    if FAKE_KEYRING is None:
-        try:
-            subprocess.run(["secret-tool", "--help"], capture_output=True, timeout=10)
-        except (OSError, subprocess.TimeoutExpired):
-            keyring_ok = False
-    out({"configured": bool(cid), "client": which, "keyring": keyring_ok,
+    probe = keyring_probe()
+    out({"configured": bool(cid), "client": which,
+         # truthful now: a Secret Service answered on the bus (the old check
+         # only proved the secret-tool BINARY existed)
+         "keyring": probe["state"] != "unavailable",
+         "keyring_state": probe["state"],
+         "keyring_locked": probe["state"] == "locked",
          "signed_in": bool(keyring_get()) and not client_changed(cid),
          "profile": read_json(PROFILE_CACHE)})
 
@@ -270,6 +361,43 @@ def cmd_refresh():
     out({"ok": True, "access_token": at, "expires_at": exp})
 
 
+def _launch(cmd, settle=2.5):
+    """Start a browser hand-off and decide within `settle` seconds whether it
+    took: a launcher that exits non-zero quickly has failed; one still running
+    (a browser that stays in the foreground when it is the first instance) or
+    one that exited 0 has done its job. Never `wait()` unbounded — xdg-open
+    runs a fresh browser in the FOREGROUND for its whole life."""
+    try:
+        p = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                             stdin=subprocess.DEVNULL, start_new_session=True)
+    except OSError:
+        return False
+    try:
+        rc = p.wait(timeout=settle)
+    except subprocess.TimeoutExpired:
+        return True
+    return rc == 0
+
+
+def open_browser(url):
+    """xdg-open first (the user's default browser), then the shipped browser
+    by desktop id, then by binary — and say so when none of them worked,
+    instead of waiting five silent minutes for a tab that never opened."""
+    if os.environ.get("EWE_AUTH_NO_BROWSER"):
+        return True
+    if _launch(["xdg-open", url]):
+        return True
+    for desk in ("helium.desktop", "helium-browser.desktop"):
+        for base in ("/usr/share/applications", os.path.expanduser("~/.local/share/applications")):
+            path = os.path.join(base, desk)
+            if os.path.exists(path) and _launch(["gio", "launch", path, url]):
+                return True
+    for binary in ("helium-browser", "helium", "firefox", "chromium"):
+        if _launch([binary, url]):
+            return True
+    return False
+
+
 def cmd_login(argv=()):
     cid, csec, which = read_client()
     if not cid:
@@ -281,9 +409,18 @@ def cmd_login(argv=()):
     scopes = BASE_SCOPES + (" " + MAIL_SCOPE if with_mail else "")
     if "--with-drive" in argv:
         scopes += " " + DRIVE_SCOPE
-    if not keyring_set("ewe-keyring-probe"):
-        out({"ok": False, "error": "keyring-unavailable"})
-    keyring_clear()
+    # Keyring check WITHOUT a prompt (busctl, never secret-tool): the old
+    # probe stored a dummy secret up front, which on a machine with no login
+    # keyring popped the gcr prompt, killed it 10 s later and never reached
+    # the browser. Only a dead service is fatal here; "missing"/"locked" are
+    # HINTS the UI shows ("a keyring prompt will appear — use your login
+    # password") and the real store below waits as long as the login does.
+    probe = keyring_probe()
+    keyring_hint = probe["state"]
+    if keyring_hint == "unavailable":
+        out({"ok": False, "error": "keyring-unavailable", "keyring": keyring_hint,
+             "message": "No Secret Service keyring is running — gnome-keyring must be "
+                        "installed and started for this session."})
 
     verifier = base64.urlsafe_b64encode(pysecrets.token_bytes(48)).decode().rstrip("=")
     challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).decode().rstrip("=")
@@ -330,11 +467,28 @@ def cmd_login(argv=()):
         "access_type": "offline", "prompt": "consent", "state": state,
         "include_granted_scopes": "true",
     })
-    # the URL also goes to stderr: if the browser hand-off fails (headless
-    # callers, odd sessions), whoever ran us can open it by hand
+    # the URL also goes to stderr and to a runtime file: if the browser
+    # hand-off fails (headless callers, odd sessions, no default browser),
+    # whoever ran us — or the shell's "open / copy the link" — can use it
     sys.stderr.write("consent-url: " + auth + "\n")
     sys.stderr.flush()
-    subprocess.Popen(["xdg-open", auth], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        os.makedirs(RUN_DIR, exist_ok=True)
+        with open(CONSENT_FILE, "w") as f:
+            f.write(auth + "\n")
+        os.chmod(CONSENT_FILE, 0o600)
+    except OSError:
+        pass
+
+    def fail(err, **extra):
+        d = {"ok": False, "error": err, "consent_url": auth, "keyring": keyring_hint}
+        d.update(extra)
+        srv.server_close()
+        out(d)
+
+    if not open_browser(auth):
+        fail("browser-failed",
+             message="Could not open a browser for the sign-in page — open the link yourself.")
 
     srv.timeout = 5
     deadline = time.time() + LOGIN_TIMEOUT
@@ -343,7 +497,8 @@ def cmd_login(argv=()):
     srv.server_close()
 
     if "code" not in result:
-        out({"ok": False, "error": result.get("error", "timeout")})
+        out({"ok": False, "error": result.get("error", "timeout"),
+             "consent_url": auth, "keyring": keyring_hint})
 
     tok, err = http_post_form(TOKEN_URL, {
         "client_id": cid, "client_secret": csec, "code": result["code"],
@@ -351,11 +506,20 @@ def cmd_login(argv=()):
         "redirect_uri": redirect,
     })
     if err or "access_token" not in (tok or {}):
-        out({"ok": False, "error": "token-exchange: %s" % (err or "no access_token")})
+        out({"ok": False, "error": "token-exchange: %s" % (err or "no access_token"),
+             "consent_url": auth, "keyring": keyring_hint})
     if "refresh_token" not in tok:
-        out({"ok": False, "error": "no-refresh-token"})
-    if not keyring_set(tok["refresh_token"]):
-        out({"ok": False, "error": "keyring-store-failed"})
+        out({"ok": False, "error": "no-refresh-token", "consent_url": auth, "keyring": keyring_hint})
+    # THE store that may prompt (new keyring / unlock) — give the human the
+    # whole login budget, never the 10 s that killed the prompt on metal
+    ok, code, msg = keyring_store(tok["refresh_token"], timeout=LOGIN_TIMEOUT)
+    if not ok:
+        out({"ok": False, "error": code, "message": msg,
+             "consent_url": auth, "keyring": keyring_hint})
+    try:
+        os.remove(CONSENT_FILE)
+    except OSError:
+        pass
 
     profile = fetch_userinfo(tok["access_token"])
     write_json(PROFILE_CACHE, profile)
@@ -365,7 +529,7 @@ def cmd_login(argv=()):
     write_json(TOKEN_CACHE, {"access_token": tok["access_token"],
                              "expires_at": exp, "client_id": cid}, mode=0o600)
     out({"ok": True, "profile": profile, "access_token": tok["access_token"],
-         "expires_at": exp})
+         "expires_at": exp, "consent_url": auth, "keyring": keyring_hint})
 
 
 def cmd_logout():

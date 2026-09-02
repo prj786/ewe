@@ -83,5 +83,59 @@ if [ "$FIRST" = 1 ] && [ -r "$DEST/dotfiles/quickshell/scripts/colorscheme.sh" ]
         || warn "colorscheme.sh reported errors — theming may be incomplete until Settings → Theme is used."
 fi
 
+# Default applications — SEED, never clobber (the phase-60 rule, lifted here
+# because an ISO install runs ewe-setup and never phase 60). Without this a
+# fresh install has no x-scheme-handler/https at all and `xdg-open` — which
+# is how ewe-auth hands the Google consent page to a browser — only worked
+# by luck of the mimeinfo cache having a single claimant. A default is
+# written only when the current handler is unset or points at a desktop
+# file that no longer exists; the user's own choices always survive.
+_desktop_ok() { [ -n "$1" ] && { [ -r "/usr/share/applications/$1" ] || [ -r "$HOME/.local/share/applications/$1" ]; }; }
+if command -v xdg-settings >/dev/null 2>&1; then
+    cur_browser="$(xdg-settings get default-web-browser 2>/dev/null)"
+    if ! _desktop_ok "$cur_browser"; then
+        for b in helium.desktop firefox.desktop firefox-esr.desktop org.mozilla.firefox.desktop; do
+            [ -r "/usr/share/applications/$b" ] && { xdg-settings set default-web-browser "$b" >/dev/null 2>&1 && break; }
+        done
+    fi
+fi
+# Zed's shipped desktop entry declares only text/plain; the override carries
+# the full text/code MimeType list so "Open With" offers it for JSON/YAML/…
+if [ -r "$DEST/system/applications/dev.zed.Zed.desktop" ]; then
+    mkdir -p "$HOME/.local/share/applications"
+    cp -f "$DEST/system/applications/dev.zed.Zed.desktop" "$HOME/.local/share/applications/dev.zed.Zed.desktop"
+fi
+# what the user EXPLICITLY chose in ~/.config/mimeapps.list — never the
+# mimeinfo-cache fallback `xdg-mime query default` would report
+_user_default() {
+    awk -F= -v m="$1" '/^\[/{s=($0=="[Default Applications]")} s && $1==m {sub(/;.*/,"",$2); print $2; exit}' \
+        "${XDG_CONFIG_HOME:-$HOME/.config}/mimeapps.list" 2>/dev/null
+}
+_mime() {
+    local d="$1"; shift
+    [ -r "/usr/share/applications/$d" ] || [ -r "$HOME/.local/share/applications/$d" ] || return 0
+    local m cur; for m in "$@"; do
+        cur="$(_user_default "$m")"
+        _desktop_ok "$cur" && continue
+        xdg-mime default "$d" "$m" >/dev/null 2>&1 || true
+    done
+}
+if command -v xdg-mime >/dev/null 2>&1; then
+    _mime helium.desktop            x-scheme-handler/http x-scheme-handler/https text/html
+    _mime nemo.desktop              inode/directory
+    _mime dev.zed.Zed.desktop text/plain text/markdown text/css text/javascript \
+          application/json application/javascript application/xml text/xml application/x-yaml \
+          text/x-python text/x-csrc text/x-chdr text/x-c++src application/x-shellscript \
+          text/x-rust text/x-go
+    _mime imv.desktop               image/png image/jpeg image/gif image/webp image/bmp image/tiff
+    _mime org.pwmt.zathura.desktop  application/pdf application/epub+zip
+    _mime mpv.desktop               video/mp4 video/x-matroska video/webm video/quicktime audio/mpeg audio/flac
+    _mime engrampa.desktop          application/zip application/x-tar application/gzip application/x-xz \
+          application/x-bzip2 application/x-7z-compressed application/x-rar application/zstd application/x-compressed-tar
+    _mime komble.desktop            application/vnd.appimage application/x-iso9660-appimage application/x-appimage
+fi
+command -v update-desktop-database >/dev/null 2>&1 \
+    && update-desktop-database "$HOME/.local/share/applications" >/dev/null 2>&1 || true
+
 say "done — the refreshed shell loads at the next login (or: systemctl --user restart ewe.service)"
 say "first install on this machine? run $DEST/install.sh for the system side (greeter, services)."

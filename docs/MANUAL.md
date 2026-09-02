@@ -156,6 +156,15 @@ in Google Drive's hidden per-app `appDataFolder`. After a reinstall, sign in
 and hit "Restore from cloud" to get your setup back; reinstalling packages
 from the captured list is always a separate, opt-in command.
 
+On a fresh install the **Welcome** flow walks through it: a *Connect to the
+internet* step first (Wi-Fi is joined from the flow itself — sign-in and
+the Drive restore both need a connection), then the one sign-in, then the
+restore offer. A machine that has never synced never uploads on its own:
+its first backup is the explicit *Back up this machine* button (Welcome, or
+Settings → User), so a fresh install can never overwrite the backup it is
+about to restore. If the keyring or the browser misbehave, see
+[Troubleshooting → Google sign-in](TROUBLESHOOTING.md#google-sign-in-no-keyring-prompt-keyring-not-showing-up-no-browser).
+
 One-time setup (Google requires your own OAuth client for native apps):
 
 1. [console.cloud.google.com](https://console.cloud.google.com) → new project →

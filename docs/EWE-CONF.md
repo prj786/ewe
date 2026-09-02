@@ -43,14 +43,53 @@ ewe-conf get <dotted.key>          value (JSON on stdout for structures)
 ewe-conf set <dotted.key> <value>  value parsed as JSON, else string; then apply
 ewe-conf dump                      whole file as JSON (one read for QML/Rust)
 ewe-conf import                    build ewe.conf FROM the live runtime files
-ewe-conf apply [--only <domain>]   regenerate artifacts + poke the shell
+ewe-conf apply [--only <domain>]   regenerate artifacts + poke the shell + reload Hyprland
 ewe-conf path                      print the canonical file path
+ewe-conf push [--force]            upload the file to your Drive (see Sync)
+ewe-conf pull [--out <path>]       download it — run `apply` afterwards
+ewe-conf sync-status               the remote copy, and this machine's sync record
 ```
 
 Writes are atomic (tmp + rename) with `flock` around read-modify-write, and
 key order is stable, so diffs of the file are honest. `import` exists for
 migration and repair: it rebuilds the document from whatever the machine is
-actually doing right now.
+actually doing right now — and seeds what a fresh machine lacks: a
+`[desktop.layout]` with the defaults, and an `[apps.installed]` baseline
+from every explicitly installed pacman package.
+
+`apply` regenerates every artifact — `user.lua` (gaps, rounding, the
+accent-tinted border) is rewritten on every apply, so it can never lag
+the theme — then, unless `--no-hooks`, re-themes the toolkits, pokes the
+shell, and runs `hyprctl reload` when a Hyprland session is up. The shell
+passes `--no-hooks` because it applies live itself; from a terminal the
+full restore is simply:
+
+```
+ewe-conf pull && ewe-conf apply
+```
+
+## Sync
+
+`push` uploads the file to the account's Drive (hidden app storage);
+`pull` downloads it, keeping the previous local file as
+`ewe.conf.<timestamp>.bak`. Both record what they saw on Drive — the file
+id and its `modifiedTime` — in `~/.local/state/ewe/sync.json`, and that
+record is the whole conflict rule:
+
+- a push is refused (`remote-newer`) when the remote's `modifiedTime` is
+  not the one recorded here: another machine saved since this one last
+  synced. `pull` to adopt theirs, or `push --force` to overwrite;
+- a machine that has **never** synced may push only into an empty Drive.
+  If a backup already exists it gets `remote-exists`: restore first (the
+  Welcome flow offers exactly that), or `--force`. This is what keeps a
+  fresh install from erasing the backup it was about to restore.
+
+No clocks and no hostnames take part — two machines both called `ewe`, or
+a fresh install with a wrong clock, sync fine. The machine name is still
+stamped on the remote (in the same request as the content), purely so the
+UI can say *"backup saved by <name>"*; `sync-status` reports that
+(`remote_machine`, `remote_modified`) separately from *when this machine
+last synced* (`local_synced_at`).
 
 ## Reference
 

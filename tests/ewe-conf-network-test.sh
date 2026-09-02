@@ -7,6 +7,8 @@ WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
 export XDG_CONFIG_HOME="$WORK/config"
+export XDG_STATE_HOME="$WORK/state"   # sync record sandbox
+unset HYPRLAND_INSTANCE_SIGNATURE   # apply hooks must never reload the host's Hyprland
 export EWE_CONF_SSH_CONFIG="$WORK/ssh-config"
 mkdir -p "$WORK/config/ewe" "$WORK/bin"
 

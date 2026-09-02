@@ -63,6 +63,10 @@ QtObject {
     property bool overviewOpen: false      // GNOME-style window overview (Super tapped alone)
     property bool clipboardOpen: false     // the clipboard-history / emoji popup (scissors icon)
     property bool settingsOpen: false      // the Quickshell Settings window (Super+, or the CC gear)
+    // the first-run Welcome overlay is up — Google.qml holds every auto-push
+    // while it is (a fresh machine must never upload over the backup it is
+    // about to restore; 0.9.16-2)
+    property bool welcomeOpen: false
     // deep-link for the LAZY-loaded fallback panel: pane index, or -2 =
     // wallpaper pane + file chooser; the panel consumes and resets to -1
     property int settingsPaneRequest: -1
