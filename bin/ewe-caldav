@@ -1,0 +1,408 @@
+#!/usr/bin/env python3
+"""ewe-caldav — the calendar of the ewe account (CalDAV, RFC-005).
+
+The shell's calendar widget reads upcoming events from the Nextcloud account
+ewe-cloud is signed in to — plain CalDAV, no vendor API, no extra scope.
+Every command prints one JSON object and exits 0, so callers never hang:
+  events [--days N] [--no-cache]   {ok, events:[…], offline, fetched_at}
+  calendars                        {ok, calendars:[{href, name, color}]}
+Event shape (the one the shell already speaks for Google/EDS):
+  {id, summary, start, end, allDay, location, video, color, calendar,
+   reminders:[minutes…]}
+  start/end are ISO 8601 with offset for timed events, YYYY-MM-DD for
+  all-day ones (end exclusive, as iCalendar has it).
+Credentials come from `ewe-cloud token --json` (the app password never
+leaves the keyring except through that call). The last good fetch is cached
+in ~/.cache/ewe/caldav-events.json for five minutes and returned with
+offline=true whenever the server cannot be reached.
+
+Assumptions verified against a real server in RFC-005 phase 6:
+  * the user's calendar home is <server>/remote.php/dav/calendars/<user>/
+    (Nextcloud's convention; no principal discovery)
+  * calendar-query with <C:expand> makes the server expand recurrences, so
+    every VEVENT we see is one concrete instance (RECURRENCE-ID set)
+"""
+import datetime as dt
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+import xml.etree.ElementTree as ET
+from base64 import b64encode
+
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:  # pragma: no cover
+    ZoneInfo = None
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+EWE_CLOUD = os.path.join(HERE, "ewe-cloud")
+CACHE_DIR = os.path.join(os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache"), "ewe")
+CACHE = os.path.join(CACHE_DIR, "caldav-events.json")
+CACHE_TTL = 300
+HTTP_TIMEOUT = 20
+NS = {"d": "DAV:", "c": "urn:ietf:params:xml:ns:caldav", "a": "http://apple.com/ns/ical/",
+      "cs": "http://calendarserver.org/ns/"}
+
+
+def out(obj):
+    print(json.dumps(obj))
+    sys.exit(0)
+
+
+# ── account ─────────────────────────────────────────────────────────────────
+
+def account():
+    """{server, user, token} from the broker, or None when signed out."""
+    try:
+        r = subprocess.run([sys.executable, EWE_CLOUD, "token", "--json"],
+                           capture_output=True, text=True, timeout=20)
+        j = json.loads(r.stdout.strip() or "{}")
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        return None
+    if not j.get("ok") or not j.get("token"):
+        return None
+    return {"server": j["server"].rstrip("/"), "user": j["user"], "token": j["token"]}
+
+
+def dav(acc, method, url, body=None, headers=None):
+    hdr = {"Authorization": "Basic " + b64encode(("%s:%s" % (acc["user"], acc["token"])).encode()).decode(),
+           "User-Agent": "ewe-caldav", "Content-Type": 'application/xml; charset="utf-8"'}
+    hdr.update(headers or {})
+    req = urllib.request.Request(url, data=body.encode() if isinstance(body, str) else body,
+                                 headers=hdr, method=method)
+    try:
+        with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:
+            return resp.status, resp.read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as e:
+        return e.code, e.read().decode("utf-8", "replace")
+    except (urllib.error.URLError, OSError, ValueError) as e:
+        raise ConnectionError(str(e))
+
+
+# ── calendars ───────────────────────────────────────────────────────────────
+
+def calendar_home(acc):
+    return "%s/remote.php/dav/calendars/%s/" % (acc["server"], urllib.parse.quote(acc["user"]))
+
+
+PROPFIND_CALS = ('<?xml version="1.0" encoding="utf-8"?>'
+                 '<d:propfind xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav" '
+                 'xmlns:a="http://apple.com/ns/ical/"><d:prop>'
+                 '<d:displayname/><d:resourcetype/><a:calendar-color/>'
+                 '<c:supported-calendar-component-set/></d:prop></d:propfind>')
+
+
+def list_calendars(acc):
+    st, text = dav(acc, "PROPFIND", calendar_home(acc), PROPFIND_CALS, {"Depth": "1"})
+    if st == 401:
+        raise PermissionError("unauthorized")
+    if st not in (207, 200):
+        raise ConnectionError("http-%d" % st)
+    cals = []
+    root = ET.fromstring(text)
+    for resp in root.findall("d:response", NS):
+        href = (resp.findtext("d:href", "", NS) or "").strip()
+        prop = resp.find("d:propstat/d:prop", NS)
+        if prop is None:
+            continue
+        rtype = prop.find("d:resourcetype", NS)
+        if rtype is None or rtype.find("c:calendar", NS) is None:
+            continue
+        comps = prop.find("c:supported-calendar-component-set", NS)
+        if comps is not None and len(comps) and not any(
+                c.get("name") == "VEVENT" for c in comps.findall("c:comp", NS)):
+            continue
+        cals.append({"href": urllib.parse.urljoin(acc["server"], href),
+                     "name": prop.findtext("d:displayname", "", NS) or href.rstrip("/").rsplit("/", 1)[-1],
+                     "color": (prop.findtext("a:calendar-color", "", NS) or "")[:7]})
+    return cals
+
+
+# ── events ──────────────────────────────────────────────────────────────────
+
+def _local_tz():
+    return dt.datetime.now().astimezone().tzinfo
+
+
+def _parse_dt(value, params):
+    """iCalendar DATE / DATE-TIME -> (datetime|date, allDay)."""
+    v = value.strip()
+    if params.get("VALUE", "").upper() == "DATE" or re.fullmatch(r"\d{8}", v):
+        return dt.date(int(v[0:4]), int(v[4:6]), int(v[6:8])), True
+    m = re.fullmatch(r"(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(Z?)", v)
+    if not m:
+        raise ValueError("bad datetime " + v)
+    y, mo, d, h, mi, s, z = m.groups()
+    naive = dt.datetime(int(y), int(mo), int(d), int(h), int(mi), int(s))
+    if z:
+        return naive.replace(tzinfo=dt.timezone.utc), False
+    tzid = params.get("TZID")
+    tz = None
+    if tzid and ZoneInfo is not None:
+        try:
+            tz = ZoneInfo(tzid)
+        except Exception:
+            tz = None
+    return naive.replace(tzinfo=tz or _local_tz()), False
+
+
+def _parse_duration(v):
+    m = re.fullmatch(r"([+-])?P(?:(\d+)W)?(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?", v.strip())
+    if not m:
+        return dt.timedelta(0)
+    sign, w, d, h, mi, s = m.groups()
+    td = dt.timedelta(weeks=int(w or 0), days=int(d or 0), hours=int(h or 0), minutes=int(mi or 0), seconds=int(s or 0))
+    return -td if sign == "-" else td
+
+
+def _unfold(text):
+    lines = []
+    for raw in text.replace("\r\n", "\n").replace("\r", "\n").split("\n"):
+        if raw[:1] in (" ", "\t") and lines:
+            lines[-1] += raw[1:]
+        else:
+            lines.append(raw)
+    return lines
+
+
+def _prop(line):
+    """'DTSTART;TZID=X:2026…' -> ('DTSTART', {'TZID': 'X'}, '2026…')"""
+    if ":" not in line:
+        return None, {}, ""
+    head, _, value = line.partition(":")
+    # a parameter value may itself contain ':' inside quotes — rare, ignored
+    parts = head.split(";")
+    name = parts[0].upper()
+    params = {}
+    for p in parts[1:]:
+        k, _, v = p.partition("=")
+        params[k.upper()] = v.strip('"')
+    return name, params, value
+
+
+def _unescape(v):
+    return v.replace("\\n", "\n").replace("\\N", "\n").replace("\\,", ",").replace("\\;", ";").replace("\\\\", "\\")
+
+
+def parse_ics(text, cal):
+    """Every VEVENT in one iCalendar document -> shell event dicts."""
+    events = []
+    ev = None
+    alarms = []
+    in_alarm = False
+    for line in _unfold(text):
+        name, params, value = _prop(line)
+        if name == "BEGIN" and value.upper() == "VEVENT":
+            ev = {"uid": "", "summary": "", "location": "", "video": "", "status": "", "rid": ""}
+            alarms = []
+            continue
+        if ev is None:
+            continue
+        if name == "BEGIN" and value.upper() == "VALARM":
+            in_alarm = True
+            continue
+        if name == "END" and value.upper() == "VALARM":
+            in_alarm = False
+            continue
+        if in_alarm:
+            if name == "TRIGGER" and params.get("VALUE", "").upper() != "DATE-TIME":
+                mins = -int(_parse_duration(value).total_seconds() // 60)
+                if mins >= 0:
+                    alarms.append(mins)
+            continue
+        if name == "END" and value.upper() == "VEVENT":
+            if ev.get("start") is not None and ev.get("status", "").upper() != "CANCELLED":
+                events.append(_finish(ev, alarms, cal))
+            ev = None
+            continue
+        if name == "UID":
+            ev["uid"] = value.strip()
+        elif name == "SUMMARY":
+            ev["summary"] = _unescape(value).strip()
+        elif name == "LOCATION":
+            ev["location"] = _unescape(value).strip()
+        elif name == "URL":
+            ev["video"] = value.strip()
+        elif name == "STATUS":
+            ev["status"] = value.strip()
+        elif name == "DTSTART":
+            try:
+                ev["start"], ev["allDay"] = _parse_dt(value, params)
+            except ValueError:
+                ev["start"] = None
+        elif name == "DTEND":
+            try:
+                ev["end"], _ = _parse_dt(value, params)
+            except ValueError:
+                pass
+        elif name == "DURATION":
+            ev["duration"] = _parse_duration(value)
+        elif name == "RECURRENCE-ID":
+            ev["rid"] = value.strip()
+        elif name == "X-EWE-VIDEO" or name == "X-GOOGLE-CONFERENCE":
+            ev["video"] = value.strip()
+    return events
+
+
+def _finish(ev, alarms, cal):
+    start = ev["start"]
+    end = ev.get("end")
+    if end is None:
+        if "duration" in ev:
+            end = start + ev["duration"]
+        elif ev["allDay"]:
+            end = start + dt.timedelta(days=1)
+        else:
+            end = start + dt.timedelta(hours=1)
+    if ev["allDay"]:
+        s, e = start.isoformat(), end.isoformat() if isinstance(end, dt.date) else str(end)[:10]
+        rem = alarms[:] if alarms else []
+    else:
+        s, e = start.isoformat(), end.isoformat()
+        rem = alarms[:] if alarms else [10]
+    return {"id": ev["uid"] + ("@" + ev["rid"] if ev["rid"] else ""), "summary": ev["summary"] or "(untitled)",
+            "start": s, "end": e, "allDay": ev["allDay"], "location": ev["location"], "video": ev["video"],
+            "color": cal.get("color", ""), "calendar": cal.get("name", ""), "reminders": rem}
+
+
+def _sort_key(e):
+    if e["allDay"]:
+        return e["start"] + "T00:00:00"
+    try:
+        return dt.datetime.fromisoformat(e["start"]).astimezone(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+    except ValueError:
+        return e["start"]
+
+
+def query_calendar(acc, cal, t0, t1):
+    fmt = "%Y%m%dT%H%M%SZ"
+    a, b = t0.astimezone(dt.timezone.utc).strftime(fmt), t1.astimezone(dt.timezone.utc).strftime(fmt)
+    body = ('<?xml version="1.0" encoding="utf-8"?>'
+            '<c:calendar-query xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">'
+            '<d:prop><d:getetag/><c:calendar-data><c:expand start="%s" end="%s"/></c:calendar-data></d:prop>'
+            '<c:filter><c:comp-filter name="VCALENDAR"><c:comp-filter name="VEVENT">'
+            '<c:time-range start="%s" end="%s"/></c:comp-filter></c:comp-filter></c:filter>'
+            '</c:calendar-query>' % (a, b, a, b))
+    st, text = dav(acc, "REPORT", cal["href"], body, {"Depth": "1"})
+    if st == 401:
+        raise PermissionError("unauthorized")
+    if st not in (207, 200):
+        raise ConnectionError("http-%d" % st)
+    found = []
+    root = ET.fromstring(text)
+    for resp in root.findall("d:response", NS):
+        data = resp.findtext("d:propstat/d:prop/c:calendar-data", "", NS)
+        if data:
+            found.extend(parse_ics(data, cal))
+    return found
+
+
+def read_cache():
+    try:
+        with open(CACHE) as f:
+            j = json.load(f)
+        if isinstance(j, dict) and isinstance(j.get("events"), list):
+            return j
+    except (OSError, ValueError):
+        pass
+    return None
+
+
+def write_cache(events):
+    os.makedirs(CACHE_DIR, exist_ok=True)
+    tmp = CACHE + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump({"fetched_at": time.time(), "events": events}, f)
+    os.replace(tmp, CACHE)
+
+
+def cmd_events(days, use_cache):
+    cache = read_cache()
+    if use_cache and cache and time.time() - float(cache.get("fetched_at", 0)) < CACHE_TTL:
+        out({"ok": True, "events": cache["events"], "offline": False, "cached": True,
+             "fetched_at": cache["fetched_at"]})
+    acc = account()
+    if acc is None:
+        out({"ok": False, "error": "not-signed-in", "events": (cache or {}).get("events", [])})
+    now = dt.datetime.now(_local_tz())
+    t0 = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    t1 = t0 + dt.timedelta(days=days)
+    try:
+        cals = list_calendars(acc)
+        evs = []
+        for cal in cals:
+            evs.extend(query_calendar(acc, cal, t0, t1))
+    except PermissionError:
+        out({"ok": False, "error": "unauthorized", "events": (cache or {}).get("events", [])})
+    except (ConnectionError, ET.ParseError) as e:
+        out({"ok": True, "offline": True, "error": "network: %s" % e,
+             "events": (cache or {}).get("events", []), "fetched_at": (cache or {}).get("fetched_at", 0)})
+    # drop what already ended, keep one entry per (uid, instance)
+    cutoff = now.isoformat()
+    seen, keep = set(), []
+    for e in sorted(evs, key=_sort_key):
+        if e["id"] in seen:
+            continue
+        seen.add(e["id"])
+        if not e["allDay"] and e["end"] < cutoff and _sort_key(e) < now.astimezone(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S"):
+            # ended already (string compare works for same-offset ISO; the
+            # UTC sort key is the honest check)
+            try:
+                if dt.datetime.fromisoformat(e["end"]) < now:
+                    continue
+            except ValueError:
+                pass
+        keep.append(e)
+    write_cache(keep)
+    out({"ok": True, "events": keep, "offline": False, "cached": False, "fetched_at": time.time()})
+
+
+def cmd_calendars():
+    acc = account()
+    if acc is None:
+        out({"ok": False, "error": "not-signed-in"})
+    try:
+        out({"ok": True, "calendars": list_calendars(acc)})
+    except PermissionError:
+        out({"ok": False, "error": "unauthorized"})
+    except (ConnectionError, ET.ParseError) as e:
+        out({"ok": False, "error": "network: %s" % e})
+
+
+def cmd_parse(path):
+    """parse <file.ics> — the ICS parser alone, for the test suite."""
+    with open(path) as f:
+        out({"ok": True, "events": parse_ics(f.read(), {"name": "test", "color": ""})})
+
+
+if __name__ == "__main__":
+    argv = sys.argv[1:]
+    cmd = argv[0] if argv else "events"
+    try:
+        if cmd == "events":
+            days, use_cache = 7, True
+            i = 1
+            while i < len(argv):
+                if argv[i] == "--days" and i + 1 < len(argv):
+                    days = max(1, min(60, int(argv[i + 1])))
+                    i += 1
+                elif argv[i] == "--no-cache":
+                    use_cache = False
+                i += 1
+            cmd_events(days, use_cache)
+        elif cmd == "calendars":
+            cmd_calendars()
+        elif cmd == "parse" and len(argv) == 2:
+            cmd_parse(argv[1])
+        else:
+            out({"ok": False, "error": "usage", "message": __doc__.strip().split("\n", 1)[0]})
+    except SystemExit:
+        raise
+    except Exception as e:  # absolute backstop: still emit parseable JSON
+        print(json.dumps({"ok": False, "error": "internal: %s" % e}))

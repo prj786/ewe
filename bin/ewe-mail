@@ -1,0 +1,329 @@
+#!/usr/bin/env python3
+"""ewe-mail — the Control Center mail badge from any IMAP account (RFC-005).
+
+Mail is not tied to the ewe account: the mailbox your Nextcloud provider gives
+you, a self-hosted server, anything that speaks IMAP. Gmail keeps working
+through the optional Google client (ewe-auth); this tool is for everyone
+else. Every command prints one JSON object and exits 0:
+  login <host> <user> [--port N] [--starttls]   password on stdin (one line);
+                        tests the login, keeps the password in the keyring
+                        (service ewe-mail host <host> user <user>), records
+                        the account (never the password) in ewe.conf
+                        [accounts.mail] -> {ok, host, user, port}
+  status                {configured, host, user, port, keyring, keyring_state}
+  unseen [--limit N]    {ok, unread, list:[{id, from, subject, date, unread}],
+                        fetched_at} — the badge and the latest unseen mail
+  logout                keyring entry + [accounts.mail] removed
+Errors are {"ok":false,"error":<code>,"message":…}: not-configured,
+auth-failed, network, keyring-*.
+Plain (non-TLS) IMAP is refused except for the loopback mock the test suite
+runs (EWE_MAIL_INSECURE=1). Never prompts; never opens anything.
+"""
+import email.header
+import email.parser
+import email.utils
+import imaplib
+import json
+import os
+import re
+import socket
+import ssl
+import subprocess
+import sys
+import time
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+EWE_CONF = os.path.join(HERE, "ewe-conf")
+FAKE_KEYRING = os.environ.get("EWE_MAIL_FAKE_KEYRING")   # tests only
+KEYRING_TIMEOUT = 10
+IMAP_TIMEOUT = 20
+
+
+def out(obj):
+    print(json.dumps(obj))
+    sys.exit(0)
+
+
+def fail(code, message, **extra):
+    out({"ok": False, "error": code, "message": message, **extra})
+
+
+# ── the account record: ewe.conf [accounts.mail] (host/user/port — no secret)
+
+def conf(*args):
+    try:
+        r = subprocess.run([sys.executable, EWE_CONF, *args], capture_output=True, text=True, timeout=20)
+    except (OSError, subprocess.TimeoutExpired):
+        return None, ""
+    return r.returncode, r.stdout.strip()
+
+
+def account():
+    rc, text = conf("get", "accounts.mail")
+    if rc != 0 or not text:
+        return None
+    try:
+        j = json.loads(text)
+    except ValueError:
+        return None
+    if not isinstance(j, dict) or not j.get("host") or not j.get("user"):
+        return None
+    j.setdefault("port", 993)
+    j.setdefault("starttls", False)
+    return j
+
+
+# ── keyring (Secret Service via secret-tool; the account is the key) ─────────
+
+def keyring_args(host, user):
+    return ["service", "ewe-mail", "host", host, "user", user]
+
+
+def _classify(stderr, timed_out=False):
+    if timed_out:
+        return "keyring-timeout", "The keyring did not answer — if a keyring prompt is open, answer it with your login password."
+    s = (stderr or "").lower()
+    if "not provided by any .service" in s or "no such interface" in s or "failed to execute" in s or "no secret service" in s:
+        return "keyring-unavailable", "No Secret Service keyring is running — gnome-keyring must be installed and started for this session."
+    if "cancel" in s or "dismiss" in s:
+        return "keyring-cancelled", "The keyring prompt was dismissed."
+    return "keyring-store-failed", "The keyring refused to store the password: " + (stderr or "").strip()[-200:]
+
+
+def keyring_store(host, user, secret):
+    if FAKE_KEYRING is not None:
+        d = _fake_load()
+        d["%s\n%s" % (host, user)] = secret
+        _fake_save(d)
+        return True, "", ""
+    try:
+        r = subprocess.run(["secret-tool", "store", "--label", "ewe mail (%s)" % user, *keyring_args(host, user)],
+                           input=secret, capture_output=True, text=True, timeout=KEYRING_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        return (False,) + _classify("", True)
+    except OSError as e:
+        return False, "keyring-unavailable", "secret-tool is not installed (%s)." % e
+    if r.returncode != 0:
+        return (False,) + _classify(r.stderr)
+    return True, "", ""
+
+
+def keyring_get(host, user):
+    if FAKE_KEYRING is not None:
+        return _fake_load().get("%s\n%s" % (host, user), "")
+    try:
+        r = subprocess.run(["secret-tool", "lookup", *keyring_args(host, user)],
+                           capture_output=True, text=True, timeout=KEYRING_TIMEOUT)
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+    return r.stdout.strip() if r.returncode == 0 else ""
+
+
+def keyring_clear(host, user):
+    if FAKE_KEYRING is not None:
+        d = _fake_load()
+        d.pop("%s\n%s" % (host, user), None)
+        _fake_save(d)
+        return
+    try:
+        subprocess.run(["secret-tool", "clear", *keyring_args(host, user)],
+                       capture_output=True, text=True, timeout=KEYRING_TIMEOUT)
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+
+
+def _fake_load():
+    try:
+        with open(FAKE_KEYRING) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
+def _fake_save(d):
+    with open(FAKE_KEYRING, "w") as f:
+        json.dump(d, f)
+
+
+# ── IMAP ────────────────────────────────────────────────────────────────────
+
+def _insecure_ok(host):
+    return os.environ.get("EWE_MAIL_INSECURE") == "1" and host in ("127.0.0.1", "localhost", "::1")
+
+
+def connect(acc, password):
+    host, port = acc["host"], int(acc.get("port", 993))
+    starttls = bool(acc.get("starttls"))
+    socket.setdefaulttimeout(IMAP_TIMEOUT)
+    try:
+        if starttls or _insecure_ok(host):
+            m = imaplib.IMAP4(host, port)
+            if starttls:
+                m.starttls(ssl.create_default_context())
+            elif not _insecure_ok(host):
+                raise ssl.SSLError("plain IMAP refused")
+        else:
+            m = imaplib.IMAP4_SSL(host, port, ssl_context=ssl.create_default_context())
+    except (OSError, ssl.SSLError, imaplib.IMAP4.error) as e:
+        raise ConnectionError(str(e))
+    try:
+        m.login(acc["user"], password)
+    except imaplib.IMAP4.error as e:
+        raise PermissionError(str(e))
+    return m
+
+
+def _decode(value):
+    if value is None:
+        return ""
+    parts = []
+    for chunk, enc in email.header.decode_header(str(value)):
+        if isinstance(chunk, bytes):
+            try:
+                parts.append(chunk.decode(enc or "utf-8", "replace"))
+            except LookupError:
+                parts.append(chunk.decode("utf-8", "replace"))
+        else:
+            parts.append(chunk)
+    return "".join(parts).strip()
+
+
+def _nice_from(v):
+    name, addr = email.utils.parseaddr(v)
+    return _decode(name) or addr or v
+
+
+def fetch_unseen(m, limit):
+    typ, data = m.status("INBOX", "(UNSEEN)")
+    unread = 0
+    if typ == "OK" and data and data[0]:
+        mm = re.search(rb"UNSEEN\s+(\d+)", data[0])
+        if mm:
+            unread = int(mm.group(1))
+    m.select("INBOX", readonly=True)
+    typ, data = m.uid("search", None, "UNSEEN")
+    ids = data[0].split() if typ == "OK" and data and data[0] else []
+    ids = ids[-limit:]
+    rows = []
+    if ids:
+        typ, data = m.uid("fetch", b",".join(ids), "(BODY.PEEK[HEADER.FIELDS (FROM SUBJECT DATE)])")
+        if typ == "OK":
+            parser = email.parser.BytesHeaderParser()
+            for item in data:
+                if not isinstance(item, tuple) or len(item) < 2:
+                    continue
+                head = item[0] if isinstance(item[0], bytes) else b""
+                uid = re.search(rb"UID\s+(\d+)", head)
+                msg = parser.parsebytes(item[1])
+                d = msg.get("Date", "")
+                try:
+                    ms = int(email.utils.parsedate_to_datetime(d).timestamp() * 1000) if d else 0
+                except (TypeError, ValueError):
+                    ms = 0
+                rows.append({"id": uid.group(1).decode() if uid else "", "from": _nice_from(_decode(msg.get("From", ""))),
+                             "subject": _decode(msg.get("Subject", "")) or "(no subject)", "date": ms, "unread": True})
+    rows.sort(key=lambda r: r["date"], reverse=True)
+    return unread, rows
+
+
+# ── commands ────────────────────────────────────────────────────────────────
+
+def cmd_login(argv):
+    host = argv[0] if argv else ""
+    user = argv[1] if len(argv) > 1 else ""
+    port, starttls = 993, False
+    i = 2
+    while i < len(argv):
+        if argv[i] == "--port" and i + 1 < len(argv):
+            port = int(argv[i + 1])
+            i += 1
+        elif argv[i] == "--starttls":
+            starttls = True
+        i += 1
+    if not host or not user:
+        fail("usage", "ewe-mail login <host> <user> [--port N] [--starttls]  (password on stdin)")
+    password = sys.stdin.readline().rstrip("\r\n")
+    if not password:
+        fail("no-password", "The password must be given on stdin (one line).")
+    acc = {"host": host, "user": user, "port": port, "starttls": starttls}
+    try:
+        m = connect(acc, password)
+        m.logout()
+    except PermissionError as e:
+        fail("auth-failed", "The server rejected the login: %s" % e)
+    except ConnectionError as e:
+        fail("network", "Could not reach %s:%s — %s" % (host, port, e))
+    ok, code, msg = keyring_store(host, user, password)
+    if not ok:
+        fail(code, msg)
+    rc, _ = conf("set", "--no-hooks", "accounts.mail", json.dumps(acc))
+    if rc != 0:
+        fail("conf-write-failed", "ewe-conf could not record the account.")
+    out({"ok": True, "host": host, "user": user, "port": port, "starttls": starttls})
+
+
+def cmd_status():
+    acc = account()
+    if not acc:
+        out({"ok": True, "configured": False})
+    has = keyring_get(acc["host"], acc["user"]) != ""
+    out({"ok": True, "configured": True, "host": acc["host"], "user": acc["user"],
+         "port": acc.get("port", 993), "starttls": bool(acc.get("starttls")), "keyring": has})
+
+
+def cmd_unseen(argv):
+    limit = 5
+    i = 0
+    while i < len(argv):
+        if argv[i] == "--limit" and i + 1 < len(argv):
+            limit = max(1, min(50, int(argv[i + 1])))
+            i += 1
+        i += 1
+    acc = account()
+    if not acc:
+        fail("not-configured", "No mail account — Settings → Account → Mail.")
+    password = keyring_get(acc["host"], acc["user"])
+    if not password:
+        fail("no-password", "The mail password is not in the keyring — sign in to the mail account again.")
+    try:
+        m = connect(acc, password)
+        try:
+            unread, rows = fetch_unseen(m, limit)
+        finally:
+            try:
+                m.logout()
+            except Exception:
+                pass
+    except PermissionError as e:
+        fail("auth-failed", "The server rejected the login: %s" % e)
+    except ConnectionError as e:
+        fail("network", "Could not reach %s — %s" % (acc["host"], e))
+    except imaplib.IMAP4.error as e:
+        fail("imap", "IMAP error: %s" % e)
+    out({"ok": True, "unread": unread, "list": rows, "host": acc["host"], "user": acc["user"], "fetched_at": time.time()})
+
+
+def cmd_logout():
+    acc = account()
+    if acc:
+        keyring_clear(acc["host"], acc["user"])
+        conf("unset", "accounts.mail")
+    out({"ok": True})
+
+
+if __name__ == "__main__":
+    argv = sys.argv[1:]
+    cmd = argv[0] if argv else "status"
+    try:
+        if cmd == "login":
+            cmd_login(argv[1:])
+        elif cmd == "unseen":
+            cmd_unseen(argv[1:])
+        elif cmd == "logout":
+            cmd_logout()
+        else:
+            cmd_status()
+    except SystemExit:
+        raise
+    except Exception as e:  # absolute backstop: still emit parseable JSON
+        print(json.dumps({"ok": False, "error": "internal: %s" % e}))

@@ -11,6 +11,12 @@ the real thing for ewe-cloud and ewe-conf's WebDAV backend:
   /remote.php/dav/files/<user>/…      WebDAV: MKCOL, PUT (If-Match /
                                       If-None-Match → 412), GET (ETag),
                                       PROPFIND depth 0/1, DELETE
+  /remote.php/dav/calendars/<user>/   CalDAV: PROPFIND depth 1 lists one
+                                      calendar "Personal"; REPORT
+                                      calendar-query on it answers three
+                                      VEVENTs relative to today (a timed one
+                                      with a VALARM, an all-day one, one
+                                      expanded recurrence instance)
 
 State lives in one JSON file so a test can inspect or forge it (a "foreign
 machine" is just another PUT without If-Match). Usage:
@@ -209,7 +215,78 @@ class H(BaseHTTPRequestHandler):
         save(s)
         self._send(201 if not cur else 204, extra={"ETag": etag, "OC-ETag": etag})
 
+    # ── CalDAV (the calendar of the account) ──
+    def _cal_path(self):
+        prefix = "/remote.php/dav/calendars/%s/" % USER
+        p = urllib.parse.unquote(urllib.parse.urlsplit(self.path).path)
+        if not p.startswith(prefix):
+            return None
+        return p[len(prefix):].strip("/")
+
+    def _cal_events_ics(self):
+        """Three VEVENTs relative to today, already 'expanded' the way a
+        calendar-query with <expand> hands them back."""
+        import datetime as dt
+        today = dt.date.today()
+        d1 = today + dt.timedelta(days=1)
+        d2 = today + dt.timedelta(days=2)
+        d3 = today + dt.timedelta(days=3)
+        stamp = lambda d, hh, mm: "%04d%02d%02dT%02d%02d00" % (d.year, d.month, d.day, hh, mm)
+        return [
+            ("ev1.ics", "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:ev1@mock\r\n"
+             "SUMMARY:Standup\r\nLOCATION:Room 4\r\n"
+             "DTSTART;TZID=Europe/Tbilisi:%s\r\nDTEND;TZID=Europe/Tbilisi:%s\r\n"
+             "BEGIN:VALARM\r\nACTION:DISPLAY\r\nTRIGGER:-PT15M\r\nEND:VALARM\r\n"
+             "END:VEVENT\r\nEND:VCALENDAR\r\n" % (stamp(d1, 10, 0), stamp(d1, 10, 30))),
+            ("ev2.ics", "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:ev2@mock\r\n"
+             "SUMMARY:Public holiday\r\nDTSTART;VALUE=DATE:%s\r\nDTEND;VALUE=DATE:%s\r\n"
+             "END:VEVENT\r\nEND:VCALENDAR\r\n" % (d2.strftime("%Y%m%d"), d3.strftime("%Y%m%d"))),
+            ("ev3.ics", "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:ev3@mock\r\n"
+             "RECURRENCE-ID:%sZ\r\nSUMMARY:Weekly sync\r\nDTSTART:%sZ\r\nDURATION:PT45M\r\n"
+             "END:VEVENT\r\nEND:VCALENDAR\r\n" % (stamp(d3, 8, 0), stamp(d3, 8, 0))),
+        ]
+
+    def do_REPORT(self):
+        rel = self._cal_path()
+        self._body()
+        if rel is None:
+            return self._json({}, 404)
+        if not self._authed():
+            return self._json({}, 401)
+        if rel != "personal":
+            return self._send(404)
+        parts = ['<?xml version="1.0"?><d:multistatus xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">']
+        for name, ics in self._cal_events_ics():
+            parts.append("<d:response><d:href>/remote.php/dav/calendars/%s/personal/%s</d:href><d:propstat><d:prop>"
+                         '<d:getetag>"%s"</d:getetag><c:calendar-data>%s</c:calendar-data>'
+                         "</d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>"
+                         % (USER, name, name, escape(ics)))
+        parts.append("</d:multistatus>")
+        self._send(207, "".join(parts).encode(), 'application/xml; charset="utf-8"')
+
+    def _propfind_calendars(self, rel):
+        if not self._authed():
+            return self._json({}, 401)
+        depth = self.headers.get("Depth", "0")
+        parts = ['<?xml version="1.0"?><d:multistatus xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav" '
+                 'xmlns:a="http://apple.com/ns/ical/">']
+        home = "/remote.php/dav/calendars/%s/" % USER
+        parts.append("<d:response><d:href>%s</d:href><d:propstat><d:prop><d:resourcetype><d:collection/></d:resourcetype>"
+                     "</d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>" % home)
+        if rel == "" and depth != "0" or rel == "personal":
+            parts.append("<d:response><d:href>%spersonal/</d:href><d:propstat><d:prop>"
+                         "<d:displayname>Personal</d:displayname><a:calendar-color>#0082C9FF</a:calendar-color>"
+                         "<d:resourcetype><d:collection/><c:calendar/></d:resourcetype>"
+                         '<c:supported-calendar-component-set><c:comp name="VEVENT"/></c:supported-calendar-component-set>'
+                         "</d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>" % home)
+        parts.append("</d:multistatus>")
+        self._send(207, "".join(parts).encode(), 'application/xml; charset="utf-8"')
+
     def do_PROPFIND(self):
+        cal = self._cal_path()
+        if cal is not None:
+            self._body()
+            return self._propfind_calendars(cal)
         rel = self._dav_path()
         self._body()
         if rel is None:
