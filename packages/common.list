@@ -181,4 +181,4 @@ zram-generator
 base-devel
 pacman-contrib          # checkupdates — the only safe update listing (Komble Updates view needs it)
 expac                   # fast sync-DB dump — Komble's Browse descriptions come from it
-nextcloud-client        # RFC-005: your Nextcloud account as ~/Nextcloud — the official client, handed the account by the shell after sign-in
+nextcloud-client        # RFC-005/006: nextcloudcmd is the folder-sync engine of the first-party account app (Flock); the client's own GUI is not used

@@ -155,7 +155,7 @@ lights up around it:
 |---|---|
 | **the one file** | `ewe.conf` syncs to `ewe/` in the account; every change — Settings, Komble, the terminal — pushes ~20 s later once this machine has made its first backup ([EWE-CONF](EWE-CONF.md)) |
 | **restore** | a machine that signs in and finds a backup is offered it, out loud; your apps line up in Komble → For you |
-| **files** | the official Nextcloud desktop app gets the same account handed to it and syncs `~/Nextcloud` (Files → sidebar) |
+| **files** | the account mounted at `~/Nextcloud` (Files → sidebar) — full folder sync and a tray come with the account app, Flock (RFC-006) |
 | **calendar** | CalDAV — the Control Center's calendar and reminders |
 | **mail** | any IMAP account (Settings app → Account → Mail): unread badge, latest mail, new-mail notifications |
 

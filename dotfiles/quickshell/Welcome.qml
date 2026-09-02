@@ -358,7 +358,7 @@ Scope {
                             Text { text: (Cloud.email !== "" ? Cloud.email + " · " : "") + Cloud.serverHost; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
                         }
                     }
-                    Note { visible: Cloud.signedIn; text: Cloud.filesApp ? "Your files sync to ~/Nextcloud with the Nextcloud app." : "Your files are mounted at ~/Nextcloud." }
+                    Note { visible: Cloud.signedIn; text: "Your files are at ~/Nextcloud (Files → sidebar)." }
                     // the server address — remembered between attempts
                     Rectangle {
                         visible: !Cloud.signedIn && Cloud.busy !== "signin"

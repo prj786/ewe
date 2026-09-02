@@ -2790,7 +2790,7 @@ Scope {
                         }
                         KV { k: "Server"; v: Cloud.serverHost + (Cloud.offline ? " · not reachable right now" : ""); dot: Cloud.offline ? "info" : "ok" }
                         KV { k: "Storage"; v: Cloud.quota && Cloud.quota.total > 0 ? (root.fmtBytes(Cloud.quota.used) + " of " + root.fmtBytes(Cloud.quota.total) + " · " + Math.round(Cloud.quota.relative || 0) + "%") : (Cloud.quota ? root.fmtBytes(Cloud.quota.used) + " used" : "—") }
-                        KV { k: "Files"; v: Cloud.filesApp ? "the Nextcloud app syncs ~/Nextcloud" : (Cloud.filesMounted ? "mounted at " + Cloud.filesPath : "not mounted"); dot: (Cloud.filesApp || Cloud.filesMounted) ? "ok" : "info"; action: !Cloud.filesApp && !Cloud.filesMounted; actionLabel: "Mount"; onAct: Cloud.mountFiles() }
+                        KV { k: "Files"; v: Cloud.filesMounted ? "mounted at " + Cloud.filesPath : "not mounted"; dot: Cloud.filesMounted ? "ok" : "info"; action: !Cloud.filesMounted; actionLabel: "Mount"; onAct: Cloud.mountFiles() }
                         KV { k: "Calendar"; v: Cloud.calState === "offline" ? "offline — showing the last fetch" : (Cloud.events.length + " upcoming in the Control Center"); dot: Cloud.calState === "offline" ? "info" : "ok" }
                         KV { k: "Mail"; v: Mail.source === "imap" ? Mail.imapUser : (Mail.source === "gmail" ? "Gmail (Google extra)" : "none — add an IMAP account in the Settings app"); dot: Mail.available ? "ok" : "info" }
                     }

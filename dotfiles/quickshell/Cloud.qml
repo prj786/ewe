@@ -104,7 +104,7 @@ QtObject {
                 remoteMachine: cl.cloudInfo ? String(cl.cloudInfo.device || "") : "",
                 remoteModified: cl.cloudInfo ? String(cl.cloudInfo.updatedAt || "") : "",
                 restoreSummary: cl.restoreSummary, restoreApps: cl.restoreApps, pendingRestore: cl.pendingRestore,
-                filesMounted: cl.filesMounted, filesPath: cl.filesPath, filesApp: cl.filesApp, loginName: cl.loginName,
+                filesMounted: cl.filesMounted, filesPath: cl.filesPath, loginName: cl.loginName,
                 calState: cl.calState, eventCount: cl.events.length
             })
         }
@@ -238,41 +238,14 @@ QtObject {
     }
 
     // ── avatar + the account as a folder ─────────────────────────────────────
-    // Owner decision (2026-09-02): the official Nextcloud desktop client is
-    // the files path. After sign-in the SAME account is handed to it through
-    // its login URL scheme — the app password from the broker, argv only —
-    // and it syncs ~/Nextcloud from then on. bin/ewe-files (rclone mount) is
-    // only the fallback for a box without the client.
-    property bool filesApp: false        // /usr/bin/nextcloud is there
-    property Process _filesAppProbe: Process {
-        running: true
-        command: ["sh", "-c", '[ -x /usr/bin/nextcloud ] && echo yes || echo no']
-        stdout: StdioCollector { onStreamFinished: cl.filesApp = this.text.indexOf("yes") === 0 }
-    }
-    function setUpFiles() { _tokenProc.running = false; _tokenProc.running = true }
-    property Process _tokenProc: Process {
-        command: ["python3", cl.helper, "token", "--json"]
-        stdout: StdioCollector {
-            onStreamFinished: {
-                var j = null
-                try { j = JSON.parse(this.text) } catch (e) {}
-                if (!j || !j.ok || !j.token) { Log.warn("cloud", "files: no app password for the client hand-off"); return }
-                if (cl.filesApp) {
-                    // the client registers nextcloud:// and completes its account
-                    // setup from this URL; the password never touches a shell
-                    Quickshell.execDetached(["xdg-open", "nextcloud://login/server:" + cl.server + "&user:" + (cl.loginName || cl.user) + "&password:" + j.token])
-                    Quickshell.execDetached(["sh", "-c",
-                        'mkdir -p "$HOME/Nextcloud"; f="$HOME/.config/gtk-3.0/bookmarks"; mkdir -p "$(dirname "$f")"; grep -qs "file://$HOME/Nextcloud" "$f" || printf "file://%s/Nextcloud Nextcloud\n" "$HOME" >> "$f"'])
-                    cl.filesMounted = true
-                } else {
-                    Quickshell.execDetached(["sh", "-c", '"$0" setup >/dev/null 2>&1', cl.eweFiles])
-                    cl._filesStatusLater.restart()
-                }
-            }
-        }
-    }
+    // Files: bin/ewe-files (rclone WebDAV mount at ~/Nextcloud) is the interim
+    // path. Owner decision (2026-09-02, RFC-006): folder sync and its tray
+    // belong to a first-party account app ("Flock") built on nextcloudcmd;
+    // the official client's GUI is NOT handed the account and never
+    // autostarts. Cloud only records [sync] in the one file and mounts.
+    function setUpFiles() { Quickshell.execDetached(["sh", "-c", '"$0" setup >/dev/null 2>&1', cl.eweFiles]); cl._filesStatusLater.restart() }
     property Timer _filesStatusLater: Timer { interval: 4000; onTriggered: cl.checkFiles() }
-    function mountFiles() { if (cl.filesApp) cl.setUpFiles(); else { cl._filesMount.running = false; cl._filesMount.running = true } }
+    function mountFiles() { cl._filesMount.running = false; cl._filesMount.running = true }
     property Process _avatarProc: Process {
         command: ["python3", cl.helper, "avatar"]
         stdout: StdioCollector {
@@ -302,8 +275,7 @@ QtObject {
         function onSessionReady() {
             cl.checkCloud(); cl.fetchCalendar()
             cl._avatarProc.running = false; cl._avatarProc.running = true
-            if (cl.filesApp) cl.filesMounted = true   // the client keeps ~/Nextcloud itself
-            else { cl._filesMount.running = false; cl._filesMount.running = true }
+            cl._filesMount.running = false; cl._filesMount.running = true
             // login-time sync catches changes made outside the apps since the
             // last session; the content hash makes it a no-op when nothing moved
             cl.syncSoon()
