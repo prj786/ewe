@@ -142,62 +142,46 @@ live in **Settings → Theme**:
   them only when missing, so a fresh install has working defaults while your
   edits are never committed or clobbered.
 
-## Google account (optional)
+## Your account (Nextcloud)
 
-Settings → User can connect a Google account **natively** (OAuth 2.0
-installed-app flow with PKCE + loopback redirect — no GNOME Online Accounts
-needed). It powers three things: **calendar events** in the Quick Settings
-calendar (dots + agenda + reminder notifications), **Gmail** (a bar envelope
-with the real INBOX unread count, new-mail notifications, and a mail list in
-the control centre that deep-links into Gmail — read-only) and **settings
-sync** — one versioned bundle (theme, keyboard, dock, wallpaper, shortcuts,
-screensaver, avatar shape, display profiles, plus your package *list*) stored
-in Google Drive's hidden per-app `appDataFolder`. After a reinstall, sign in
-and hit "Restore from cloud" to get your setup back; reinstalling packages
-from the captured list is always a separate, opt-in command.
+ewe's account is **your own Nextcloud** — a server you run, or a hosted
+account from a provider such as Murena, Disroot or Infomaniak
+([RFC-005](RFC-005-nextcloud-account.md)). Nothing about it is baked into
+ewe: no project client, no vendor console, nobody's verification. One
+sign-in (Welcome on the first login, or Settings → Account) and the desktop
+lights up around it:
 
-On a fresh install the **Welcome** flow walks through it: a *Connect to the
-internet* step first (Wi-Fi is joined from the flow itself — sign-in and
-the Drive restore both need a connection), then an *Updates* step, then the
-one sign-in, then the restore offer. The Updates step exists because a
-fresh install carries the package database of its install day, and Arch
-mirrors drop superseded versions within days — so installing anything on
-that database fails with 404s, and Komble refuses partial upgrades by
-design. Welcome runs `checkupdates`, and if anything is waiting offers the
-one safe move, a full `pacman -Syu` (one authentication prompt, progress in
-the card), before the app restore can try to install a thing. *Later*
-defers it to Komble → Updates. A machine that has never synced never uploads on its own:
-its first backup is the explicit *Back up this machine* button (Welcome, or
-Settings → User), so a fresh install can never overwrite the backup it is
-about to restore. If the keyring or the browser misbehave, see
-[Troubleshooting → Google sign-in](TROUBLESHOOTING.md#google-sign-in-no-keyring-prompt-keyring-not-showing-up-no-browser).
+| what | how |
+|---|---|
+| **the one file** | `ewe.conf` syncs to `ewe/` in the account; every change — Settings, Komble, the terminal — pushes ~20 s later once this machine has made its first backup ([EWE-CONF](EWE-CONF.md)) |
+| **restore** | a machine that signs in and finds a backup is offered it, out loud; your apps line up in Komble → For you |
+| **files** | the official Nextcloud desktop app gets the same account handed to it and syncs `~/Nextcloud` (Files → sidebar) |
+| **calendar** | CalDAV — the Control Center's calendar and reminders |
+| **mail** | any IMAP account (Settings app → Account → Mail): unread badge, latest mail, new-mail notifications |
 
-One-time setup (Google requires your own OAuth client for native apps):
+Signing in is Nextcloud's own **Login Flow v2**: the browser opens your
+server's page, you sign in there (password, 2FA, SSO — whatever your server
+uses) and grant access to *ewe (<your computer>)*; the server hands ewe an
+**app password** that lives only in the keyring. Revoke it any time in
+Nextcloud → Settings → Security. Details, the terminal tools and the
+troubleshooting: [NEXTCLOUD.md](NEXTCLOUD.md).
 
-1. [console.cloud.google.com](https://console.cloud.google.com) → new project →
-   enable the **Google Calendar API**, **Google Drive API** and **Gmail API**.
-2. *OAuth consent screen*: External. Then **publish the app to "In
-   production"** (Audience → Publish). Don't leave it in *Testing*: with
-   Calendar/Drive/Gmail scopes a Testing app issues refresh tokens that
-   **expire after 7 days**, forcing a weekly re-login. Publishing an app for
-   personal use needs **no Google verification** — you just click through an
-   "unverified app" warning once during consent.
-3. *Credentials* → **Create OAuth client ID** → type **Desktop app**.
-4. Save the id/secret as `~/.config/quickshell/google-oauth.json`:
-   `{ "client_id": "…apps.googleusercontent.com", "client_secret": "…" }`
+If the browser never opened, Welcome and Settings offer **Open the sign-in
+page / Copy the link**. If the keyring rejects your login password, **Reset
+the keyring** then **Log out now** — PAM recreates it at the next login
+([Troubleshooting](TROUBLESHOOTING.md)).
 
-That file is **gitignored**; a Desktop-app client secret is explicitly
-non-confidential. The **refresh token** never touches a file — it lives in the
-Secret Service keyring (`gnome-keyring`, via `secret-tool`). Scopes requested:
-`openid email profile`, `calendar.readonly`, `drive.appdata`, `gmail.readonly`
-(the shell can read your calendar, mail headers and its own hidden app folder —
-nothing else; it can never send or delete anything). `gmail.readonly` is
-Google's *restricted* tier — fine for a personal published-unverified client
-via the warning clickthrough; if Google ever hard-blocks it, the shell simply
-shows mail as unavailable while calendar and sync keep working. Sign out
-revokes the token at Google and clears the keyring. Helper:
-`dotfiles/quickshell/scripts/google-auth.py` (stdlib-only Python). Everything
-degrades cleanly when signed out or offline.
+## Google (optional)
+
+Google is an extra, not the account: **Gmail** in the Control Center and
+**Google Drive** as `~/Google Drive`. ewe ships **no Google client** — to use
+it, create your own OAuth client of type *Desktop app* (Gmail + Drive APIs)
+and save it as `~/.config/ewe/oauth-client.json`
+([GOOGLE-CLIENT.md](GOOGLE-CLIENT.md)); Settings → Account then shows
+**Connect Google**. A personal client needs no Google verification — the
+consent screen shows a warning you click through once. Settings sync never
+uses Google; an IMAP mail account, when set up, takes precedence over Gmail
+in the Control Center.
 
 ## VPN
 
