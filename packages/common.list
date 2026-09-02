@@ -55,7 +55,6 @@ alsa-utils              # alsactl (restore mixer @ boot) + alsamixer / aplay -l 
 networkmanager
 networkmanager-openvpn  # OpenVPN profiles (the most common VPN type)
 networkmanager-l2tp     # L2TP/IPsec profiles (server + user + password + PSK — the corporate/ISP kind); strongswan + xl2tpd ride along
-networkmanager-l2tp     # L2TP/IPsec profiles (needs strongswan below)
 strongswan              # IPsec for networkmanager-l2tp
 # Cast to TV (the control-centre "Cast" tile → gnome-network-displays, aur.list):
 iw                      # `iw list` — cast-check.sh verifies the Wi-Fi card does Wi-Fi Direct (P2P), which Miracast needs
@@ -181,4 +180,4 @@ zram-generator
 base-devel
 pacman-contrib          # checkupdates — the only safe update listing (Komble Updates view needs it)
 expac                   # fast sync-DB dump — Komble's Browse descriptions come from it
-nextcloud-client        # RFC-005/006: nextcloudcmd is the folder-sync engine of the first-party account app (Flock); the client's own GUI is not used
+nextcloud-client        # RFC-005/006: nextcloudcmd is the folder-sync engine of the first-party account app (ewe-sync); the client's own GUI is not used
