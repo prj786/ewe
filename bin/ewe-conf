@@ -166,8 +166,26 @@ def load():
         return {"schema": SCHEMA}
 
 
+def _normalize_manifest(doc):
+    """Every write heals the app list: entries that arrived from another
+    machine's backup keep whatever `source` that machine wrote (Komble
+    < 0.9.13 wrote file paths), and nothing else ever rewrites them."""
+    try:
+        node, last = dig(doc, "apps.installed")
+        man = node.get(last)
+        pkgs = man.get("packages") if isinstance(man, dict) else None
+        if not isinstance(pkgs, list):
+            return
+        for e in pkgs:
+            if isinstance(e, dict):
+                e["source"] = normalize_source(e.get("source"), e.get("package"), None)
+    except (KeyError, AttributeError, TypeError):
+        pass
+
+
 def save(doc):
     doc["schema"] = SCHEMA
+    _normalize_manifest(doc)
     os.makedirs(EWE_DIR, exist_ok=True)
     text = emit(doc)
     tomllib.loads(text)  # never persist something we cannot read back
