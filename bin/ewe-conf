@@ -16,7 +16,8 @@ artifact of `ewe-conf apply`.
                                       regenerate artifacts (+ colorscheme +
                                       settings-reload poke + hyprctl reload
                                       unless --no-hooks)
-    ewe-conf push [--force]           upload the file to Drive (RFC-002)
+    ewe-conf push [--force]           upload the file to the account (RFC-005:
+                                      [sync].provider = nextcloud | google)
     ewe-conf pull [--out PATH]        download it — then `apply` to make it live
     ewe-conf sync-status              the remote copy + this machine's sync record
 
@@ -92,7 +93,7 @@ SECTION_NOTES = {
     "apps": "pins, startup entries, places, and Komble's installed manifest",
     "apps.installed": "what Komble manages here — a fresh machine reinstalls from this",
     "system": "what this MACHINE is — read by the installer/OS tooling only",
-    "sync": "account identity for sync; credentials never live in this file",
+    "sync": "where the file syncs: provider (nextcloud | google), server, user, folder; credentials never live here",
     "network": "connection DEFINITIONS only — keys and passwords never sync",
     "network.ssh": "~/.ssh/config host aliases (the ewe-managed block)",
     "network.vpn": "NM VPN profile definitions; secrets re-prompt after restore",
@@ -1061,16 +1062,19 @@ DRIVE_UPLOAD = _DRIVE_BASE + "/upload/drive/v3/files"
 PUSH_STAMP = os.path.join(os.environ.get("XDG_RUNTIME_DIR") or "/tmp", "ewe-conf-push.stamp")
 
 
+def _tool(name):
+    """a sibling tool (ewe-auth / ewe-cloud): realpath, not abspath — this
+    file is reached through the ~/.config symlink farm, and lexical `..`
+    collapsing lands in the wrong directory"""
+    t = os.path.join(os.path.dirname(os.path.realpath(__file__)), name)
+    return t if os.path.exists(t) else name
+
+
 def _auth_token():
     if os.environ.get("EWE_CONF_TEST_TOKEN"):     # tests only — skip ewe-auth
         return os.environ["EWE_CONF_TEST_TOKEN"]
-    # realpath, not abspath: this file is reached through the ~/.config
-    # symlink farm, and lexical `..` collapsing lands in the wrong directory
-    ea = os.path.join(os.path.dirname(os.path.realpath(__file__)), "ewe-auth")
-    if not os.path.exists(ea):
-        ea = "ewe-auth"
     try:
-        r = subprocess.run([ea, "token"], capture_output=True, text=True, timeout=60)
+        r = subprocess.run([_tool("ewe-auth"), "token"], capture_output=True, text=True, timeout=60)
     except (OSError, subprocess.TimeoutExpired):
         return None
     tok = r.stdout.strip().splitlines()[-1] if r.stdout.strip() else ""
@@ -1128,13 +1132,14 @@ def _sync_state():
         return {}
 
 
-def _sync_record(remote_id, remote_modified, remote_machine):
-    """what this machine last saw on Drive — the whole conflict guard"""
+def _sync_record(remote_id, remote_modified, remote_machine, provider="google", **extra):
+    """what this machine last saw on the remote — the whole conflict guard
+    (Drive: file id + modifiedTime; Nextcloud: the WebDAV ETag)"""
     import time as _t
     os.makedirs(STATE_DIR, exist_ok=True)
-    st = {"id": remote_id, "remote_modified": remote_modified,
+    st = {"provider": provider, "id": remote_id, "remote_modified": remote_modified,
           "remote_machine": remote_machine,
-          "local_synced_at": _t.strftime("%Y-%m-%dT%H:%M:%SZ", _t.gmtime())}
+          "local_synced_at": _t.strftime("%Y-%m-%dT%H:%M:%SZ", _t.gmtime()), **extra}
     fd, tmp = tempfile.mkstemp(dir=STATE_DIR, prefix=".sync.json.")
     with os.fdopen(fd, "w") as f:
         json.dump(st, f, indent=2)
@@ -1167,32 +1172,190 @@ def _adopt_network():
         pass
 
 
-def do_push(quiet=False, force=False):
-    _adopt_network()
-    token = _auth_token()
-    if not token:
-        return {"ok": False, "error": "not-signed-in"}
+# ── the provider layer (RFC-005) ─────────────────────────────────────────────
+#
+# Two remotes, one contract. Every backend exposes the same three verbs and
+# the same `remote` shape — {id, modifiedTime, appProperties{machine,schema}}
+# — so push/pull/sync-status and the shells that read them never care which
+# cloud is behind the file:
+#   google     Drive appData (RFC-002): id = file id, guard = modifiedTime
+#   nextcloud  WebDAV <server>/remote.php/dav/files/<user>/<folder>/ewe.conf
+#              + ewe.conf.meta.json {machine, saved_at, schema}; id = ETag,
+#              guard = If-Match on the server itself (412 ⇒ someone else
+#              saved first) — no clocks, no hostnames, no race window.
+
+PROVIDERS = ("google", "nextcloud")
+CLOUD_META = os.path.join(EWE_DIR, "cloud.json")           # written by ewe-cloud
+
+
+def sync_cfg(doc=None):
+    """[sync] as the tools see it. An absent provider means the pre-RFC-005
+    default (google) so existing machines keep working until they sign in
+    to a Nextcloud; the shell shows the migration note."""
+    s = (doc if doc is not None else load()).get("sync") or {}
+    prov = str(s.get("provider") or "google").lower()
+    return {"provider": prov if prov in PROVIDERS else "",
+            "server": str(s.get("server") or ""), "user": str(s.get("user") or ""),
+            "folder": str(s.get("folder") or "ewe").strip("/") or "ewe",
+            "enabled": bool(s.get("enabled"))}
+
+
+class _Nc:
+    """one signed-in Nextcloud: the WebDAV folder + basic auth"""
+    def __init__(self, base, auth):
+        self.base, self.auth = base, auth
+
+    def url(self, name=""):
+        import urllib.parse
+        return self.base + urllib.parse.quote(name)
+
+    def req(self, method, name="", body=None, headers=None, timeout=60):
+        """→ (status, headers, body) — HTTP errors are a status, transport
+        failures come back as (None, {}, message)"""
+        import base64
+        import urllib.request
+        import urllib.error
+        h = {"User-Agent": "ewe-conf", **(headers or {})}
+        h["Authorization"] = "Basic " + base64.b64encode(("%s:%s" % self.auth).encode()).decode()
+        r = urllib.request.Request(self.url(name), method=method, data=body, headers=h)
+        try:
+            with urllib.request.urlopen(r, timeout=timeout) as resp:
+                return resp.status, dict(resp.headers), resp.read()
+        except urllib.error.HTTPError as e:
+            return e.code, dict(e.headers), e.read()
+        except OSError as e:
+            return None, {}, f"network: {getattr(e, 'reason', e)}"
+
+
+def _nc_session(cfg=None):
+    """(session, None) or (None, error-code). Credentials come from
+    ewe-cloud (the app password in the keyring, server + login from
+    cloud.json); [sync].server/user in the file are the fallback identity
+    (and what the tests set)."""
+    cfg = cfg or sync_cfg()
+    server, user, token = "", "", os.environ.get("EWE_CONF_TEST_TOKEN", "")
+    meta = None
     try:
-        content = open(CONF, "rb").read()
-        local_mtime = int(os.path.getmtime(CONF))
-    except OSError:
-        return {"ok": False, "error": "no-local-file"}
-    remote, err = _remote_find(token)
+        with open(CLOUD_META) as f:
+            meta = json.load(f)
+    except (OSError, ValueError):
+        pass
+    if isinstance(meta, dict) and meta.get("server") and meta.get("login_name"):
+        server, user = meta["server"], meta["login_name"]
+    if not token:
+        try:
+            r = subprocess.run([_tool("ewe-cloud"), "token", "--json"],
+                               capture_output=True, text=True, timeout=60)
+            j = json.loads(r.stdout.strip().splitlines()[-1]) if r.stdout.strip() else {}
+        except (OSError, subprocess.TimeoutExpired, ValueError, IndexError):
+            j = {}
+        if j.get("ok") and j.get("token"):
+            token, server, user = j["token"], j.get("server") or server, j.get("user") or user
+    server = server or cfg["server"]
+    user = user or cfg["user"]
+    if not (server and user and token):
+        return None, "not-signed-in"
+    import urllib.parse
+    base = "%s/remote.php/dav/files/%s/%s/" % (server.rstrip("/"), urllib.parse.quote(user, safe=""),
+                                               urllib.parse.quote(cfg["folder"]))
+    return _Nc(base, (user, token)), None
+
+
+def _httpdate_iso(s):
+    """'Tue, 02 Sep 2026 12:00:00 GMT' → '2026-09-02T12:00:00Z' (or '')"""
+    import email.utils
+    try:
+        return email.utils.parsedate_to_datetime(s).strftime("%Y-%m-%dT%H:%M:%SZ")
+    except (TypeError, ValueError):
+        return ""
+
+
+def _nc_props(nc, name):
+    """PROPFIND depth 0 → (etag, lastmodified-iso) or (None, None) when absent"""
+    body = (b'<?xml version="1.0"?><d:propfind xmlns:d="DAV:"><d:prop>'
+            b'<d:getetag/><d:getlastmodified/></d:prop></d:propfind>')
+    code, _, raw = nc.req("PROPFIND", name, body,
+                          {"Depth": "0", "Content-Type": "application/xml"})
+    if code is None:
+        return None, raw
+    if code == 404:
+        return None, None
+    if code == 401:
+        return None, "unauthorized"
+    if code not in (207, 200):
+        return None, f"http-{code}"
+    import xml.etree.ElementTree as ET
+    try:
+        root = ET.fromstring(raw)
+    except ET.ParseError:
+        return None, "bad-propfind"
+    ns = {"d": "DAV:"}
+    etag = root.findtext(".//d:getetag", default="", namespaces=ns).strip()
+    lm = root.findtext(".//d:getlastmodified", default="", namespaces=ns).strip()
+    return {"etag": etag, "modified": _httpdate_iso(lm) or lm}, None
+
+
+def _nc_find(nc):
+    """the remote in the Drive-shaped contract, or None; (None, err) on failure"""
+    props, err = _nc_props(nc, "ewe.conf")
     if err:
-        return {"ok": False, "error": err}
-    rec = _sync_state()
-    if remote and not force:
-        if rec.get("id") == remote.get("id") and rec.get("remote_modified"):
-            # we have synced with THIS file before: refuse if it moved since
-            if remote.get("modifiedTime") != rec["remote_modified"]:
-                return {"ok": False, "error": "remote-newer", "remote": remote,
-                        "local_mtime": local_mtime,
-                        "recorded_remote_modified": rec["remote_modified"]}
-        else:
-            # never synced here, but Drive already holds a backup: restoring
-            # is the safe move, overwriting is a decision (--force)
-            return {"ok": False, "error": "remote-exists", "remote": remote,
-                    "local_mtime": local_mtime}
+        return None, err
+    if not props:
+        return None, None
+    meta = {}
+    code, _, raw = nc.req("GET", "ewe.conf.meta.json")
+    if code == 200:
+        try:
+            meta = json.loads(raw.decode())
+        except ValueError:
+            meta = {}
+    return {"id": props["etag"], "etag": props["etag"],
+            "modifiedTime": meta.get("saved_at") or props["modified"],
+            "appProperties": {"machine": str(meta.get("machine", "")),
+                              "schema": str(meta.get("schema", ""))},
+            "provider": "nextcloud"}, None
+
+
+def _nc_mkcol(nc):
+    """make sure the folder exists (405 = already there); creates parents"""
+    import urllib.parse
+    p = urllib.parse.urlsplit(nc.base)
+    parts = [x for x in p.path.split("/") if x]
+    # …/remote.php/dav/files/<user>/<folder parts…>
+    i = parts.index("files") + 2
+    for n in range(i, len(parts)):
+        url = urllib.parse.urlunsplit((p.scheme, p.netloc, "/" + "/".join(parts[:n + 1]), "", ""))
+        saved = nc.base
+        nc.base = url
+        code, _, raw = nc.req("MKCOL")
+        nc.base = saved
+        if code is None:
+            return raw
+        if code not in (201, 405, 301):
+            return f"http-{code}"
+    return None
+
+
+def _guard(rec, remote, cfg, force):
+    """the one conflict rule, provider-agnostic: (error, detail) or (None,)
+    - never synced here + a backup exists → remote-exists (restore first)
+    - synced here, remote moved since → remote-newer (pull first)"""
+    if force or not remote:
+        return None
+    known = rec.get("provider", "google") == cfg["provider"] and bool(rec.get("id"))
+    if cfg["provider"] == "google":
+        known = known and rec.get("id") == remote.get("id") and bool(rec.get("remote_modified"))
+        same = known and rec.get("remote_modified") == remote.get("modifiedTime")
+    else:
+        same = known and rec.get("id") == remote.get("id")
+    if not known:
+        return "remote-exists"
+    if not same:
+        return "remote-newer"
+    return None
+
+
+def _push_google(content, force, rec, remote, token):
     props = {"machine": _machine(), "schema": "1"}
     fields = "fields=id,modifiedTime,appProperties"
     if remote:
@@ -1208,38 +1371,138 @@ def do_push(quiet=False, force=False):
         j, err = _drive("POST", f"{DRIVE_UPLOAD}?uploadType=multipart&{fields}",
                         token, body, ctype)
     if err:
-        return {"ok": False, "error": err}
+        return None, err
     if not isinstance(j, dict) or not j.get("id"):
-        return {"ok": False, "error": "upload: no file id in the response"}
+        return None, "upload: no file id in the response"
     if (j.get("appProperties") or {}).get("machine") != props["machine"]:
-        return {"ok": False, "error": "stamp-missing", "id": j.get("id", "")}
+        return None, "stamp-missing"
     modified = j.get("modifiedTime") or ""
     if not modified:
-        # a Drive that ignored `fields`: ask again rather than record nothing
         again, _ = _remote_find(token)
         modified = (again or {}).get("modifiedTime", "")
-    st = _sync_record(j["id"], modified, props["machine"])
+    return {"id": j["id"], "modified": modified, "machine": props["machine"]}, None
+
+
+def _push_nextcloud(content, force, rec, remote, nc):
+    import time as _t
+    err = _nc_mkcol(nc)
+    if err:
+        return None, err
+    headers = {"Content-Type": "application/toml"}
+    if not force:
+        # the server enforces the rule too: a push that races another
+        # machine's save is rejected with 412 — no window between find and put
+        if remote:
+            headers["If-Match"] = rec.get("id") or remote["id"]
+        else:
+            headers["If-None-Match"] = "*"
+    code, h, raw = nc.req("PUT", "ewe.conf", content, headers)
+    if code is None:
+        return None, raw
+    if code == 412:
+        return None, "remote-newer" if remote else "remote-exists"
+    if code == 401:
+        return None, "unauthorized"
+    if code not in (200, 201, 204):
+        return None, f"http-{code}"
+    etag = (h.get("ETag") or h.get("OC-ETag") or h.get("Etag") or "").strip()
+    if not etag:
+        props, perr = _nc_props(nc, "ewe.conf")
+        etag = (props or {}).get("etag", "")
+    saved_at = _t.strftime("%Y-%m-%dT%H:%M:%SZ", _t.gmtime())
+    meta = json.dumps({"machine": _machine(), "saved_at": saved_at, "schema": "1"}).encode()
+    code, _, raw = nc.req("PUT", "ewe.conf.meta.json", meta, {"Content-Type": "application/json"})
+    if code is None or code not in (200, 201, 204):
+        return None, "stamp-missing"
+    return {"id": etag, "modified": saved_at, "machine": _machine(), "etag": etag}, None
+
+
+def _backend(cfg):
+    """→ (find, push, pull, token-or-session, error)"""
+    if cfg["provider"] == "google":
+        token = _auth_token()
+        if not token:
+            return None, "not-signed-in"
+        return {"find": lambda: _remote_find(token),
+                "push": lambda c, f, rec, rem: _push_google(c, f, rec, rem, token),
+                "pull": lambda rem: _pull_google(rem, token)}, None
+    if cfg["provider"] == "nextcloud":
+        nc, err = _nc_session(cfg)
+        if err:
+            return None, err
+        return {"find": lambda: _nc_find(nc),
+                "push": lambda c, f, rec, rem: _push_nextcloud(c, f, rec, rem, nc),
+                "pull": lambda rem: _pull_nextcloud(rem, nc)}, None
+    return None, "no-provider"
+
+
+def _pull_google(remote, token):
+    raw, err = _drive("GET", f"{DRIVE_FILES}/{remote['id']}?alt=media", token)
+    if err:
+        return None, err
+    if isinstance(raw, dict):
+        raw = json.dumps(raw).encode()
+    return raw, None
+
+
+def _pull_nextcloud(remote, nc):
+    code, h, raw = nc.req("GET", "ewe.conf")
+    if code is None:
+        return None, raw
+    if code == 404:
+        return None, "nothing-synced"
+    if code != 200:
+        return None, f"http-{code}"
+    etag = (h.get("ETag") or h.get("OC-ETag") or "").strip()
+    if etag:
+        remote["id"] = remote["etag"] = etag
+    return raw, None
+
+
+def do_push(quiet=False, force=False):
+    _adopt_network()
+    cfg = sync_cfg()
+    be, err = _backend(cfg)
+    if err:
+        return {"ok": False, "error": err, "provider": cfg["provider"]}
+    try:
+        content = open(CONF, "rb").read()
+        local_mtime = int(os.path.getmtime(CONF))
+    except OSError:
+        return {"ok": False, "error": "no-local-file"}
+    remote, err = be["find"]()
+    if err:
+        return {"ok": False, "error": err, "provider": cfg["provider"]}
+    rec = _sync_state()
+    verdict = _guard(rec, remote, cfg, force)
+    if verdict:
+        return {"ok": False, "error": verdict, "remote": remote, "provider": cfg["provider"],
+                "local_mtime": local_mtime,
+                "recorded_remote_modified": rec.get("remote_modified", "")}
+    res, err = be["push"](content, force, rec, remote)
+    if err:
+        return {"ok": False, "error": err, "remote": remote, "provider": cfg["provider"]}
+    st = _sync_record(res["id"], res["modified"], res["machine"], provider=cfg["provider"])
     with open(PUSH_STAMP, "w") as f:
         f.write(str(int(__import__("time").time())))
-    return {"ok": True, "id": j["id"], "bytes": len(content),
-            "machine": props["machine"], "modified": modified,
+    return {"ok": True, "id": res["id"], "bytes": len(content), "provider": cfg["provider"],
+            "machine": res["machine"], "modified": res["modified"],
             "local_synced_at": st["local_synced_at"]}
 
 
 def do_pull(out_path=None):
-    token = _auth_token()
-    if not token:
-        return {"ok": False, "error": "not-signed-in"}
-    remote, err = _remote_find(token)
+    cfg = sync_cfg()
+    be, err = _backend(cfg)
     if err:
-        return {"ok": False, "error": err}
+        return {"ok": False, "error": err, "provider": cfg["provider"]}
+    remote, err = be["find"]()
+    if err:
+        return {"ok": False, "error": err, "provider": cfg["provider"]}
     if not remote:
-        return {"ok": False, "error": "nothing-synced"}
-    raw, err = _drive("GET", f"{DRIVE_FILES}/{remote['id']}?alt=media", token)
+        return {"ok": False, "error": "nothing-synced", "provider": cfg["provider"]}
+    raw, err = be["pull"](remote)
     if err:
-        return {"ok": False, "error": err}
-    if isinstance(raw, dict):
-        raw = json.dumps(raw).encode()
+        return {"ok": False, "error": err, "provider": cfg["provider"]}
     tomllib.loads(raw.decode())          # never write a document we can't read
     target = out_path or CONF
     backed_up = ""
@@ -1247,7 +1510,7 @@ def do_pull(out_path=None):
         os.makedirs(os.path.dirname(os.path.abspath(target)), exist_ok=True)
         _wbytes(target, raw)
         return {"ok": True, "bytes": len(raw), "modified": remote.get("modifiedTime", ""),
-                "backup": "", "written": target}
+                "provider": cfg["provider"], "backup": "", "written": target}
     # Under the same lock every writer takes, and tmp+rename like save():
     # a concurrent `set` (Komble mirrors its manifest at startup) used to
     # load the pre-pull document and save it straight back over the pull.
@@ -1260,10 +1523,36 @@ def do_pull(out_path=None):
             shutil.copy2(CONF, backed_up)
         _wbytes(CONF, raw)
         st = _sync_record(remote.get("id", ""), remote.get("modifiedTime", ""),
-                          (remote.get("appProperties") or {}).get("machine", ""))
+                          (remote.get("appProperties") or {}).get("machine", ""),
+                          provider=cfg["provider"])
     return {"ok": True, "bytes": len(raw), "modified": remote.get("modifiedTime", ""),
-            "machine": st["remote_machine"], "backup": backed_up, "written": target,
-            "local_synced_at": st["local_synced_at"]}
+            "provider": cfg["provider"], "machine": st["remote_machine"],
+            "backup": backed_up, "written": target, "local_synced_at": st["local_synced_at"]}
+
+
+def sync_status():
+    cfg = sync_cfg()
+    be, err = _backend(cfg)
+    if err:
+        return {"ok": False, "error": err, "provider": cfg["provider"]}
+    remote, err = be["find"]()
+    local_mtime = None
+    try:
+        local_mtime = int(os.path.getmtime(CONF))
+    except OSError:
+        pass
+    rec = _sync_state()
+    rprops = (remote or {}).get("appProperties") or {}
+    return {"ok": err is None, "error": err, "provider": cfg["provider"],
+            "server": cfg["server"], "folder": cfg["folder"], "enabled": cfg["enabled"],
+            "remote": remote, "local_mtime": local_mtime,
+            # who saved the backup that is on the remote right now
+            "remote_machine": rprops.get("machine", ""),
+            "remote_modified": (remote or {}).get("modifiedTime", ""),
+            # when THIS machine last pushed or pulled
+            "local_synced_at": rec.get("local_synced_at", ""),
+            "recorded_remote_modified": rec.get("remote_modified", ""),
+            "in_sync": bool(remote and _guard(rec, remote, cfg, False) is None)}
 
 
 def _wbytes(path, data):
@@ -1355,30 +1644,7 @@ def main(argv):
             save(doc)
             do_apply(doc, only="theme", hooks=hooks)
     elif cmd == "sync-status":
-        token = _auth_token()
-        if not token:
-            print(json.dumps({"ok": False, "error": "not-signed-in"}))
-            return 0
-        remote, err = _remote_find(token)
-        local_mtime = None
-        try:
-            local_mtime = int(os.path.getmtime(CONF))
-        except OSError:
-            pass
-        rec = _sync_state()
-        rprops = (remote or {}).get("appProperties") or {}
-        print(json.dumps({"ok": err is None,
-                          "error": err,
-                          "remote": remote,
-                          "local_mtime": local_mtime,
-                          # who saved the backup that is on Drive right now
-                          "remote_machine": rprops.get("machine", ""),
-                          "remote_modified": (remote or {}).get("modifiedTime", ""),
-                          # when THIS machine last pushed or pulled
-                          "local_synced_at": rec.get("local_synced_at", ""),
-                          "recorded_remote_modified": rec.get("remote_modified", ""),
-                          "in_sync": bool(remote and rec.get("id") == remote.get("id")
-                                          and rec.get("remote_modified") == remote.get("modifiedTime"))}))
+        print(json.dumps(sync_status()))
     elif cmd == "push":
         print(json.dumps(do_push(quiet="--quiet" in argv, force="--force" in argv)))
     elif cmd == "pull":
