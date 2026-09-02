@@ -584,6 +584,16 @@ def cmd_keyring_reset():
             os.remove(p)
         except OSError:
             pass
+    # The running daemon still holds the old keyring in memory, and it
+    # survives a logout whenever the user manager does (another session, a
+    # lingering process): PAM would hand the next login's password to THAT
+    # daemon and get "invalid" again (metal, 2026-09-02). Restart it so the
+    # next unlock starts from the empty directory and creates a fresh one.
+    try:
+        subprocess.run(["systemctl", "--user", "restart", "gnome-keyring-daemon.service"],
+                       capture_output=True, timeout=15)
+    except (OSError, subprocess.TimeoutExpired):
+        pass
     out({"ok": True, "moved": moved, "relogin": True,
          "message": "Keyring reset. Log out and back in — it is recreated with your login password — then sign in again."})
 
