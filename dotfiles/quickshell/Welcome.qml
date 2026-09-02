@@ -5,10 +5,12 @@ import Quickshell.Wayland
 
 // Welcome — what a stranger sees in their first minute (ROADMAP 0.7).
 // Shown ONCE on a fresh install (stamp: ~/.local/state/ewe/welcomed), never
-// on the live ISO (EWE_LIVE — the installer is the point there). Five steps:
-//   1 welcome · 2 get online (0.9.16-2) · 3 one sign-in (Google) · 4 restore
-//   offer (only when the account holds a backup from another machine) ·
-//   5 the 60-second tour.
+// on the live ISO (EWE_LIVE — the installer is the point there). Six steps:
+//   1 welcome · 2 get online (0.9.16-2) · 3 updates (0.9.19: a fresh install
+//   must be current before anything can be installed — the sync database it
+//   was born with points at packages the mirrors have already dropped) ·
+//   4 one sign-in (Google) · 5 restore offer (only when the account holds a
+//   backup from another machine) · 6 the 60-second tour.
 // Re-open any time:  qs ipc call welcome toggle   (reset: … welcome reset)
 //
 // 0.9.16-2, the first bare-metal install: this overlay sat on the Overlay
@@ -23,9 +25,64 @@ Scope {
     property int step: 0
     readonly property string stamp: (Quickshell.env("XDG_STATE_HOME") || (Quickshell.env("HOME") + "/.local/state")) + "/ewe/welcomed"
     readonly property int stepNetwork: 1
-    readonly property int stepSignIn: 2
-    readonly property int stepRestore: 3
-    readonly property int stepTour: 4
+    readonly property int stepUpdates: 2
+    readonly property int stepSignIn: 3
+    readonly property int stepRestore: 4
+    readonly property int stepTour: 5
+    readonly property bool isLive: (Quickshell.env("EWE_LIVE") || "") !== ""
+
+    // ── updates ──
+    // checking | current | pending | installing | done | failed | unknown
+    property string updState: "unknown"
+    property int updCount: 0
+    property var updTail: []             // the last few lines of pacman's output
+    readonly property bool updBusy: updState === "checking" || updState === "installing"
+    function checkUpdates() {
+        root.updState = "checking"; root.updCount = 0; root.updTail = []
+        updCheck.running = false; updCheck.running = true
+    }
+    function installUpdates() {
+        if (root.updState === "installing") return
+        root.updState = "installing"; root.updTail = []
+        updInstall.running = false; updInstall.running = true
+    }
+    function _updLine(line) {
+        var l = String(line).replace(/\r/g, "").trim()
+        if (l === "") return
+        var t = root.updTail.slice(); t.push(l.length > 96 ? l.slice(0, 96) + "…" : l)
+        while (t.length > 5) t.shift()
+        root.updTail = t
+    }
+    // pacman-contrib's checkupdates: 0 = updates listed on stdout, 2 = none
+    property Process updCheck: Process {
+        command: ["checkupdates"]
+        stdout: StdioCollector { id: updOut }
+        onExited: function (code) {
+            if (code === 2) { root.updState = "current"; updAdvance.restart(); return }
+            if (code !== 0) { root.updState = "unknown"; return }   // no checkupdates / no network: not a blocker
+            var n = updOut.text.split("\n").filter(function (l) { return l.trim() !== "" }).length
+            root.updCount = n
+            if (n === 0) { root.updState = "current"; updAdvance.restart() } else root.updState = "pending"
+        }
+    }
+    // the shell's own PolkitAgent (Auth.qml) answers pkexec's prompt
+    property Process updInstall: Process {
+        command: ["pkexec", "pacman", "-Syu", "--noconfirm", "--noprogressbar"]
+        stdout: SplitParser { onRead: function (data) { root._updLine(data) } }
+        stderr: SplitParser { onRead: function (data) { root._updLine(data) } }
+        onExited: function (code) {
+            if (code === 0) { root.updState = "done"; root.updCount = 0; updAdvance.restart() }
+            else if (code === 126 || code === 127) { root.updState = "failed"; root._updLine("Authentication was cancelled — nothing was changed.") }
+            else root.updState = "failed"
+        }
+    }
+    Timer { id: updAdvance; interval: 1100; onTriggered: if (root.open && root.step === root.stepUpdates) root.next() }
+    onStepChanged: {
+        if (root.step === root.stepUpdates) {
+            if (!root.online || root.isLive) { root.step = root.stepSignIn; return }
+            if (root.updState !== "done") root.checkUpdates()
+        }
+    }
 
     // a restore is worth offering when the account has a backup and THIS
     // machine has never synced — the same rule Google._maybeOfferRestore uses
@@ -41,6 +98,7 @@ Scope {
         root.open = false
     }
     function next() {
+        if (root.step === root.stepUpdates && root.updBusy) return                                        // never skip past a running upgrade
         if (root.step === root.stepSignIn && !root.restoreWorthIt) { root.step = root.stepTour; return }   // nothing to restore → tour
         if (root.step >= root.stepTour) { root.finish(); return }
         root.step += 1
@@ -111,9 +169,9 @@ Scope {
             id: keys
             anchors.fill: parent
             focus: true
-            Keys.onEscapePressed: root.finish()
-            Keys.onReturnPressed: if (root.step !== root.stepNetwork || root.online) root.next()
-            Keys.onEnterPressed: if (root.step !== root.stepNetwork || root.online) root.next()
+            Keys.onEscapePressed: if (!root.updBusy) root.finish()
+            Keys.onReturnPressed: if ((root.step !== root.stepNetwork || root.online) && !root.updBusy) root.next()
+            Keys.onEnterPressed: if ((root.step !== root.stepNetwork || root.online) && !root.updBusy) root.next()
         }
 
         Rectangle {
@@ -224,7 +282,49 @@ Scope {
                     Note { visible: !root.online; text: "You can also continue offline — Google sign-in and the restore stay available later in Settings → User." }
                 }
 
-                // ── 3 · one sign-in ──
+                // ── 3 · updates ──
+                // The installed system carries the sync database of its
+                // install day; Arch mirrors drop old package versions within
+                // days, so `pacman -S anything` on a stale database fails with
+                // 404s. Komble refuses partial upgrades by design — so the ONE
+                // safe move, a full upgrade, is offered here, before the app
+                // restore can try to install anything.
+                Column {
+                    visible: root.step === root.stepUpdates
+                    width: parent.width; spacing: 16
+                    Glyph { anchors.horizontalCenter: parent.horizontalCenter; ic: Theme.icRefresh }
+                    Title { text: root.updState === "done" ? "Up to date" : root.updState === "current" ? "Your system is up to date" : "Bring the system up to date" }
+                    Body {
+                        text: root.updState === "checking" ? "Checking for updates…"
+                            : root.updState === "current" ? "Nothing is waiting. Moving on."
+                            : root.updState === "pending" ? root.updCount + (root.updCount === 1 ? " update is" : " updates are") + " waiting. A fresh install must be current before apps can be installed — the package list it was born with points at versions the mirrors have already replaced."
+                            : root.updState === "installing" ? "Installing updates. This can take a few minutes; the desktop stays usable."
+                            : root.updState === "done" ? "Done — some changes apply at your next login."
+                            : root.updState === "failed" ? "The upgrade did not finish. You can retry now, or later from Komble → Updates."
+                            : "Could not check for updates right now. Komble → Updates has them whenever you are ready."
+                    }
+                    Row {
+                        visible: root.updBusy
+                        anchors.horizontalCenter: parent.horizontalCenter; spacing: 8
+                        Spinner { anchors.verticalCenter: parent.verticalCenter; font.pixelSize: 13 }
+                        Text { anchors.verticalCenter: parent.verticalCenter; text: root.updState === "checking" ? "Checking…" : "Upgrading…"; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
+                    }
+                    // the last lines of pacman, so a long upgrade is visibly alive
+                    Rectangle {
+                        visible: root.updTail.length > 0
+                        width: parent.width; height: updLog.implicitHeight + 16
+                        radius: Theme.radiusInner; color: Theme.elevated; border.color: root.updState === "failed" ? Theme.danger : Theme.stroke; border.width: 1
+                        Text {
+                            id: updLog
+                            anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 8
+                            text: root.updTail.join("\n")
+                            color: root.updState === "failed" ? Theme.danger : Theme.fgDim
+                            font.family: Theme.fontMono; font.pixelSize: 11; wrapMode: Text.WrapAnywhere
+                        }
+                    }
+                }
+
+                // ── 4 · one sign-in ──
                 Column {
                     visible: root.step === root.stepSignIn
                     width: parent.width; spacing: 16
@@ -279,7 +379,7 @@ Scope {
                     }
                 }
 
-                // ── 4 · restore ──
+                // ── 5 · restore ──
                 Column {
                     visible: root.step === root.stepRestore
                     width: parent.width; spacing: 16
@@ -303,7 +403,7 @@ Scope {
                     }
                 }
 
-                // ── 5 · tour ──
+                // ── 6 · tour ──
                 Column {
                     visible: root.step === root.stepTour
                     width: parent.width; spacing: 16
@@ -321,7 +421,7 @@ Scope {
                                 anchors.verticalCenter: parent.verticalCenter
                                 width: parent.width - 24 - 12 - openKomble.width - 12
                                 wrapMode: Text.Wrap
-                                text: Google.restoreApps + (Google.restoreApps === 1 ? " app is" : " apps are") + " waiting in Komble → For you. Reinstalling is one click, never automatic."
+                                text: Google.restoreApps + (Google.restoreApps === 1 ? " app is" : " apps are") + " waiting in Komble → For you: repository apps install in one go, AUR apps go through the PKGBUILD review first. Never automatic."
                                 color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
                             }
                             Btn { id: openKomble; anchors.verticalCenter: parent.verticalCenter; label: "Open Komble"; onGo: Globals.openStore() }
@@ -362,7 +462,7 @@ Scope {
                     Row {
                         anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; spacing: 6
                         Repeater {
-                            model: 5
+                            model: 6
                             delegate: Rectangle {
                                 required property int index
                                 width: index === root.step ? 18 : 6; height: 6; radius: 3
@@ -375,6 +475,7 @@ Scope {
                         anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; spacing: 8
                         // step-specific secondary
                         Btn { visible: root.step === root.stepNetwork && !root.online; label: "Continue offline"; onGo: root.next() }
+                        Btn { visible: root.step === root.stepUpdates && (root.updState === "pending" || root.updState === "failed" || root.updState === "unknown"); label: "Later"; onGo: root.next() }
                         Btn { visible: root.step === root.stepSignIn && Google.busy !== "signin"; label: "Skip for now"; onGo: root.next() }
                         Btn { visible: root.step === root.stepSignIn && !root.online && Google.busy !== "signin"; label: "Back"; onGo: root.step = root.stepNetwork }
                         Btn { visible: root.step === root.stepSignIn && Google.busy === "signin"; label: "Cancel"; onGo: Google.cancelSignIn() }
@@ -382,6 +483,10 @@ Scope {
                         // step-specific primary
                         Btn { visible: root.step === 0; primary: true; label: "Get started"; onGo: root.next() }
                         Btn { visible: root.step === root.stepNetwork; primary: true; enabled: root.online; label: root.online ? "Continue" : "Waiting for a connection…"; onGo: root.next() }
+                        Btn { visible: root.step === root.stepUpdates && root.updState === "pending"; primary: true; label: "Install updates"; onGo: root.installUpdates() }
+                        Btn { visible: root.step === root.stepUpdates && root.updState === "failed"; primary: true; label: "Retry"; onGo: root.installUpdates() }
+                        Btn { visible: root.step === root.stepUpdates && root.updBusy; primary: true; enabled: false; label: root.updState === "checking" ? "Checking…" : "Installing…" }
+                        Btn { visible: root.step === root.stepUpdates && (root.updState === "done" || root.updState === "current"); primary: true; label: "Continue"; onGo: root.next() }
                         Btn { visible: root.step === root.stepSignIn && Google.busy !== "signin"; primary: true; enabled: Google.configured && root.online; label: "Sign in with Google"; onGo: Google.signIn() }
                         Btn { visible: root.step === root.stepRestore && !root._restoring; primary: true; label: "Restore my desktop"
                               onGo: { root._restoring = true; Google.pendingRestore = { updatedAt: Google.cloudInfo.updatedAt, device: Google.cloudInfo.device }; Google.applyRestore() } }

@@ -158,8 +158,15 @@ from the captured list is always a separate, opt-in command.
 
 On a fresh install the **Welcome** flow walks through it: a *Connect to the
 internet* step first (Wi-Fi is joined from the flow itself — sign-in and
-the Drive restore both need a connection), then the one sign-in, then the
-restore offer. A machine that has never synced never uploads on its own:
+the Drive restore both need a connection), then an *Updates* step, then the
+one sign-in, then the restore offer. The Updates step exists because a
+fresh install carries the package database of its install day, and Arch
+mirrors drop superseded versions within days — so installing anything on
+that database fails with 404s, and Komble refuses partial upgrades by
+design. Welcome runs `checkupdates`, and if anything is waiting offers the
+one safe move, a full `pacman -Syu` (one authentication prompt, progress in
+the card), before the app restore can try to install a thing. *Later*
+defers it to Komble → Updates. A machine that has never synced never uploads on its own:
 its first backup is the explicit *Back up this machine* button (Welcome, or
 Settings → User), so a fresh install can never overwrite the backup it is
 about to restore. If the keyring or the browser misbehave, see

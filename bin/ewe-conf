@@ -336,6 +336,23 @@ def do_import():
 LAYOUT_DEFAULTS = {"gaps_in": 6, "gaps_out": 14, "border_size": 1, "rounding": 12}
 
 
+def normalize_source(src, name=None, foreign=None):
+    """Komble < 0.9.13 wrote the built package FILE PATH as `source`
+    (…/aur/<pkg>/<pkg>-…pkg.tar.zst, …/first-party/…), so a restore treated
+    every AUR app as a repo package and pacman could not find it (metal,
+    2026-09-02). Fold any such value to the three words the readers expect."""
+    s = str(src or "")
+    if s in ("repo", "aur", "first-party", "appimage"):
+        return s
+    if "/first-party/" in s or s.startswith("first-party"):
+        return "first-party"
+    if "/aur/" in s or s == "AUR":
+        return "aur"
+    if s.startswith("/"):
+        return "aur" if (foreign and name in foreign) else "repo"
+    return s or ("aur" if (foreign and name in foreign) else "repo")
+
+
 def seed_installed(doc):
     """[apps.installed] baseline from pacman: every EXPLICITLY installed
     package (source "aur" when no sync db carries it), unioned with what the
@@ -356,6 +373,8 @@ def seed_installed(doc):
     node, last = dig(doc, "apps.installed", create=True)
     man = node.get(last) if isinstance(node.get(last), dict) else {}
     pkgs = [e for e in (man.get("packages") or []) if isinstance(e, dict)]
+    for e in pkgs:
+        e["source"] = normalize_source(e.get("source"), e.get("package"), foreign)
     have = {e.get("package") for e in pkgs}
     for line in q.stdout.splitlines():
         parts = line.split()

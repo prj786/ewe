@@ -77,9 +77,23 @@ QtObject {
     property IpcHandler _ipc: IpcHandler {
         target: "google"
         function signIn(): void { goo.signIn() }
+        function cancelSignIn(): void { goo.cancelSignIn() }
         function keyringReset(): void { goo.resetKeyring() }
+        // the browser hand-off fallbacks and the post-reset relogin, for a
+        // Settings app that has no window of its own into the shell's state
+        function openConsentUrl(): void { goo.openConsentUrl() }
+        function copyConsentUrl(): void { goo.copyConsentUrl() }
+        function logOut(): void { goo.logOut() }
+        // the explicit first push of a never-synced machine
+        function backUpNow(): void { goo.backUpNow() }
+        // "Push anyway" after the conflict guard said remote-newer / remote-exists
+        function pushForce(): void { goo.pushForce() }
         function signOut(): void { goo.signOut() }
         function syncNow(): void { goo.syncNow() }
+        // the two halves of a restore: fetch + park in pendingRestore, then
+        // the explicit apply (pull + apply + reload) after the UI confirmed
+        function requestRestore(): void { goo.requestRestore() }
+        function applyRestore(): void { goo.applyRestore() }
         // debounced push — Komble and ewe-settings poke this after every
         // install/remove/settings write, so changes sync without user action
         function syncSoon(): void { goo.syncSoon() }
@@ -96,11 +110,18 @@ QtObject {
         function status(): string {
             return JSON.stringify({
                 probed: goo.probed, configured: goo.configured, keyringOk: goo.keyringOk,
-                keyringState: goo.keyringState, consentUrl: goo.consentUrl,
-                signedIn: goo.signedIn, busy: goo.busy, error: goo.error,
+                keyringState: goo.keyringState, keyringTrouble: goo.keyringTrouble, keyringResetDone: goo.keyringResetDone,
+                consentUrl: goo.consentUrl,
+                signedIn: goo.signedIn, busy: goo.busy, error: goo.error, errorCode: goo.errorCode,
                 syncState: goo.syncState, syncError: goo.syncError, syncConflict: goo.syncConflict, inSync: goo.inSync,
                 lastSync: goo.lastSync, localSyncedAt: goo.localSyncedAt, autoSync: goo.autoSync,
+                // who saved the backup on Drive (cloudInfo) — distinct from
+                // when THIS machine last synced (localSyncedAt)
+                remoteMachine: goo.cloudInfo ? String(goo.cloudInfo.device || "") : "",
+                remoteModified: goo.cloudInfo ? String(goo.cloudInfo.updatedAt || "") : "",
+                restoreSummary: goo.restoreSummary,
                 restoreApps: goo.restoreApps,
+                pendingRestore: goo.pendingRestore,
                 profile: goo.profile
             })
         }

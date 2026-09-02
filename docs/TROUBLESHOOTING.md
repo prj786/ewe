@@ -99,6 +99,11 @@ binary, and reports `browser-failed` instead of waiting five minutes. The
 sign-in page's link is always available — **Open the sign-in page** /
 **Copy the link** in Welcome and in Settings → User — and is also written to
 `$XDG_RUNTIME_DIR/ewe-auth-consent-url` for the length of the attempt.
+Command-line tools that open a browser (`gh auth login`, Python's
+`webbrowser`) use `$BROWSER`, which the session sets to `gio launch` of the
+shipped browser's desktop entry: it returns immediately, where `xdg-open`
+would block until the first browser window closes and leave the tool
+hanging after the web side already said "authorized".
 
 Diagnose from a terminal: `ewe-auth status` (`keyring_state` is one of
 `ok` · `missing` · `locked` · `unavailable`) and `ewe-auth login` (its

@@ -89,6 +89,16 @@ case ":$PATH:" in *":$HOME/.local/share/mise/shims:"*) ;; *) export PATH="$HOME/
 # in a TTY), Zed for everything graphical (mime defaults, phase 60).
 export EDITOR=micro VISUAL=micro
 
+# Default browser for CLI hand-offs (gh auth login, python's webbrowser, …).
+# Those tools fall back to xdg-open, which under Hyprland blocks until the
+# FIRST browser instance exits — `gh auth login` sat forever on the owner's
+# machine (2026-09-02). `gio launch` starts the desktop entry and returns at
+# once, so the caller gets on with its life. Only set when the shipped
+# browser is actually installed; otherwise the tools keep their own default.
+if [ -f /usr/share/applications/helium.desktop ]; then
+    export BROWSER="gio launch /usr/share/applications/helium.desktop"
+fi
+
 # GPU escape hatch: if the Arc 140V (xe) driver ever tears/hangs/corrupts, log
 # in once with DE_SOFTWARE_RENDER=1 in your environment to fall back to Mesa
 # software rendering. (The cursor-plane bug is already handled in hyprland.lua
