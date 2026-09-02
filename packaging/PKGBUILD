@@ -30,6 +30,7 @@ license=('GPL-2.0-only')
 depends=('pipewire-jack'            # claims 'jack' before ffmpeg/mpv/portaudio ask
          'tesseract-data-eng'       # claims 'tessdata' before libmupdf asks (else: Afrikaans)
          'komble-arch' 'ewe-settings' 'ewe-cast'
+         'ewe-sync'                 # the account app (RFC-006), served from [ewe]
          'reversal-icon-theme' 'mocu-cursor-theme'
          'python')   # ewe-conf; + the lists, appended in package()
 install=ewe.install

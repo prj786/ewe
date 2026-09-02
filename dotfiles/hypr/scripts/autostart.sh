@@ -28,6 +28,9 @@ fi
 # hyprland-session.target (BindsTo=graphical-session.target) pulls it active and
 # brings the portals up. Without this, Flatpak apps can't open the browser and
 # the browser can't hand back slack:// (Slack sign-in did nothing).
+# User units WantedBy=graphical-session.target ride on this — ewe-sync.service
+# (the account app's tray, enabled by ewe-setup) among them. Do not run_once
+# them below as well: that starts them twice.
 if command -v systemctl >/dev/null 2>&1; then
     systemctl --user start hyprland-session.target >/dev/null 2>&1 || true
 fi

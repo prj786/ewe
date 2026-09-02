@@ -2793,6 +2793,8 @@ Scope {
                         KV { k: "Files"; v: Cloud.filesMounted ? "mounted at " + Cloud.filesPath : "not mounted"; dot: Cloud.filesMounted ? "ok" : "info"; action: !Cloud.filesMounted; actionLabel: "Mount"; onAct: Cloud.mountFiles() }
                         KV { k: "Calendar"; v: Cloud.calState === "offline" ? "offline — showing the last fetch" : (Cloud.events.length + " upcoming in the Control Center"); dot: Cloud.calState === "offline" ? "info" : "ok" }
                         KV { k: "Mail"; v: Mail.source === "imap" ? Mail.imapUser : (Mail.source === "gmail" ? "Gmail (Google extra)" : "none — add an IMAP account in the Settings app"); dot: Mail.available ? "ok" : "info" }
+                        // the account app (RFC-006) — the in-shell cards stay as the fallback
+                        KV { visible: Globals.syncAppInstalled; k: "Account app"; v: "your machines, folder sync, conflicts"; dot: "ok"; action: true; actionLabel: "Manage in ewe-sync"; onAct: Globals.openSync() }
                     }
                     Text {
                         visible: Cloud.error !== ""

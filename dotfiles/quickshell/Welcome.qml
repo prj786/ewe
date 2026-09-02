@@ -359,6 +359,13 @@ Scope {
                         }
                     }
                     Note { visible: Cloud.signedIn; text: "Your files are at ~/Nextcloud (Files → sidebar)." }
+                    // the account app (RFC-006): machines, folder sync, conflicts
+                    Note { visible: Cloud.signedIn && Globals.syncAppInstalled; text: "Folders and your machines: ewe-sync (the tray icon)." }
+                    Row {
+                        visible: Cloud.signedIn && Globals.syncAppInstalled
+                        anchors.horizontalCenter: parent.horizontalCenter; spacing: 18
+                        LinkBtn { label: "Open ewe-sync"; onGo: Globals.openSync() }
+                    }
                     // the server address — remembered between attempts
                     Rectangle {
                         visible: !Cloud.signedIn && Cloud.busy !== "signin"

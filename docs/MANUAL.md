@@ -155,7 +155,7 @@ lights up around it:
 |---|---|
 | **the one file** | `ewe.conf` syncs to `ewe/` in the account; every change — Settings, Komble, the terminal — pushes ~20 s later once this machine has made its first backup ([EWE-CONF](EWE-CONF.md)) |
 | **restore** | a machine that signs in and finds a backup is offered it, out loud; your apps line up in Komble → For you |
-| **files** | the account mounted at `~/Nextcloud` (Files → sidebar) — full folder sync and a tray come with the account app, Flock (RFC-006) |
+| **files** | the account mounted at `~/Nextcloud` (Files → sidebar); full folder sync, your machines and a tray are the account app, ewe-sync (below) |
 | **calendar** | CalDAV — the Control Center's calendar and reminders |
 | **mail** | any IMAP account (Settings app → Account → Mail): unread badge, latest mail, new-mail notifications |
 
@@ -165,6 +165,17 @@ uses) and grant access to *ewe (<your computer>)*; the server hands ewe an
 **app password** that lives only in the keyring. Revoke it any time in
 Nextcloud → Settings → Security. Details, the terminal tools and the
 troubleshooting: [NEXTCLOUD.md](NEXTCLOUD.md).
+
+**ewe-sync** ([RFC-006](RFC-006-flock.md)) is the account app that comes
+with the account: a tray icon that shows the sync state, and a window with
+your account, this machine's backup, **your machines** (every machine that
+backed up to the account, which one saved last) and **folder sync** — pairs
+of a local folder and a folder in the account, two-way through the Nextcloud
+sync engine or one-way copies, on change, on a timer or at login, with
+conflicts resolved in place. It starts with the session (`ewe-sync.service`,
+enabled by `ewe-setup`); Welcome and Settings → Account open it with
+**Open ewe-sync** / **Manage in ewe-sync**. Komble and the Settings app keep
+no sync buttons — they only write the one file, ewe-sync moves it.
 
 If the browser never opened, Welcome and Settings offer **Open the sign-in
 page / Copy the link**. If the keyring rejects your login password, **Reset

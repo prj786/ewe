@@ -137,5 +137,15 @@ fi
 command -v update-desktop-database >/dev/null 2>&1 \
     && update-desktop-database "$HOME/.local/share/applications" >/dev/null 2>&1 || true
 
+# ewe-sync (RFC-006), the account app, runs as a tray app of the graphical
+# session: its unit is WantedBy=graphical-session.target, which autostart.sh
+# brings up through hyprland-session.target at every login. Enabling it here
+# is therefore the whole autostart — no run_once line in autostart.sh, that
+# would start it twice. Idempotent: enable only when not enabled yet.
+if command -v systemctl >/dev/null 2>&1 && systemctl --user cat ewe-sync.service >/dev/null 2>&1; then
+    systemctl --user is-enabled ewe-sync.service >/dev/null 2>&1 \
+        || systemctl --user enable ewe-sync.service >/dev/null 2>&1 || true
+fi
+
 say "done — the refreshed shell loads at the next login (or: systemctl --user restart ewe.service)"
 say "first install on this machine? run $DEST/install.sh for the system side (greeter, services)."

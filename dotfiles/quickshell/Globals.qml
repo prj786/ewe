@@ -111,6 +111,14 @@ QtObject {
         if (g.kombleInstalled) Quickshell.execDetached(["komble"])
         else g.storeOpen = true
     }
+    // ewe-sync (RFC-006): the account app — your machines, folders, conflicts.
+    // Focus-or-launch like the others; nothing in-shell to fall back to, the
+    // shell's own account cards stay for the sync of the one file.
+    property bool syncAppInstalled: false
+    function openSync() {
+        if (g.focusWindowByClass("ewe-sync")) return
+        if (g.syncAppInstalled) Quickshell.execDetached(["ewe-sync"])
+    }
     // ── Focus-or-launch ────────────────────────────────────────────────────
     // Clicking an app that already has a window JUMPS to it (activate = focus
     // + workspace switch) instead of spawning a second instance — for
@@ -139,10 +147,11 @@ QtObject {
 
     property Process _standaloneProbe: Process {
         running: true
-        command: ["sh", "-c", "command -v komble >/dev/null && printf k; command -v ewe-settings >/dev/null && printf s; command -v hypr-settings >/dev/null && printf o"]
+        command: ["sh", "-c", "command -v komble >/dev/null && printf k; command -v ewe-settings >/dev/null && printf s; command -v hypr-settings >/dev/null && printf o; command -v ewe-sync >/dev/null && printf y"]
         stdout: StdioCollector {
             onStreamFinished: {
                 g.kombleInstalled = this.text.indexOf("k") >= 0
+                g.syncAppInstalled = this.text.indexOf("y") >= 0
                 g.settingsAppInstalled = this.text.indexOf("s") >= 0 || this.text.indexOf("o") >= 0
                 if (this.text.indexOf("s") < 0 && this.text.indexOf("o") >= 0) g.settingsAppBin = "hypr-settings"
             }
