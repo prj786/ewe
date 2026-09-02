@@ -77,7 +77,7 @@ Scope {
             else root.updState = "failed"
         }
     }
-    Timer { id: updAdvance; interval: 1100; onTriggered: if (root.open && root.step === root.stepUpdates) root.next() }
+    Timer { id: updAdvance; interval: 2200; onTriggered: if (root.open && root.step === root.stepUpdates) root.next() }
     onStepChanged: {
         if (root.step === root.stepUpdates) {
             if (!root.online || root.isLive) { root.step = root.stepSignIn; return }
@@ -124,7 +124,7 @@ Scope {
     // the network step (WifiPicker, inside the card below) polls only while
     // it is on screen; once online, move on by itself after a beat — long
     // enough to read "Connected"
-    Timer { id: autoAdvance; interval: 900; onTriggered: if (root.open && root.step === root.stepNetwork && wifi.online) root.next() }
+    Timer { id: autoAdvance; interval: 1800; onTriggered: if (root.open && root.step === root.stepNetwork && wifi.online) root.next() }
 
     // sign-in landed while the account step is up → show "signed in as …" for
     // a beat, learn whether the account holds a backup, then move on
