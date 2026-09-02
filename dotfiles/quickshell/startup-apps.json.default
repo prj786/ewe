@@ -1,10 +1,3 @@
 {
-  "apps": [
-    {
-      "name": "Komble",
-      "exec": "komble",
-      "icon": "komble",
-      "enabled": true
-    }
-  ]
+  "apps": []
 }
