@@ -9,11 +9,30 @@ import Quickshell.Services.Polkit
 Scope {
     id: root
 
-    PolkitAgent { id: agent }
+    // The agent registers with polkitd when it is created. That fails with
+    // "An authentication agent already exists for the given subject" while a
+    // previous shell instance still holds the registration (a shell restart
+    // mid-update — metal, 2026-09-02); once that instance is gone NOTHING
+    // answers pkexec and Komble / Welcome fail with "polkit refused". So the
+    // agent lives in a Loader and is re-created until polkitd accepts it, and
+    // again whenever the registration is lost later (polkitd restart).
+    property var agent: agentLoader.item
+    Loader { id: agentLoader; active: true; sourceComponent: PolkitAgent {} }
+    Timer {
+        interval: 5000; repeat: true; running: true
+        property int tries: 0
+        onTriggered: {
+            if (agentLoader.item && agentLoader.item.isRegistered) { tries = 0; return }
+            tries += 1
+            if (tries === 3 || tries % 60 === 0) Log.warn("auth", "polkit agent not registered yet — re-creating (try " + tries + ")")
+            agentLoader.active = false
+            agentLoader.active = true
+        }
+    }
 
     PanelWindow {
         id: win
-        visible: agent.isActive && agent.flow !== null
+        visible: (agent && agent.isActive) && (agent ? agent.flow : null) !== null
         color: "transparent"
         // a modal: the dim backdrop covers the WHOLE screen, dock and bar
         // included — reserved strips would leave undimmed bands around it
@@ -29,8 +48,8 @@ Scope {
 
         Connections {
             target: agent
-            function onIsActiveChanged() { if (agent.isActive) pwField.forceActiveFocus() }
-            function onFlowChanged() { if (agent.flow) { pwField.text = ""; pwField.forceActiveFocus() } }
+            function onIsActiveChanged() { if ((agent && agent.isActive)) pwField.forceActiveFocus() }
+            function onFlowChanged() { if ((agent ? agent.flow : null)) { pwField.text = ""; pwField.forceActiveFocus() } }
         }
 
         Rectangle {
@@ -57,7 +76,7 @@ Scope {
                 }
                 Text {
                     width: parent.width; horizontalAlignment: Text.AlignHCenter
-                    text: agent.flow ? agent.flow.message : ""
+                    text: (agent ? agent.flow : null) ? (agent ? agent.flow : null).message : ""
                     visible: text.length > 0
                     color: Theme.fgSecondary; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; wrapMode: Text.Wrap
                 }
@@ -73,14 +92,14 @@ Scope {
                         anchors.fill: parent; anchors.leftMargin: 12; anchors.rightMargin: 12
                         verticalAlignment: TextInput.AlignVCenter
                         color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsBody
-                        echoMode: (agent.flow && agent.flow.responseVisible) ? TextInput.Normal : TextInput.Password
-                        enabled: agent.flow && agent.flow.isResponseRequired
-                        onAccepted: if (agent.flow) { agent.flow.submit(text); text = "" }
-                        Keys.onEscapePressed: if (agent.flow) agent.flow.cancelAuthenticationRequest()
+                        echoMode: ((agent ? agent.flow : null) && (agent ? agent.flow : null).responseVisible) ? TextInput.Normal : TextInput.Password
+                        enabled: (agent ? agent.flow : null) && (agent ? agent.flow : null).isResponseRequired
+                        onAccepted: if ((agent ? agent.flow : null)) { (agent ? agent.flow : null).submit(text); text = "" }
+                        Keys.onEscapePressed: if ((agent ? agent.flow : null)) (agent ? agent.flow : null).cancelAuthenticationRequest()
                         Text {
                             anchors.verticalCenter: parent.verticalCenter
                             visible: pwField.text.length === 0
-                            text: agent.flow && agent.flow.inputPrompt ? agent.flow.inputPrompt : "Password"
+                            text: (agent ? agent.flow : null) && (agent ? agent.flow : null).inputPrompt ? (agent ? agent.flow : null).inputPrompt : "Password"
                             color: Theme.fgDim; font: pwField.font
                         }
                     }
@@ -89,9 +108,9 @@ Scope {
                 // error / supplementary message
                 Text {
                     width: parent.width; horizontalAlignment: Text.AlignHCenter
-                    text: agent.flow ? (agent.flow.supplementaryMessage !== "" ? agent.flow.supplementaryMessage : (agent.flow.failed ? "Authentication failed — try again" : "")) : ""
+                    text: (agent ? agent.flow : null) ? ((agent ? agent.flow : null).supplementaryMessage !== "" ? (agent ? agent.flow : null).supplementaryMessage : ((agent ? agent.flow : null).failed ? "Authentication failed — try again" : "")) : ""
                     visible: text.length > 0
-                    color: (agent.flow && (agent.flow.supplementaryIsError || agent.flow.failed)) ? Theme.danger : Theme.fgDim
+                    color: ((agent ? agent.flow : null) && ((agent ? agent.flow : null).supplementaryIsError || (agent ? agent.flow : null).failed)) ? Theme.danger : Theme.fgDim
                     font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; wrapMode: Text.Wrap
                 }
 
@@ -105,14 +124,14 @@ Scope {
                         color: cancelMa.containsMouse ? Theme.hover : Theme.elevated
                         Behavior on color { ColorAnimation { duration: Theme.durFast } }
                         Text { anchors.centerIn: parent; text: "Cancel"; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsBody }
-                        MouseArea { id: cancelMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: if (agent.flow) agent.flow.cancelAuthenticationRequest() }
+                        MouseArea { id: cancelMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: if ((agent ? agent.flow : null)) (agent ? agent.flow : null).cancelAuthenticationRequest() }
                     }
                     Rectangle {
                         width: (parent.width - 10) / 2; height: 36; radius: 9
                         color: okMa.containsMouse ? Qt.lighter(Theme.accent, 1.12) : Theme.accent
                         Behavior on color { ColorAnimation { duration: Theme.durFast } }
                         Text { anchors.centerIn: parent; text: "Authenticate"; color: Theme.accentText; font.family: Theme.fontText; font.pixelSize: Theme.fsBody; font.weight: Font.DemiBold }
-                        MouseArea { id: okMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: if (agent.flow) { agent.flow.submit(pwField.text); pwField.text = "" } }
+                        MouseArea { id: okMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: if ((agent ? agent.flow : null)) { (agent ? agent.flow : null).submit(pwField.text); pwField.text = "" } }
                     }
                 }
             }
