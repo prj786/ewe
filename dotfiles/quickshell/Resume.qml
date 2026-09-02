@@ -109,7 +109,9 @@ QtObject {
             //    fails safely: Google keeps its cached events, goes "offline" and
             //    arms its own retry.
             Log.info("resume", "6/6 accounts")
+            Cloud.refreshAfterResume()
             Google.refreshAfterResume()
+            Mail.refreshAfterResume()
 
             rs.busy = false
             Log.info("resume", "=== wake sequence done ===")

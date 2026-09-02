@@ -26,12 +26,10 @@ Scope {
     readonly property int firstW: new Date(calYear, calMonth, 1).getDay()
     readonly property int daysIn: new Date(calYear, calMonth + 1, 0).getDate()
     readonly property var monthNames: ["January","February","March","April","May","June","July","August","September","October","November","December"]
-    // calendar events — the native Google account when signed in, else the
-    // optional GOA/EDS pipeline; empty → no dots, no agenda, a gentle hint.
-    // Keyed on the events themselves, NOT Google.signedIn: right after boot the
-    // signed-in probe can lag (keyring/Wi-Fi race) while the cached events are
-    // already loaded — sign-out clears Google.events, so nothing stale leaks.
-    readonly property var calEvents: Google.events.length > 0 ? Google.events : (Accounts.events || [])
+    // calendar events — Agenda picks the source: the Nextcloud account
+    // (CalDAV), the optional Google client, or the GOA/EDS pipeline;
+    // empty → no dots, no agenda, a gentle hint.
+    readonly property var calEvents: Agenda.events
     // all-day events carry a bare YYYY-MM-DD — parse as LOCAL midnight, not UTC
     function evDate(e) {
         if (e.allDay && /^\d{4}-\d{2}-\d{2}/.test(String(e.start))) {
@@ -98,7 +96,7 @@ Scope {
         if (t === "vpn") vpnScan.running = true
         if (t === "ssh") sshScan.running = true
         if (t === "mobile") { root.mobileView = "notifs"; KdeConnect.refresh() }
-        if (t === "mail" && Google.signedIn) Google.fetchMail()
+        if (t === "mail" && Mail.available) Mail.fetch()
         if (t === "cast") Globals.castCommand("scan", "")
     }
 
@@ -700,7 +698,7 @@ Scope {
                         ]
                         delegate: RailBtn {
                             required property var modelData
-                            visible: modelData.key === "mail" ? Google.signedIn
+                            visible: modelData.key === "mail" ? Mail.available
                                    : modelData.key === "vpn"  ? (root.vpnList.length > 0 || Globals.vpnActive)
                                    : modelData.key === "ssh"  ? (root.sshList.length > 0 || Globals.sshTunnelUp)
                                    : true
@@ -1513,16 +1511,17 @@ Scope {
                             onMenu: root.setTab("mobile")
                         }
                         Tile {
-                            // freedom by absence: no Google account, no Google
-                            // chrome — the card only exists once signed in
-                            // (the sign-in lives in Settings → Account, alone)
-                            visible: Google.signedIn
+                            // freedom by absence: no mail account, no mail
+                            // chrome — the card only exists once one is set up
+                            // (Settings → Account → Mail, or the Google extra)
+                            visible: Mail.available
                             ic: Theme.icMail; label: "Mail"
                             active: false                      // mail has no on/off — never accent
                             opened: root.expanded === "mail"
                             hasMenu: true
-                            sub: Google.mailState === "offline" ? "Offline"
-                               : Google.mailUnread > 0 ? Google.mailUnread + " unread" : "No unread"
+                            sub: Mail.state === "offline" ? "Offline"
+                               : Mail.state === "auth" ? "Sign in again"
+                               : Mail.unread > 0 ? Mail.unread + " unread" : "No unread"
                             onClicked: root.setTab("mail")
                             onMenu: root.setTab("mail")
                         }
@@ -2017,76 +2016,76 @@ Scope {
                                     width: parent.width; height: 26
                                     Text {
                                         anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter
-                                        text: Google.signedIn ? ("Inbox" + (Google.mailUnread > 0 ? "  ·  " + Google.mailUnread + " unread" : "")) : "Mail"
+                                        text: Mail.available ? ("Inbox" + (Mail.unread > 0 ? "  ·  " + Mail.unread + " unread" : "")) : "Mail"
                                         color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold
                                     }
                                     Row {
                                         anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; spacing: 6
                                         // new-mail notifications on/off
                                         Rectangle {
-                                            visible: Google.signedIn
+                                            visible: Mail.available
                                             width: 22; height: 22; radius: 6
                                             color: mnMa.containsMouse ? Theme.hover : "transparent"
-                                            Text { anchors.centerIn: parent; text: Theme.icBellRing; font.family: Theme.fontIcons; font.pixelSize: 12; color: Google.mailNotify ? Theme.accent : Theme.fgDim }
-                                            MouseArea { id: mnMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: Google.setMailNotify(!Google.mailNotify) }
+                                            Text { anchors.centerIn: parent; text: Theme.icBellRing; font.family: Theme.fontIcons; font.pixelSize: 12; color: Mail.notify ? Theme.accent : Theme.fgDim }
+                                            MouseArea { id: mnMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: Mail.setNotify(!Mail.notify) }
                                         }
                                         Rectangle {
-                                            visible: Google.signedIn
+                                            visible: Mail.available
                                             width: 22; height: 22; radius: 6
                                             color: mlrMa.containsMouse ? Theme.hover : "transparent"
                                             Text { anchors.centerIn: parent; text: Theme.icRefresh; font.family: Theme.fontIcons; font.pixelSize: 12; color: Theme.fgDim }
-                                            MouseArea { id: mlrMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: Google.fetchMail() }
+                                            MouseArea { id: mlrMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: Mail.fetch() }
                                         }
                                         Rectangle {
                                             width: ogTxt.implicitWidth + 18; height: 22; radius: 11
                                             color: ogMa.containsMouse ? Theme.hover : "transparent"; border.color: Theme.hover; border.width: 1
-                                            Text { id: ogTxt; anchors.centerIn: parent; text: "Open Gmail"; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: 11 }
-                                            MouseArea { id: ogMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: Quickshell.execDetached(["xdg-open", "https://mail.google.com/mail/u/0/"]) }
+                                            Text { id: ogTxt; anchors.centerIn: parent; text: Mail.inboxLabel; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: 11 }
+                                            MouseArea { id: ogMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: Mail.openInbox() }
                                         }
                                     }
                                 }
                                 Text {
-                                    width: parent.width; visible: !Google.signedIn; wrapMode: Text.Wrap
-                                    text: "Connect a Google account (Settings → User) to see mail here."
+                                    width: parent.width; visible: !Mail.available; wrapMode: Text.Wrap
+                                    text: Mail.hint
                                     color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
                                 }
                                 Text {
-                                    width: parent.width; visible: Google.signedIn && Google.mailError !== ""; wrapMode: Text.Wrap
-                                    text: Google.mailError
+                                    width: parent.width; visible: Mail.available && Mail.error !== ""; wrapMode: Text.Wrap
+                                    text: Mail.error
                                     color: Theme.warning; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
                                 }
                                 Row {
-                                    visible: Google.signedIn && Google.mailState === "scope"; spacing: 6
+                                    visible: Mail.needsReconnect; spacing: 6
                                     Rectangle {
                                         width: rcTxt.implicitWidth + 22; height: 24; radius: 12
                                         color: rcMa.containsMouse ? Qt.lighter(Theme.accent, 1.15) : Theme.accent
                                         Text { id: rcTxt; anchors.centerIn: parent; text: "Reconnect Google"; color: Theme.accentText; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold }
-                                        MouseArea { id: rcMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: Google.signIn() }
+                                        MouseArea { id: rcMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: Mail.reconnect() }
                                     }
                                 }
                                 Text {
                                     width: parent.width
-                                    visible: Google.signedIn && Google.mailState === "offline"
+                                    visible: Mail.available && Mail.state === "offline"
                                     text: "Offline — showing the last check."
                                     color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
                                 }
                                 Text {
                                     width: parent.width
-                                    visible: Google.signedIn && Google.mailState === "" && Google.mailList.length === 0
+                                    visible: Mail.available && Mail.state === "" && Mail.list.length === 0
                                     text: "Inbox is empty."
                                     color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
                                 }
                                 // latest 10, compact two-line rows — no inner scrolling
                                 Rectangle {
                                     width: parent.width
-                                    visible: Google.signedIn && Google.mailList.length > 0
+                                    visible: Mail.available && Mail.list.length > 0
                                     height: visible ? mailCol.implicitHeight + 10 : 0
                                     radius: 7; color: Theme.bg; border.color: Theme.stroke; border.width: 1
                                     Column {
                                         id: mailCol
                                         anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 5
                                         Repeater {
-                                            model: Google.mailList.slice(0, 10)
+                                            model: Mail.list.slice(0, 10)
                                             delegate: Item {
                                                 id: mRow
                                                 required property var modelData
@@ -2120,7 +2119,7 @@ Scope {
                                                     text: root.fmtMsgTime(mRow.modelData.date)
                                                     color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 10
                                                 }
-                                                MouseArea { id: mmMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: Google.openMail(mRow.modelData.id) }
+                                                MouseArea { id: mmMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: Mail.open(mRow.modelData.id) }
                                             }
                                         }
                                     }
@@ -2306,14 +2305,14 @@ Scope {
                             // agenda — upcoming events grouped by day, GNOME-dropdown style
                             Rectangle { visible: root.agenda.length > 0; width: parent.width; height: 1; color: Theme.stroke; opacity: 0.6 }
                             Text {
-                                visible: Google.calState === "offline"
+                                visible: Agenda.state === "offline"
                                 width: parent.width; text: "Offline — showing last synced events"
                                 color: Theme.warning; font.family: Theme.fontText; font.pixelSize: 10
                             }
                             Text {
                                 visible: root.agenda.length === 0
                                 width: parent.width
-                                text: (Google.signedIn || (Accounts.events || []).length > 0) ? "No upcoming events" : "Connect a Google account (Settings → User) to see events here"
+                                text: Agenda.hint
                                 color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 10; wrapMode: Text.Wrap
                             }
                             Repeater {

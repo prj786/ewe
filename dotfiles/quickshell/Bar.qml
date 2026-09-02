@@ -42,7 +42,7 @@ Scope {
     // ── calendar "something is near": a timed event starts within the hour
     //    (or is running right now). Re-checked on every clock tick — a binding
     //    with `new Date()` inside would never re-evaluate on its own. ────────
-    readonly property var calSrc: Google.events.length > 0 ? Google.events : (Accounts.events || [])
+    readonly property var calSrc: Agenda.events
     onCalSrcChanged: bar.updateCalSoon()
     property bool calSoon: false
     function updateCalSoon() {
@@ -608,9 +608,9 @@ Scope {
                                     color: Theme.fgSecondary
                                 }
                             }
-                            // Mail (Gmail) — envelope + count, only when there is unread mail
+                            // Mail (IMAP or Gmail) — envelope + count, only when there is unread mail
                             Row {
-                                visible: Google.signedIn && Google.mailUnread > 0
+                                visible: Mail.available && Mail.unread > 0
                                 anchors.verticalCenter: parent.verticalCenter
                                 spacing: 4
                                 Text {
@@ -621,7 +621,7 @@ Scope {
                                 }
                                 Text {
                                     anchors.verticalCenter: parent.verticalCenter
-                                    text: Google.mailUnread > 99 ? "99+" : String(Google.mailUnread)
+                                    text: Mail.unread > 99 ? "99+" : String(Mail.unread)
                                     font.family: Theme.fontText; font.pixelSize: 11; font.weight: Font.DemiBold
                                     color: Theme.fgSecondary
                                 }

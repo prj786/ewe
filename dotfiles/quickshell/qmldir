@@ -8,7 +8,10 @@ singleton Lid 1.0 Lid.qml
 singleton Power 1.0 Power.qml
 singleton Wallpaper 1.0 Wallpaper.qml
 singleton Accounts 1.0 Accounts.qml
+singleton Cloud 1.0 Cloud.qml
 singleton Google 1.0 Google.qml
+singleton Agenda 1.0 Agenda.qml
+singleton Mail 1.0 Mail.qml
 singleton KdeConnect 1.0 KdeConnect.qml
 Elevation 1.0 Elevation.qml
 Spinner 1.0 Spinner.qml
