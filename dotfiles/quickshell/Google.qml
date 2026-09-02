@@ -20,6 +20,11 @@ QtObject {
     property var profile: null           // { name, email, picture } (cached on disk, non-secret)
     property string busy: ""             // "" | "signin" | "refresh"
     property string error: ""            // last auth-level error, human-readable ("" = none)
+    property string errorCode: ""        // the helper's machine code behind `error` ("" = none)
+    property bool keyringResetDone: false // keyring-reset ran: a relogin is what finishes it
+    // a keyring that is locked, or that just refused to store: the one repair
+    // that always works is a fresh keyring made by PAM at the next login
+    readonly property bool keyringTrouble: keyringState === "locked" || errorCode.indexOf("keyring-") === 0
     // 0.9.16-2 (first metal install): the keyring and the browser were both
     // invisible behind the Welcome overlay and ewe-auth killed its own
     // prompt. The broker now reports what the keyring will do and hands the
@@ -28,6 +33,25 @@ QtObject {
     property string consentUrl: ""       // the sign-in page of the login in flight / that just failed
     readonly property bool keyringPromptExpected: keyringState === "missing" || keyringState === "locked"
     function openConsentUrl() { if (goo.consentUrl !== "") Quickshell.execDetached(["xdg-open", goo.consentUrl]) }
+    function resetKeyring() { if (goo.busy === "") { goo.busy = "keyring-reset"; _resetProc.running = false; _resetProc.running = true } }
+    function logOut() { Quickshell.execDetached(["sh", "-c", "exec \"$HOME/.config/hypr/scripts/power.sh\" logout"]) }
+    property Process _resetProc: Process {
+        command: ["python3", goo.helper, "keyring-reset"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                goo.busy = ""
+                try {
+                    var j = JSON.parse(this.text)
+                    if (j.ok) {
+                        goo.signedIn = false; goo.profile = null; goo._accessToken = ""
+                        goo.keyringState = "missing"; goo.errorCode = ""
+                        goo.keyringResetDone = !!j.relogin
+                        goo.error = j.relogin ? String(j.message) : ""
+                    } else goo.error = j.message ? String(j.message) : ("Keyring reset failed: " + j.error)
+                } catch (e) { goo.error = "Keyring reset failed — could not parse the helper output." }
+            }
+        }
+    }
     function copyConsentUrl() { if (goo.consentUrl !== "") Quickshell.execDetached(["sh", "-c", 'printf %s "$1" | wl-copy', "sh", goo.consentUrl]) }
 
     signal sessionReady()                // fired on sign-in and on startup when already signed in
@@ -53,6 +77,7 @@ QtObject {
     property IpcHandler _ipc: IpcHandler {
         target: "google"
         function signIn(): void { goo.signIn() }
+        function keyringReset(): void { goo.resetKeyring() }
         function signOut(): void { goo.signOut() }
         function syncNow(): void { goo.syncNow() }
         // debounced push — Komble and ewe-settings poke this after every
@@ -142,6 +167,7 @@ QtObject {
     function signIn() {
         if (goo.busy === "signin" || !goo.configured) return
         goo.error = ""
+        goo.errorCode = ""
         goo.consentUrl = ""
         goo.busy = "signin"
         _loginProc.running = false; _loginProc.running = true
@@ -178,12 +204,14 @@ QtObject {
                         goo._accessToken = j.access_token
                         goo._expiresAt = j.expires_at * 1000
                         goo.error = ""
+                        goo.errorCode = ""
                         goo.sessionReady()
                         // one sign-in, files too: the fresh token carries the
                         // Drive scope, so finish the ~/Google Drive plumbing
                         // (rclone remote + Nemo bookmark + mount) consent-free
                         Quickshell.execDetached(["bash", Quickshell.env("HOME") + "/.config/quickshell/../../bin/ewe-drive", "setup", "--have-scope"])
                     } else {
+                        goo.errorCode = String(j.error || "")
                         goo.error = goo._loginErrMsg(j.error, j.message)
                         Log.warn("google", "sign-in failed:", j.error, j.message || "")
                     }
@@ -196,8 +224,8 @@ QtObject {
         if (e === "timeout") return "Sign-in timed out — no response from the browser within 5 minutes. Use “Open the sign-in page” if no tab appeared."
         if (e === "browser-failed") return "No browser opened for the sign-in page — use “Open the sign-in page” or copy the link into any browser."
         if (e === "keyring-unavailable") return "No Secret Service keyring is running — gnome-keyring must be installed and started for this session."
-        if (e === "keyring-cancelled") return "The keyring prompt was dismissed — sign in again and unlock the keyring with your login password."
-        if (e === "keyring-timeout") return "The keyring did not answer — if a keyring password prompt is open, answer it with your login password, then sign in again."
+        if (e === "keyring-cancelled") return "The keyring prompt was dismissed — sign in again and unlock the keyring with your login password. If it keeps rejecting that password, reset the keyring."
+        if (e === "keyring-timeout") return "The keyring did not answer — if a keyring password prompt is open, answer it with your login password, then sign in again. If it keeps rejecting that password, reset the keyring."
         if (e === "keyring-store-failed") return detail ? String(detail) : "The keyring refused to store the token — see Troubleshooting → Google sign-in."
         if (e === "not-configured") return "Google client ID not configured — see README → Google account."
         if (e === "no-refresh-token") return "Google returned no refresh token — remove the app at myaccount.google.com/permissions and retry."

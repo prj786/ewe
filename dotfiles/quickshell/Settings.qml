@@ -2778,6 +2778,13 @@ Scope {
                         visible: Google.error !== ""
                         width: parent.width; text: Google.error; color: Theme.danger; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap
                     }
+                    // the keyring rejects the login password → replace it (PAM
+                    // recreates `login` with the login password at the next login)
+                    Card {
+                        visible: Google.configured && !Google.signedIn && (Google.keyringTrouble || Google.keyringResetDone)
+                        KV { visible: !Google.keyringResetDone; k: "Keyring"; v: Google.keyringState === "locked" ? "locked — PAM could not unlock it" : "refused the token"; dot: "bad"; action: true; actionLabel: "Reset the keyring"; onAct: Google.resetKeyring() }
+                        KV { visible: Google.keyringResetDone; k: "Keyring"; v: "reset — log out and back in, then sign in"; dot: "info"; action: true; actionLabel: "Log out now"; onAct: Google.logOut() }
+                    }
 
                     SectionTitle { visible: Google.signedIn; text: "SETTINGS SYNC" }
                     Card {

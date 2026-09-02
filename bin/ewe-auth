@@ -13,6 +13,9 @@ never hang on it; `token` prints the bare token unless --json):
   refresh  -> like token, but always JSON and never the runtime cache's copy
               without checking expiry (kept for the shell's existing calls)
   logout   -> revoke at Google + clear keyring + caches
+  keyring-reset -> move ~/.local/share/keyrings aside (a keyring made with a
+              password other than the login one stays locked forever); PAM
+              recreates the login keyring at the next login -> {ok, moved, relogin}
 
 Client config — the fresh "ewe" OAuth client drops in here:
   1. ~/.config/ewe/oauth-client.json      (the ewe client; flat or the
@@ -552,6 +555,39 @@ def cmd_logout():
     out({"ok": True})
 
 
+def cmd_keyring_reset():
+    """A login keyring created with some password other than the login one
+    (typed into a prompt that was hidden behind the Welcome overlay, first
+    bare-metal install 2026-09-02) can never be unlocked by PAM and rejects
+    what the user remembers. The only fix is a fresh one: move the keyring
+    files aside (never delete — a `keyrings.bak.<ts>` directory keeps them),
+    drop our caches, and let pam_gnome_keyring recreate `login` with the
+    login password at the next login. Nothing else on the machine uses the
+    ewe keyring entries (NetworkManager keeps Wi-Fi secrets in its own store).
+    """
+    if FAKE_KEYRING is not None:
+        keyring_clear()
+        out({"ok": True, "moved": "", "relogin": False})
+        return
+    data = os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
+    kdir = os.path.join(data, "keyrings")
+    moved = ""
+    if os.path.isdir(kdir):
+        moved = "%s.bak.%d" % (kdir, int(time.time()))
+        try:
+            os.rename(kdir, moved)
+        except OSError as e:
+            out({"ok": False, "error": "keyring-reset-failed", "message": str(e)})
+            return
+    for p in (PROFILE_CACHE, TOKEN_CACHE, AUTH_META):
+        try:
+            os.remove(p)
+        except OSError:
+            pass
+    out({"ok": True, "moved": moved, "relogin": True,
+         "message": "Keyring reset. Log out and back in — it is recreated with your login password — then sign in again."})
+
+
 if __name__ == "__main__":
     argv = sys.argv[1:]
     cmd = argv[0] if argv else "status"
@@ -562,7 +598,8 @@ if __name__ == "__main__":
             cmd_login(argv[1:])
         else:
             {"status": cmd_status,
-             "refresh": cmd_refresh, "logout": cmd_logout}.get(cmd, cmd_status)()
+             "refresh": cmd_refresh, "logout": cmd_logout,
+             "keyring-reset": cmd_keyring_reset}.get(cmd, cmd_status)()
     except SystemExit:
         raise
     except Exception as e:  # absolute backstop: still emit parseable JSON

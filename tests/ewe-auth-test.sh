@@ -68,4 +68,9 @@ r="$(./bin/ewe-auth refresh | python3 -c 'import json,sys;d=json.load(sys.stdin)
 [ "$(./bin/ewe-auth logout | python3 -c 'import json,sys;print(json.load(sys.stdin)["ok"])')" = "True" ] \
     && echo "ok  logout idempotent" || fail logout
 
+# 7 · keyring-reset is JSON, ok, and leaves the fake keyring empty
+[ "$(./bin/ewe-auth keyring-reset | python3 -c 'import json,sys;print(json.load(sys.stdin)["ok"])')" = "True" ] \
+    && [ ! -s "$EWE_AUTH_FAKE_KEYRING" ] \
+    && echo "ok  keyring-reset" || fail keyring-reset
+
 echo "ALL PASS"

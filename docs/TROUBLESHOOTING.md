@@ -80,11 +80,16 @@ login password at the greeter. Three things can go wrong:
    `system/pam.d/greetd`; `install.sh` phase 30 re-installs it).
 3. **Wrong keyring password, or the shell says "signed out" at every
    login.** A keyring created with a password other than your login
-   password stays locked until you type it. Reset it — this deletes only
-   the keyring, nothing else — and sign in again:
+   password stays locked until you type it, and "Unlock keyring" rejects
+   the password you know. Replace it: **Reset the keyring** in Welcome or
+   Settings → User (it appears whenever the keyring is locked or refused
+   the token), then **Log out now**. PAM recreates the login keyring with
+   your login password at the next login; sign in again afterwards. The
+   old files are kept in `~/.local/share/keyrings.bak.<timestamp>`. The
+   same thing by hand:
 
    ```sh
-   rm -rf ~/.local/share/keyrings
+   ewe-auth keyring-reset      # or: mv ~/.local/share/keyrings{,.bak}
    # log out and back in, then Settings → User → Sign in with Google
    ```
 

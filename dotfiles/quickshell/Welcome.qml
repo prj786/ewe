@@ -268,6 +268,15 @@ Scope {
                         LinkBtn { label: "Open the sign-in page"; onGo: Google.openConsentUrl() }
                         LinkBtn { label: "Copy the link"; onGo: Google.copyConsentUrl() }
                     }
+                    // a keyring that rejects the login password can only be
+                    // replaced: PAM makes a fresh one at the next login
+                    Row {
+                        visible: root.online && Google.configured && !Google.signedIn && Google.busy !== "signin"
+                                 && (Google.keyringTrouble || Google.keyringResetDone)
+                        anchors.horizontalCenter: parent.horizontalCenter; spacing: 18
+                        LinkBtn { visible: !Google.keyringResetDone; label: "Reset the keyring"; onGo: Google.resetKeyring() }
+                        LinkBtn { visible: Google.keyringResetDone; label: "Log out now"; onGo: Google.logOut() }
+                    }
                 }
 
                 // ── 4 · restore ──
