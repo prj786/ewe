@@ -240,7 +240,7 @@ QtObject {
     // ── avatar + the account as a folder ─────────────────────────────────────
     // Files: bin/ewe-files (rclone WebDAV mount at ~/Nextcloud) is the interim
     // path. Owner decision (2026-09-02, RFC-006): folder sync and its tray
-    // belong to a first-party account app ("Flock") built on nextcloudcmd;
+    // belong to a first-party account app (ewe-sync) built on nextcloudcmd;
     // the official client's GUI is NOT handed the account and never
     // autostarts. Cloud only records [sync] in the one file and mounts.
     function setUpFiles() { Quickshell.execDetached(["sh", "-c", '"$0" setup >/dev/null 2>&1', cl.eweFiles]); cl._filesStatusLater.restart() }
