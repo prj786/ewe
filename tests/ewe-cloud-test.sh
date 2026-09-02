@@ -118,6 +118,23 @@ MOCK=$!
 for _ in $(seq 1 30); do curl -s -o /dev/null "$SRV/index.php/login/v2" && break; sleep 0.2; done
 ok "offline: still signed in, last-known facts"
 
+# 8b · ewe-files setup --offline writes the rclone remote from the signed-in account
+export HOME="$WORK/home"; mkdir -p "$HOME"
+r=$("$HERE/bin/ewe-files" setup --offline 2>&1) || fail "ewe-files setup: $r"
+conf="$XDG_CONFIG_HOME/ewe/rclone-nextcloud.conf"
+[ -f "$conf" ] || fail "rclone remote not written"
+grep -q "^url = $SRV/remote.php/dav/files/tester/" "$conf" || fail "remote url: $(cat "$conf")"
+grep -q '^user = tester$' "$conf" || fail "remote user"
+grep -q '^type = webdav$' "$conf" && grep -q '^vendor = nextcloud$' "$conf" || fail "remote type/vendor"
+[ "$(stat -c %a "$conf")" = "600" ] || fail "remote file mode: $(stat -c %a "$conf")"
+grep -q 'Nextcloud' "$XDG_CONFIG_HOME/gtk-3.0/bookmarks" || fail "Nemo bookmark missing"
+r=$("$HERE/bin/ewe-files" status)
+[ "$(jget "$r" "['configured']")" = "True" ] || fail "ewe-files status: $r"
+[ "$(jget "$r" "['mounted']")" = "False" ] || fail "ewe-files status mounted: $r"
+"$HERE/bin/ewe-files" forget >/dev/null 2>&1
+[ ! -f "$conf" ] || fail "forget left the remote"
+ok "ewe-files: remote from the signed-in account, bookmark, status, forget"
+
 # 9 · logout revokes server-side and clears everything
 r=$("$EC" logout)
 [ "$(jget "$r" "['ok']")" = "True" ] || fail "logout: $r"

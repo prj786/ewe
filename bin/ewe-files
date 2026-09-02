@@ -1,0 +1,131 @@
+#!/usr/bin/env bash
+# ewe-files — your Nextcloud as a folder (RFC-005).
+#
+# The account ewe signs in to (ewe-cloud) is also where your files live;
+# rclone mounts it at ~/Nextcloud over WebDAV using the SAME app password
+# the broker holds — no second login, no desktop-client daemon. Nemo sees
+# a plain folder; a GTK bookmark puts it in the sidebar.
+#
+#   ewe-files setup      one-time: write the rclone remote from the signed-in
+#                        account, bookmark, mount
+#   ewe-files mount      mount if configured (autostart calls this)
+#   ewe-files unmount    unmount
+#   ewe-files status     {configured, mounted, path} JSON
+#
+# The rclone config lives in its own file (~/.config/ewe/rclone-nextcloud.conf)
+# so a user's own ~/.config/rclone is never touched. The app password is
+# written into it obscured, as rclone expects (mode 0600) — the keyring stays
+# the source of truth; `setup` regenerates the file from it.
+set -uo pipefail
+
+CFG="${XDG_CONFIG_HOME:-$HOME/.config}"
+CONF="$CFG/ewe/rclone-nextcloud.conf"
+MOUNT="${EWE_FILES_MOUNT:-$HOME/Nextcloud}"
+REMOTE="ewe-nextcloud"
+BOOKMARKS="$CFG/gtk-3.0/bookmarks"
+
+say() { printf '\033[1;36m::\033[0m %s\n' "$*"; }
+die() { printf '\033[1;31mxx\033[0m %s\n' "$*" >&2; exit 1; }
+
+ewe_cloud() {
+    for c in "$(dirname "$(realpath "$0")")/ewe-cloud" /usr/bin/ewe-cloud ewe-cloud; do
+        command -v "$c" >/dev/null 2>&1 && { "$c" "$@"; return; }
+    done
+    die "ewe-cloud not found"
+}
+
+mounted() { mountpoint -q "$MOUNT" 2>/dev/null; }
+
+case "${1:-status}" in
+
+setup)
+    # --offline (tests/CI) writes the remote and the bookmark but does not mount
+    if [ "${2:-}" != "--offline" ]; then
+        command -v rclone >/dev/null 2>&1 || die "rclone is not installed (pacman -S rclone fuse3)"
+    fi
+    # 1 · the signed-in account: server + login name + app password
+    tok="$(ewe_cloud token --json)"
+    echo "$tok" | grep -q '"ok": true' || die "not signed in to a Nextcloud — sign in first (Settings → Account)"
+    read -r url user pass < <(python3 - "$tok" <<'PY'
+import json, sys, urllib.parse
+j = json.loads(sys.argv[1])
+print("%s/remote.php/dav/files/%s/" % (j["server"].rstrip("/"), urllib.parse.quote(j["user"], safe="")),
+      j["user"], j["token"])
+PY
+    )
+    [ -n "${pass:-}" ] || die "the app password is not readable"
+    # rclone stores WebDAV passwords obscured (reversible; the file is 0600).
+    # `rclone obscure` is the documented way; a test box without rclone gets
+    # the raw value under the same key, which rclone would reject — fine.
+    if command -v rclone >/dev/null 2>&1; then
+        obscured="$(printf '%s' "$pass" | rclone obscure - 2>/dev/null)" || obscured=""
+    else
+        obscured=""
+    fi
+    [ -n "$obscured" ] || obscured="$pass"
+    umask 077
+    mkdir -p "$(dirname "$CONF")"
+    cat > "$CONF" <<EOF
+# written by ewe-files — do not edit; \`ewe-files setup\` regenerates it
+[$REMOTE]
+type = webdav
+vendor = nextcloud
+url = $url
+user = $user
+pass = $obscured
+EOF
+    say "remote written"
+    # 2 · folder + Nemo sidebar bookmark (idempotent)
+    mkdir -p "$MOUNT"
+    mkdir -p "$(dirname "$BOOKMARKS")"
+    grep -q "$(basename "$MOUNT")" "$BOOKMARKS" 2>/dev/null \
+        || printf 'file://%s %s\n' "$MOUNT" "$(basename "$MOUNT")" >> "$BOOKMARKS"
+    [ "${2:-}" = "--offline" ] && { say "offline setup done (no mount)"; exit 0; }
+    exec "$0" mount
+    ;;
+
+mount)
+    [ -r "$CONF" ] || exit 0                       # not set up — silent no-op
+    command -v rclone >/dev/null 2>&1 || exit 0
+    mounted && exit 0
+    # a dead FUSE endpoint ("Transport endpoint is not connected", e.g. after
+    # a killed rclone) blocks everything until lazily unmounted — probe with
+    # ls and heal on ANY failure (see ewe-drive for the history)
+    if ! ls "$MOUNT" >/dev/null 2>&1; then
+        fusermount3 -uz "$MOUNT" 2>/dev/null || fusermount -uz "$MOUNT" 2>/dev/null || true
+    fi
+    mkdir -p "$MOUNT"
+    say "mounting Nextcloud"
+    # Background it ourselves and poll for readiness — rclone's own --daemon
+    # never returned on this stack; setsid detaches it from the login session
+    # so a shell restart doesn't kill the mount.
+    ( setsid rclone --config "$CONF" mount "$REMOTE:" "$MOUNT" \
+        --vfs-cache-mode writes --dir-cache-time 1m --poll-interval 30s \
+        >/dev/null 2>&1 & )
+    for _ in $(seq 1 40); do mounted && break; sleep 0.25; done
+    mounted && say "mounted at $MOUNT" \
+        || die "mount failed (see: rclone --config $CONF lsd $REMOTE:)"
+    ;;
+
+unmount)
+    mounted || exit 0
+    fusermount3 -u "$MOUNT" 2>/dev/null || fusermount -u "$MOUNT" 2>/dev/null
+    say "unmounted"
+    ;;
+
+forget)
+    # sign-out companion: unmount and drop the remote (the bookmark stays
+    # harmless; the folder is the user's)
+    "$0" unmount >/dev/null 2>&1 || true
+    rm -f "$CONF"
+    say "remote removed"
+    ;;
+
+status)
+    printf '{"configured": %s, "mounted": %s, "path": "%s"}\n' \
+        "$([ -r "$CONF" ] && echo true || echo false)" \
+        "$(mounted && echo true || echo false)" "$MOUNT"
+    ;;
+
+*) die "usage: ewe-files setup [--offline]|mount|unmount|forget|status" ;;
+esac
