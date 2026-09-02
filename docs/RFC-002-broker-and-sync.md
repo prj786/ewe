@@ -1,6 +1,6 @@
 # RFC-002 — ewe-auth and the sync of the one file
 
-*Status: steps 1–3 SHIPPED and verified against real Google (broker token
+*Status (2026-09-02): SUPERSEDED for the account and the sync of the one file by [RFC-005](RFC-005-nextcloud-account.md) — the ewe account is a Nextcloud account; `ewe-auth` and the Drive backend remain only for the optional, bring-your-own-client Google extras (mail, Drive folder). Historical status: steps 1–3 SHIPPED and verified against real Google (broker token
 from a live session; ewe.conf → Drive appData → back, byte-identical).
 Step 4 SHIPPED (komble 0.9.3: For You restores from the manifest; sync
 verbs are ewe-conf push/pull). Step 5 SHIPPED (shell + komble mains: the

@@ -45,7 +45,7 @@ ewe-conf dump                      whole file as JSON (one read for QML/Rust)
 ewe-conf import                    build ewe.conf FROM the live runtime files
 ewe-conf apply [--only <domain>]   regenerate artifacts + poke the shell + reload Hyprland
 ewe-conf path                      print the canonical file path
-ewe-conf push [--force]            upload the file to your Drive (see Sync)
+ewe-conf push [--force]            upload the file to your account (see Sync)
 ewe-conf pull [--out <path>]       download it — run `apply` afterwards
 ewe-conf sync-status               the remote copy, and this machine's sync record
 ```
@@ -70,26 +70,35 @@ ewe-conf pull && ewe-conf apply
 
 ## Sync
 
-`push` uploads the file to the account's Drive (hidden app storage);
-`pull` downloads it, keeping the previous local file as
-`ewe.conf.<timestamp>.bak`. Both record what they saw on Drive — the file
-id and its `modifiedTime` — in `~/.local/state/ewe/sync.json`, and that
+`push` uploads the file to the account named in `[sync]`; `pull` downloads
+it, keeping the previous local file as `ewe.conf.<timestamp>.bak`. Two
+providers speak the same contract ([RFC-005](RFC-005-nextcloud-account.md)):
+
+| `[sync].provider` | where the file lives | the guard |
+|---|---|---|
+| `nextcloud` | WebDAV: `<server>/remote.php/dav/files/<user>/<folder>/ewe.conf` + `ewe.conf.meta.json` `{machine, saved_at, schema}` | the server's own `If-Match` on the ETag recorded at the last sync (412 ⇒ refused) — no race window |
+| `google` | Drive app data (RFC-002; only with a personal OAuth client) | the file id + `modifiedTime` recorded at the last sync |
+
+Both record what they saw — in `~/.local/state/ewe/sync.json` — and that
 record is the whole conflict rule:
 
-- a push is refused (`remote-newer`) when the remote's `modifiedTime` is
-  not the one recorded here: another machine saved since this one last
-  synced. `pull` to adopt theirs, or `push --force` to overwrite;
-- a machine that has **never** synced may push only into an empty Drive.
+- a push is refused (`remote-newer`) when the remote is not the copy
+  recorded here: another machine saved since this one last synced. `pull`
+  to adopt theirs, or `push --force` to overwrite;
+- a machine that has **never** synced may push only into an empty remote.
   If a backup already exists it gets `remote-exists`: restore first (the
   Welcome flow offers exactly that), or `--force`. This is what keeps a
   fresh install from erasing the backup it was about to restore.
 
 No clocks and no hostnames take part — two machines both called `ewe`, or
 a fresh install with a wrong clock, sync fine. The machine name is still
-stamped on the remote (in the same request as the content), purely so the
-UI can say *"backup saved by <name>"*; `sync-status` reports that
-(`remote_machine`, `remote_modified`) separately from *when this machine
-last synced* (`local_synced_at`).
+stamped next to the file, purely so the UI can say *"backup saved by
+<name>"*; `sync-status` reports that (`remote_machine`, `remote_modified`)
+separately from *when this machine last synced* (`local_synced_at`), plus
+`provider`, `server`, `folder`, `enabled` and `in_sync`. Credentials come
+from the brokers — `ewe-cloud token` / `ewe-auth token` — never from this
+file. `[sync].enabled` is THE auto-sync switch: every `set` schedules a
+debounced push when it is on.
 
 ## Reference
 
@@ -194,9 +203,11 @@ file said.
 
 ### `[sync]`
 
-`enabled` (bool) · `provider` (`"google"`). Identity only — the account
-*email* may appear here so a restored machine knows whose Drive to ask.
-Tokens live in the keyring behind `ewe-auth`, never in this file.
+`provider` (`"nextcloud"` | `"google"`) · `server` · `user` · `folder`
+(default `ewe`) · `enabled` (bool, the auto-sync switch). Identity only,
+so a restored machine knows where its backup lives. The app password (or
+the Google refresh token) lives in the keyring behind `ewe-cloud` /
+`ewe-auth`, never in this file.
 
 ## SSH & VPN — the `[network]` domain
 
