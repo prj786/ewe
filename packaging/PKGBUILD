@@ -15,12 +15,13 @@
 # the single source of truth. gaming.list becomes optdepends.
 
 pkgname=ewe
-pkgver=0.9.4
-# NOTE: still 2, not reset to 1, on purpose — 0.10.2-2 is already published to
-# [ewe], and 0.10.2-1 would sort LOWER, so pacman would never offer it. It
-# resets to 1 at the next pkgver bump. (It became 2 to carry an injected
-# oauth-client.json; RFC-005 retired that and the injection is gone below.)
-pkgrel=2
+# NOTE: ewe-repo's publish workflow REWRITES this line from the latest release
+# tag (`sed -i "s/^pkgver=.*/pkgver=${ver#v}/"`), so it is a placeholder kept in
+# step with VERSION rather than the value that ships — which is why it had
+# drifted to 0.9.4. pkgrel is NOT rewritten, so it matters: it resets to 1 here
+# because pkgver moved, and 0.11.0-1 sorts above the published 0.10.2-2.
+pkgver=0.11.0
+pkgrel=1
 pkgdesc="ewe — a clean, dark Hyprland + Quickshell desktop environment"
 arch=('any')
 url="https://github.com/prj786/ewe"

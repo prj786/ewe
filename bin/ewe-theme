@@ -183,11 +183,21 @@ def _write(path, text):
 
 def cmd_build(a):
     doc, path = load(a.conf)
-    written = []
-    j, c = a.json or OUT_JSON, a.css or OUT_CSS
+    written, skipped = [], []
+    j = a.json or OUT_JSON
     _write(j, gen_json(doc)); written.append(j)
-    _write(c, gen_css(doc)); written.append(c)
-    out({"ok": True, "conf": path, "written": written})
+
+    # The CSS is a BUILD-TIME artefact for the app repos, not a runtime one:
+    # on an installed system HERE is /usr and design/ does not exist, so write
+    # it only where the tree actually is (a dev checkout), or where asked.
+    c = a.css or OUT_CSS
+    if c == "/dev/null":
+        skipped.append("css (asked to discard)")
+    elif a.css or os.path.isdir(os.path.dirname(c)):
+        _write(c, gen_css(doc)); written.append(c)
+    else:
+        skipped.append("%s (no design/ here — this is an installed tree)" % c)
+    out({"ok": True, "conf": path, "written": written, "skipped": skipped})
 
 
 def cmd_check(a):
