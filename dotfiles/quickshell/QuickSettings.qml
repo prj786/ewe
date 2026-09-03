@@ -910,7 +910,7 @@ Scope {
                     anchors.left: sIco.right; anchors.leftMargin: sld.icon === "" ? 0 : 8; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
                     height: 8; radius: 4; color: Theme.hover
                     Rectangle { height: parent.height; radius: Theme.r(4); width: parent.width * Math.max(0, Math.min(1, sld.value)); color: Theme.accent }
-                    Rectangle { width: 14; height: 14; radius: 7; color: "white"; anchors.verticalCenter: parent.verticalCenter; x: Math.max(0, Math.min(trk.width - width, trk.width * sld.value - width / 2)) }
+                    Rectangle { width: 14; height: 14; radius: 7; color: Theme.accentText; anchors.verticalCenter: parent.verticalCenter; x: Math.max(0, Math.min(trk.width - width, trk.width * sld.value - width / 2)) }
                     MouseArea {
                         anchors.fill: parent; anchors.topMargin: -8; anchors.bottomMargin: -8
                         onPressed: function (m) { sld.moved(Math.max(0, Math.min(1, m.x / trk.width))) }
@@ -986,7 +986,7 @@ Scope {
                                     anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
                                     width: 38; height: 22; radius: 11; color: Globals.eventSounds ? Theme.accent : Theme.hover
                                     Behavior on color { ColorAnimation { duration: 150 } }
-                                    Rectangle { width: 18; height: 18; radius: 9; color: "white"; anchors.verticalCenter: parent.verticalCenter; x: Globals.eventSounds ? parent.width-width-2 : 2; Behavior on x { NumberAnimation { duration: 150 } } }
+                                    Rectangle { width: 18; height: 18; radius: 9; color: Theme.accentText; anchors.verticalCenter: parent.verticalCenter; x: Globals.eventSounds ? parent.width-width-2 : 2; Behavior on x { NumberAnimation { duration: 150 } } }
                                     MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { Globals.eventSounds = !Globals.eventSounds; root.writePrefsPoke.restart(); if (Globals.eventSounds) Globals.playSound("audio-volume-change") } }
                                 }
                             }
@@ -1105,7 +1105,7 @@ Scope {
                                         anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
                                         width: 38; height: 22; radius: 11; color: root.wifiOn ? Theme.accent : Theme.hover
                                         Behavior on color { ColorAnimation { duration: 150 } }
-                                        Rectangle { width: 18; height: 18; radius: 9; color: "white"; anchors.verticalCenter: parent.verticalCenter; x: root.wifiOn ? parent.width-width-2 : 2; Behavior on x { NumberAnimation { duration: 150 } } }
+                                        Rectangle { width: 18; height: 18; radius: 9; color: Theme.accentText; anchors.verticalCenter: parent.verticalCenter; x: root.wifiOn ? parent.width-width-2 : 2; Behavior on x { NumberAnimation { duration: 150 } } }
                                         MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { Quickshell.execDetached(["nmcli","radio","wifi", root.wifiOn ? "off" : "on"]); rescanTimer.restart() } }
                                     }
                                 }
@@ -1182,7 +1182,7 @@ Scope {
                                         readonly property bool on: parent.adapter ? parent.adapter.enabled : false
                                         color: on ? Theme.accent : Theme.hover
                                         Behavior on color { ColorAnimation { duration: 150 } }
-                                        Rectangle { width: 18; height: 18; radius: 9; color: "white"; anchors.verticalCenter: parent.verticalCenter; x: parent.on ? parent.width-width-2 : 2; Behavior on x { NumberAnimation { duration: 150 } } }
+                                        Rectangle { width: 18; height: 18; radius: 9; color: Theme.accentText; anchors.verticalCenter: parent.verticalCenter; x: parent.on ? parent.width-width-2 : 2; Behavior on x { NumberAnimation { duration: 150 } } }
                                         MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: if (parent.parent.adapter) parent.parent.adapter.enabled = !parent.parent.adapter.enabled }
                                     }
                                 }
@@ -2327,7 +2327,7 @@ Scope {
                                         delegate: Item {
                                             required property var modelData
                                             width: agDay.width; height: 30
-                                            Rectangle { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; width: 3; height: 20; radius: Theme.r(1).5; color: modelData.color !== "" ? modelData.color : Theme.accent }
+                                            Rectangle { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; width: 3; height: 20; radius: Theme.r(1.5); color: modelData.color !== "" ? modelData.color : Theme.accent }
                                             Column {
                                                 anchors.left: parent.left; anchors.leftMargin: 11; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; spacing: 0
                                                 Text { width: parent.width; text: modelData.summary; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: 11; elide: Text.ElideRight }

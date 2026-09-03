@@ -93,6 +93,14 @@ def css_vars(t):
     b = int(shape.get("border", 1))
     v["--input-border-width"] = "0 0 %dpx 0" % b if voice.get("input-border") == "bottom" else "%dpx" % b
 
+    # The look's DEFAULT accent. Deliberately NOT emitted as --accent: that
+    # name belongs to the user's pick, set as an inline style at runtime, and
+    # an inline style beats a stylesheet. tokens.css chains
+    # `--accent: var(--accent-default)`, so a machine that has never chosen an
+    # accent gets the theme's, and a machine that has keeps its own.
+    if t.get("accent"):
+        v["--accent-default"] = t["accent"]
+
     # depth: a solid offset block, or ambient blur when shadow-offset is 0
     off = int(shape.get("shadow-offset", 0))
     if off:
@@ -114,8 +122,10 @@ def gen_css(doc):
          " * shell and the apps are demonstrably the same system. The default theme is",
          " * :root; every other theme is .dark.<name>, the class App.svelte toggles.",
          " *",
-         " * NOT themed on purpose: --accent (whatever Settings -> Theme wrote) and the",
-         " * font stack. Both looks share them.",
+         " * --accent is the user's pick, injected inline at runtime, which beats any",
+         " * rule here. What IS themed is --accent-default: the colour a look opens",
+         " * with before anyone chooses, chained as `--accent: var(--accent-default)`.",
+         " * The font stack is shared by both looks and never themed.",
          " */", ""]
     order = [default] + [n for n in ts if n != default]
     for name in order:
@@ -123,8 +133,11 @@ def gen_css(doc):
         sel = ":root" if name == default else ".dark.%s" % name
         s.append("/* %s — %s */" % (t.get("label", name), t.get("note", "")))
         s.append("%s {" % sel)
-        for k, val in css_vars(t).items():
+        vars_ = css_vars(t)
+        for k, val in vars_.items():
             s.append("  %s: %s;" % (k, val))
+        if "--accent-default" in vars_:
+            s.append("  --accent: var(--accent-default);")
         s.append("}")
         s.append("")
     return "\n".join(s)
@@ -136,6 +149,7 @@ def gen_json(doc):
         "version": (doc.get("meta") or {}).get("version", 1),
         "default": (doc.get("meta") or {}).get("default") or next(iter(ts)),
         "themes": {n: {"label": t.get("label", n), "note": t.get("note", ""),
+                       "accent": t.get("accent", ""),
                        "color": t.get("color") or {}, "shape": t.get("shape") or {},
                        "voice": t.get("voice") or {}} for n, t in ts.items()},
     }, indent=2) + "\n"
@@ -325,7 +339,7 @@ def cmd_preview(a):
             .replace("__THEMES__", json.dumps(
                 {n: {"label": t.get("label", n), "note": t.get("note", ""),
                      "color": t.get("color") or {},
-                     "accent": (t.get("preview") or {}).get("accent", "#8fbce0")}
+                     "accent": t.get("accent", "#8fbce0")}
                  for n, t in ts.items()}))
             .replace("__DEFAULT__", default))
     target = a.out or os.path.join(HERE, "design", "specimen.html")

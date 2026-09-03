@@ -81,7 +81,11 @@ QtObject {
     readonly property int barIconPx:     14
 
     // Accent — whatever Settings → Theme wrote into user-theme.json.
-    readonly property color accent:      Globals.accentColor
+    // The user's pick always wins. Until there is one, the LOOK decides:
+    // ewe-theme.conf gives flock Bauhaus's high-energy yellow and blacksheep
+    // Alexandria's quiet blue, so a fresh machine already looks like itself.
+    readonly property color accent:      Globals.accentExplicit ? Globals.accentColor
+                                         : ((_tok && _tok.accent) || Globals.accentColor)
     // accentText auto-contrasts with the accent (white on dark accents, ink on
     // light ones) so foreground text on accent fills stays legible at any hue.
     // 0.55, not 0.6: mid-luminance accents (the system green) already lose

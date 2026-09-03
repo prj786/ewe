@@ -834,7 +834,7 @@ Scope {
                                     y: Math.round(thumbBox.height * modelData[1])
                                     width: Math.round(thumbBox.width * modelData[2])
                                     height: Math.round(thumbBox.height * modelData[3])
-                                    radius: Theme.r(2).5
+                                    radius: Theme.r(2.5)
                                     opacity: root.dragActive ? 0.25 : 1
                                     color: thumb.current ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.75)
                                                          : Qt.rgba(1, 1, 1, 0.40)

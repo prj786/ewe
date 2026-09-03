@@ -1269,7 +1269,7 @@ Scope {
                 Rectangle {
                     id: strk; anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; anchors.bottomMargin: 4; height: 8; radius: 4; color: Theme.hover
                     Rectangle { height: parent.height; radius: Theme.r(4); color: Theme.accent; width: parent.width * (sld.shown - sld.from) / Math.max(0.0001, sld.to - sld.from) }
-                    Rectangle { width: 14; height: 14; radius: 7; color: "white"; anchors.verticalCenter: parent.verticalCenter; x: Math.max(0, Math.min(strk.width - width, strk.width * (sld.shown - sld.from) / Math.max(0.0001, sld.to - sld.from) - width / 2)) }
+                    Rectangle { width: 14; height: 14; radius: 7; color: Theme.accentText; anchors.verticalCenter: parent.verticalCenter; x: Math.max(0, Math.min(strk.width - width, strk.width * (sld.shown - sld.from) / Math.max(0.0001, sld.to - sld.from) - width / 2)) }
                     MouseArea {
                         anchors.fill: parent; anchors.topMargin: -8; anchors.bottomMargin: -8
                         function pick(mx) { var f = Math.max(0, Math.min(1, mx / strk.width)); var v = sld.from + f * (sld.to - sld.from); return Math.round(v / sld.step) * sld.step }
@@ -1287,7 +1287,7 @@ Scope {
                 border.color: activeFocus ? Theme.fg : "transparent"; border.width: activeFocus ? 1 : 0
                 Keys.onSpacePressed: toggled()
                 Keys.onReturnPressed: toggled()
-                Rectangle { width: 18; height: 18; radius: 9; color: "white"; anchors.verticalCenter: parent.verticalCenter; x: parent.on ? parent.width - width - 3 : 3; Behavior on x { NumberAnimation { duration: 150 } } }
+                Rectangle { width: 18; height: 18; radius: 9; color: Theme.accentText; anchors.verticalCenter: parent.verticalCenter; x: parent.on ? parent.width - width - 3 : 3; Behavior on x { NumberAnimation { duration: 150 } } }
                 MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: toggled() }
             }
             component Pill: Rectangle {
@@ -2073,7 +2073,7 @@ Scope {
                         }
                         Text {
                             width: parent.width; wrapMode: Text.Wrap
-                            text: "Flock — the ewe look in soft dark greys. Black Sheep — the same look on absolute black (#020202) surfaces: bar, dock, panels. Shape, icons and your accent stay identical; applies instantly."
+                            text: "Flock — bold and unapologetic: square corners, thick rules, flat blocks of colour. Black Sheep — serene and tonal: soft corners, hairline outlines, quiet surfaces. The two differ in SHAPE as well as colour. Your accent and the icons stay yours; applies instantly."
                             color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11
                         }
                     }

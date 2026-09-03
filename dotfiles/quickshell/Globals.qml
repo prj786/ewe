@@ -255,6 +255,10 @@ QtObject {
     // it so the whole shell recolours live. Persisted to ~/.config/quickshell/
     // user-theme.json and re-read here at startup (default = system blue).
     property color accentColor: "#0a84ff"
+    // false = user-theme.json carries no accent, i.e. nobody has ever picked
+    // one. Theme.accent then falls back to the LOOK's own default from
+    // ewe-theme.conf (flock yellow, blacksheep blue) instead of this literal.
+    property bool accentExplicit: false
     property bool tintBorders: false        // mirror window border colour to the accent
     // false → fully opaque windows (decoration inactive_opacity forced to 1.0);
     // true keeps hyprland.lua's subtle unfocused translucency. user-theme.json.
@@ -494,7 +498,7 @@ QtObject {
                     // else in the file is legacy (graphite/ambiance) and falls
                     // through to the "flock" default
                     if (j && (j.themeName === "flock" || j.themeName === "blacksheep")) g.themeName = j.themeName
-                    if (j && j.accent) g.accentColor = j.accent
+                    if (j && j.accent) { g.accentColor = j.accent; g.accentExplicit = true }
                     if (j && j.tintBorders !== undefined) g.tintBorders = j.tintBorders
                     if (j && j.windowTransparency !== undefined) g.windowTransparency = j.windowTransparency
                     if (j && j.dockEnabled !== undefined) g.dockEnabled = j.dockEnabled

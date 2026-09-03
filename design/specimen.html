@@ -12,8 +12,10 @@
  * shell and the apps are demonstrably the same system. The default theme is
  * :root; every other theme is .dark.<name>, the class App.svelte toggles.
  *
- * NOT themed on purpose: --accent (whatever Settings -> Theme wrote) and the
- * font stack. Both looks share them.
+ * --accent is the user's pick, injected inline at runtime, which beats any
+ * rule here. What IS themed is --accent-default: the colour a look opens
+ * with before anyone chooses, chained as `--accent: var(--accent-default)`.
+ * The font stack is shared by both looks and never themed.
  */
 
 /* Flock — Bauhaus — bold, raw, unapologetic. Square, thick-ruled, uppercase. */
@@ -44,8 +46,10 @@
   --btn-hover-bg: transparent;
   --btn-hover-fg: var(--accent);
   --input-border-width: 0 0 3px 0;
+  --accent-default: #ffcc00;
   --elevation: 4px 4px 0 0 #000000;
   --elevation-sm: 2px 2px 0 0 #000000;
+  --accent: var(--accent-default);
 }
 
 /* Black Sheep — Alexandria — serene, tonal, soft-cornered. For deep-focus work. */
@@ -76,8 +80,10 @@
   --btn-hover-bg: color-mix(in srgb, var(--accent) 88%, #ffffff);
   --btn-hover-fg: var(--accent-fg);
   --input-border-width: 1px;
+  --accent-default: #b1c5ff;
   --elevation: 0 8px 24px rgba(0, 0, 0, 0.45);
   --elevation-sm: 0 2px 8px rgba(0, 0, 0, 0.35);
+  --accent: var(--accent-default);
 }
 
 * { box-sizing: border-box; }
