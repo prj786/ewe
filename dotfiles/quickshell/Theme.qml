@@ -4,27 +4,55 @@ import QtQuick
 // Theme — single source of truth for colour, type, metrics and icons.
 // Imported as `Theme.*`; components must never define their own.
 //
-// TWO looks that share every token except the neutral surfaces:
-//   "flock"      — dark neutral greys (the default)
-//   "blacksheep" — absolute black (#020202 surfaces) for OLED / pure-dark fans
-// Both: rounded, solid surfaces, a user-picked accent, Phosphor Fill icons.
-// The old second theme (Unity 7 "Ambiance") is gone; the shape/colour tokens
-// it needed (barTop/barBottom, barItem*) remain as plain constants.
+// TWO looks. They no longer differ only in surface darkness — since
+// 2026-09-03 each carries its own SHAPE as well as its own colour, so a
+// component that reads the tokens changes character with the theme:
+//
+//   "flock"      — Bauhaus / neo-brutalist, on a dark ground (the default).
+//                  Form follows function: flat colour blocks, NO radius, thick
+//                  solid borders, and depth from a hard offset block rather
+//                  than a blur. Limited palette — paper + one accent per
+//                  surface. Yellow is the high-energy state, red destroys,
+//                  blue is interactive.
+//   "blacksheep" — Alexandria. A tonal Material-style ladder on near-black,
+//                  hairline outlines, soft 6-12px radii, ambient shadow.
+//
+// ewe stays dark-only (decision 2026-09-01), so Bauhaus is applied as its
+// STRUCTURE inverted onto an ink ground, not as its paper-white canvas: the
+// guide's #f5f0e8 becomes the ink colour rather than the background.
+//
+// Fonts and the user's accent are deliberately NOT theme-derived — the accent
+// is whatever Settings → Theme wrote, in both looks.
+// The shape/colour tokens the retired Unity 7 "Ambiance" look needed
+// (barTop/barBottom, barItem*) remain as plain constants.
 QtObject {
     id: t
 
-    // ── Palette ───────────────────────────────────────────────────────────
-    readonly property bool pitchBlack:   Globals.themeName === "blacksheep"
-    readonly property color bg:          pitchBlack ? "#020202" : "#1c1c1e"   // desktop / app base
-    readonly property color panel:       pitchBlack ? "#020202" : "#1d1d1f"   // popup / panel surface
-    readonly property color elevated:    pitchBlack ? "#101012" : "#2c2c2e"   // cards / rows on a panel
-    readonly property color hover:       pitchBlack ? "#1a1a1c" : "#3a3a3c"
-    readonly property color stroke:      pitchBlack ? "#222225" : "#38383a"   // hairline border
-    readonly property color shadow:      Qt.rgba(0, 0, 0, 0.45)
+    // ── Which look ────────────────────────────────────────────────────────
+    readonly property bool blacksheep:   Globals.themeName === "blacksheep"
+    readonly property bool brutalist:    !blacksheep          // flock is Bauhaus
+    // kept: Globals.qml still reads it, and "is this the black look" is still
+    // the question every caller was really asking
+    readonly property bool pitchBlack:   blacksheep
 
-    readonly property color fg:          "#f2f2f7"   // warm off-white, never pure white
-    readonly property color fgSecondary: "#aeaeb2"
-    readonly property color fgDim:       "#8e8e93"
+    // ── Surfaces ──────────────────────────────────────────────────────────
+    // flock: a WARM ink ladder — the Bauhaus ground is #f5f0e8 warm paper, so
+    //   its inversion keeps the warmth rather than going neutral grey.
+    // blacksheep: Alexandria's surface / surface-container-* ladder verbatim.
+    readonly property color bg:          blacksheep ? "#121314" : "#14140f"   // desktop / app base
+    readonly property color panel:       blacksheep ? "#1b1c1d" : "#1c1b15"   // popup / panel surface
+    readonly property color elevated:    blacksheep ? "#1f2021" : "#24231b"   // cards / rows on a panel
+    readonly property color hover:       blacksheep ? "#292a2b" : "#2f2d22"
+    // The border is where the two looks part company. Alexandria outlines a
+    // shape with a hairline; Bauhaus DRAWS it — a thick solid rule in the ink
+    // colour. Pair `stroke` with `border` below, never with a literal width.
+    readonly property color stroke:      blacksheep ? "#434653" : "#f5f0e8"
+    readonly property color shadow:      Qt.rgba(0, 0, 0, blacksheep ? 0.45 : 0.85)
+
+    // flock's ink IS the guide's paper colour; blacksheep uses on-surface.
+    readonly property color fg:          blacksheep ? "#e3e2e3" : "#f5f0e8"
+    readonly property color fgSecondary: blacksheep ? "#c3c6d5" : "#b8b2a4"
+    readonly property color fgDim:       blacksheep ? "#8d909e" : "#8a8478"
 
     // ── Bar shape ─────────────────────────────────────────────────────────
     // Identical stops render the gradient node flat — kept so Bar.qml needs
@@ -35,7 +63,7 @@ QtObject {
     readonly property color barBorder:   stroke
     readonly property color barHover:    hover
     readonly property color barActive:   hover
-    readonly property int barItemRadius: 6
+    readonly property int barItemRadius: blacksheep ? 6 : 0
     readonly property int barItemHeight: 22
     readonly property int barItemSpacing: 6
     // every glyph on the bar renders at this size — no per-site literals
@@ -49,10 +77,21 @@ QtObject {
     // white text — tip to ink earlier.
     readonly property color accentText:  (0.299 * accent.r + 0.587 * accent.g + 0.114 * accent.b) > 0.55 ? "#1c1c1e" : "#ffffff"
 
-    // status cues (battery / vpn / connectivity / profile)
-    readonly property color success:     "#30d158"   // charging · connected · power-saver
-    readonly property color warning:     "#ff9f0a"   // low-ish · performance
-    readonly property color danger:      "#ff453a"   // critical / low battery
+    // ── Status cues (battery / vpn / connectivity / profile) ──────────────
+    // flock keeps Bauhaus's LIMITED palette — yellow, red, blue and nothing
+    // else — so "positive" is the interactive blue rather than a green the
+    // guide never names. Both blues are given: the solid one is a fill with
+    // white on top, the light one is what stays legible AS text or a dot on
+    // the ink ground (#0055ff on #14140f is far too dark to read).
+    // blacksheep takes Alexandria's error and tertiary verbatim; the guide has
+    // no success colour, so it is derived in the same light-desaturated
+    // register as its error (#ffb4ab).
+    readonly property color success:     blacksheep ? "#a6d6a8" : "#4d84ff"  // charging · connected
+    readonly property color warning:     blacksheep ? "#dcc661" : "#ffcc00"  // low-ish · performance
+    readonly property color danger:      blacksheep ? "#ffb4ab" : "#e63b2e"  // critical / destructive
+    // interactive: `link` reads on the ground, `linkSolid` is a fill
+    readonly property color link:        blacksheep ? "#b1c5ff" : "#4d84ff"
+    readonly property color linkSolid:   blacksheep ? "#3366cc" : "#0055ff"
 
     // ── Type ──────────────────────────────────────────────────────────────
     // Ubuntu for body AND titles — one humanist face that reads equally well
@@ -74,10 +113,34 @@ QtObject {
     readonly property int fsLarge:  17
     readonly property int fsTitle:  22
 
-    // ── Metrics ───────────────────────────────────────────────────────────
-    readonly property int radius:       18    // panels / launcher
-    readonly property int radiusInner:  12    // rows, input field
-    readonly property int radiusPill:   8
+    // ── Metrics & shape ───────────────────────────────────────────────────
+    // Radius is a THEME decision, not a per-component one. Bauhaus is square:
+    // "no border-radius or minimal" — zero everywhere, no exceptions, because
+    // a single rounded corner in a square system reads as a mistake.
+    // Alexandria rounds softly (its own scale: 0.375rem / 0.5rem / 0.75rem).
+    readonly property int radius:       blacksheep ? 12 : 0   // panels / launcher
+    readonly property int radiusInner:  blacksheep ? 8  : 0   // rows, input field
+    readonly property int radiusPill:   blacksheep ? 6  : 0
+
+    // Border WIDTH travels with the border colour: Alexandria hairlines at
+    // 1px, Bauhaus rules at 2-3px. Components use `Theme.border` rather than
+    // a literal, so the same card is outlined in one look and drawn in the
+    // other. borderThin is for dense rows where 3px would fill the row.
+    readonly property int border:       blacksheep ? 1 : 3
+    readonly property int borderThin:   blacksheep ? 1 : 2
+
+    // Depth. Bauhaus forbids soft shadows — depth is a solid block offset
+    // down-right ("offset shadows: 4-6px"). Zero here means "use the blurred
+    // Elevation effect instead", which is what Alexandria wants.
+    readonly property int shadowOffset: blacksheep ? 0 : 4
+
+    // Typographic voice — "uppercase buttons" is a Bauhaus rule about the
+    // whole system, not a decision per control. Mirrors --label-* in
+    // design/tokens.css.
+    readonly property int labelCaps:     blacksheep ? Font.MixedCase : Font.AllUppercase
+    readonly property real labelTracking: blacksheep ? 0 : 0.8
+    readonly property int labelWeight:   blacksheep ? Font.Medium : Font.Bold
+
     readonly property int pad:          12
     readonly property int gap:          8
     readonly property int barHeight:    30

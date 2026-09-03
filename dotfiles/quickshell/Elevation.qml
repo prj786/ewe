@@ -8,11 +8,17 @@ import QtQuick.Effects
 // same way; tweak the feel once, not per component. MultiEffect pads the
 // layer automatically, so the host window only needs the shadow to fall
 // inside its bounds (all popup windows are full-screen and transparent).
+// The two looks disagree about what depth IS, so the recipe forks here rather
+// than at 40 call sites. Alexandria lifts a surface with ambient blur; Bauhaus
+// forbids soft shadows outright and gets its depth from a hard block of solid
+// colour offset down-right (Theme.shadowOffset). Same three lines at every
+// call site, opposite result.
 MultiEffect {
     shadowEnabled: true
     shadowColor: Theme.shadow
-    shadowOpacity: 0.65
-    shadowBlur: 1.0
-    shadowVerticalOffset: 7
+    shadowOpacity: Theme.brutalist ? 1.0 : 0.65
+    shadowBlur: Theme.brutalist ? 0.0 : 1.0
+    shadowHorizontalOffset: Theme.brutalist ? Theme.shadowOffset : 0
+    shadowVerticalOffset: Theme.brutalist ? Theme.shadowOffset : 7
     blurMax: 48
 }
