@@ -91,7 +91,7 @@ Scope {
             width: 320; height: 56
             radius: Theme.radius
             color: Theme.panel
-            border.color: Theme.stroke; border.width: 1
+            border.color: Theme.stroke; border.width: Theme.borderThin
             layer.enabled: true
             layer.effect: Elevation {}
             Sheen { radius: parent.radius }
@@ -125,7 +125,7 @@ Scope {
                     height: 7; radius: 4
                     color: Theme.hover
                     Rectangle {
-                        height: parent.height; radius: 4
+                        height: parent.height; radius: Theme.r(4)
                         width: parent.width * Math.max(0, Math.min(1, root.level))
                         color: (root.mode === "volume" && root.muted) ? Theme.fgDim : Theme.accent
                         Behavior on width { NumberAnimation { duration: Theme.durFast } }

@@ -22,7 +22,7 @@ Item {
         anchors.fill: parent
         radius: av.shapeRadius
         color: Theme.elevated
-        border.color: Theme.stroke; border.width: 1
+        border.color: Theme.stroke; border.width: Theme.borderThin
         antialiasing: true
         Text {
             anchors.centerIn: parent
@@ -63,7 +63,7 @@ Item {
         visible: img.visible
         radius: av.shapeRadius
         color: "transparent"
-        border.color: Theme.stroke; border.width: 1
+        border.color: Theme.stroke; border.width: Theme.borderThin
         antialiasing: true
     }
 }

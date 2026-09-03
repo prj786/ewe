@@ -144,7 +144,7 @@ Scope {
             radius: Theme.radius
             color: Theme.panel
             border.color: Theme.stroke
-            border.width: 1
+            border.width: Theme.borderThin
             MouseArea { anchors.fill: parent }       // eat clicks so they don't cancel
 
             // the body scrolls on a short screen instead of clipping the footer
@@ -201,13 +201,13 @@ Scope {
                                 height: thumb.height + 54
                                 radius: Theme.radiusInner
                                 color: sMa.containsMouse ? Theme.hover : Theme.elevated
-                                border.color: sMa.containsMouse ? Theme.accent : "transparent"; border.width: 2
+                                border.color: sMa.containsMouse ? Theme.accent : "transparent"; border.width: Theme.border
                                 Behavior on color { ColorAnimation { duration: Theme.durFast } }
                                 Rectangle {
                                     id: thumb
                                     anchors { top: parent.top; left: parent.left; right: parent.right; margins: 8 }
                                     height: Math.round((width) / scard.aspect)
-                                    radius: 8; color: Theme.bg; clip: true
+                                    radius: Theme.r(8); color: Theme.bg; clip: true
                                     ScreencopyView {
                                         anchors.fill: parent
                                         // belt and braces: drop the source the moment
@@ -251,12 +251,12 @@ Scope {
                                     height: 118
                                     radius: Theme.radiusInner
                                     color: wMa.containsMouse ? Theme.hover : Theme.elevated
-                                    border.color: wMa.containsMouse ? Theme.accent : "transparent"; border.width: 2
+                                    border.color: wMa.containsMouse ? Theme.accent : "transparent"; border.width: Theme.border
                                     Behavior on color { ColorAnimation { duration: Theme.durFast } }
                                     Rectangle {
                                         id: wthumb
                                         anchors { top: parent.top; left: parent.left; right: parent.right; margins: 8 }
-                                        height: 70; radius: 8; color: Theme.bg; clip: true
+                                        height: 70; radius: Theme.r(8); color: Theme.bg; clip: true
                                         ScreencopyView {
                                             id: wsc
                                             anchors.fill: parent
@@ -289,7 +289,7 @@ Scope {
                     Row {
                         anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; spacing: 8
                         Rectangle {
-                            width: 18; height: 18; radius: 5
+                            width: 18; height: 18; radius: Theme.r(5)
                             anchors.verticalCenter: parent.verticalCenter
                             color: root.allowToken ? Theme.accent : Theme.bg
                             border.color: root.allowToken ? Theme.accent : Theme.stroke
@@ -306,13 +306,13 @@ Scope {
                     Row {
                         anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; spacing: 10
                         Rectangle {
-                            width: 150; height: 36; radius: 9
+                            width: 150; height: 36; radius: Theme.r(9)
                             color: rMa.containsMouse ? Theme.hover : Theme.elevated
                             Text { anchors.centerIn: parent; text: "Select a region…"; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsBody }
                             MouseArea { id: rMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: { root.hidden = true; slurp.running = true } }
                         }
                         Rectangle {
-                            width: 100; height: 36; radius: 9
+                            width: 100; height: 36; radius: Theme.r(9)
                             color: cMa.containsMouse ? Theme.hover : Theme.elevated
                             Text { anchors.centerIn: parent; text: "Cancel"; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsBody }
                             MouseArea { id: cMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.answer("") }

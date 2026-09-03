@@ -86,7 +86,7 @@ Scope {
             width: 380; height: 440
             radius: Theme.radius
             color: Theme.panel
-            border.color: Theme.stroke; border.width: 1
+            border.color: Theme.stroke; border.width: Theme.borderThin
             opacity: Globals.launcherOpen ? 1 : 0
             scale: Globals.launcherOpen ? 1 : 0.96
             transformOrigin: Item.BottomLeft
@@ -104,7 +104,7 @@ Scope {
                 // search
                 Rectangle {
                     width: parent.width; height: 36; radius: Theme.radiusInner
-                    color: Theme.bg; border.color: searchIn.activeFocus ? Theme.accent : Theme.stroke; border.width: 1
+                    color: Theme.bg; border.color: searchIn.activeFocus ? Theme.accent : Theme.stroke; border.width: Theme.borderThin
                     Text { anchors.left: parent.left; anchors.leftMargin: 11; anchors.verticalCenter: parent.verticalCenter; text: Theme.icSearch; font.family: Theme.fontIcons; font.pixelSize: 14; color: Theme.fgDim }
                     TextInput {
                         id: searchIn
@@ -146,7 +146,7 @@ Scope {
                                 required property var modelData
                                 width: grid.width / 4; height: 86
                                 readonly property string did: (modelData.id || "") + (String(modelData.id).match(/\.desktop$/) ? "" : ".desktop")
-                                Rectangle { anchors.fill: parent; anchors.margins: 3; radius: 12; color: tMa.containsMouse ? Theme.hover : "transparent" }
+                                Rectangle { anchors.fill: parent; anchors.margins: 3; radius: Theme.r(12); color: tMa.containsMouse ? Theme.hover : "transparent" }
                                 Column {
                                     anchors.centerIn: parent; spacing: 6
                                     Image { anchors.horizontalCenter: parent.horizontalCenter; width: 40; height: 40; sourceSize.width: 64; sourceSize.height: 64; mipmap: true; source: modelData.icon ? Quickshell.iconPath(modelData.icon, "application-x-executable") : "" }

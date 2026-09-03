@@ -70,6 +70,9 @@ package() {
     # and the account as a folder. A tool that is not installed here does not
     # exist on an installed system (the publish assertion caught exactly that).
     install -Dm755 bin/ewe-cloud "$pkgdir/usr/bin/ewe-cloud"
+    # the ONE writer of what the looks are (ewe-theme.conf -> the shell's
+    # theme-tokens.json + the apps' tokens.css)
+    install -Dm755 bin/ewe-theme "$pkgdir/usr/bin/ewe-theme"
     install -Dm755 bin/ewe-caldav "$pkgdir/usr/bin/ewe-caldav"
     install -Dm755 bin/ewe-mail "$pkgdir/usr/bin/ewe-mail"
     install -Dm755 bin/ewe-files "$pkgdir/usr/bin/ewe-files"

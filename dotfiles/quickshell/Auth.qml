@@ -60,7 +60,7 @@ Scope {
             radius: Theme.radius
             color: Theme.panel
             border.color: Theme.stroke
-            border.width: 1
+            border.width: Theme.borderThin
             MouseArea { anchors.fill: parent }   // swallow clicks
 
             Column {
@@ -83,10 +83,10 @@ Scope {
 
                 // password field
                 Rectangle {
-                    width: parent.width; height: 38; radius: 9
+                    width: parent.width; height: 38; radius: Theme.r(9)
                     color: Theme.bg
                     border.color: pwField.activeFocus ? Theme.accent : Theme.stroke
-                    border.width: 1
+                    border.width: Theme.borderThin
                     TextInput {
                         id: pwField
                         anchors.fill: parent; anchors.leftMargin: 12; anchors.rightMargin: 12
@@ -120,14 +120,14 @@ Scope {
                     width: parent.width
                     spacing: 10
                     Rectangle {
-                        width: (parent.width - 10) / 2; height: 36; radius: 9
+                        width: (parent.width - 10) / 2; height: 36; radius: Theme.r(9)
                         color: cancelMa.containsMouse ? Theme.hover : Theme.elevated
                         Behavior on color { ColorAnimation { duration: Theme.durFast } }
                         Text { anchors.centerIn: parent; text: "Cancel"; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsBody }
                         MouseArea { id: cancelMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: if ((agent ? agent.flow : null)) (agent ? agent.flow : null).cancelAuthenticationRequest() }
                     }
                     Rectangle {
-                        width: (parent.width - 10) / 2; height: 36; radius: 9
+                        width: (parent.width - 10) / 2; height: 36; radius: Theme.r(9)
                         color: okMa.containsMouse ? Qt.lighter(Theme.accent, 1.12) : Theme.accent
                         Behavior on color { ColorAnimation { duration: Theme.durFast } }
                         Text { anchors.centerIn: parent; text: "Authenticate"; color: Theme.accentText; font.family: Theme.fontText; font.pixelSize: Theme.fsBody; font.weight: Font.DemiBold }

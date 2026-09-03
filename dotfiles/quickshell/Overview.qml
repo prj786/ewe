@@ -46,7 +46,7 @@ Scope {
         signal go()
         height: rr.sub !== "" ? 54 : 46
         Rectangle {
-            anchors.fill: parent; radius: 10
+            anchors.fill: parent; radius: Theme.r(10)
             color: rr.seld ? Qt.rgba(1, 1, 1, 0.12) : (rrMa.containsMouse ? Qt.rgba(1, 1, 1, 0.06) : "transparent")
         }
         Row {
@@ -63,7 +63,7 @@ Scope {
                 }
                 Rectangle {
                     visible: rr.icon === ""
-                    anchors.fill: parent; radius: 7
+                    anchors.fill: parent; radius: Theme.r(7)
                     color: Qt.rgba(1, 1, 1, 0.10)
                     Text { anchors.centerIn: parent; text: rr.glyph; font.family: Theme.fontIcons; font.pixelSize: 15; color: Theme.fgSecondary }
                 }
@@ -509,7 +509,7 @@ Scope {
                             Rectangle {
                                 id: shadowProxy
                                 anchors.fill: cardContent
-                                radius: 14
+                                radius: Theme.r(14)
                                 color: "black"
                                 visible: false
                             }
@@ -528,7 +528,7 @@ Scope {
                                 id: cardContent
                                 width: dragArea.width
                                 height: dragArea.height
-                                radius: 14
+                                radius: Theme.r(14)
                                 color: Theme.panel
                                 border.color: dragArea.seld ? Theme.accent : stage.hairline
                                 border.width: dragArea.seld ? 2 : 1
@@ -599,7 +599,7 @@ Scope {
                                     anchors.right: appBadge.left; anchors.rightMargin: 6
                                     width: grpRow.implicitWidth + 16; height: 24; radius: 12
                                     color: Qt.rgba(0, 0, 0, 0.55)
-                                    border.color: Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.55); border.width: 1
+                                    border.color: Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.55); border.width: Theme.borderThin
                                     Row {
                                         id: grpRow
                                         anchors.centerIn: parent; spacing: 5
@@ -616,7 +616,7 @@ Scope {
                                 width: 24; height: 24; radius: 12
                                 visible: !dragArea.drag.active && !root.searching && (dragArea.containsMouse || closeMa.containsMouse)
                                 color: closeMa.containsMouse ? Theme.danger : Qt.rgba(0, 0, 0, 0.6)
-                                border.color: closeMa.containsMouse ? Theme.danger : Theme.accent; border.width: 1
+                                border.color: closeMa.containsMouse ? Theme.danger : Theme.accent; border.width: Theme.borderThin
                                 Text {
                                     anchors.fill: parent
                                     horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
@@ -644,7 +644,7 @@ Scope {
             Rectangle {
                 id: searchShadowProxy
                 anchors.fill: searchBox
-                radius: 16
+                radius: Theme.r(16)
                 color: "black"
                 visible: false
             }
@@ -664,10 +664,10 @@ Scope {
                 anchors.horizontalCenter: parent.horizontalCenter
                 y: 30
                 width: 560; height: 52
-                radius: 16
+                radius: Theme.r(16)
                 color: stage.glassBg
                 border.color: search.activeFocus ? Qt.rgba(1, 1, 1, 0.24) : stage.hairline
-                border.width: 1
+                border.width: Theme.borderThin
                 z: 10
 
                 Row {
@@ -715,9 +715,9 @@ Scope {
                 anchors.top: searchBox.bottom; anchors.topMargin: 8
                 width: searchBox.width
                 height: Math.min(resCol.implicitHeight + 16, stage.height - searchBox.y - searchBox.height - 60)
-                radius: 16
+                radius: Theme.r(16)
                 color: stage.glassBg
-                border.color: stage.hairline; border.width: 1
+                border.color: stage.hairline; border.width: Theme.borderThin
                 z: 10
 
                 Flickable {
@@ -816,7 +816,7 @@ Scope {
                         Rectangle {
                             id: thumbBox
                             anchors.fill: parent
-                            radius: 9
+                            radius: Theme.r(9)
                             color: thumbDrop.containsDrag ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.30)
                                  : thumb.current ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.16)
                                  : Qt.rgba(1, 1, 1, thumbMa.containsMouse ? 0.13 : 0.07)
@@ -834,7 +834,7 @@ Scope {
                                     y: Math.round(thumbBox.height * modelData[1])
                                     width: Math.round(thumbBox.width * modelData[2])
                                     height: Math.round(thumbBox.height * modelData[3])
-                                    radius: 2.5
+                                    radius: Theme.r(2).5
                                     opacity: root.dragActive ? 0.25 : 1
                                     color: thumb.current ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.75)
                                                          : Qt.rgba(1, 1, 1, 0.40)
@@ -856,7 +856,7 @@ Scope {
                                 anchors.centerIn: parent
                                 visible: root.dragActive
                                 text: thumb.wsId
-                                color: thumbDrop.containsDrag ? "#ffffff" : Theme.fgSecondary
+                                color: thumbDrop.containsDrag ? Theme.fg : Theme.fgSecondary
                                 font.family: Theme.fontDisplay; font.pixelSize: 14; font.weight: Font.DemiBold
                             }
                         }

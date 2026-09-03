@@ -22,9 +22,9 @@ Column {
         Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: dr.label; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
         Rectangle {
             anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
-            width: dr.buttonWidth; height: 26; radius: 7
+            width: dr.buttonWidth; height: 26; radius: Theme.r(7)
             color: drMa.containsMouse && !dr.dim ? Theme.hover : Theme.panel
-            border.color: (dr.open || drBtn.activeFocus) ? Theme.accent : Theme.stroke; border.width: 1
+            border.color: (dr.open || drBtn.activeFocus) ? Theme.accent : Theme.stroke; border.width: Theme.borderThin
             activeFocusOnTab: !dr.dim; id: drBtn
             Keys.onSpacePressed: Globals.openDd = dr.open ? "" : dr.ddId
             Keys.onReturnPressed: Globals.openDd = dr.open ? "" : dr.ddId
@@ -36,7 +36,7 @@ Column {
     Rectangle {
         visible: dr.open
         width: parent.width; height: Math.min(drOptCol.implicitHeight + 10, 172)
-        radius: 7; color: Theme.bg; border.color: Theme.stroke; border.width: 1
+        radius: Theme.r(7); color: Theme.bg; border.color: Theme.stroke; border.width: Theme.borderThin
         Flickable {
             anchors.fill: parent; anchors.margins: 5
             contentHeight: drOptCol.implicitHeight; clip: true; boundsBehavior: Flickable.StopAtBounds
@@ -47,7 +47,7 @@ Column {
                     delegate: Rectangle {
                         required property var modelData
                         readonly property bool sel: String(modelData.value) === String(dr.value)
-                        width: parent.width; height: 26; radius: 6
+                        width: parent.width; height: 26; radius: Theme.r(6)
                         color: drOMa.containsMouse ? Theme.hover : "transparent"
                         Text { anchors.left: parent.left; anchors.leftMargin: 8; anchors.right: parent.right; anchors.rightMargin: 26; anchors.verticalCenter: parent.verticalCenter; text: modelData.label; color: sel ? Theme.accent : Theme.fg; font.family: Theme.fontText; font.pixelSize: 11; font.weight: sel ? Font.DemiBold : Font.Normal; elide: Text.ElideRight }
                         Text { anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter; visible: sel; text: Theme.icCheck; font.family: Theme.fontIcons; font.pixelSize: 11; color: Theme.accent }

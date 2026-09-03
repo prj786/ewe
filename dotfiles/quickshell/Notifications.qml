@@ -121,7 +121,7 @@ Scope {
                         anchors.horizontalCenter: parent.horizontalCenter
                         width: parent.width - 14; height: card.height
                         radius: Theme.radiusInner; color: Theme.panel; opacity: 0.55
-                        border.color: Theme.stroke; border.width: 1
+                        border.color: Theme.stroke; border.width: Theme.borderThin
                     }
 
                     Rectangle {
@@ -131,7 +131,7 @@ Scope {
                         radius: Theme.radiusInner
                         color: Theme.panel
                         border.color: Theme.stroke
-                        border.width: 1
+                        border.width: Theme.borderThin
                         layer.enabled: true
                         layer.effect: Elevation {}
                         Sheen { radius: parent.radius }
@@ -167,7 +167,7 @@ Scope {
                                     Rectangle {
                                         visible: groupItem.count > 1
                                         anchors.verticalCenter: parent.verticalCenter
-                                        width: cnt.implicitWidth + 10; height: 15; radius: 7
+                                        width: cnt.implicitWidth + 10; height: 15; radius: Theme.r(7)
                                         color: Theme.accent
                                         Text { id: cnt; anchors.centerIn: parent; text: groupItem.count; color: Theme.accentText; font.family: Theme.fontText; font.pixelSize: 9; font.weight: Font.Bold }
                                     }

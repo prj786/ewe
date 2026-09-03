@@ -461,6 +461,27 @@ QtObject {
     // knows would silently delete everyone else's.
     property var prefsRaw: ({})
 
+    // ── Generated theme definitions (ewe-theme.conf -> `ewe-theme build`) ─────
+    // What the looks ARE, as data: {flock: {color, shape, voice}, ...}. Theme.qml
+    // reads its tokens out of here, so a colour is changed in ewe-theme.conf and
+    // the whole shell follows without touching QML. The values compiled into
+    // Theme.qml stay as the FALLBACK — a missing or unparsable file degrades to
+    // the shipped look rather than to a colourless shell.
+    property var themeTokens: ({})
+    property Process _tokenLoad: Process {
+        running: true
+        command: ["sh", "-c", "cat \"$HOME/.config/quickshell/theme-tokens.json\" 2>/dev/null"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                try {
+                    var j = JSON.parse(this.text)
+                    if (j && j.themes && typeof j.themes === "object") g.themeTokens = j.themes
+                } catch (e) {}
+            }
+        }
+    }
+    function reloadThemeTokens() { g._tokenLoad.running = false; g._tokenLoad.running = true }
+
     property Process _themeLoad: Process {
         running: true
         command: ["sh", "-c", "cat \"$HOME/.config/quickshell/user-theme.json\" 2>/dev/null"]

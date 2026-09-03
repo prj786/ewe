@@ -178,5 +178,17 @@ if command -v systemctl >/dev/null 2>&1; then
     fi
 fi
 
+# The looks, as data (ewe-theme.conf). Generate the shell's token file so
+# Theme.qml reads the CONF rather than only its compiled-in fallbacks. A user
+# copy at ~/.config/ewe/ewe-theme.conf wins over the shipped one, so editing
+# colours never means editing QML.
+if command -v ewe-theme >/dev/null 2>&1; then
+    ewe-theme build --css /dev/null >/dev/null 2>&1 \
+        && say "theme tokens generated (edit ~/.config/ewe/ewe-theme.conf, then: ewe-theme build)" \
+        || true
+elif [ -x "$DEST/bin/ewe-theme" ]; then
+    "$DEST/bin/ewe-theme" build --css /dev/null >/dev/null 2>&1 || true
+fi
+
 say "done — the refreshed shell loads at the next login (or: systemctl --user restart ewe.service)"
 say "first install on this machine? run $DEST/install.sh for the system side (greeter, services)."

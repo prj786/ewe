@@ -226,7 +226,7 @@ Scope {
             // QML propagates `visible` down from ancestors, so this stops the
             // animator whenever the chip/button holding it isn't drawn.
             RotationAnimator on rotation { from: 0; to: 360; duration: 850; loops: Animation.Infinite; running: sp.visible }
-            Rectangle { anchors.fill: parent; radius: width / 2; color: "transparent"; border.color: parent.ring; border.width: 2 }
+            Rectangle { anchors.fill: parent; radius: width / 2; color: "transparent"; border.color: parent.ring; border.width: Theme.border }
             Rectangle { width: parent.width * 0.3; height: width; radius: width / 2; color: parent.dot; anchors.horizontalCenter: parent.horizontalCenter; anchors.top: parent.top; anchors.topMargin: -1 }
         }
 
@@ -236,7 +236,7 @@ Scope {
             y: parent.height - height - 90
             width: 460; height: 460
             radius: Theme.radius; color: Theme.panel
-            border.color: Theme.stroke; border.width: 1
+            border.color: Theme.stroke; border.width: Theme.borderThin
             opacity: Globals.storeOpen ? 1 : 0
             scale: Globals.storeOpen ? 1 : 0.96
             transformOrigin: Item.BottomLeft
@@ -298,7 +298,7 @@ Scope {
                                 visible: instMa.containsMouse; z: 50
                                 anchors.top: parent.bottom; anchors.topMargin: 6; anchors.right: parent.right
                                 width: ttT.implicitWidth + 16; height: ttT.implicitHeight + 12
-                                radius: 8; color: Theme.elevated; border.color: Theme.stroke; border.width: 1
+                                radius: Theme.r(8); color: Theme.elevated; border.color: Theme.stroke; border.width: Theme.borderThin
                                 Text { id: ttT; anchors.centerIn: parent; text: (root.busyKind === "remove" ? "Removing " : "Installing ") + root.busyId + "…"; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: 10 }
                             }
                         }
@@ -332,7 +332,7 @@ Scope {
                             width: parent.width; height: 4; radius: 2; color: Theme.stroke; clip: true
                             Rectangle {
                                 id: fill
-                                height: parent.height; radius: 2; color: Theme.accent
+                                height: parent.height; radius: Theme.r(2); color: Theme.accent
                                 width: root.busyPct >= 0 ? Math.max(6, track.width * root.busyPct) : track.width * 0.32
                                 x: root.busyPct >= 0 ? 0 : indet.pos
                                 Behavior on width { NumberAnimation { duration: 200; easing.type: Theme.ease } }
@@ -353,7 +353,7 @@ Scope {
 
                 Rectangle {
                     width: parent.width; height: 36; radius: Theme.radiusInner
-                    color: Theme.bg; border.color: storeIn.activeFocus ? Theme.accent : Theme.stroke; border.width: 1
+                    color: Theme.bg; border.color: storeIn.activeFocus ? Theme.accent : Theme.stroke; border.width: Theme.borderThin
                     Text { anchors.left: parent.left; anchors.leftMargin: 11; anchors.verticalCenter: parent.verticalCenter; text: Theme.icSearch; font.family: Theme.fontIcons; font.pixelSize: 14; color: Theme.fgDim }
                     TextInput {
                         id: storeIn
@@ -376,7 +376,7 @@ Scope {
                 // ── error banner ──
                 Rectangle {
                     width: parent.width; visible: root.opError !== ""; radius: Theme.radiusInner
-                    height: visible ? errT.implicitHeight + 16 : 0; color: Qt.rgba(1, 0.27, 0.23, 0.12); border.color: Theme.danger; border.width: 1
+                    height: visible ? errT.implicitHeight + 16 : 0; color: Qt.rgba(1, 0.27, 0.23, 0.12); border.color: Theme.danger; border.width: Theme.borderThin
                     Text { id: errT; anchors.left: parent.left; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; anchors.margins: 8; text: root.opError; wrapMode: Text.WordWrap; color: Theme.danger; font.family: Theme.fontText; font.pixelSize: 10 }
                 }
 
@@ -416,7 +416,7 @@ Scope {
                                         anchors.verticalCenter: parent.verticalCenter; spacing: 1; width: 230
                                         Row { spacing: 6
                                             Text { text: modelData.name; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold; elide: Text.ElideRight; width: Math.min(implicitWidth, 150) }
-                                            Rectangle { anchors.verticalCenter: parent.verticalCenter; width: badge.implicitWidth + 10; height: 15; radius: 4; color: rowItem.aur ? Theme.accent : Theme.hover
+                                            Rectangle { anchors.verticalCenter: parent.verticalCenter; width: badge.implicitWidth + 10; height: 15; radius: Theme.r(4); color: rowItem.aur ? Theme.accent : Theme.hover
                                                 Text { id: badge; anchors.centerIn: parent; text: modelData.source; color: rowItem.aur ? Theme.accentText : Theme.fgSecondary; font.family: Theme.fontText; font.pixelSize: 9; font.weight: Font.DemiBold } }
                                             Text { anchors.verticalCenter: parent.verticalCenter; visible: rowItem.isInstalled; text: "installed"; color: Theme.accent; font.family: Theme.fontText; font.pixelSize: 9 }
                                         }
@@ -428,17 +428,17 @@ Scope {
                                     anchors.right: parent.right; anchors.rightMargin: 10; anchors.verticalCenter: parent.verticalCenter; spacing: 6
                                     // busy → spinner on this row's button
                                     Rectangle {
-                                        visible: rowItem.isBusy; width: 26; height: 26; radius: 7; color: Theme.hover
+                                        visible: rowItem.isBusy; width: 26; height: 26; radius: Theme.r(7); color: Theme.hover
                                         Spinner { anchors.centerIn: parent; width: 15; height: 15 }
                                     }
                                     // Install (hidden if already installed or busy)
-                                    Rectangle { visible: !rowItem.isInstalled && !rowItem.isBusy; width: il.implicitWidth + 16; height: 26; radius: 7
+                                    Rectangle { visible: !rowItem.isInstalled && !rowItem.isBusy; width: il.implicitWidth + 16; height: 26; radius: Theme.r(7)
                                         opacity: root.busyId === "" ? 1 : 0.4
                                         color: iMa.containsMouse && root.busyId === "" ? Theme.accent : Theme.hover
                                         Text { id: il; anchors.centerIn: parent; text: "Install"; color: (iMa.containsMouse && root.busyId === "") ? Theme.accentText : Theme.fg; font.family: Theme.fontText; font.pixelSize: 11; font.weight: Font.DemiBold }
                                         MouseArea { id: iMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.ask("install", modelData.id) } }
                                     // Remove (only if installed, hidden while busy)
-                                    Rectangle { visible: rowItem.isInstalled && !rowItem.isBusy; width: rl.implicitWidth + 14; height: 26; radius: 7
+                                    Rectangle { visible: rowItem.isInstalled && !rowItem.isBusy; width: rl.implicitWidth + 14; height: 26; radius: Theme.r(7)
                                         opacity: root.busyId === "" ? 1 : 0.4
                                         color: rMa.containsMouse && root.busyId === "" ? Theme.danger : Theme.hover
                                         Text { id: rl; anchors.centerIn: parent; text: "Remove"; color: (rMa.containsMouse && root.busyId === "") ? Theme.accentText : Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11; font.weight: Font.DemiBold }
@@ -457,7 +457,7 @@ Scope {
                 MouseArea { anchors.fill: parent; onClicked: root.cancelAsk() }   // click-outside cancels
                 Rectangle {
                     anchors.centerIn: parent; width: 320; height: pwCol.implicitHeight + 36
-                    radius: Theme.radius; color: Theme.panel; border.color: Theme.stroke; border.width: 1
+                    radius: Theme.radius; color: Theme.panel; border.color: Theme.stroke; border.width: Theme.borderThin
                     MouseArea { anchors.fill: parent }   // swallow clicks inside the card
                     Column {
                         id: pwCol
@@ -468,7 +468,7 @@ Scope {
                             text: (root.pendKind === "remove" ? "Remove " : "Install ") + (root.pendId || "") + (root.pendKind === "install" && root.helper ? "  (repos + AUR)" : "") }
                         Rectangle {
                             width: parent.width; height: 38; radius: Theme.radiusInner
-                            color: Theme.bg; border.color: pwIn.activeFocus ? Theme.accent : Theme.stroke; border.width: 1
+                            color: Theme.bg; border.color: pwIn.activeFocus ? Theme.accent : Theme.stroke; border.width: Theme.borderThin
                             TextInput {
                                 id: pwIn
                                 anchors.fill: parent; anchors.leftMargin: 12; anchors.rightMargin: 12; verticalAlignment: TextInput.AlignVCenter
@@ -482,10 +482,10 @@ Scope {
                         }
                         Row {
                             anchors.right: parent.right; spacing: 8
-                            Rectangle { width: cl.implicitWidth + 22; height: 30; radius: 8; color: clMa.containsMouse ? Theme.hover : Theme.elevated
+                            Rectangle { width: cl.implicitWidth + 22; height: 30; radius: Theme.r(8); color: clMa.containsMouse ? Theme.hover : Theme.elevated
                                 Text { id: cl; anchors.centerIn: parent; text: "Cancel"; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: 11; font.weight: Font.DemiBold }
                                 MouseArea { id: clMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.cancelAsk() } }
-                            Rectangle { width: ol.implicitWidth + 22; height: 30; radius: 8; opacity: root.pwText.length ? 1 : 0.4
+                            Rectangle { width: ol.implicitWidth + 22; height: 30; radius: Theme.r(8); opacity: root.pwText.length ? 1 : 0.4
                                 color: Theme.accent
                                 Text { id: ol; anchors.centerIn: parent; text: root.pendKind === "remove" ? "Remove" : "Install"; color: Theme.accentText; font.family: Theme.fontText; font.pixelSize: 11; font.weight: Font.DemiBold }
                                 MouseArea { id: okMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: { if (root.pwText.length) root.confirmAsk() } } }

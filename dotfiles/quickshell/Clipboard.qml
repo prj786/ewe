@@ -166,7 +166,7 @@ Scope {
                     Rectangle {
                         anchors.left: parent.left; anchors.right: clearBtn.left; anchors.rightMargin: 8
                         height: parent.height; radius: Theme.radiusInner
-                        color: Theme.bg; border.color: searchField.activeFocus ? Theme.accent : Theme.stroke; border.width: 1
+                        color: Theme.bg; border.color: searchField.activeFocus ? Theme.accent : Theme.stroke; border.width: Theme.borderThin
                         Text { anchors.left: parent.left; anchors.leftMargin: 10; anchors.verticalCenter: parent.verticalCenter; text: Theme.icSearch; font.family: Theme.fontIcons; font.pixelSize: 12; color: Theme.fgDim }
                         TextInput {
                             id: searchField
@@ -246,7 +246,7 @@ Scope {
                                 required property var modelData
                                 width: emojiGrid.width / 8
                                 height: width
-                                radius: 8
+                                radius: Theme.r(8)
                                 color: emMa.containsMouse ? Theme.hover : "transparent"
                                 Text { anchors.centerIn: parent; text: modelData; font.family: "Noto Color Emoji"; font.pixelSize: 22 }
                                 MouseArea { id: emMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.copyEmoji(modelData) }

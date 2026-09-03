@@ -125,7 +125,7 @@ Scope {
             y: Theme.barHeight + 4
             width: 230
             height: mainCol.implicitHeight + 10
-            radius: Theme.radius; color: Theme.panel; border.color: Theme.stroke; border.width: 1
+            radius: Theme.radius; color: Theme.panel; border.color: Theme.stroke; border.width: Theme.borderThin
             opacity: Globals.trayMenuOpen ? 1 : 0
             scale: Globals.trayMenuOpen ? 1 : 0.97
             transformOrigin: Item.Top
@@ -150,7 +150,7 @@ Scope {
             y: mainBox.y + root.subY
             width: 210
             height: subCol.implicitHeight + 10
-            radius: Theme.radius; color: Theme.panel; border.color: Theme.stroke; border.width: 1
+            radius: Theme.radius; color: Theme.panel; border.color: Theme.stroke; border.width: Theme.borderThin
             layer.enabled: true
             layer.effect: Elevation {}
             MouseArea { anchors.fill: parent }

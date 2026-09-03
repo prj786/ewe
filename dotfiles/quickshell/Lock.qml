@@ -165,7 +165,7 @@ Scope {
                         width: 300; height: 46; radius: Theme.radiusInner
                         color: Theme.elevated
                         border.color: root.err !== "" ? Theme.danger : Theme.accent
-                        border.width: 2
+                        border.width: Theme.border
                         Behavior on border.color { ColorAnimation { duration: 120 } }
 
                         // entered-password dots

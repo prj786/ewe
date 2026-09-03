@@ -128,7 +128,7 @@ Scope {
             y: parent.height - height - 90
             width: 400; height: 470
             radius: Theme.radius; color: Theme.panel
-            border.color: Theme.stroke; border.width: 1
+            border.color: Theme.stroke; border.width: Theme.borderThin
             Sheen { radius: parent.radius }
             opacity: Globals.placesOpen ? 1 : 0
             scale: Globals.placesOpen ? 1 : 0.96
@@ -155,7 +155,7 @@ Scope {
                 property string glyph: ""
                 property bool enabledState: true
                 signal act()
-                width: 28; height: 28; radius: 8
+                width: 28; height: 28; radius: Theme.r(8)
                 color: ibMa.containsMouse && enabledState ? Theme.hover : "transparent"
                 opacity: enabledState ? 1 : 0.35
                 Text { anchors.centerIn: parent; text: parent.glyph; font.family: Theme.fontIcons; font.pixelSize: 15; color: Theme.fg }
@@ -170,7 +170,7 @@ Scope {
                 property bool rIsDir: false
                 property bool rPinned: false
                 width: parent ? parent.width : 100
-                height: 34; radius: 8
+                height: 34; radius: Theme.r(8)
                 color: frMa.containsMouse ? Theme.hover : "transparent"
 
                 Row {
@@ -223,7 +223,7 @@ Scope {
                     Rectangle {
                         width: parent.width - 28*3 - 4*3; height: 30; radius: Theme.radiusInner
                         anchors.verticalCenter: parent.verticalCenter
-                        color: Theme.bg; border.color: Theme.stroke; border.width: 1
+                        color: Theme.bg; border.color: Theme.stroke; border.width: Theme.borderThin
                         Text { anchors.left: parent.left; anchors.right: parent.right; anchors.leftMargin: 10; anchors.rightMargin: 10; anchors.verticalCenter: parent.verticalCenter
                             text: root.tilde(root.cwd); color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; elide: Text.ElideLeft }
                     }

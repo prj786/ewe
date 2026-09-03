@@ -180,7 +180,7 @@ Scope {
             width: row.implicitWidth + 16
             radius: Theme.radius
             color: Theme.panel
-            border.color: Theme.stroke; border.width: 1
+            border.color: Theme.stroke; border.width: Theme.borderThin
             HoverHandler { id: dockHov }
             layer.enabled: true
             layer.effect: Elevation {}
@@ -239,7 +239,7 @@ Scope {
                     width: Math.max(win.cell, penRow.implicitWidth + 16)
                     color: win.penOpen ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.16)
                          : penMa.containsMouse ? Theme.hover : Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.07)
-                    border.color: win.penOpen ? Theme.accent : Theme.stroke; border.width: 1
+                    border.color: win.penOpen ? Theme.accent : Theme.stroke; border.width: Theme.borderThin
                     Behavior on color { ColorAnimation { duration: 150 } }
                     MouseArea { id: penMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
                         onClicked: Hyprland.dispatch('hl.dsp.workspace.toggle_special("pen")') }
@@ -258,7 +258,7 @@ Scope {
                             delegate: Rectangle {
                                 required property var modelData
                                 anchors.verticalCenter: parent.verticalCenter
-                                width: Math.round(34 * win.k); height: Math.round(30 * win.k); radius: 8
+                                width: Math.round(34 * win.k); height: Math.round(30 * win.k); radius: Theme.r(8)
                                 color: modelData.activated && win.penOpen ? Theme.accent : Theme.hover
                                 opacity: win.penOpen || penTileMa.containsMouse ? 1 : 0.75
                                 scale: penTileMa.containsMouse ? 1.1 : 1.0
@@ -300,7 +300,7 @@ Scope {
                         width: Math.max(win.cell, wsRow.implicitWidth + 16)
                         color: focused ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.16)
                              : wsMa.containsMouse ? Theme.hover : Theme.elevated
-                        border.color: focused ? Theme.accent : Theme.stroke; border.width: 1
+                        border.color: focused ? Theme.accent : Theme.stroke; border.width: Theme.borderThin
                         Behavior on color { ColorAnimation { duration: 150 } }
 
                         // background click → switch workspace (window tiles sit on top)
@@ -328,7 +328,7 @@ Scope {
                                 delegate: Rectangle {
                                     required property var modelData
                                     anchors.verticalCenter: parent.verticalCenter
-                                    width: Math.round(34 * win.k); height: Math.round(30 * win.k); radius: 8
+                                    width: Math.round(34 * win.k); height: Math.round(30 * win.k); radius: Theme.r(8)
                                     color: modelData.activated ? Theme.accent : Theme.hover
                                     Behavior on color { ColorAnimation { duration: 120 } }
                                     scale: tileMa.containsMouse ? 1.1 : 1.0

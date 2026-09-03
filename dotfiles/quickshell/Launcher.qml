@@ -212,7 +212,7 @@ Scope {
                 radius: Theme.radius
                 color: Theme.panel
                 border.color: Theme.stroke
-                border.width: 1
+                border.width: Theme.borderThin
                 layer.enabled: true
                 layer.effect: Elevation {}
                 Sheen { radius: parent.radius }

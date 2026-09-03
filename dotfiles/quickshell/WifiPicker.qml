@@ -167,7 +167,7 @@ Column {
         width: parent.width
         visible: root.wifiOn && root.wifiList.length > 0
         height: visible ? Math.min(wifiOptCol.implicitHeight + 10, 232) : 0
-        radius: 7; color: Theme.bg; border.color: Theme.stroke; border.width: 1
+        radius: Theme.r(7); color: Theme.bg; border.color: Theme.stroke; border.width: Theme.borderThin
         clip: true
         Flickable {
             anchors.fill: parent; anchors.margins: 5
@@ -182,7 +182,7 @@ Column {
                         width: wifiOptCol.width
                         Item {
                             width: parent.width; height: 30
-                            Rectangle { anchors.fill: parent; radius: 6; color: wMa.containsMouse ? Theme.hover : "transparent" }
+                            Rectangle { anchors.fill: parent; radius: Theme.r(6); color: wMa.containsMouse ? Theme.hover : "transparent" }
                             Text { anchors.left: parent.left; anchors.leftMargin: 8; anchors.verticalCenter: parent.verticalCenter; text: modelData.signal >= 66 ? Theme.icWifi : (modelData.signal >= 33 ? Theme.icWifiMed : Theme.icWifiLow); font.family: Theme.fontIcons; font.pixelSize: 13; color: modelData.active ? Theme.accent : Theme.fgDim }
                             Text { anchors.left: parent.left; anchors.leftMargin: 32; anchors.right: parent.right; anchors.rightMargin: 40; anchors.verticalCenter: parent.verticalCenter; text: modelData.ssid; color: modelData.active ? Theme.accent : Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: modelData.active ? Font.DemiBold : Font.Normal; elide: Text.ElideRight }
                             Text { anchors.right: parent.right; anchors.rightMargin: modelData.active ? 26 : 8; anchors.verticalCenter: parent.verticalCenter; visible: modelData.sec !== ""; text: Theme.icLock; font.family: Theme.fontIcons; font.pixelSize: 10; color: Theme.fgDim }
@@ -193,7 +193,7 @@ Column {
                         Item {
                             width: parent.width; height: visible ? 36 : 0; visible: root.pwTarget === modelData.ssid
                             Rectangle {
-                                anchors.fill: parent; anchors.topMargin: 2; anchors.bottomMargin: 4; radius: 7; color: Theme.bg; border.color: Theme.accent; border.width: 1
+                                anchors.fill: parent; anchors.topMargin: 2; anchors.bottomMargin: 4; radius: Theme.r(7); color: Theme.bg; border.color: Theme.accent; border.width: Theme.borderThin
                                 TextInput {
                                     id: pwInput
                                     anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 84; verticalAlignment: TextInput.AlignVCenter

@@ -20,10 +20,10 @@ Rectangle {
     readonly property bool hovering: drop.containsDrag
 
     implicitHeight: 52
-    radius: 8
+    radius: Theme.r(8)
     color: hovering ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.14) : Theme.bg
     border.color: (hovering || zoneMa.containsMouse) ? Theme.accent : Theme.stroke
-    border.width: 1
+    border.width: Theme.borderThin
     Behavior on color { ColorAnimation { duration: 120 } }
 
     readonly property var _imageExts: ["png", "jpg", "jpeg", "webp", "bmp", "gif"]

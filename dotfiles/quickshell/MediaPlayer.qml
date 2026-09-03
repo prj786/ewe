@@ -120,7 +120,7 @@ Scope {
             width: 340
             height: col.implicitHeight + 28
             radius: Theme.radius; color: Theme.panel
-            border.color: Theme.stroke; border.width: 1
+            border.color: Theme.stroke; border.width: Theme.borderThin
             Sheen { radius: parent.radius }
             opacity: Globals.mediaOpen ? 1 : 0
             scale: Globals.mediaOpen ? 1 : 0.96
@@ -147,7 +147,7 @@ Scope {
                     Rectangle {
                         visible: box.hasArt
                         anchors.verticalCenter: parent.verticalCenter
-                        width: 84; height: 84; radius: 10; color: Theme.hover; clip: true
+                        width: 84; height: 84; radius: Theme.r(10); color: Theme.hover; clip: true
                         Image {
                             anchors.fill: parent; fillMode: Image.PreserveAspectCrop
                             source: box.hasArt ? box.pl.trackArtUrl : ""

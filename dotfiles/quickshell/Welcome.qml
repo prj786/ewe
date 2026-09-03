@@ -183,7 +183,7 @@ Scope {
             height: body.implicitHeight + 40
             radius: Theme.radius
             color: Theme.panel
-            border.color: Theme.stroke; border.width: 1
+            border.color: Theme.stroke; border.width: Theme.borderThin
             layer.enabled: true
             layer.effect: Elevation {}
             Sheen { radius: parent.radius }
@@ -212,7 +212,7 @@ Scope {
                 property bool primary: false
                 property bool enabled: true
                 signal go()
-                width: bt.implicitWidth + 36; height: 40; radius: 12
+                width: bt.implicitWidth + 36; height: 40; radius: Theme.r(12)
                 opacity: enabled ? 1 : 0.45
                 color: primary ? (bMa.containsMouse ? Qt.lighter(Theme.accent, 1.12) : Theme.accent)
                                : (bMa.containsMouse ? Theme.hover : Theme.elevated)
@@ -228,7 +228,7 @@ Scope {
             }
             component Glyph: Rectangle {
                 property string ic: ""
-                width: 64; height: 64; radius: 20
+                width: 64; height: 64; radius: Theme.r(20)
                 color: Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.16)
                 Text { anchors.centerIn: parent; text: parent.ic; font.family: Theme.fontIcons; font.pixelSize: 30; color: Theme.accent }
             }
@@ -238,7 +238,7 @@ Scope {
                 property string text: ""
                 width: parent.width; spacing: 14
                 Rectangle {
-                    width: 44; height: 44; radius: 14
+                    width: 44; height: 44; radius: Theme.r(14)
                     color: Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.16)
                     Text { anchors.centerIn: parent; text: parent.parent.ic; font.family: Theme.fontIcons; font.pixelSize: 20; color: Theme.accent }
                 }
@@ -314,7 +314,7 @@ Scope {
                     Rectangle {
                         visible: root.updTail.length > 0
                         width: parent.width; height: updLog.implicitHeight + 16
-                        radius: Theme.radiusInner; color: Theme.elevated; border.color: root.updState === "failed" ? Theme.danger : Theme.stroke; border.width: 1
+                        radius: Theme.radiusInner; color: Theme.elevated; border.color: root.updState === "failed" ? Theme.danger : Theme.stroke; border.width: Theme.borderThin
                         Text {
                             id: updLog
                             anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 8
@@ -331,7 +331,7 @@ Scope {
                     width: parent.width; spacing: 16
                     Rectangle {
                         anchors.horizontalCenter: parent.horizontalCenter
-                        width: 64; height: 64; radius: 20
+                        width: 64; height: 64; radius: Theme.r(20)
                         color: Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.16)
                         Image { anchors.centerIn: parent; source: Qt.resolvedUrl("assets/nextcloud.svg"); width: 40; height: 40; sourceSize.width: 80; sourceSize.height: 80; fillMode: Image.PreserveAspectFit; opacity: 0.92 }
                     }
@@ -367,8 +367,8 @@ Scope {
                     // the server address — remembered between attempts
                     Rectangle {
                         visible: !Cloud.signedIn && Cloud.busy !== "signin"
-                        width: parent.width; height: 40; radius: 10
-                        color: Theme.bg; border.color: srvField.activeFocus ? Theme.accent : Theme.stroke; border.width: 1
+                        width: parent.width; height: 40; radius: Theme.r(10)
+                        color: Theme.bg; border.color: srvField.activeFocus ? Theme.accent : Theme.stroke; border.width: Theme.borderThin
                         TextInput {
                             id: srvField
                             anchors.fill: parent; anchors.leftMargin: 12; anchors.rightMargin: 12
@@ -455,7 +455,7 @@ Scope {
                     Rectangle {
                         visible: Cloud.restoreApps > 0
                         width: parent.width; height: appsRow.implicitHeight + 20
-                        radius: Theme.radiusInner; color: Theme.elevated; border.color: Theme.accent; border.width: 1
+                        radius: Theme.radiusInner; color: Theme.elevated; border.color: Theme.accent; border.width: Theme.borderThin
                         Row {
                             id: appsRow
                             anchors.left: parent.left; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; anchors.margins: 12; spacing: 12
@@ -475,7 +475,7 @@ Scope {
                     Rectangle {
                         visible: Cloud.signedIn && Cloud.lastSync === ""
                         width: parent.width; height: bkRow.implicitHeight + 20
-                        radius: Theme.radiusInner; color: Theme.elevated; border.color: Theme.stroke; border.width: 1
+                        radius: Theme.radiusInner; color: Theme.elevated; border.color: Theme.stroke; border.width: Theme.borderThin
                         Row {
                             id: bkRow
                             anchors.left: parent.left; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; anchors.margins: 12; spacing: 12

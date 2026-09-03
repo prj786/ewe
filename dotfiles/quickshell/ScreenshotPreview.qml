@@ -70,10 +70,10 @@ Scope {
                     width: 280; height: 180
                     x: depth * 8
                     y: depth * 8
-                    radius: 12
+                    radius: Theme.r(12)
                     color: Theme.bg
                     border.color: Theme.stroke
-                    border.width: 1
+                    border.width: Theme.borderThin
                 }
             }
 
@@ -81,10 +81,10 @@ Scope {
             Rectangle {
                 id: topCard
                 width: 280; height: 180
-                radius: 12
+                radius: Theme.r(12)
                 color: Theme.panel
                 border.color: Theme.stroke
-                border.width: 1
+                border.width: Theme.borderThin
                 clip: true
 
                 Image {
