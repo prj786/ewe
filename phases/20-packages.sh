@@ -71,7 +71,7 @@ phase_packages() {
         off=("${keep[@]}")
     fi
 
-    info "${#off[@]} official packages + ${#aur[@]} AUR packages + 3 first-party apps (Komble, ewe-settings, ewe-sync) + 2 source themes (Reversal, Mocu)"
+    info "${#off[@]} official packages + ${#aur[@]} AUR packages + 4 first-party apps (Komble, ewe-settings, ewe-sync, ewe-cast) + 2 source themes (Reversal, Mocu)"
     [ "${DEV:-0}" = "1" ] && info "+ ${#dev[@]} optional dev packages (--dev)"
     [ "${GAMING:-0}" = "1" ] && info "+ ${#game[@]} optional gaming packages (--gaming)"
     if [ "${DRY_RUN:-0}" = "1" ]; then
@@ -80,7 +80,7 @@ phase_packages() {
         [ "${DEV:-0}" = "1" ] && printf '%s   dev:%s    %s\n' "$C_DIM" "$C_0" "${dev[*]}"
         [ "${GAMING:-0}" = "1" ] && printf '%s   gaming:%s %s\n' "$C_DIM" "$C_0" "${game[*]}"
         printf '%s   source:%s Reversal-icon-theme (all variants), mocu-xcursor → /usr/share/icons\n' "$C_DIM" "$C_0"
-        printf '%s   releases:%s komble-arch (the software manager), ewe-settings (the Settings app), ewe-sync (the account app) — prebuilt GitHub release, source-build fallback\n' "$C_DIM" "$C_0"
+        printf '%s   releases:%s komble-arch (the software manager), ewe-settings (the Settings app), ewe-sync (the account app), ewe-cast (the casting daemon) — prebuilt GitHub release, source-build fallback\n' "$C_DIM" "$C_0"
         printf '%s   patched:%s %s — official packages rebuilt with not-yet-released upstream fixes (packages/patched/*, self-retiring)\n' "$C_DIM" "$C_0" "$(ls "$DOTREPO/packages/patched" 2>/dev/null | tr '\n' ' ')"
         return 0
     fi
@@ -143,6 +143,10 @@ phase_packages() {
     # pacman path; this line is what covers the get.sh path, where nothing
     # resolves that dependency for us.
     install_release_pkg ewe-sync prj786/ewe-sync https://github.com/prj786/ewe-sync.git
+    # ewe-cast — the casting daemon (RFC-004). Headless on purpose: the shell's
+    # Cast card is the UI. Like the three above it is a dependency of the `ewe`
+    # PACKAGE, so pacman covers it; this covers the get.sh path.
+    install_release_pkg ewe-cast prj786/ewe-cast https://github.com/prj786/ewe-cast.git
     _install_themes
     ok "package phase done"
 }

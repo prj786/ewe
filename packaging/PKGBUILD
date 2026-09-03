@@ -20,7 +20,7 @@ pkgname=ewe
 # step with VERSION rather than the value that ships — which is why it had
 # drifted to 0.9.4. pkgrel is NOT rewritten, so it matters: it resets to 1 here
 # because pkgver moved, and 0.11.0-1 sorts above the published 0.10.2-2.
-pkgver=0.11.1
+pkgver=0.11.2
 pkgrel=1
 pkgdesc="ewe — a clean, dark Hyprland + Quickshell desktop environment"
 arch=('any')
