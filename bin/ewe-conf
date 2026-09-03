@@ -1212,10 +1212,47 @@ def sync_cfg(doc=None):
     to a Nextcloud; the shell shows the migration note."""
     s = (doc if doc is not None else load()).get("sync") or {}
     prov = str(s.get("provider") or "google").lower()
+    server, user = str(s.get("server") or ""), str(s.get("user") or "")
+    if prov == "nextcloud" and not (server and user):
+        # signed in from the terminal (no UI to write these): the broker's
+        # record is the identity, so sync-status names the server it uses
+        try:
+            with open(CLOUD_META) as f:
+                meta = json.load(f)
+            server = server or str(meta.get("server") or "")
+            user = user or str(meta.get("login_name") or meta.get("user") or "")
+        except (OSError, ValueError, AttributeError):
+            pass
     return {"provider": prov if prov in PROVIDERS else "",
-            "server": str(s.get("server") or ""), "user": str(s.get("user") or ""),
+            "server": server, "user": user,
             "folder": str(s.get("folder") or "ewe").strip("/") or "ewe",
             "enabled": bool(s.get("enabled"))}
+
+
+def _adopt_sync_identity(cfg):
+    """After a successful push, record who we are in the file itself, so a
+    machine that signed in from the terminal still names its account, and a
+    restored file says which server it came from."""
+    if cfg.get("provider") != "nextcloud":
+        return
+    try:
+        with open(CLOUD_META) as f:
+            meta = json.load(f)
+    except (OSError, ValueError):
+        return
+    server = str(meta.get("server") or "")
+    user = str(meta.get("login_name") or meta.get("user") or "")
+    if not (server and user):
+        return
+    doc = load()
+    node, last = dig(doc, "sync", create=True)
+    sec = node.get(last) if isinstance(node.get(last), dict) else {}
+    if sec.get("server") == server and sec.get("user") == user:
+        return
+    sec["server"], sec["user"] = server, user
+    sec.setdefault("folder", cfg.get("folder") or "ewe")
+    node[last] = sec
+    save(doc)
 
 
 class _Nc:
@@ -1501,6 +1538,7 @@ def do_push(quiet=False, force=False):
     if err:
         return {"ok": False, "error": err, "remote": remote, "provider": cfg["provider"]}
     st = _sync_record(res["id"], res["modified"], res["machine"], provider=cfg["provider"])
+    _adopt_sync_identity(cfg)
     with open(PUSH_STAMP, "w") as f:
         f.write(str(int(__import__("time").time())))
     return {"ok": True, "id": res["id"], "bytes": len(content), "provider": cfg["provider"],

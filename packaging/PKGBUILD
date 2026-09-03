@@ -71,7 +71,14 @@ package() {
     install -Dm755 "$srcdir/ewe-setup" "$pkgdir/usr/bin/ewe-setup"
     # RFC-001: the ONE writer of the ONE file
     install -Dm755 bin/ewe-conf "$pkgdir/usr/bin/ewe-conf"
-    # RFC-002: the ONE Google identity for every ewe app
+    # RFC-005: the ONE account — Nextcloud identity, its calendar, any inbox,
+    # and the account as a folder. A tool that is not installed here does not
+    # exist on an installed system (the publish assertion caught exactly that).
+    install -Dm755 bin/ewe-cloud "$pkgdir/usr/bin/ewe-cloud"
+    install -Dm755 bin/ewe-caldav "$pkgdir/usr/bin/ewe-caldav"
+    install -Dm755 bin/ewe-mail "$pkgdir/usr/bin/ewe-mail"
+    install -Dm755 bin/ewe-files "$pkgdir/usr/bin/ewe-files"
+    # RFC-002, now optional: Google mail + Drive with the user's own client
     install -Dm755 bin/ewe-auth "$pkgdir/usr/bin/ewe-auth"
     install -Dm755 bin/ewe-drive "$pkgdir/usr/bin/ewe-drive"
 }
