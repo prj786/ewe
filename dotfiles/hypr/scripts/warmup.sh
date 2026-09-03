@@ -39,7 +39,7 @@ for f in \
     /usr/lib/firefox/libxul.so /usr/lib/firefox/firefox \
     /usr/lib/libwebkitgtk-6.0.so* /usr/lib/libwebkit2gtk-4.1.so* \
     /usr/bin/nemo /usr/lib/libnemo-private.so* \
-    /usr/bin/komble /usr/bin/ewe-settings \
+    /usr/bin/komble /usr/bin/ewe-settings /usr/bin/ewe-sync \
     /usr/lib/libgtk-3.so* /usr/lib/libgtk-4.so* /usr/lib/libglib-2.0.so* \
     /usr/lib/libQt6Core.so* /usr/lib/libQt6Gui.so* /usr/lib/libQt6Qml.so* \
     /usr/bin/kitty /usr/bin/zathura /usr/bin/imv /usr/bin/galculator \

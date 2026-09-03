@@ -71,7 +71,7 @@ phase_packages() {
         off=("${keep[@]}")
     fi
 
-    info "${#off[@]} official packages + ${#aur[@]} AUR packages + 2 first-party apps (Komble, ewe-settings) + 2 source themes (Reversal, Mocu)"
+    info "${#off[@]} official packages + ${#aur[@]} AUR packages + 3 first-party apps (Komble, ewe-settings, ewe-sync) + 2 source themes (Reversal, Mocu)"
     [ "${DEV:-0}" = "1" ] && info "+ ${#dev[@]} optional dev packages (--dev)"
     [ "${GAMING:-0}" = "1" ] && info "+ ${#game[@]} optional gaming packages (--gaming)"
     if [ "${DRY_RUN:-0}" = "1" ]; then
@@ -80,7 +80,7 @@ phase_packages() {
         [ "${DEV:-0}" = "1" ] && printf '%s   dev:%s    %s\n' "$C_DIM" "$C_0" "${dev[*]}"
         [ "${GAMING:-0}" = "1" ] && printf '%s   gaming:%s %s\n' "$C_DIM" "$C_0" "${game[*]}"
         printf '%s   source:%s Reversal-icon-theme (all variants), mocu-xcursor → /usr/share/icons\n' "$C_DIM" "$C_0"
-        printf '%s   releases:%s komble-arch (the software manager), ewe-settings (the Settings app) — prebuilt GitHub release, source-build fallback\n' "$C_DIM" "$C_0"
+        printf '%s   releases:%s komble-arch (the software manager), ewe-settings (the Settings app), ewe-sync (the account app) — prebuilt GitHub release, source-build fallback\n' "$C_DIM" "$C_0"
         printf '%s   patched:%s %s — official packages rebuilt with not-yet-released upstream fixes (packages/patched/*, self-retiring)\n' "$C_DIM" "$C_0" "$(ls "$DOTREPO/packages/patched" 2>/dev/null | tr '\n' ' ')"
         return 0
     fi
@@ -136,6 +136,13 @@ phase_packages() {
         sudo_run pacman -R --noconfirm hypr-shell-settings
     fi
     install_release_pkg ewe-settings prj786/ewe-settings https://github.com/prj786/ewe-settings.git
+    # ewe-sync — THE account app (RFC-006): the Nextcloud account, the one
+    # file between machines, the machine registry, folder sync, and the IMAP
+    # and Google accounts. A first-party app exactly like the two above, so it
+    # installs the same way. The `ewe` PACKAGE depends on it, which covers the
+    # pacman path; this line is what covers the get.sh path, where nothing
+    # resolves that dependency for us.
+    install_release_pkg ewe-sync prj786/ewe-sync https://github.com/prj786/ewe-sync.git
     _install_themes
     ok "package phase done"
 }

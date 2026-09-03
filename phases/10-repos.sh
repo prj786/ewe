@@ -3,7 +3,7 @@
 # libs + Steam), and bootstrap an AUR helper. All idempotent.
 
 # The [ewe] repo (github.com/prj786/ewe-repo, rolling release tag) carries the
-# ewe/komble-arch/ewe-settings packages plus prebuilt copies of the aur.list
+# ewe/komble-arch/ewe-settings/ewe-sync packages plus prebuilt copies of the aur.list
 # packages — this is what makes plain `pacman -Syu` update the whole DE.
 _enable_ewe_repo() {
     if grep -q '^\[ewe\]' /etc/pacman.conf 2>/dev/null; then
