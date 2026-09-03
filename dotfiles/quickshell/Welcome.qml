@@ -19,6 +19,11 @@ import Quickshell.Wayland
 // to reach the sign-in step), the keyring prompt and the browser it had just
 // asked for. It now carries its own network step and steps aside while a
 // sign-in is in flight.
+// 2026-09-03: a floating card, not a sheet. The dimmed backdrop is gone and the
+// input region is the card alone (`mask`), so the desktop behind stays live
+// and nothing else on screen is swallowed. The card's height also no longer
+// animates between steps — a centred card grows from both edges at once, so
+// every step visibly walked up and down.
 Scope {
     id: root
 
@@ -154,19 +159,13 @@ Scope {
         WlrLayershell.layer: WlrLayer.Overlay
         WlrLayershell.keyboardFocus: (root.open && !root.yielding) ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
         anchors { top: true; bottom: true; left: true; right: true }
+        // a floating card, not a sheet: only the card takes input, so the
+        // desktop behind it stays live (and the keyring prompt stays clickable)
+        mask: Region { item: card }
 
         property bool held: false
         Timer { id: closeTimer; interval: Math.max(1, Theme.durSlow + 60); onTriggered: win.held = false }
         Connections { target: root; function onOpenChanged() { if (root.open) { closeTimer.stop(); win.held = true; keys.forceActiveFocus() } else closeTimer.restart() } }
-
-        // dimmed desktop behind the card
-        Rectangle {
-            anchors.fill: parent
-            color: "#000000"
-            opacity: root.open ? 0.62 : 0
-            Behavior on opacity { NumberAnimation { duration: Theme.durSlow; easing.type: Theme.ease } }
-            MouseArea { anchors.fill: parent }   // swallow — the card is the only way out
-        }
 
         Item {
             id: keys
@@ -192,7 +191,6 @@ Scope {
             scale: root.open ? 1 : 0.94
             Behavior on opacity { NumberAnimation { duration: Theme.durSlow; easing.type: Theme.ease } }
             Behavior on scale { NumberAnimation { duration: Theme.durSlow; easing.type: Theme.ease } }
-            Behavior on height { NumberAnimation { duration: Theme.durBase; easing.type: Theme.ease } }
             MouseArea { anchors.fill: parent }
 
             // ── shared bits ──

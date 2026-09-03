@@ -55,49 +55,71 @@ What the 2026-08-21 investigation found, in the order it bit:
 Run `~/.config/hypr/scripts/cast-check.sh` any time — it checks all of the
 above and prints the fix for each.
 
-## Google sign-in: no keyring prompt, "keyring not showing up", no browser
+## Sign-in: no keyring prompt, "keyring not showing up"
 
-What the first bare-metal install (2026-09-02) taught, and what 0.9.16-2
-changed. The refresh token lives in the Secret Service keyring
-(`gnome-keyring`), which PAM is supposed to create and unlock with your
-login password at the greeter. Three things can go wrong:
+The account credential — the Nextcloud app password (RFC-005), and Google's
+refresh token when that optional client is configured — lives in the Secret
+Service keyring (`gnome-keyring`), which PAM creates and unlocks with your
+login password at the greeter. When that works you never see a prompt at all.
 
-1. **No prompt ever appears / the sign-in seems to hang.** Before 0.9.16-2
-   the first-run Welcome overlay sat above every other window — including
-   the keyring prompt and the browser it had just opened — and the sign-in
-   helper killed its own keyring prompt after 10 s. Now Welcome steps aside
-   while a sign-in runs, and the helper waits as long as the login does.
-   If you are on an older shell: press **Esc** on Welcome (it can be
-   reopened with `qs ipc call welcome toggle`), then sign in from
-   Settings → User.
-2. **A "Choose password for new keyring" or "Unlock keyring" prompt
-   appears.** PAM did not create/unlock a login keyring for this account.
-   Answer it with your **login password** — that is what lets it unlock by
-   itself at every later login. Check the PAM side with
-   `grep gkr-pam <(journalctl -b _COMM=greetd)` (expected: *"gnome-keyring-daemon
-   started properly and unlocked keyring"*) and `cat /etc/pam.d/greetd`
-   (it must carry the `pam_gnome_keyring.so` auth + session lines from
-   `system/pam.d/greetd`; `install.sh` phase 30 re-installs it).
-3. **Wrong keyring password, or the shell says "signed out" at every
-   login.** A keyring created with a password other than your login
-   password stays locked until you type it, and "Unlock keyring" rejects
-   the password you know. Replace it: **Reset the keyring** in Welcome or
-   Settings → User (it appears whenever the keyring is locked or refused
-   the token), then **Log out now**. PAM recreates the login keyring with
-   your login password at the next login; sign in again afterwards. The
-   old files are kept in `~/.local/share/keyrings.bak.<timestamp>`. The
-   same thing by hand:
+**The cause, found 2026-09-03.** Arch's systemd preset *enables*
+`gnome-keyring-daemon.socket`. That unit socket-activates the daemon at login
+with **no password**, takes `org.freedesktop.secrets` before
+`pam_gnome_keyring` can hand its own daemon your login password, and then
+restarts it mid-login. One unit produced every reported symptom at once: no
+`login` keyring is ever created (so you meet a *"Choose password for new
+keyring"* prompt for a **Default keyring** instead of a silent unlock),
+several prompts stack up unanswered behind whatever is on screen, and the
+first sign-in dies with `keyring-timeout`. In the journal:
 
-   ```sh
-   ewe-auth keyring-reset      # or: mv ~/.local/share/keyrings{,.bak}
-   # log out and back in, then Settings → User → Sign in with Google
-   ```
+```text
+sign-in failed: keyring-timeout
+Stopping GNOME Keyring daemon... / Started GNOME Keyring daemon.
+```
+
+four seconds apart, at login.
+
+`install.sh` phase 30 masks both `gnome-keyring-daemon.socket` and
+`gnome-keyring-daemon.service` under `/etc/systemd/user`, leaving PAM as the
+only starter; `ewe-setup` applies the same mask at user level, so a machine
+installed before this heals itself at the next login without root. D-Bus
+activation is left alone on purpose — its `Exec` is
+`gnome-keyring-daemon --start`, which attaches to the PAM-started daemon
+instead of spawning a second, password-less one.
+
+Check it:
+
+```sh
+systemctl --user is-enabled gnome-keyring-daemon.socket   # expect: masked
+ls ~/.local/share/keyrings/login.keyring                  # expect: present
+```
+
+**You already have a "Default keyring".** The mask stops a new machine from
+ever getting one, but it cannot re-key the one you have: that keyring was
+created with a password PAM does not know, so it stays locked until you type
+it. Clear it and let PAM start over:
+
+```sh
+ewe-auth keyring-reset      # or: mv ~/.local/share/keyrings{,.bak}
+# log out and back in — PAM now creates login.keyring with your login
+# password — then sign in again from ewe-sync.
+```
+
+The old files are kept in `~/.local/share/keyrings.bak.<timestamp>`.
+
+**A prompt appears anyway.** Then it is a genuine request from some app, not
+a stuck one — answer it with your **login password**. It is floated, centred
+and kept small by a window rule (`dotfiles/hypr/hyprland.lua`; gcr's GTK
+dialog has its own minimum width and will not shrink much past 400 px).
+Before 0.9.16-2 the first-run Welcome overlay sat above every other window,
+the keyring prompt included; Welcome now steps aside while a sign-in runs
+and takes input only on its own card.
 
 **The browser never opened** (no tab, "Waiting for the browser…"): the
 helper now tries `xdg-open`, then the shipped browser by desktop id, then by
 binary, and reports `browser-failed` instead of waiting five minutes. The
 sign-in page's link is always available — **Open the sign-in page** /
-**Copy the link** in Welcome and in Settings → User — and is also written to
+**Copy the link** in Welcome and in ewe-sync — and is also written to
 `$XDG_RUNTIME_DIR/ewe-auth-consent-url` for the length of the attempt.
 Command-line tools that open a browser (`gh auth login`, Python's
 `webbrowser`) use `$BROWSER`, which the session sets to `gio launch` of the

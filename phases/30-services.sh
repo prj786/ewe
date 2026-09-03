@@ -152,6 +152,41 @@ phase_services() {
         else
             info "gnome-keyring not present — skipped greetd PAM keyring integration."
         fi
+
+        # ── PAM owns the keyring daemon; systemd must not race it ──────────
+        # (2026-09-03) Arch's preset ENABLES gnome-keyring-daemon.socket, so
+        # systemd socket-activated the daemon at login with no password,
+        # claimed org.freedesktop.secrets before pam_gnome_keyring could hand
+        # its own daemon the login password, and then restarted it mid-login,
+        # tearing down every prompt in flight. That single unit produced all
+        # three field symptoms at once: no `login` keyring is ever created (so
+        # the user meets a "Default keyring" prompt instead of a silent
+        # unlock), prompts stack up unanswered, and the shell's first sign-in
+        # dies with `keyring-timeout`. The journal of the 0.10.1 machine:
+        #     sign-in failed: keyring-timeout
+        #     Stopping GNOME Keyring daemon... / Started GNOME Keyring daemon.
+        # four seconds apart, at login.
+        #
+        # Masking both units leaves PAM as the only starter. D-Bus activation
+        # stays as the fallback and is SAFE to keep: its Exec is
+        # `gnome-keyring-daemon --start`, which attaches to the PAM-started
+        # daemon over the control socket rather than spawning a second,
+        # password-less one. (It has no SystemdService= key, so masking the
+        # systemd units does not disable it.)
+        if pkg_present gnome-keyring; then
+            _kr_masked=1
+            sudo_run install -d -m 755 /etc/systemd/user
+            for _u in gnome-keyring-daemon.socket gnome-keyring-daemon.service; do
+                if [ "$(readlink -f "/etc/systemd/user/$_u" 2>/dev/null)" = /dev/null ]; then continue; fi
+                sudo_run ln -sf /dev/null "/etc/systemd/user/$_u" || _kr_masked=0
+            done
+            if [ "$_kr_masked" = 1 ]; then
+                ok "masked gnome-keyring systemd user units (PAM unlocks the login keyring)"
+            else
+                warn "could not mask the gnome-keyring systemd user units — the login keyring may prompt at every login"
+            fi
+            unset _kr_masked _u
+        fi
         # Only enable greetd if a greeter binary exists (qs is primary, regreet is
         # the fallback). Otherwise cage's "Failed to spawn client" loops a black
         # screen — refuse to enable and say how to finish.

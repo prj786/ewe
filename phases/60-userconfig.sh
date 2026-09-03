@@ -23,12 +23,18 @@ phase_userconfig() {
             done
         fi
     fi
-    # Zed's shipped desktop entry declares only text/plain; our override (same
-    # name, user apps dir wins) carries the full text/code MimeType list so
-    # "Open With" offers Zed for JSON/YAML/Rust/… too.
-    if [ -r "$DOTREPO/system/applications/dev.zed.Zed.desktop" ]; then
+    # Shipped desktop-entry overrides. Same id as the package's own entry, and
+    # the user apps dir wins over /usr/share/applications, so each file here
+    # replaces upstream's outright. Two live today: Zed (upstream declares only
+    # text/plain; ours carries the full text/code MimeType list) and the
+    # Nextcloud client (hidden — ewe-sync is the sync app; see the file).
+    if [ -d "$DOTREPO/system/applications" ]; then
         run mkdir -p "$HOME/.local/share/applications"
-        run cp -f "$DOTREPO/system/applications/dev.zed.Zed.desktop" "$HOME/.local/share/applications/dev.zed.Zed.desktop"
+        for _d in "$DOTREPO/system/applications/"*.desktop; do
+            [ -r "$_d" ] || continue
+            run cp -f "$_d" "$HOME/.local/share/applications/$(basename "$_d")"
+        done
+        unset _d
         run update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
     fi
 

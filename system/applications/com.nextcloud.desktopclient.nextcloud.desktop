@@ -1,0 +1,20 @@
+[Desktop Entry]
+# ewe override of nextcloud-client's shipped entry (same id — the user apps
+# dir wins over /usr/share/applications).
+#
+# RFC-006: ewe-sync is the account app and the ONLY sync surface a user sees.
+# We still depend on nextcloud-client, but only for `nextcloudcmd` — the
+# headless two-way engine ewe-sync drives per folder pair. The package's GUI
+# (/usr/bin/nextcloud) is a second, competing tray icon, account wizard and
+# sync engine; shipping it visibly means two apps claim the same job and two
+# daemons can sync the same folders. So the launcher entry is hidden here
+# rather than the package dropped, which would take nextcloudcmd with it.
+#
+# Hidden=true is the XDG "the user deleted this entry" flag: it removes the
+# entry everywhere (launcher, Komble, "Open With"), while /usr/bin/nextcloud
+# stays on PATH for anyone who deliberately wants it.
+Type=Application
+Name=Nextcloud Desktop
+NoDisplay=true
+Hidden=true
+Exec=nextcloud

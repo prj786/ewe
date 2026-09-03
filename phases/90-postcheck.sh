@@ -91,10 +91,18 @@ phase_postcheck() {
     # keyring, so the first Google sign-in popped a "new keyring" prompt
     # nobody could see. Notes, not failures — a first login before any
     # keyring exists is legitimate; the point is to SAY what will happen.
-    if [ -r "$HOME/.local/share/keyrings/login.keyring" ]; then
-        _note "keyring: login keyring present (PAM unlocks it at the greeter)"
+    # The socket unit is the whole bug (2026-09-03): while it is live, systemd
+    # starts a password-less daemon at login and PAM never gets to create the
+    # login keyring. Check the CAUSE, not only the symptom.
+    if [ "$(readlink -f /etc/systemd/user/gnome-keyring-daemon.socket 2>/dev/null)" = /dev/null ]; then
+        _note "keyring: gnome-keyring socket masked — PAM owns the daemon"
     else
-        _note "keyring: no login keyring yet — the first Google sign-in will ask you to create one; use your LOGIN password (docs/TROUBLESHOOTING.md → Google sign-in)"
+        _note "keyring: gnome-keyring-daemon.socket is NOT masked — systemd will race PAM and the login keyring will never be created; re-run install.sh"
+    fi
+    if [ -r "$HOME/.local/share/keyrings/login.keyring" ]; then
+        _note "keyring: login keyring present (PAM unlocks it at the greeter — no prompt)"
+    else
+        _note "keyring: no login keyring yet — it is created and unlocked by your login password at the next sign-in (docs/TROUBLESHOOTING.md → keyring)"
     fi
     if command -v secret-tool >/dev/null 2>&1; then
         timeout 5 secret-tool lookup service ewe account google >/dev/null 2>&1

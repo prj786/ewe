@@ -59,6 +59,12 @@ machines" and which one saved the backup.
 ewe-sync (Tauri v2 + Svelte 5, tray via SNI like Komble)
 ├─ Account      sign in (server URL → browser), who/quota/server, sign out,
 │               "Create an account" (provider links), keyring trouble → reset
+├─ Mail         any IMAP mailbox (ewe-mail): add / change / remove, check
+│               unread. The new-mail NOTIFICATION switch stays in Settings —
+│               it is a preference about this desktop, not about the account
+├─ Google       the optional extra (ewe-auth): where your own
+│               oauth-client.json goes and whether it parses, connect /
+│               disconnect, Gmail + Drive state. ewe ships no client
 ├─ This machine ewe.conf: last synced, backup saved by, Sync now / Back up
 │               now / Restore…; auto-sync toggle (= [sync].enabled)
 ├─ Machines     the registry: name, last seen, ewe version, apps; "Restore
@@ -71,7 +77,8 @@ ewe-sync (Tauri v2 + Svelte 5, tray via SNI like Komble)
 └─ tray         icon = state (idle / syncing / conflict / offline / signed
                 out), themed menu: Sync now · Pause · Open ewe-sync · Quit
 Backends: ewe-cloud (identity), ewe-conf (the one file), nextcloudcmd
-(folders), secret-tool (keyring). Rust side spawns argv-only, never a shell.
+(folders), ewe-mail (IMAP), ewe-auth (Google), secret-tool (keyring). Rust
+side spawns argv-only, never a shell; the IMAP password goes on stdin.
 Privileges: none — everything is the user's own files.
 ```
 
@@ -93,7 +100,9 @@ exclude = [".git", "node_modules"]
 | today | after ewe-sync |
 |---|---|
 | Welcome → Sign in to Nextcloud (shell) | stays in the shell (it is one field + the browser); on success the shell writes `[sync]` and ewe-sync picks it up |
-| Settings → Account card (shell + ewe-settings) | a launcher: who is signed in + **Manage in ewe-sync**; Google (optional) card stays in Settings (mail/Drive client file) |
+| Settings → Account card (shell + ewe-settings) | a launcher: who is signed in + **Manage in ewe-sync** |
+| Settings → Mail (add/change/remove IMAP) | moves to ewe-sync → Mail (2026-09-03); Settings keeps the read-out and the notification switch |
+| Settings → Google card (connect/disconnect, client-file note) | moves to ewe-sync → Google (2026-09-03); Settings keeps the read-out |
 | Komble For You / sync buttons | gone (RFC-005 phase 4); For You reads the manifest |
 | Google.qml sync/restore | gone (RFC-005 phase 2) |
 | ewe-files (rclone mount) | retired once ewe-sync's folder sync ships |

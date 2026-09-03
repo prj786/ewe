@@ -148,7 +148,7 @@ ewe's account is **your own Nextcloud** — a server you run, or a hosted
 account from a provider such as Murena, Disroot or Infomaniak
 ([RFC-005](RFC-005-nextcloud-account.md)). Nothing about it is baked into
 ewe: no project client, no vendor console, nobody's verification. One
-sign-in (Welcome on the first login, or Settings → Account) and the desktop
+sign-in (Welcome on the first login, or ewe-sync afterwards) and the desktop
 lights up around it:
 
 | what | how |
@@ -157,7 +157,7 @@ lights up around it:
 | **restore** | a machine that signs in and finds a backup is offered it, out loud; your apps line up in Komble → For you |
 | **files** | the account mounted at `~/Nextcloud` (Files → sidebar); full folder sync, your machines and a tray are the account app, ewe-sync (below) |
 | **calendar** | CalDAV — the Control Center's calendar and reminders |
-| **mail** | any IMAP account (Settings app → Account → Mail): unread badge, latest mail, new-mail notifications |
+| **mail** | any IMAP account (ewe-sync → Mail adds it; Settings → User shows it and its notification switch): unread badge, latest mail, new-mail notifications |
 
 Signing in is Nextcloud's own **Login Flow v2**: the browser opens your
 server's page, you sign in there (password, 2FA, SSO — whatever your server
@@ -177,9 +177,10 @@ enabled by `ewe-setup`); Welcome and Settings → Account open it with
 **Open ewe-sync** / **Manage in ewe-sync**. Komble and the Settings app keep
 no sync buttons — they only write the one file, ewe-sync moves it.
 
-If the browser never opened, Welcome and Settings offer **Open the sign-in
-page / Copy the link**. If the keyring rejects your login password, **Reset
-the keyring** then **Log out now** — PAM recreates it at the next login
+If the browser never opened, Welcome and ewe-sync offer **Open the sign-in
+page / Copy the link**. The keyring should never prompt at all — PAM creates
+and unlocks it with your login password — but a machine carrying an older
+"Default keyring" needs one `ewe-auth keyring-reset` and a re-login first
 ([Troubleshooting](TROUBLESHOOTING.md)).
 
 ## Google (optional)
@@ -188,8 +189,8 @@ Google is an extra, not the account: **Gmail** in the Control Center and
 **Google Drive** as `~/Google Drive`. ewe ships **no Google client** — to use
 it, create your own OAuth client of type *Desktop app* (Gmail + Drive APIs)
 and save it as `~/.config/ewe/oauth-client.json`
-([GOOGLE-CLIENT.md](GOOGLE-CLIENT.md)); Settings → Account then shows
-**Connect Google**. A personal client needs no Google verification — the
+([GOOGLE-CLIENT.md](GOOGLE-CLIENT.md)); **ewe-sync → Google** says whether
+the file parses and connects the account. A personal client needs no Google verification — the
 consent screen shows a warning you click through once. Settings sync never
 uses Google; an IMAP mail account, when set up, takes precedence over Gmail
 in the Control Center.

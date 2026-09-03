@@ -17,10 +17,26 @@ Restart=on-failure
 RestartSec=1
 Slice=session.slice
 # Apps launched from the shell (launcher, dock, xdg-open) inherit the shell's
-# cgroup, so a wedged GUI child sits in ewe.service and systemd waits the full
-# 90 s default for it on the way down — observed 2026-08-22: a stuck
-# `jetbrainsd` added 90 s to a poweroff ("State 'stop-sigterm' timed out").
-# The shell itself has nothing to flush on exit, so cut the wait short.
+# cgroup, so ewe.service's cgroup holds the user's whole desktop — browsers,
+# editors, everything.
+#
+# KillMode=process is therefore not an optimisation, it is a correctness fix
+# (2026-09-03). With the default `control-group`, EVERY restart of the shell
+# SIGTERMs (then SIGKILLs) that entire cgroup. A crashed shell did not just
+# come back — it took the user's apps with it:
+#     ewe.service: Main process exited, code=exited, status=255/EXCEPTION
+#     ewe.service: State 'stop-sigterm' timed out. Killing.
+#     ewe.service: Killing process 100982 (jetbrainsd) with signal SIGKILL.
+# with browser and Slack coredumps in the same second. Restart=on-failure plus
+# a shared cgroup means one shell bug is a session-wide data-loss event.
+# `process` scopes stop/restart to quickshell itself and leaves the apps alone;
+# logind still reaps them at logout, when the session scope goes away.
+#
+# It also retires the old 90 s hang for the right reason rather than by
+# truncating it (observed 2026-08-22: a stuck `jetbrainsd` added 90 s to a
+# poweroff). The shell has nothing to flush on exit, so the short stop
+# timeout stays as a backstop.
+KillMode=process
 TimeoutStopSec=5s
 
 [Install]

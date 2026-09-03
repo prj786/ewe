@@ -99,11 +99,17 @@ if command -v xdg-settings >/dev/null 2>&1; then
         done
     fi
 fi
-# Zed's shipped desktop entry declares only text/plain; the override carries
-# the full text/code MimeType list so "Open With" offers it for JSON/YAML/…
-if [ -r "$DEST/system/applications/dev.zed.Zed.desktop" ]; then
+# Shipped desktop-entry overrides (same id as the package's own entry; the
+# user apps dir wins). Zed's carries the full text/code MimeType list; the
+# Nextcloud client's hides it, because ewe-sync is the one sync app and we
+# keep that package only for `nextcloudcmd`.
+if [ -d "$DEST/system/applications" ]; then
     mkdir -p "$HOME/.local/share/applications"
-    cp -f "$DEST/system/applications/dev.zed.Zed.desktop" "$HOME/.local/share/applications/dev.zed.Zed.desktop"
+    for _d in "$DEST/system/applications/"*.desktop; do
+        [ -r "$_d" ] || continue
+        cp -f "$_d" "$HOME/.local/share/applications/$(basename "$_d")"
+    done
+    unset _d
 fi
 # what the user EXPLICITLY chose in ~/.config/mimeapps.list — never the
 # mimeinfo-cache fallback `xdg-mime query default` would report
@@ -145,6 +151,31 @@ command -v update-desktop-database >/dev/null 2>&1 \
 if command -v systemctl >/dev/null 2>&1 && systemctl --user cat ewe-sync.service >/dev/null 2>&1; then
     systemctl --user is-enabled ewe-sync.service >/dev/null 2>&1 \
         || systemctl --user enable ewe-sync.service >/dev/null 2>&1 || true
+fi
+
+# The keyring must never prompt (2026-09-03). Arch enables
+# gnome-keyring-daemon.socket by preset, so systemd starts the daemon at login
+# with NO password, takes org.freedesktop.secrets before pam_gnome_keyring can
+# hand its own daemon the login password, and then restarts it mid-login —
+# which is why no `login` keyring is ever created, why prompts stack up
+# unanswered, and why the first sign-in dies with `keyring-timeout`.
+# install.sh's phase 30 masks the units system-wide for fresh installs; this
+# is the same mask at user level, so an ALREADY-installed machine heals itself
+# at the next login without needing root. D-Bus activation is left alone on
+# purpose — its Exec is `gnome-keyring-daemon --start`, which attaches to the
+# PAM daemon instead of spawning a second, password-less one.
+if command -v systemctl >/dev/null 2>&1; then
+    for _u in gnome-keyring-daemon.socket gnome-keyring-daemon.service; do
+        case "$(systemctl --user is-enabled "$_u" 2>/dev/null)" in
+            masked) ;;
+            *) systemctl --user mask "$_u" >/dev/null 2>&1 || true ;;
+        esac
+    done
+    unset _u
+    if [ ! -e "${XDG_DATA_HOME:-$HOME/.local/share}/keyrings/login.keyring" ]; then
+        say "no login keyring yet — it is created, and unlocked, by your login password at the next sign-in."
+        say "an older 'Default keyring' still holding secrets? run: ewe-auth keyring-reset"
+    fi
 fi
 
 say "done — the refreshed shell loads at the next login (or: systemctl --user restart ewe.service)"

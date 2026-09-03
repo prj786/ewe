@@ -177,7 +177,22 @@ Scope {
                     Flow {
                         width: parent.width; spacing: 12
                         Repeater {
-                            model: Quickshell.screens
+                            // ONLY while the picker is open (2026-09-03). A
+                            // ScreencopyView with a monitor as its captureSource
+                            // holds an ext_output_image_capture_source_v1 for that
+                            // output; this Scope is created eagerly by shell.qml,
+                            // so an unguarded `model: Quickshell.screens` meant the
+                            // shell held one per monitor from login to logout for a
+                            // picker that is open for seconds a month. On a monitor
+                            // hotplug the delegates rebuild against an output the
+                            // compositor is tearing down, and the manager answers
+                            //   ext_output_image_capture_source_manager_v1:
+                            //     error -1: invalid output resource
+                            // A Wayland protocol error is FATAL to the whole client,
+                            // so the entire shell died on plugging a dock in — and
+                            // took every app in ewe.service's cgroup with it when
+                            // systemd restarted the unit (see systemd/ewe.service).
+                            model: root.open ? Quickshell.screens : []
                             Rectangle {
                                 id: scard
                                 required property var modelData
@@ -195,7 +210,9 @@ Scope {
                                     radius: 8; color: Theme.bg; clip: true
                                     ScreencopyView {
                                         anchors.fill: parent
-                                        captureSource: scard.modelData
+                                        // belt and braces: drop the source the moment
+                                        // the surface goes away, not just on close
+                                        captureSource: win.visible ? scard.modelData : null
                                         live: win.visible
                                         paintCursor: false
                                     }
@@ -226,7 +243,7 @@ Scope {
                             id: winFlow
                             width: parent.width; spacing: 10
                             Repeater {
-                                model: root.windows
+                                model: root.open ? root.windows : []
                                 Rectangle {
                                     id: wcard
                                     required property var modelData
