@@ -71,8 +71,8 @@ Scope {
                     x: depth * 8
                     y: depth * 8
                     radius: Theme.r(12)
-                    color: Theme.bg
-                    border.color: Theme.stroke
+                    color: Theme.bg3
+                    border.color: Theme.stroke2
                     border.width: Theme.borderThin
                 }
             }
@@ -82,8 +82,8 @@ Scope {
                 id: topCard
                 width: 280; height: 180
                 radius: Theme.r(12)
-                color: Theme.panel
-                border.color: Theme.stroke
+                color: Theme.bg1
+                border.color: Theme.stroke2
                 border.width: Theme.borderThin
                 clip: true
 
@@ -130,8 +130,8 @@ Scope {
                     visible: root.n > 1
                     anchors.left: parent.left; anchors.top: parent.top; anchors.margins: 6
                     width: Math.max(20, cnt.implicitWidth + 12); height: 20; radius: 10
-                    color: Theme.accent
-                    Text { id: cnt; anchors.centerIn: parent; text: root.n; color: Theme.accentText; font.family: Theme.fontText; font.pixelSize: 11; font.weight: Font.Bold }
+                    color: Theme.accentFill
+                    Text { id: cnt; anchors.centerIn: parent; text: root.n; color: Theme.accentOn; font.family: Theme.fontText; font.pixelSize: 11; font.weight: Font.Bold }
                 }
 
                 // hover hint
@@ -144,7 +144,7 @@ Scope {
                         id: hintTxt
                         anchors.centerIn: parent
                         text: root.n > 1 ? "drag all ↗" : "drag · click=copy"
-                        color: Theme.fg
+                        color: Theme.fg1
                         font.family: Theme.fontText; font.pixelSize: 10
                     }
                 }

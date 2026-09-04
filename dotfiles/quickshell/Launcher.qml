@@ -210,8 +210,8 @@ Scope {
                 width: parent.width
                 height: content.implicitHeight
                 radius: Theme.radius
-                color: Theme.panel
-                border.color: Theme.stroke
+                color: Theme.bg1
+                border.color: Theme.stroke2
                 border.width: Theme.borderThin
                 layer.enabled: true
                 layer.effect: Elevation {}
@@ -238,13 +238,13 @@ Scope {
                                 text: Theme.icSearch
                                 font.family: Theme.fontIcons
                                 font.pixelSize: 18
-                                color: Theme.fgDim
+                                color: Theme.fg3
                             }
                             TextInput {
                                 id: input
                                 width: parent.width - 40
                                 anchors.verticalCenter: parent.verticalCenter
-                                color: Theme.fg
+                                color: Theme.fg1
                                 font.family: Theme.fontDisplay
                                 font.pixelSize: Theme.fsTitle
                                 selectionColor: Theme.accent
@@ -255,7 +255,7 @@ Scope {
                                     visible: input.text.length === 0
                                     anchors.verticalCenter: parent.verticalCenter
                                     text: "Search apps, files & folders…"
-                                    color: Theme.fgDim
+                                    color: Theme.fg3
                                     font: input.font
                                 }
                                 Keys.onPressed: function (ev) {
@@ -270,7 +270,7 @@ Scope {
 
                     Rectangle {
                         width: parent.width; height: 1
-                        color: Theme.stroke
+                        color: Theme.stroke3
                         visible: root.results.length > 0
                     }
 
@@ -314,7 +314,7 @@ Scope {
                                     spacing: 1
                                     Text {
                                         text: row.modelData.name || ""
-                                        color: row.sel ? Theme.accentText : Theme.fg
+                                        color: row.sel ? Theme.accentOn : Theme.fg1
                                         font.family: Theme.fontText
                                         font.pixelSize: Theme.fsBody
                                         font.weight: Font.Medium
@@ -322,7 +322,7 @@ Scope {
                                     Text {
                                         text: row.modelData.sub || ""
                                         visible: text.length > 0
-                                        color: row.sel ? Theme.accentText : Theme.fgDim
+                                        color: row.sel ? Theme.accentOn : Theme.fg3
                                         font.family: Theme.fontText
                                         font.pixelSize: Theme.fsSmall
                                         elide: Text.ElideRight

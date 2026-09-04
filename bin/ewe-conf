@@ -31,6 +31,7 @@ import fcntl
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -80,7 +81,7 @@ def _scalar(v):
 # Section comments — regenerated on every write, so the file explains itself.
 SECTION_NOTES = {
     "desktop": "everything the Settings surfaces manage",
-    "desktop.theme": "colours + look; colorscheme.sh reapplies these",
+    "desktop.theme": "accent + shape/density; every colour is derived from accent by ewe-theme",
     "desktop.dock": "the bottom dock (autohide = intelligent hide)",
     "desktop.animations": "speed multiplies every duration; detail = per-leaf tuning",
     "desktop.displays": "per-monitor-set profiles (Settings → Displays owns this)",
@@ -248,7 +249,17 @@ THEME_MAP = [  # ewe.conf key ↔ user-theme.json key (with defaults)
     # because Komble reads user-theme.json's colorScheme to follow the DE
     ("desktop.theme.color_scheme", "colorScheme", "dark"),
     ("desktop.theme.accent", "accent", "#0a84ff"),
+    # theme_name is vestigial: ewe has ONE look since the Fluent 2 move, and
+    # ewe-theme resolves either legacy name to it. The key stays so a synced
+    # ewe.conf from an older machine still round-trips.
     ("desktop.theme.theme_name", "themeName", "flock"),
+    # The shape/density knobs. These are the WHOLE user-facing surface of the
+    # theme engine — everything else (the grey ramp, the brand ramp, all 60-odd
+    # alias tokens) is derived from `accent` by ewe-theme, in the repo.
+    ("desktop.theme.corner", "themeCorner", "medium"),
+    ("desktop.theme.density", "themeDensity", "comfortable"),
+    ("desktop.theme.stroke", "themeStroke", "thin"),
+    ("desktop.theme.neutral_tint", "neutralTint", 8),
     ("desktop.theme.tint_borders", "tintBorders", True),
     ("desktop.theme.window_transparency", "windowTransparency", False),
     ("desktop.theme.avatar_shape", "avatarShape", "circle"),
@@ -406,6 +417,29 @@ def seed_installed(doc):
     node[last] = man
 
 
+def build_theme_tokens():
+    """Regenerate the shell's Fluent token set from `[desktop.theme]`.
+
+    An ARTIFACT, not a hook: the shell calls `apply --no-hooks` when it themes
+    live, and it still needs the tokens rebuilt. ewe-theme reads ewe.conf
+    itself, so there is nothing to pass here and no way for the two to hold
+    different opinions about what the accent is. A missing tool is not fatal —
+    Theme.qml falls back to its built-ins and the desktop still comes up."""
+    # The SIBLING first, PATH second. The two tools share a token format, so
+    # the ewe-theme that ships beside this ewe-conf is the one that matches
+    # it; picking PATH first meant a repo checkout drove the INSTALLED engine
+    # and wrote an older schema over the shell's token file.
+    sib = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ewe-theme")
+    exe = sib if os.path.exists(sib) else shutil.which("ewe-theme")
+    if not exe:
+        return
+    try:
+        subprocess.run([exe, "build", "--css", "/dev/null"],
+                       capture_output=True, timeout=30)
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+
+
 def do_apply(doc, only=None, hooks=True):
     def want(domain):
         return only is None or only == domain
@@ -416,6 +450,7 @@ def do_apply(doc, only=None, hooks=True):
             node, last = dig(doc, ck)
             ut[jk] = (node or {}).get(last, dflt)
         _wj("user-theme.json", ut)
+        build_theme_tokens()
     if want("animations"):
         node, last = dig(doc, "desktop.animations.detail")
         detail = (node or {}).get(last) if node else None

@@ -219,7 +219,7 @@ Scope {
         // small reusable spinner
         component Spinner: Item {
             id: sp
-            property color ring: Theme.stroke
+            property color ring: Theme.stroke1
             property color dot: Theme.accent
             // `running: true` drove a 60 fps repaint of the whole store overlay
             // whenever it was open — even with no job and the spinner hidden.
@@ -235,8 +235,8 @@ Scope {
             x: Math.max(12, Math.min(parent.width - width - 12, Globals.storeAnchorX - width / 2))
             y: parent.height - height - 90
             width: 460; height: 460
-            radius: Theme.radius; color: Theme.panel
-            border.color: Theme.stroke; border.width: Theme.borderThin
+            radius: Theme.radius; color: Theme.bg1
+            border.color: Theme.stroke2; border.width: Theme.borderThin
             opacity: Globals.storeOpen ? 1 : 0
             scale: Globals.storeOpen ? 1 : 0.96
             transformOrigin: Item.BottomLeft
@@ -257,7 +257,7 @@ Scope {
                     // clipped behind the search box drawn under it.
                     z: 5
                     width: parent.width; height: 26
-                    Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "App Store"; color: Theme.fg; font.family: Theme.fontDisplay; font.pixelSize: Theme.fsLarge; font.weight: Font.Bold }
+                    Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "App Store"; color: Theme.fg1; font.family: Theme.fontDisplay; font.pixelSize: Theme.fsLarge; font.weight: Font.Bold }
 
                     // AUR helper (paru) is provided by setup — just reflect its presence.
                     Row {
@@ -269,13 +269,13 @@ Scope {
                             width: kombleLbl.implicitWidth + 16; height: 18
                             Rectangle {
                                 anchors.fill: parent; radius: Theme.radiusPill
-                                color: kombleMa.containsMouse ? Theme.hover : "transparent"
+                                color: kombleMa.containsMouse ? Theme.subtleHover : Theme.subtle
                             }
                             Text {
                                 id: kombleLbl
                                 anchors.centerIn: parent
                                 text: "Open Komble ↗"
-                                color: kombleMa.containsMouse ? Theme.fg : Theme.fgDim
+                                color: kombleMa.containsMouse ? Theme.fg1 : Theme.fg3
                                 font.family: Theme.fontText; font.pixelSize: 10; font.weight: Font.DemiBold
                             }
                             MouseArea {
@@ -288,29 +288,29 @@ Scope {
                         Rectangle {
                             visible: root.busyId !== ""
                             anchors.verticalCenter: parent.verticalCenter
-                            width: instRow.implicitWidth + 14; height: 18; radius: 9; color: Theme.accent
+                            width: instRow.implicitWidth + 14; height: 18; radius: 9; color: Theme.accentFill
                             Row { id: instRow; anchors.centerIn: parent; spacing: 5
-                                Spinner { width: 10; height: 10; anchors.verticalCenter: parent.verticalCenter; ring: Qt.rgba(1, 1, 1, 0.4); dot: Theme.accentText }
-                                Text { anchors.verticalCenter: parent.verticalCenter; text: "1 app " + (root.busyKind === "remove" ? "removing" : "installing"); color: Theme.accentText; font.family: Theme.fontText; font.pixelSize: 9; font.weight: Font.DemiBold }
+                                Spinner { width: 10; height: 10; anchors.verticalCenter: parent.verticalCenter; ring: Qt.rgba(1, 1, 1, 0.4); dot: Theme.accentOn }
+                                Text { anchors.verticalCenter: parent.verticalCenter; text: "1 app " + (root.busyKind === "remove" ? "removing" : "installing"); color: Theme.accentOn; font.family: Theme.fontText; font.pixelSize: 9; font.weight: Font.DemiBold }
                             }
                             MouseArea { id: instMa; anchors.fill: parent; hoverEnabled: true }
                             Rectangle {
                                 visible: instMa.containsMouse; z: 50
                                 anchors.top: parent.bottom; anchors.topMargin: 6; anchors.right: parent.right
                                 width: ttT.implicitWidth + 16; height: ttT.implicitHeight + 12
-                                radius: Theme.r(8); color: Theme.elevated; border.color: Theme.stroke; border.width: Theme.borderThin
-                                Text { id: ttT; anchors.centerIn: parent; text: (root.busyKind === "remove" ? "Removing " : "Installing ") + root.busyId + "…"; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: 10 }
+                                radius: Theme.r(8); color: Theme.card; border.color: Theme.stroke2; border.width: Theme.borderThin
+                                Text { id: ttT; anchors.centerIn: parent; text: (root.busyKind === "remove" ? "Removing " : "Installing ") + root.busyId + "…"; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: 10 }
                             }
                         }
-                        Text { anchors.verticalCenter: parent.verticalCenter; text: (root.helper !== "" ? Theme.icCheck : Theme.icClose); font.family: Theme.fontIcons; font.pixelSize: 12; color: root.helper !== "" ? Theme.accent : Theme.fgDim }
-                        Text { anchors.verticalCenter: parent.verticalCenter; text: root.helper !== "" ? ("AUR · " + root.helper) : "Official repos only"; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 10 }
+                        Text { anchors.verticalCenter: parent.verticalCenter; text: (root.helper !== "" ? Theme.icCheck : Theme.icClose); font.family: Theme.fontIcons; font.pixelSize: 12; color: root.helper !== "" ? Theme.accent : Theme.fg3 }
+                        Text { anchors.verticalCenter: parent.verticalCenter; text: root.helper !== "" ? ("AUR · " + root.helper) : "Official repos only"; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 10 }
                     }
                 }
 
                 // ── live install/remove progress (background job) ──
                 Rectangle {
                     width: parent.width; visible: root.busyId !== ""
-                    height: visible ? 46 : 0; radius: Theme.radiusInner; color: Theme.elevated
+                    height: visible ? 46 : 0; radius: Theme.radiusInner; color: Theme.card
                     clip: true
                     Column {
                         anchors.left: parent.left; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
@@ -320,16 +320,16 @@ Scope {
                             Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter
                                 width: parent.width - pctT.width - 10; elide: Text.ElideRight
                                 text: (root.busyKind === "remove" ? "Removing " : "Installing ") + root.busyId
-                                color: Theme.fg; font.family: Theme.fontText; font.pixelSize: 11; font.weight: Font.DemiBold }
+                                color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: 11; font.weight: Font.DemiBold }
                             Text { id: pctT; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
                                 text: root.busyStat + (root.busyPct >= 0 ? "  ·  " + Math.round(root.busyPct * 100) + "%" : "")
-                                color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 10 }
+                                color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 10 }
                         }
                         // progress track: determinate fill when we have a step count,
                         // otherwise an indeterminate sliding bar.
                         Rectangle {
                             id: track
-                            width: parent.width; height: 4; radius: 2; color: Theme.stroke; clip: true
+                            width: parent.width; height: 4; radius: 2; color: Theme.bg2; clip: true
                             Rectangle {
                                 id: fill
                                 height: parent.height; radius: Theme.r(2); color: Theme.accent
@@ -353,12 +353,12 @@ Scope {
 
                 Rectangle {
                     width: parent.width; height: 36; radius: Theme.radiusInner
-                    color: Theme.bg; border.color: storeIn.activeFocus ? Theme.accent : Theme.stroke; border.width: Theme.borderThin
-                    Text { anchors.left: parent.left; anchors.leftMargin: 11; anchors.verticalCenter: parent.verticalCenter; text: Theme.icSearch; font.family: Theme.fontIcons; font.pixelSize: 14; color: Theme.fgDim }
+                    color: Theme.bg3; border.color: storeIn.activeFocus ? Theme.accent : Theme.stroke1; border.width: Theme.borderThin
+                    Text { anchors.left: parent.left; anchors.leftMargin: 11; anchors.verticalCenter: parent.verticalCenter; text: Theme.icSearch; font.family: Theme.fontIcons; font.pixelSize: 14; color: Theme.fg3 }
                     TextInput {
                         id: storeIn
                         anchors.fill: parent; anchors.leftMargin: 34; anchors.rightMargin: 12; verticalAlignment: TextInput.AlignVCenter
-                        color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsBody; clip: true
+                        color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsBody; clip: true
                         enabled: !root.pwOpen
                         onTextChanged: {
                             root.query = text
@@ -368,10 +368,10 @@ Scope {
                         }
                         Keys.onEscapePressed: Globals.storeOpen = false
                         onAccepted: { searchDebounce.stop(); root.doSearch() }
-                        Text { anchors.verticalCenter: parent.verticalCenter; visible: storeIn.text.length === 0; text: "Search apps to install or remove…"; color: Theme.fgDim; font: storeIn.font }
+                        Text { anchors.verticalCenter: parent.verticalCenter; visible: storeIn.text.length === 0; text: "Search apps to install or remove…"; color: Theme.fg3; font: storeIn.font }
                     }
                 }
-                Text { width: parent.width; wrapMode: Text.WordWrap; text: (root.helper ? "Searches the official repos + AUR as you type." : "Searches the official repos as you type.") + " Installs run in the background."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 10 }
+                Text { width: parent.width; wrapMode: Text.WordWrap; text: (root.helper ? "Searches the official repos + AUR as you type." : "Searches the official repos as you type.") + " Installs run in the background."; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 10 }
 
                 // ── error banner ──
                 Rectangle {
@@ -390,7 +390,7 @@ Scope {
                         Row {
                             width: parent.width; height: visible ? 30 : 0; visible: root.searching; spacing: 10
                             Spinner { width: 20; height: 20; anchors.verticalCenter: parent.verticalCenter }
-                            Text { anchors.verticalCenter: parent.verticalCenter; text: "Searching repos + AUR…"; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
+                            Text { anchors.verticalCenter: parent.verticalCenter; text: "Searching repos + AUR…"; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
                         }
                         Text {
                             width: parent.width
@@ -398,7 +398,7 @@ Scope {
                             text: root.helper === "" ? "No results in the official repos. Many apps (e.g. Chrome) are AUR-only — re-run setup to enable the AUR."
                                                       : "No results."
                             wrapMode: Text.WordWrap
-                            color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
+                            color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
                         }
                         Repeater {
                             model: root.results
@@ -408,19 +408,19 @@ Scope {
                                 readonly property bool aur: modelData.source === "aur"
                                 readonly property bool isInstalled: modelData.inst === true || root.installed[modelData.id] === true
                                 readonly property bool isBusy: root.busyId === modelData.id
-                                width: resCol.width; height: 56; radius: Theme.radiusInner; color: Theme.elevated
+                                width: resCol.width; height: 56; radius: Theme.radiusInner; color: Theme.card
                                 Row {
                                     anchors.left: parent.left; anchors.leftMargin: 10; anchors.right: actions.left; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter; spacing: 10
                                     Image { anchors.verticalCenter: parent.verticalCenter; width: 30; height: 30; sourceSize.width: 60; sourceSize.height: 60; mipmap: true; source: Quickshell.iconPath(modelData.name, "application-x-executable") }
                                     Column {
                                         anchors.verticalCenter: parent.verticalCenter; spacing: 1; width: 230
                                         Row { spacing: 6
-                                            Text { text: modelData.name; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold; elide: Text.ElideRight; width: Math.min(implicitWidth, 150) }
-                                            Rectangle { anchors.verticalCenter: parent.verticalCenter; width: badge.implicitWidth + 10; height: 15; radius: Theme.r(4); color: rowItem.aur ? Theme.accent : Theme.hover
-                                                Text { id: badge; anchors.centerIn: parent; text: modelData.source; color: rowItem.aur ? Theme.accentText : Theme.fgSecondary; font.family: Theme.fontText; font.pixelSize: 9; font.weight: Font.DemiBold } }
+                                            Text { text: modelData.name; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold; elide: Text.ElideRight; width: Math.min(implicitWidth, 150) }
+                                            Rectangle { anchors.verticalCenter: parent.verticalCenter; width: badge.implicitWidth + 10; height: 15; radius: Theme.r(4); color: rowItem.aur ? Theme.accentFill : Theme.card
+                                                Text { id: badge; anchors.centerIn: parent; text: modelData.source; color: rowItem.aur ? Theme.accentOn : Theme.fg2; font.family: Theme.fontText; font.pixelSize: 9; font.weight: Font.DemiBold } }
                                             Text { anchors.verticalCenter: parent.verticalCenter; visible: rowItem.isInstalled; text: "installed"; color: Theme.accent; font.family: Theme.fontText; font.pixelSize: 9 }
                                         }
-                                        Text { width: 230; text: modelData.desc; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11; elide: Text.ElideRight; maximumLineCount: 1 }
+                                        Text { width: 230; text: modelData.desc; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11; elide: Text.ElideRight; maximumLineCount: 1 }
                                     }
                                 }
                                 Row {
@@ -428,20 +428,20 @@ Scope {
                                     anchors.right: parent.right; anchors.rightMargin: 10; anchors.verticalCenter: parent.verticalCenter; spacing: 6
                                     // busy → spinner on this row's button
                                     Rectangle {
-                                        visible: rowItem.isBusy; width: 26; height: 26; radius: Theme.r(7); color: Theme.hover
+                                        visible: rowItem.isBusy; width: 26; height: 26; radius: Theme.r(7); color: Theme.card
                                         Spinner { anchors.centerIn: parent; width: 15; height: 15 }
                                     }
                                     // Install (hidden if already installed or busy)
                                     Rectangle { visible: !rowItem.isInstalled && !rowItem.isBusy; width: il.implicitWidth + 16; height: 26; radius: Theme.r(7)
                                         opacity: root.busyId === "" ? 1 : 0.4
-                                        color: iMa.containsMouse && root.busyId === "" ? Theme.accent : Theme.hover
-                                        Text { id: il; anchors.centerIn: parent; text: "Install"; color: (iMa.containsMouse && root.busyId === "") ? Theme.accentText : Theme.fg; font.family: Theme.fontText; font.pixelSize: 11; font.weight: Font.DemiBold }
+                                        color: iMa.containsMouse && root.busyId === "" ? Theme.accentFill : Theme.card
+                                        Text { id: il; anchors.centerIn: parent; text: "Install"; color: (iMa.containsMouse && root.busyId === "") ? Theme.accentOn : Theme.fg1; font.family: Theme.fontText; font.pixelSize: 11; font.weight: Font.DemiBold }
                                         MouseArea { id: iMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.ask("install", modelData.id) } }
                                     // Remove (only if installed, hidden while busy)
                                     Rectangle { visible: rowItem.isInstalled && !rowItem.isBusy; width: rl.implicitWidth + 14; height: 26; radius: Theme.r(7)
                                         opacity: root.busyId === "" ? 1 : 0.4
-                                        color: rMa.containsMouse && root.busyId === "" ? Theme.danger : Theme.hover
-                                        Text { id: rl; anchors.centerIn: parent; text: "Remove"; color: (rMa.containsMouse && root.busyId === "") ? Theme.accentText : Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11; font.weight: Font.DemiBold }
+                                        color: rMa.containsMouse && root.busyId === "" ? Theme.danger : Theme.card
+                                        Text { id: rl; anchors.centerIn: parent; text: "Remove"; color: (rMa.containsMouse && root.busyId === "") ? Theme.accentOn : Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11; font.weight: Font.DemiBold }
                                         MouseArea { id: rMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.ask("remove", modelData.id) } }
                                 }
                             }
@@ -457,37 +457,37 @@ Scope {
                 MouseArea { anchors.fill: parent; onClicked: root.cancelAsk() }   // click-outside cancels
                 Rectangle {
                     anchors.centerIn: parent; width: 320; height: pwCol.implicitHeight + 36
-                    radius: Theme.radius; color: Theme.panel; border.color: Theme.stroke; border.width: Theme.borderThin
+                    radius: Theme.radius; color: Theme.bg1; border.color: Theme.stroke2; border.width: Theme.borderThin
                     MouseArea { anchors.fill: parent }   // swallow clicks inside the card
                     Column {
                         id: pwCol
                         anchors.left: parent.left; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
                         anchors.margins: 18; spacing: 12
-                        Text { text: "Administrator password"; color: Theme.fg; font.family: Theme.fontDisplay; font.pixelSize: Theme.fsBody; font.weight: Font.Bold }
-                        Text { width: parent.width; wrapMode: Text.WordWrap; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11
+                        Text { text: "Administrator password"; color: Theme.fg1; font.family: Theme.fontDisplay; font.pixelSize: Theme.fsBody; font.weight: Font.Bold }
+                        Text { width: parent.width; wrapMode: Text.WordWrap; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11
                             text: (root.pendKind === "remove" ? "Remove " : "Install ") + (root.pendId || "") + (root.pendKind === "install" && root.helper ? "  (repos + AUR)" : "") }
                         Rectangle {
                             width: parent.width; height: 38; radius: Theme.radiusInner
-                            color: Theme.bg; border.color: pwIn.activeFocus ? Theme.accent : Theme.stroke; border.width: Theme.borderThin
+                            color: Theme.bg3; border.color: pwIn.activeFocus ? Theme.accent : Theme.stroke1; border.width: Theme.borderThin
                             TextInput {
                                 id: pwIn
                                 anchors.fill: parent; anchors.leftMargin: 12; anchors.rightMargin: 12; verticalAlignment: TextInput.AlignVCenter
                                 echoMode: TextInput.Password; passwordCharacter: "•"
-                                color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsBody; clip: true
+                                color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsBody; clip: true
                                 onTextChanged: root.pwText = text
                                 Keys.onEscapePressed: root.cancelAsk()
                                 onAccepted: { if (root.pwText.length) root.confirmAsk() }
-                                Text { anchors.verticalCenter: parent.verticalCenter; visible: pwIn.text.length === 0; text: "sudo password"; color: Theme.fgDim; font: pwIn.font }
+                                Text { anchors.verticalCenter: parent.verticalCenter; visible: pwIn.text.length === 0; text: "sudo password"; color: Theme.fg3; font: pwIn.font }
                             }
                         }
                         Row {
                             anchors.right: parent.right; spacing: 8
-                            Rectangle { width: cl.implicitWidth + 22; height: 30; radius: Theme.r(8); color: clMa.containsMouse ? Theme.hover : Theme.elevated
-                                Text { id: cl; anchors.centerIn: parent; text: "Cancel"; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: 11; font.weight: Font.DemiBold }
+                            Rectangle { width: cl.implicitWidth + 22; height: 30; radius: Theme.r(8); color: clMa.containsMouse ? Theme.cardHover : Theme.card
+                                Text { id: cl; anchors.centerIn: parent; text: "Cancel"; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: 11; font.weight: Font.DemiBold }
                                 MouseArea { id: clMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.cancelAsk() } }
                             Rectangle { width: ol.implicitWidth + 22; height: 30; radius: Theme.r(8); opacity: root.pwText.length ? 1 : 0.4
-                                color: Theme.accent
-                                Text { id: ol; anchors.centerIn: parent; text: root.pendKind === "remove" ? "Remove" : "Install"; color: Theme.accentText; font.family: Theme.fontText; font.pixelSize: 11; font.weight: Font.DemiBold }
+                                color: Theme.accentFill
+                                Text { id: ol; anchors.centerIn: parent; text: root.pendKind === "remove" ? "Remove" : "Install"; color: Theme.accentOn; font.family: Theme.fontText; font.pixelSize: 11; font.weight: Font.DemiBold }
                                 MouseArea { id: okMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: { if (root.pwText.length) root.confirmAsk() } } }
                         }
                     }

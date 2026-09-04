@@ -182,8 +182,8 @@ Scope {
             width: 600
             height: body.implicitHeight + 40
             radius: Theme.radius
-            color: Theme.panel
-            border.color: Theme.stroke; border.width: Theme.borderThin
+            color: Theme.bg1
+            border.color: Theme.stroke2; border.width: Theme.borderThin
             layer.enabled: true
             layer.effect: Elevation {}
             Sheen { radius: parent.radius }
@@ -196,15 +196,15 @@ Scope {
             // ── shared bits ──
             component Title: Text {
                 width: parent.width; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.Wrap
-                color: Theme.fg; font.family: Theme.fontDisplay; font.pixelSize: 26; font.weight: Font.Bold
+                color: Theme.fg1; font.family: Theme.fontDisplay; font.pixelSize: 26; font.weight: Font.Bold
             }
             component Body: Text {
                 width: parent.width; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.Wrap
-                color: Theme.fgSecondary; font.family: Theme.fontText; font.pixelSize: Theme.fsBody; lineHeight: 1.25
+                color: Theme.fg2; font.family: Theme.fontText; font.pixelSize: Theme.fsBody; lineHeight: 1.25
             }
             component Note: Text {
                 width: parent.width; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.Wrap
-                color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
+                color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
             }
             component Btn: Rectangle {
                 id: b
@@ -214,16 +214,16 @@ Scope {
                 signal go()
                 width: bt.implicitWidth + 36; height: 40; radius: Theme.r(12)
                 opacity: enabled ? 1 : 0.45
-                color: primary ? (bMa.containsMouse ? Qt.lighter(Theme.accent, 1.12) : Theme.accent)
-                               : (bMa.containsMouse ? Theme.hover : Theme.elevated)
+                color: primary ? (bMa.containsMouse ? Theme.brandBgHover : Theme.accentFill)
+                               : (bMa.containsMouse ? Theme.cardHover : Theme.card)
                 Behavior on color { ColorAnimation { duration: 120 } }
-                Text { id: bt; anchors.centerIn: parent; text: b.label; color: b.primary ? Theme.accentText : Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsBody; font.weight: Font.DemiBold }
+                Text { id: bt; anchors.centerIn: parent; text: b.label; color: b.primary ? Theme.accentOn : Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsBody; font.weight: Font.DemiBold }
                 MouseArea { id: bMa; anchors.fill: parent; hoverEnabled: true; enabled: b.enabled; cursorShape: Qt.PointingHandCursor; onClicked: b.go() }
             }
             component LinkBtn: Text {
                 property string label: ""
                 signal go()
-                text: label; color: Theme.accent; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold
+                text: label; color: Theme.accentFill; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold
                 MouseArea { anchors.fill: parent; anchors.margins: -6; cursorShape: Qt.PointingHandCursor; onClicked: parent.go() }
             }
             component Glyph: Rectangle {
@@ -245,8 +245,8 @@ Scope {
                 Column {
                     width: parent.width - 58; spacing: 2
                     anchors.verticalCenter: parent.verticalCenter
-                    Text { width: parent.width; text: parent.parent.head; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsBody; font.weight: Font.DemiBold }
-                    Text { width: parent.width; text: parent.parent.text; color: Theme.fgSecondary; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; wrapMode: Text.Wrap }
+                    Text { width: parent.width; text: parent.parent.head; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsBody; font.weight: Font.DemiBold }
+                    Text { width: parent.width; text: parent.parent.text; color: Theme.fg2; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; wrapMode: Text.Wrap }
                 }
             }
 
@@ -308,18 +308,18 @@ Scope {
                         visible: root.updBusy
                         anchors.horizontalCenter: parent.horizontalCenter; spacing: 8
                         Spinner { anchors.verticalCenter: parent.verticalCenter; font.pixelSize: 13 }
-                        Text { anchors.verticalCenter: parent.verticalCenter; text: root.updState === "checking" ? "Checking…" : "Upgrading…"; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
+                        Text { anchors.verticalCenter: parent.verticalCenter; text: root.updState === "checking" ? "Checking…" : "Upgrading…"; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
                     }
                     // the last lines of pacman, so a long upgrade is visibly alive
                     Rectangle {
                         visible: root.updTail.length > 0
                         width: parent.width; height: updLog.implicitHeight + 16
-                        radius: Theme.radiusInner; color: Theme.elevated; border.color: root.updState === "failed" ? Theme.danger : Theme.stroke; border.width: Theme.borderThin
+                        radius: Theme.radiusInner; color: Theme.card; border.color: root.updState === "failed" ? Theme.danger : Theme.stroke1; border.width: Theme.borderThin
                         Text {
                             id: updLog
                             anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 8
                             text: root.updTail.join("\n")
-                            color: root.updState === "failed" ? Theme.danger : Theme.fgDim
+                            color: root.updState === "failed" ? Theme.danger : Theme.fg3
                             font.family: Theme.fontMono; font.pixelSize: 11; wrapMode: Text.WrapAnywhere
                         }
                     }
@@ -346,14 +346,14 @@ Scope {
                         anchors.horizontalCenter: parent.horizontalCenter; spacing: 12
                         Rectangle {
                             anchors.verticalCenter: parent.verticalCenter
-                            width: 40; height: 40; radius: 20; color: Theme.hover
-                            Text { anchors.centerIn: parent; visible: wAv.status !== Image.Ready; text: (Cloud.displayName || "?").charAt(0).toUpperCase(); color: Theme.fg; font.family: Theme.fontText; font.pixelSize: 16; font.weight: Font.DemiBold }
+                            width: 40; height: 40; radius: 20; color: Theme.card
+                            Text { anchors.centerIn: parent; visible: wAv.status !== Image.Ready; text: (Cloud.displayName || "?").charAt(0).toUpperCase(); color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: 16; font.weight: Font.DemiBold }
                             Image { id: wAv; anchors.fill: parent; source: Cloud.avatarPath !== "" ? "file://" + Cloud.avatarPath : ""; fillMode: Image.PreserveAspectCrop; visible: status === Image.Ready }
                         }
                         Column {
                             anchors.verticalCenter: parent.verticalCenter; spacing: 2
-                            Text { text: Cloud.displayName; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsBody; font.weight: Font.DemiBold }
-                            Text { text: (Cloud.email !== "" ? Cloud.email + " · " : "") + Cloud.serverHost; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
+                            Text { text: Cloud.displayName; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsBody; font.weight: Font.DemiBold }
+                            Text { text: (Cloud.email !== "" ? Cloud.email + " · " : "") + Cloud.serverHost; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
                         }
                     }
                     Note { visible: Cloud.signedIn; text: "Your files are at ~/Nextcloud (Files → sidebar)." }
@@ -368,16 +368,16 @@ Scope {
                     Rectangle {
                         visible: !Cloud.signedIn && Cloud.busy !== "signin"
                         width: parent.width; height: 40; radius: Theme.r(10)
-                        color: Theme.bg; border.color: srvField.activeFocus ? Theme.accent : Theme.stroke; border.width: Theme.borderThin
+                        color: Theme.bg3; border.color: srvField.activeFocus ? Theme.accent : Theme.stroke1; border.width: Theme.borderThin
                         TextInput {
                             id: srvField
                             anchors.fill: parent; anchors.leftMargin: 12; anchors.rightMargin: 12
                             verticalAlignment: TextInput.AlignVCenter
                             text: Cloud.lastServer
-                            color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsBody
+                            color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsBody
                             clip: true; selectByMouse: true
                             onAccepted: if (root.online && text.trim() !== "") Cloud.signIn(text)
-                            Text { visible: srvField.text === "" && !srvField.activeFocus; anchors.verticalCenter: parent.verticalCenter; text: "https://cloud.example.org"; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsBody }
+                            Text { visible: srvField.text === "" && !srvField.activeFocus; anchors.verticalCenter: parent.verticalCenter; text: "https://cloud.example.org"; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: Theme.fsBody }
                         }
                     }
                     Text {
@@ -396,7 +396,7 @@ Scope {
                         visible: Cloud.busy === "signin"
                         anchors.horizontalCenter: parent.horizontalCenter; spacing: 8
                         Spinner { anchors.verticalCenter: parent.verticalCenter; font.pixelSize: 13 }
-                        Text { anchors.verticalCenter: parent.verticalCenter; text: "Waiting for the browser — sign in on your server's page and grant access to ewe…"; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
+                        Text { anchors.verticalCenter: parent.verticalCenter; text: "Waiting for the browser — sign in on your server's page and grant access to ewe…"; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
                     }
                     Text {
                         visible: Cloud.error !== ""
@@ -437,7 +437,7 @@ Scope {
                         visible: root._restoring
                         anchors.horizontalCenter: parent.horizontalCenter; spacing: 8
                         Spinner { anchors.verticalCenter: parent.verticalCenter; font.pixelSize: 13 }
-                        Text { anchors.verticalCenter: parent.verticalCenter; text: "Restoring…"; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
+                        Text { anchors.verticalCenter: parent.verticalCenter; text: "Restoring…"; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
                     }
                     Text {
                         visible: Cloud.syncError !== "" && !root._restoring
@@ -455,7 +455,7 @@ Scope {
                     Rectangle {
                         visible: Cloud.restoreApps > 0
                         width: parent.width; height: appsRow.implicitHeight + 20
-                        radius: Theme.radiusInner; color: Theme.elevated; border.color: Theme.accent; border.width: Theme.borderThin
+                        radius: Theme.radiusInner; color: Theme.card; border.color: Theme.accent; border.width: Theme.borderThin
                         Row {
                             id: appsRow
                             anchors.left: parent.left; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; anchors.margins: 12; spacing: 12
@@ -465,7 +465,7 @@ Scope {
                                 width: parent.width - 24 - 12 - openKomble.width - 12
                                 wrapMode: Text.Wrap
                                 text: Cloud.restoreApps + (Cloud.restoreApps === 1 ? " app is" : " apps are") + " waiting in Komble → For you: repository apps install in one go, AUR apps go through the PKGBUILD review first. Never automatic."
-                                color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
+                                color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
                             }
                             Btn { id: openKomble; anchors.verticalCenter: parent.verticalCenter; label: "Open Komble"; onGo: Globals.openStore() }
                         }
@@ -475,7 +475,7 @@ Scope {
                     Rectangle {
                         visible: Cloud.signedIn && Cloud.lastSync === ""
                         width: parent.width; height: bkRow.implicitHeight + 20
-                        radius: Theme.radiusInner; color: Theme.elevated; border.color: Theme.stroke; border.width: Theme.borderThin
+                        radius: Theme.radiusInner; color: Theme.card; border.color: Theme.stroke2; border.width: Theme.borderThin
                         Row {
                             id: bkRow
                             anchors.left: parent.left; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; anchors.margins: 12; spacing: 12
@@ -485,7 +485,7 @@ Scope {
                                 width: parent.width - 24 - 12 - bkBtn.width - 12
                                 wrapMode: Text.Wrap
                                 text: root._backingUp ? "Backing this machine up to your account…" : "This machine is not backed up yet. Nothing is uploaded until you say so."
-                                color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
+                                color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
                             }
                             Btn { id: bkBtn; anchors.verticalCenter: parent.verticalCenter; label: root._backingUp ? "Backing up…" : "Back up now"; enabled: !root._backingUp; onGo: { root._backingUp = true; Cloud.backUpNow() } }
                         }
@@ -509,7 +509,7 @@ Scope {
                             delegate: Rectangle {
                                 required property int index
                                 width: index === root.step ? 18 : 6; height: 6; radius: 3
-                                color: index === root.step ? Theme.accent : Theme.hover
+                                color: index === root.step ? Theme.accent : Theme.subtleSelected
                                 Behavior on width { NumberAnimation { duration: Theme.durBase; easing.type: Theme.ease } }
                             }
                         }

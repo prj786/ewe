@@ -43,14 +43,14 @@ Scope {
             anchors.verticalCenter: parent.verticalCenter
             anchors.left: parent.left; anchors.right: parent.right
             anchors.leftMargin: 10; anchors.rightMargin: 10
-            height: 1; color: Theme.stroke; opacity: 0.6
+            height: 1; color: Theme.stroke3
         }
 
         Rectangle {
             visible: !(row.entry && row.entry.isSeparator)
             anchors.fill: parent; anchors.leftMargin: 4; anchors.rightMargin: 4
             radius: Theme.radiusInner
-            color: (rowMa.containsMouse && row.entry && row.entry.enabled) ? Theme.hover : "transparent"
+            color: (rowMa.containsMouse && row.entry && row.entry.enabled) ? Theme.subtleHover : Theme.subtle
 
             // check / radio indicator
             Text {
@@ -64,7 +64,7 @@ Scope {
                 anchors.right: parent.right; anchors.rightMargin: 22
                 anchors.verticalCenter: parent.verticalCenter
                 text: row.entry ? row.entry.text : ""
-                color: (row.entry && row.entry.enabled) ? Theme.fg : Theme.fgDim
+                color: (row.entry && row.entry.enabled) ? Theme.fg1 : Theme.fg3
                 font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
                 elide: Text.ElideRight
             }
@@ -73,7 +73,7 @@ Scope {
                 anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter
                 visible: row.entry && row.entry.hasChildren
                 text: Theme.icChevronRight
-                font.family: Theme.fontIcons; font.pixelSize: 13; color: Theme.fgDim
+                font.family: Theme.fontIcons; font.pixelSize: 13; color: Theme.fg3
             }
 
             MouseArea {
@@ -125,7 +125,7 @@ Scope {
             y: Theme.barHeight + 4
             width: 230
             height: mainCol.implicitHeight + 10
-            radius: Theme.radius; color: Theme.panel; border.color: Theme.stroke; border.width: Theme.borderThin
+            radius: Theme.radius; color: Theme.bg1; border.color: Theme.stroke2; border.width: Theme.borderThin
             opacity: Globals.trayMenuOpen ? 1 : 0
             scale: Globals.trayMenuOpen ? 1 : 0.97
             transformOrigin: Item.Top
@@ -150,7 +150,7 @@ Scope {
             y: mainBox.y + root.subY
             width: 210
             height: subCol.implicitHeight + 10
-            radius: Theme.radius; color: Theme.panel; border.color: Theme.stroke; border.width: Theme.borderThin
+            radius: Theme.radius; color: Theme.bg1; border.color: Theme.stroke2; border.width: Theme.borderThin
             layer.enabled: true
             layer.effect: Elevation {}
             MouseArea { anchors.fill: parent }

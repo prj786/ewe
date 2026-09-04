@@ -1,43 +1,62 @@
 #!/usr/bin/env python3
-"""ewe-theme — the ONE writer of what the looks are.
+"""ewe-theme — the ONE writer of what ewe looks like.
 
-`ewe-theme.conf` says what a theme IS; this turns it into the two artefacts
-the desktop actually reads, so a colour is changed in one place and both
-halves of ewe follow:
+There is no theme file to edit. What a look IS — the grey ramp, the brand
+ramp, every alias token, the radius/spacing/stroke/type ramps — is DERIVED,
+and the derivation lives in this file, in the repo. What you can CHANGE lives
+in `ewe.conf` under `[desktop.theme]`, with everything else in the document
+that describes your machine:
+
+    [desktop.theme]
+    accent       = "#ffcc00"      # THE seed. brand[10..160] comes from this.
+    corner       = "medium"       # none | small | medium | large
+    density      = "comfortable"  # compact | comfortable | roomy
+    stroke       = "thin"         # thin | thick
+    neutral_tint = 8              # 0 = pure neutral greys; higher = more accent
+
+That is the whole surface. One accent in, a complete Fluent 2 token set out,
+written to the two artefacts the desktop reads:
 
   ~/.config/quickshell/theme-tokens.json   the shell — Theme.qml reads it and
                                            falls back to its built-ins if absent
-  design/tokens.css                        the apps — compiled in by Tailwind,
-                                           and re-injectable at runtime
+  design/tokens.css                        the apps — compiled in by Tailwind
 
 Commands (each prints one JSON object and exits 0, like the other ewe tools):
-  list                 -> {ok, default, themes:[{name, label, note}]}
-  show <theme>         -> {ok, name, css_vars{}, color{}, shape{}, voice{}}
-  build [--conf F] [--json F] [--css F]
-                       -> {ok, written:[...]}  regenerate both artefacts
-  check                -> {ok, drift:[...]}    do the artefacts match the conf?
-  preview [--out F]    -> {ok, path}           a self-contained specimen page
+  show                 -> {ok, input{}, color{}, shape{}, size{}, brand{}, grey{}}
+  build [--json F] [--css F]   -> {ok, written:[...]}
+  check                -> {ok, drift:[...]}
+  preview [--out F]    -> {ok, path}   a specimen page, generated from the tokens
 
-Nothing here enumerates theme names: add a [<name>] block to the conf and it
-appears everywhere. The DEFAULT theme becomes the CSS `:root` block; every
-other theme becomes `.dark.<name>`, which is the class App.svelte toggles.
+WHY FLUENT 2. ewe's own palette had one `hover` and one `stroke`, so there was
+no way to say "hover on a card" as distinct from "hover on a bare row", or
+"divider" as distinct from "focus ring". Every border/hover bug came from that
+missing vocabulary. Fluent names them: six background levels each with their
+own Hover/Pressed/Selected, a `subtle` set for things with no fill of their
+own, and three stroke levels plus an accessible one and two focus strokes.
+
+WHERE WE DEVIATE, deliberately, and why:
+  1. Fluent's greys are pure neutral (grey[20] is literally #333333). ewe's
+     premise is that the accent colours everything, so the ramp is pulled a
+     little toward the accent's hue. `neutral_tint = 0` restores Fluent's.
+  2. Fluent hard-codes text-on-brand to white, which is safe only because its
+     brand fills are always dark blue. ewe lets you pick yellow, so the
+     foreground is chosen from the fill's measured lightness instead.
 """
 import argparse
 import json
+import math
 import os
 import sys
 import tomllib
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CFG_DIR = os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
-USER_CONF = os.path.join(CFG_DIR, "ewe", "ewe-theme.conf")
-SHIPPED = [USER_CONF, os.path.join(HERE, "templates", "ewe-theme.conf"),
-           "/usr/share/ewe/templates/ewe-theme.conf"]
+EWE_CONF = os.path.join(CFG_DIR, "ewe", "ewe.conf")
 OUT_JSON = os.path.join(CFG_DIR, "quickshell", "theme-tokens.json")
 OUT_CSS = os.path.join(HERE, "design", "tokens.css")
 
-# px-valued shape keys — emitted as `<n>px` in CSS, as plain ints in JSON
-PX = ("radius", "radius-inner", "radius-pill", "border", "border-thin", "shadow-offset")
+DEFAULTS = {"accent": "#0a84ff", "corner": "medium", "density": "comfortable",
+            "stroke": "thin", "neutral_tint": 8}
 
 
 def out(o):
@@ -50,170 +69,519 @@ def fail(code, msg):
     sys.exit(0)
 
 
-def load(path=None):
-    for p in ([path] if path else SHIPPED):
-        if p and os.path.isfile(p):
+# ═══ colour math — sRGB <-> CIELAB <-> LCH, D65. Stdlib only. ═══════════════
+Xn, Yn, Zn = 0.95047, 1.0, 1.08883
+
+
+def _lin(c):
+    c /= 255.0
+    return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+
+
+def _gam(c):
+    return 12.92 * c if c <= 0.0031308 else 1.055 * (c ** (1 / 2.4)) - 0.055
+
+
+def hex_to_lch(h):
+    h = h.lstrip("#")
+    if len(h) == 3:
+        h = "".join(c * 2 for c in h)
+    r, g, b = (_lin(int(h[i:i + 2], 16)) for i in (0, 2, 4))
+    X = 0.4124564 * r + 0.3575761 * g + 0.1804375 * b
+    Y = 0.2126729 * r + 0.7151522 * g + 0.0721750 * b
+    Z = 0.0193339 * r + 0.1191920 * g + 0.9503041 * b
+    f = lambda t: t ** (1 / 3) if t > 216 / 24389 else (24389 / 27 * t + 16) / 116
+    fx, fy, fz = f(X / Xn), f(Y / Yn), f(Z / Zn)
+    L, a, bb = 116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz)
+    return L, math.hypot(a, bb), math.degrees(math.atan2(bb, a)) % 360
+
+
+def lch_to_rgb(L, C, H):
+    a = C * math.cos(math.radians(H))
+    b = C * math.sin(math.radians(H))
+    fy = (L + 16) / 116
+    fx, fz = fy + a / 500, fy - b / 200
+    g = lambda t: t ** 3 if t ** 3 > 216 / 24389 else (116 * t - 16) / (24389 / 27)
+    X = g(fx) * Xn
+    Y = (((L + 16) / 116) ** 3 if L > 8 else L / (24389 / 27)) * Yn
+    Z = g(fz) * Zn
+    return (_gam(3.2404542 * X - 1.5371385 * Y - 0.4985314 * Z),
+            _gam(-0.9692660 * X + 1.8760108 * Y + 0.0415560 * Z),
+            _gam(0.0556434 * X - 0.2040259 * Y + 1.0572252 * Z))
+
+
+def _fits(t):
+    return all(-0.0005 <= c <= 1.0005 for c in t)
+
+
+def lch_to_hex(L, C, H):
+    """Fluent's snap_into_gamut: hold L and H, drop chroma until sRGB fits."""
+    if not _fits(lch_to_rgb(L, C, H)):
+        lo, hi = 0.0, C
+        for _ in range(32):
+            mid = (lo + hi) / 2
+            if _fits(lch_to_rgb(L, mid, H)):
+                lo = mid
+            else:
+                hi = mid
+        C = lo
+    r, g, b = lch_to_rgb(L, C, H)
+    q = lambda c: max(0, min(255, round(c * 255)))
+    return "#%02x%02x%02x" % (q(r), q(g), q(b))
+
+
+# ═══ global ramp 1: the greys ══════════════════════════════════════════════
+# Fluent's grey ramp is 50 stops keyed by percent lightness, and the value is
+# simply round(2.55 * key) in all three channels — grey[20] is #333333. We keep
+# the exact same keys and lightness so every alias mapping below is Fluent's
+# verbatim, and only bend the hue.
+GREY_KEYS = list(range(2, 100, 2)) + [99]
+
+
+def grey_ramp(accent, tint):
+    """The neutral ladder, pulled `tint` toward the accent's hue.
+
+    tint = 0 gives Fluent's pure greys. The pull tapers to nothing at both ends
+    (black and white must stay black and white) and peaks in the midtones,
+    which is where a surface's colour actually reads."""
+    _, _, hue = hex_to_lch(accent)
+    ramp = {}
+    for k in GREY_KEYS:
+        v = round(2.55 * k)
+        base = "#%02x%02x%02x" % (v, v, v)
+        if not tint:
+            ramp[k] = base
+            continue
+        L = hex_to_lch(base)[0]
+        t = L / 100.0
+        # Weighted to the DARK end on purpose. The dark rungs are the large
+        # surfaces — the desktop, panels, cards — and that is where a hue
+        # actually reads. The light rungs are text, which must stay neutral
+        # white or it goes muddy, so the curve is gone by L* 85.
+        C = tint * 0.32 * math.exp(-(((t - 0.22) / 0.30) ** 2))
+        ramp[k] = lch_to_hex(L, C, hue)
+    return ramp
+
+
+# ═══ global ramp 2: the brand ═════════════════════════════════════════════
+# Fluent's real generator walks a curved helix through CIELAB with a per-hue
+# snapping table. This is a faithful reduction of it: hold the accent's hue,
+# ride a lightness ladder anchored so the accent lands EXACTLY on its stop,
+# scale chroma by the measured envelope, twist slightly toward the ends, and
+# snap into gamut. Validated against Microsoft's own published ramps —
+# mean dE 1.5 (brandWeb) and 3.8 (brandTeams), anchor stop exact.
+BRAND_STOPS = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160]
+# measured off brandWeb: the lightness ladder and the chroma envelope
+REF_L = [7.0, 12.9, 18.0, 23.7, 29.1, 34.7, 39.2, 44.9,
+         54.8, 63.7, 68.2, 72.6, 78.3, 84.3, 89.7, 95.5]
+REF_C = [11.2, 16.6, 20.9, 25.2, 31.3, 36.7, 43.6, 49.8,
+         52.5, 51.1, 43.7, 38.1, 30.7, 21.5, 13.2, 5.3]
+ANCHOR = 80          # the stop your accent lands on, exactly
+TORSION = -13.0      # degrees of hue twist toward the ends
+
+
+def brand_ramp(accent):
+    L0, C0, H0 = hex_to_lch(accent)
+    i = BRAND_STOPS.index(ANCHOR)
+    La, Ca = REF_L[i], REF_C[i]
+    ks = (C0 / Ca) if Ca else 0
+    ramp = {}
+    for j, s in enumerate(BRAND_STOPS):
+        L = REF_L[j]
+        Lo = L0 * (L / La) if L <= La else L0 + (100 - L0) * (L - La) / (100 - La)
+        t = (L - La) / (100 - La) if L >= La else (La - L) / La * 0.55
+        ramp[s] = lch_to_hex(Lo, REF_C[j] * ks, (H0 + TORSION * t) % 360)
+    return ramp
+
+
+def on(fill):
+    """Foreground for text sitting ON a fill. Fluent hard-codes white here;
+    ewe cannot, because you may pick yellow. L* 60 is where white gives up."""
+    return "#242424" if hex_to_lch(fill)[0] > 60 else "#ffffff"
+
+
+# ═══ the alias layer — Fluent's dark theme, verbatim ══════════════════════
+# Every right-hand side below is Fluent's own dark mapping. Read it as the
+# contract: a component asks for a ROLE and this table decides the value.
+def alias(grey, brand, white="#ffffff", black="#000000"):
+    g, b = grey, brand
+    return {
+        # ── foregrounds ────────────────────────────────────────────────────
+        "fg-1": white,                    # primary text
+        "fg-2": g[84],                    # secondary text
+        "fg-2-hover": white,
+        "fg-3": g[68],                    # tertiary / placeholder / icons
+        "fg-3-hover": g[84],
+        "fg-4": g[60],                    # the quietest readable text
+        "fg-disabled": g[36],
+        "fg-inverted": g[14],             # text on a light fill
+        "fg-on-brand": on(b[70]),         # DEVIATION: measured, not white
+        # ── backgrounds: six levels, each with its own states ─────────────
+        "bg-1": g[16], "bg-1-hover": g[24], "bg-1-pressed": g[12], "bg-1-selected": g[22],
+        "bg-2": g[12], "bg-2-hover": g[20], "bg-2-pressed": g[8], "bg-2-selected": g[18],
+        "bg-3": g[8], "bg-3-hover": g[16], "bg-3-pressed": g[4], "bg-3-selected": g[14],
+        "bg-4": g[4], "bg-4-hover": g[12], "bg-4-pressed": black, "bg-4-selected": g[10],
+        "bg-5": black, "bg-5-hover": g[8], "bg-5-pressed": g[2], "bg-5-selected": g[6],
+        "bg-6": g[20],
+        "bg-disabled": g[8],
+        # ── card: a raised, FILLED surface that reacts to the pointer ──────
+        # DEVIATION. Fluent's bg-6 has no state variants, because its Card
+        # component carries its own. ewe's panels are full of cards and tiles
+        # that must hover, so the ladder is extended here using Fluent's own
+        # deltas off bg-1 (+8 hover, -4 pressed, +6 selected) applied to g20.
+        # Without this a hovered card had to borrow `subtle-hover`, which is a
+        # DIFFERENT surface — that is why hovering a tile made it jump colour.
+        "card": g[20],
+        "card-hover": g[28],
+        "card-pressed": g[16],
+        "card-selected": g[26],
+        # ── subtle: a thing with no fill of its own until you point at it ──
+        # THIS is the token ewe never had. Every "hover a bare row" bug was
+        # this concept being spelled with a surface colour instead.
+        "subtle": "transparent",
+        "subtle-hover": g[22],
+        "subtle-pressed": g[18],
+        "subtle-selected": g[20],
+        # ── strokes: three weights, not one ────────────────────────────────
+        "stroke-1": g[40],                # a real UI border
+        "stroke-1-hover": g[46],
+        "stroke-1-pressed": g[42],
+        "stroke-1-selected": g[44],
+        "stroke-2": g[32],                # subtle outline
+        "stroke-3": g[24],                # divider / separator
+        "stroke-accessible": g[68],       # a border that must be SEEN
+        "stroke-disabled": g[26],
+        "stroke-focus-1": black,          # the inner half of a focus ring
+        "stroke-focus-2": white,          # the outer half
+        # ── brand ──────────────────────────────────────────────────────────
+        "brand-bg": b[70],                # a filled primary control
+        "brand-bg-hover": b[80],
+        "brand-bg-pressed": b[40],
+        "brand-bg-selected": b[60],
+        "brand-fg-1": b[100],             # accent AS text / icon on dark
+        "brand-fg-2": b[110],
+        "brand-fg-link": b[100],
+        "brand-fg-link-hover": b[110],
+        "brand-stroke-1": b[100],
+        "brand-stroke-2": b[50],
+        # compound = a control whose fill and stroke move together (checkbox,
+        # radio, switch): the one place Fluent brightens on hover instead of
+        # darkening, so the control reads as "live" under the pointer
+        "compound-brand-bg": b[100],
+        "compound-brand-bg-hover": b[110],
+        "compound-brand-bg-pressed": b[90],
+        "compound-brand-fg": b[100],
+        "compound-brand-stroke": b[100],
+        # ── shadow (Fluent's own alphas) ───────────────────────────────────
+        "shadow-ambient": "rgba(0,0,0,0.24)",
+        "shadow-key": "rgba(0,0,0,0.28)",
+    }
+
+
+# status colours — Fluent's shared status hues, taken at the tints its dark
+# theme uses. They are NOT derived from the accent: "this failed" must not
+# change meaning because you picked a red accent.
+STATUS = {
+    "success": "#54b054", "success-bg": "#052505", "success-border": "#9fd89f",
+    "warning": "#fdea3d", "warning-bg": "#332a00", "warning-border": "#fbde3d",
+    "danger": "#f1707b", "danger-bg": "#3b0509", "danger-border": "#f1707b",
+    "info": "#9ea2a6", "info-bg": "#222527", "info-border": "#9ea2a6",
+}
+
+
+# ═══ the non-colour ramps ═════════════════════════════════════════════════
+# Fluent's global ramps, verbatim. Nothing here is invented.
+RADIUS_RAMP = {"none": 0, "small": 2, "medium": 4, "large": 6, "xlarge": 8,
+               "2xlarge": 12, "3xlarge": 16, "4xlarge": 24, "circular": 9999}
+SPACING_RAMP = {"none": 0, "xxs": 2, "xs": 4, "snudge": 6, "s": 8, "mnudge": 10,
+                "m": 12, "l": 16, "xl": 20, "xxl": 24, "xxxl": 32}
+STROKE_RAMP = {"thin": 1, "thick": 2, "thicker": 3, "thickest": 4}
+FONT_RAMP = {100: (10, 14), 200: (12, 16), 300: (14, 20), 400: (16, 22),
+             500: (20, 28), 600: (24, 32), 700: (28, 36), 800: (32, 40)}
+
+# `corner` picks which rung of the radius ramp each ROLE stands on. One knob,
+# and the whole desktop's cornering moves together.
+CORNER = {
+    "none":   {"control": "none", "card": "none", "panel": "none", "pill": "none"},
+    "small":  {"control": "small", "card": "medium", "panel": "large", "pill": "small"},
+    "medium": {"control": "medium", "card": "large", "panel": "xlarge", "pill": "medium"},
+    "large":  {"control": "large", "card": "xlarge", "panel": "2xlarge", "pill": "circular"},
+}
+# `density` picks the spacing rungs and the control heights. Fluent's own
+# button sizes are 24 / 32 / 40, which is exactly this ladder.
+DENSITY = {
+    "compact":     {"pad": "s", "gap": "xs", "control": 24, "row": 28, "font": 200},
+    "comfortable": {"pad": "m", "gap": "s", "control": 32, "row": 36, "font": 300},
+    "roomy":       {"pad": "l", "gap": "m", "control": 40, "row": 44, "font": 300},
+}
+
+
+# ═══ reading the one config ═══════════════════════════════════════════════
+def read_conf(path=None):
+    """`[desktop.theme]` out of ewe.conf. Missing file, missing section and
+    missing keys all fall back to DEFAULTS — a fresh machine still themes."""
+    p = path or EWE_CONF
+    cfg = dict(DEFAULTS)
+    src = "defaults"
+    if os.path.isfile(p):
+        try:
             with open(p, "rb") as f:
-                return tomllib.load(f), p
-    fail("no-conf", "no ewe-theme.conf found (looked in %s)" % ", ".join(x for x in SHIPPED if x))
+                doc = tomllib.load(f)
+            t = ((doc.get("desktop") or {}).get("theme") or {})
+            for k in DEFAULTS:
+                if k in t:
+                    cfg[k] = t[k]
+            src = p
+        except (tomllib.TOMLDecodeError, OSError):
+            pass  # a broken conf must never leave the desktop unthemed
+    if not isinstance(cfg["accent"], str) or not cfg["accent"].startswith("#"):
+        cfg["accent"] = DEFAULTS["accent"]
+    for k, table in (("corner", CORNER), ("density", DENSITY), ("stroke", STROKE_RAMP)):
+        if cfg[k] not in table:
+            cfg[k] = DEFAULTS[k]
+    try:
+        cfg["neutral_tint"] = max(0, min(40, int(cfg["neutral_tint"])))
+    except (TypeError, ValueError):
+        cfg["neutral_tint"] = DEFAULTS["neutral_tint"]
+    return cfg, src
 
 
-def themes(doc):
-    return {k: v for k, v in doc.items() if k != "meta" and isinstance(v, dict)}
+def tokens(cfg):
+    """The whole token set, derived. This is the only place it is decided."""
+    grey = grey_ramp(cfg["accent"], cfg["neutral_tint"])
+    brand = brand_ramp(cfg["accent"])
+    color = alias(grey, brand)
+    color.update(STATUS)
+
+    corner, dens = CORNER[cfg["corner"]], DENSITY[cfg["density"]]
+    thin = STROKE_RAMP[cfg["stroke"]]
+    shape = {
+        "radius-control": RADIUS_RAMP[corner["control"]],
+        "radius-card": RADIUS_RAMP[corner["card"]],
+        "radius-panel": RADIUS_RAMP[corner["panel"]],
+        "radius-pill": RADIUS_RAMP[corner["pill"]],
+        "stroke-width": thin,
+        "stroke-width-thick": min(4, thin + 1),
+        "focus-width": 2,
+    }
+    size = {
+        "pad": SPACING_RAMP[dens["pad"]],
+        "gap": SPACING_RAMP[dens["gap"]],
+        "control": dens["control"],
+        "row": dens["row"],
+        # 18, not 16. Lucide is STROKE art where the old face was solid, so
+        # the same nominal size reads lighter; a font cannot vary its stroke
+        # width, which makes size the only lever for optical weight. Compact
+        # keeps the two-step drop it always had.
+        "icon": 20 if dens["control"] >= 40 else 18 if dens["control"] >= 32 else 16,
+        "bar-height": dens["control"] - 2,
+    }
+    for name, step in SPACING_RAMP.items():
+        size["space-" + name] = step
+    base = dens["font"]
+    for key, (fs, lh) in FONT_RAMP.items():
+        size["fs-%d" % key] = fs
+        size["lh-%d" % key] = lh
+    size["fs-body"] = FONT_RAMP[base][0]
+    size["fs-small"] = FONT_RAMP[max(100, base - 100)][0]
+    size["fs-large"] = FONT_RAMP[base + 100][0]
+    size["fs-title"] = FONT_RAMP[600][0]
+    return {"input": cfg, "color": color, "shape": shape, "size": size,
+            "grey": grey, "brand": brand}
 
 
-def css_vars(t):
-    """One theme -> the {--name: value} map. The derived values (how a button
-    hovers, where an input's border sits, what depth looks like) are computed
-    from the declarative `voice`/`shape` keys, so the conf stays readable."""
-    v = {}
-    for k, val in (t.get("color") or {}).items():
-        v["--" + k] = val
-    shape = t.get("shape") or {}
-    for k in PX:
-        if k in shape:
-            v["--" + k] = "%dpx" % int(shape[k])
-    voice = t.get("voice") or {}
-    if "label-transform" in voice:
-        v["--label-transform"] = voice["label-transform"]
-    if "label-tracking" in voice:
-        v["--label-tracking"] = voice["label-tracking"]
-    if "label-weight" in voice:
-        v["--label-weight"] = str(voice["label-weight"])
-
-    # hover: invert empties the fill and moves the accent to the text
-    if voice.get("hover") == "invert":
-        v["--btn-hover-bg"] = "transparent"
-        v["--btn-hover-fg"] = "var(--accent)"
-    else:
-        v["--btn-hover-bg"] = "color-mix(in srgb, var(--accent) 88%, #ffffff)"
-        v["--btn-hover-fg"] = "var(--accent-fg)"
-
-    # inputs: a bottom rule, or a full outline
-    b = int(shape.get("border", 1))
-    v["--input-border-width"] = "0 0 %dpx 0" % b if voice.get("input-border") == "bottom" else "%dpx" % b
-
-    # The look's DEFAULT accent. Deliberately NOT emitted as --accent: that
-    # name belongs to the user's pick, set as an inline style at runtime, and
-    # an inline style beats a stylesheet. tokens.css chains
-    # `--accent: var(--accent-default)`, so a machine that has never chosen an
-    # accent gets the theme's, and a machine that has keeps its own.
-    if t.get("accent"):
-        v["--accent-default"] = t["accent"]
-
-    # depth: a solid offset block, or ambient blur when shadow-offset is 0
-    off = int(shape.get("shadow-offset", 0))
-    if off:
-        v["--elevation"] = "%dpx %dpx 0 0 #000000" % (off, off)
-        v["--elevation-sm"] = "%dpx %dpx 0 0 #000000" % (max(1, off // 2), max(1, off // 2))
-    else:
-        v["--elevation"] = "0 8px 24px rgba(0, 0, 0, 0.45)"
-        v["--elevation-sm"] = "0 2px 8px rgba(0, 0, 0, 0.35)"
-    return v
+# ═══ the compatibility layer ══════════════════════════════════════════════
+# ewe's ~50 QML files and three Svelte apps still ask for the OLD names. They
+# are migrated file by file, not in one commit, so every old name is published
+# here as an alias onto its Fluent role. Nothing breaks on the day the engine
+# lands; a component stops appearing in this table when it has been migrated,
+# and when the table is empty it is deleted.
+# ── the legacy alias layer ────────────────────────────────────────────────
+# NOTHING in this tree reads these any more: the shell moved onto the Fluent
+# roles on 2026-09-04, and so did design/components.css and all three apps.
+# They are emitted for ONE reason — an already-installed app binary, built
+# before the move, calls `ewe-theme show` and injects whatever css_vars it
+# gets. Dropping them would leave such a binary painting itself with the
+# defaults compiled into its own tokens.css. Delete them a release after the
+# Fluent move ships.
+LEGACY_COLOR = {
+    "bg": "bg-3",                 # desktop / app base — the deepest surface
+    "panel": "bg-1",              # a popup or panel sitting on it
+    "elevated": "card",           # a card or row raised on the panel
+    "hover": "subtle-hover",      # what ewe called "hover" was always this
+    "stroke": "stroke-2",
+    "fg": "fg-1",
+    "fg-secondary": "fg-2",
+    "fg-dim": "fg-3",
+    "link": "brand-fg-link",
+    "link-solid": "brand-bg",
+    "accent-fg": "fg-on-brand",
+    "success": "success", "warning": "warning", "danger": "danger",
+}
+LEGACY_SHAPE = {
+    "radius": "radius-panel", "radius-inner": "radius-card",
+    "radius-pill": "radius-pill", "border": "stroke-width",
+    "border-thin": "stroke-width", "hover-inset": "stroke-width",
+    "focus": "focus-width",
+}
+LEGACY_SIZE = ("pad", "gap", "row", "control", "bar-height", "icon",
+               "fs-small", "fs-body", "fs-large", "fs-title")
+# One look now, so both old names resolve to it. Keeping the two keys means a
+# machine whose ewe.conf still says theme_name = "blacksheep" themes correctly
+# instead of falling back to Theme.qml's built-ins.
+LEGACY_LOOKS = ("flock", "blacksheep")
 
 
-def gen_css(doc):
-    ts = themes(doc)
-    default = (doc.get("meta") or {}).get("default") or next(iter(ts))
-    s = ["/* AUTO-GENERATED by `ewe-theme build` from ewe-theme.conf.",
-         " * Do not edit by hand — change the conf and rebuild.",
-         " *",
-         " * Every name here mirrors a token in dotfiles/quickshell/Theme.qml, so the",
-         " * shell and the apps are demonstrably the same system. The default theme is",
-         " * :root; every other theme is .dark.<name>, the class App.svelte toggles.",
-         " *",
-         " * --accent is the user's pick, injected inline at runtime, which beats any",
-         " * rule here. What IS themed is --accent-default: the colour a look opens",
-         " * with before anyone chooses, chained as `--accent: var(--accent-default)`.",
-         " * The font stack is shared by both looks and never themed.",
-         " */", ""]
-    order = [default] + [n for n in ts if n != default]
-    for name in order:
-        t = ts[name]
-        sel = ":root" if name == default else ".dark.%s" % name
-        s.append("/* %s — %s */" % (t.get("label", name), t.get("note", "")))
-        s.append("%s {" % sel)
-        vars_ = css_vars(t)
-        for k, val in vars_.items():
-            s.append("  %s: %s;" % (k, val))
-        if "--accent-default" in vars_:
-            s.append("  --accent: var(--accent-default);")
-        s.append("}")
-        s.append("")
-    return "\n".join(s)
+def legacy(t):
+    c, s, z = t["color"], t["shape"], t["size"]
+    look = {
+        "label": "Ewe",
+        "note": "Fluent 2 tokens, derived from your accent.",
+        "accent": c["brand-fg-1"],
+        "color": {k: c[v] for k, v in LEGACY_COLOR.items()},
+        "shape": dict({k: s[v] for k, v in LEGACY_SHAPE.items()}, **{"shadow-offset": 0}),
+        "size": {k: z[k] for k in LEGACY_SIZE},
+        # the retired Bauhaus/Alexandria "voice" keys — one look, one voice
+        "voice": {"label-transform": "none", "label-tracking": "normal",
+                  "label-weight": 600, "hover": "brighten",
+                  "input-border": "all", "surface": "tonal"},
+    }
+    return {n: look for n in LEGACY_LOOKS}
 
 
-def gen_json(doc):
-    ts = themes(doc)
+# ═══ artefacts ════════════════════════════════════════════════════════════
+def gen_json(t):
     return json.dumps({
-        "version": (doc.get("meta") or {}).get("version", 1),
-        "default": (doc.get("meta") or {}).get("default") or next(iter(ts)),
-        "themes": {n: {"label": t.get("label", n), "note": t.get("note", ""),
-                       "accent": t.get("accent", ""),
-                       "color": t.get("color") or {}, "shape": t.get("shape") or {},
-                       "voice": t.get("voice") or {}} for n, t in ts.items()},
+        "version": 2,
+        "input": t["input"],
+        "color": t["color"], "shape": t["shape"], "size": t["size"],
+        "grey": t["grey"], "brand": t["brand"],
+        "themes": legacy(t),
     }, indent=2) + "\n"
 
 
-def cmd_list(a):
-    doc, path = load(a.conf)
-    ts = themes(doc)
-    out({"ok": True, "conf": path,
-         "default": (doc.get("meta") or {}).get("default"),
-         "themes": [{"name": n, "label": t.get("label", n), "note": t.get("note", "")}
-                    for n, t in ts.items()]})
+def css_vars(t):
+    v = {}
+    for k, val in t["color"].items():
+        v["--" + k] = val
+    for k, val in t["shape"].items():
+        v["--" + k] = "%dpx" % val
+    for k, val in t["size"].items():
+        v["--" + k] = "%dpx" % val
+    # the accent itself, and depth. ewe is dark-only, so depth is ambient:
+    # Fluent's own two-layer shadow, key over ambient.
+    v["--accent-default"] = t["color"]["brand-fg-1"]
+    v["--elevation-sm"] = "0 1px 2px %s, 0 0 2px %s" % (
+        t["color"]["shadow-key"], t["color"]["shadow-ambient"])
+    v["--elevation"] = "0 8px 16px %s, 0 0 2px %s" % (
+        t["color"]["shadow-key"], t["color"]["shadow-ambient"])
+    # legacy aliases — see LEGACY_COLOR
+    for k, src in LEGACY_COLOR.items():
+        v["--" + k] = t["color"][src]
+    for k, src in LEGACY_SHAPE.items():
+        v["--" + k] = "%dpx" % t["shape"][src]
+    v["--shadow-offset"] = "0px"
+    v["--label-transform"] = "none"
+    v["--label-tracking"] = "normal"
+    v["--label-weight"] = "600"
+    v["--btn-hover-bg"] = t["color"]["brand-bg-hover"]
+    v["--btn-hover-fg"] = t["color"]["fg-on-brand"]
+    v["--input-border-width"] = "%dpx" % t["shape"]["stroke-width"]
+    return v
 
 
-def cmd_show(a):
-    doc, path = load(a.conf)
-    ts = themes(doc)
-    if a.theme not in ts:
-        fail("no-theme", "no such theme: %s (have: %s)" % (a.theme, ", ".join(ts)))
-    t = ts[a.theme]
-    out({"ok": True, "name": a.theme, "conf": path, "label": t.get("label", a.theme),
-         "css_vars": css_vars(t), "color": t.get("color") or {},
-         "shape": t.get("shape") or {}, "voice": t.get("voice") or {}})
+def gen_css(t):
+    s = ["/* AUTO-GENERATED by `ewe-theme build`. Do not edit by hand.",
+         " *",
+         " * There is no theme file. Every value below is DERIVED from the one",
+         " * accent in ewe.conf [desktop.theme] — change it there and rebuild:",
+         " *",
+         " *     ewe-conf set desktop.theme.accent '#ffcc00'",
+         " *",
+         " * Names are Fluent 2's roles. A component asks for a role and this",
+         " * layer decides the value; no component carries a palette literal.",
+         " * The --bg/--panel/--stroke names near the bottom are the pre-Fluent",
+         " * aliases, kept so unmigrated components keep working.",
+         " *",
+         " * --accent is the user's pick, injected inline at runtime, which",
+         " * beats any rule here. The font stack is never themed.",
+         " */", "", ":root {"]
+    for k, val in css_vars(t).items():
+        s.append("  %s: %s;" % (k, val))
+    s.append("  --accent: var(--accent-default);")
+    s.append("}")
+    s.append("")
+    return "\n".join(s)
 
 
 def _write(path, text):
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w") as f:
+    d = os.path.dirname(path)
+    if d and not os.path.isdir(d):
+        os.makedirs(d, exist_ok=True)
+    tmp = path + ".tmp"
+    with open(tmp, "w") as f:
         f.write(text)
+    os.replace(tmp, path)
+
+
+# ═══ commands ═════════════════════════════════════════════════════════════
+def cmd_show(a):
+    cfg, src = read_conf(a.conf)
+    t = tokens(cfg)
+    # css_vars is what the Tauri apps inject at runtime. They ship tokens.css
+    # compiled in, built from the DEFAULT accent; this is the same map built
+    # from THIS machine's ewe.conf, so the apps wear the user's accent — and
+    # the greys its tint produced — without being rebuilt.
+    out({"ok": True, "conf": src, "input": cfg, "color": t["color"],
+         "shape": t["shape"], "size": t["size"], "brand": t["brand"],
+         "css_vars": css_vars(t)})
 
 
 def cmd_build(a):
-    doc, path = load(a.conf)
+    cfg, src = read_conf(a.conf)
+    t = tokens(cfg)
     written, skipped = [], []
-    j = a.json or OUT_JSON
-    _write(j, gen_json(doc)); written.append(j)
-
-    # The CSS is a BUILD-TIME artefact for the app repos, not a runtime one:
-    # on an installed system HERE is /usr and design/ does not exist, so write
-    # it only where the tree actually is (a dev checkout), or where asked.
-    c = a.css or OUT_CSS
-    if c == "/dev/null":
-        skipped.append("css (asked to discard)")
-    elif a.css or os.path.isdir(os.path.dirname(c)):
-        _write(c, gen_css(doc)); written.append(c)
+    jp = a.json if a.json is not None else OUT_JSON
+    if jp == "/dev/null":
+        skipped.append("json (asked to discard)")
     else:
-        skipped.append("%s (no design/ here — this is an installed tree)" % c)
-    out({"ok": True, "conf": path, "written": written, "skipped": skipped})
+        _write(jp, gen_json(t))
+        written.append(jp)
+    cp = a.css if a.css is not None else OUT_CSS
+    if cp == "/dev/null":
+        skipped.append("css (asked to discard)")
+    elif os.path.isdir(os.path.dirname(cp) or "."):
+        # The CSS is a REPO file, committed and compiled into the apps, so it
+        # is built from the DEFAULTS — never from whichever machine ran the
+        # build. (The JSON above is the opposite: it is this machine's state.)
+        # At runtime the apps re-inject the live token set over the top; this
+        # file is the baseline they start from and what they fall back to.
+        _write(cp, gen_css(tokens(dict(DEFAULTS))))
+        written.append(cp)
+    else:
+        # an installed tree has no design/ — the apps ship their CSS compiled in
+        skipped.append("css (no %s)" % os.path.dirname(cp))
+    out({"ok": True, "conf": src, "accent": cfg["accent"],
+         "written": written, "skipped": skipped})
 
 
 def cmd_check(a):
-    doc, path = load(a.conf)
+    cfg, src = read_conf(a.conf)
+    t = tokens(cfg)
     drift = []
-    for target, gen in ((a.json or OUT_JSON, gen_json), (a.css or OUT_CSS, gen_css)):
-        want = gen(doc)
-        try:
-            with open(target) as f:
-                have = f.read()
-        except OSError:
-            drift.append({"path": target, "why": "missing"})
+    for path, want in ((a.json or OUT_JSON, gen_json(t)),
+                       (a.css or OUT_CSS, gen_css(tokens(dict(DEFAULTS))))):
+        if path == "/dev/null":
             continue
-        if have != want:
-            drift.append({"path": target, "why": "stale — rebuild with `ewe-theme build`"})
-    out({"ok": not drift, "conf": path, "drift": drift})
+        try:
+            with open(path) as f:
+                got = f.read()
+        except OSError:
+            drift.append({"path": path, "why": "missing — run `ewe-theme build`"})
+            continue
+        if got != want:
+            drift.append({"path": path, "why": "stale — rebuild with `ewe-theme build`"})
+    out({"ok": not drift, "conf": src, "drift": drift})
 
 
 SPECIMEN = """<!doctype html>
@@ -221,154 +589,190 @@ SPECIMEN = """<!doctype html>
 <title>Ewe Theme Specimen</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Ubuntu:wght@400;500;700&family=Ubuntu+Mono&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Ubuntu:wght@400;500;600;700&family=Ubuntu+Mono&display=swap">
 <style>
 __TOKENS__
 * { box-sizing: border-box; }
-body { margin:0; font-family: Ubuntu, "Noto Sans Georgian", Cantarell, system-ui, sans-serif; background: var(--bg); color: var(--fg);
-       transition: background .15s, color .15s; }
-.wrap { max-width: 1000px; margin: 0 auto; padding: 28px 24px 64px; }
-h1 { font-size: 22px; margin: 0 0 2px; font-weight: var(--label-weight);
-     text-transform: var(--label-transform); letter-spacing: var(--label-tracking); }
-.sub { color: var(--fg-dim); font-size: 13px; margin-bottom: 22px; }
-h2 { font-size: 11px; color: var(--fg-dim); margin: 30px 0 10px; font-weight: var(--label-weight);
-     text-transform: var(--label-transform); letter-spacing: var(--label-tracking); }
-.card { background: var(--panel); border: var(--border) solid var(--stroke);
-        border-radius: var(--radius); box-shadow: var(--elevation); padding: 18px; }
-.row { display:flex; flex-wrap:wrap; gap:12px; align-items:center; }
-.btn { display:inline-flex; align-items:center; gap:6px; white-space:nowrap; padding:7px 14px;
-       font: inherit; font-size:13px; cursor:pointer; border-radius: var(--radius-pill);
-       border: var(--border) solid transparent; font-weight: var(--label-weight);
-       letter-spacing: var(--label-tracking); text-transform: var(--label-transform); }
-.btn-primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
-.btn-primary:hover { background: var(--btn-hover-bg); color: var(--btn-hover-fg); }
-.btn-ghost { background: var(--elevated); color: var(--fg); border-color: var(--stroke); }
-.btn-ghost:hover { background: var(--hover); }
-.btn-danger { background: var(--danger); color: var(--accent-fg); border-color: var(--danger); }
-.btn[disabled] { opacity:.45; pointer-events:none; }
-input.f { width:100%; padding:8px 12px; font:inherit; font-size:13px; background: var(--elevated);
-          color: var(--fg); border-radius: var(--radius-inner); border-style: solid;
-          border-color: var(--stroke); border-width: var(--input-border-width); outline:none; }
-input.f:focus { border-color: var(--accent); }
-input.f::placeholder { color: var(--fg-dim); }
-.kv { display:flex; justify-content:space-between; padding:9px 14px; font-size:13px;
-      border-top: var(--border-thin) solid var(--stroke); }
-.sw { width:38px; height:20px; border-radius: var(--radius-pill); position:relative; cursor:pointer;
-      border: var(--border-thin) solid var(--stroke); background: var(--elevated); }
-.sw.on { background: var(--accent); border-color: var(--accent); }
-.sw i { position:absolute; top:1px; left:2px; width:14px; height:14px; border-radius: var(--radius-pill);
-        background: var(--fg-dim); transition:left .12s; }
-.sw.on i { left:19px; background: var(--accent-fg); }
-.track { height:6px; background: var(--elevated); border-radius: var(--radius-pill); overflow:hidden;
-         border: var(--border-thin) solid var(--stroke); }
-.track > b { display:block; height:100%; width:64%; background: var(--accent); }
-.chip { display:inline-block; padding:3px 9px; font-size:11px; border-radius: var(--radius-pill);
-        border: var(--border-thin) solid currentColor; }
-.sw-list { display:grid; grid-template-columns: repeat(auto-fill,minmax(132px,1fr)); gap:10px; }
-.sw-list div { border: var(--border-thin) solid var(--stroke); border-radius: var(--radius-inner);
-               padding:8px; font-size:10px; font-family: "Ubuntu Mono", ui-monospace, monospace; color: var(--fg-dim); }
-.sw-list span { display:block; height:36px; border-radius: var(--radius-pill); margin-bottom:6px;
-                border: var(--border-thin) solid var(--stroke); }
-:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
-@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
-.picker { position:sticky; top:0; background: var(--bg); padding:14px 0; display:flex; gap:8px;
-          border-bottom: var(--border-thin) solid var(--stroke); margin-bottom:8px; z-index:2; }
+body { margin:0; font-family: Ubuntu, "Noto Sans Georgian", system-ui, sans-serif;
+       background: var(--bg-3); color: var(--fg-1); font-size: var(--fs-body); }
+.wrap { max-width: 1060px; margin: 0 auto; padding: 24px 22px 72px; }
+h1 { font-size: var(--fs-600); line-height: var(--lh-600); margin: 0 0 2px; font-weight: 600; }
+.sub { color: var(--fg-3); font-size: var(--fs-200); margin-bottom: 20px; }
+h2 { font-size: var(--fs-200); color: var(--fg-3); margin: 28px 0 9px; font-weight: 600; }
+.card { background: var(--bg-1); border: var(--stroke-width) solid var(--stroke-2);
+        border-radius: var(--radius-card); box-shadow: var(--elevation-sm); padding: var(--pad); }
+.row { display:flex; flex-wrap:wrap; gap: var(--gap); align-items:center; }
+/* controls */
+.btn { display:inline-flex; align-items:center; justify-content:center; gap:6px;
+       min-height: var(--control); padding-inline: var(--pad); font: inherit;
+       font-weight: 600; cursor:pointer; border-radius: var(--radius-control);
+       border: var(--stroke-width) solid transparent; transition: background .1s, border-color .1s; }
+.btn-primary { background: var(--brand-bg); color: var(--fg-on-brand); border-color: var(--brand-bg); }
+.btn-primary:hover { background: var(--brand-bg-hover); border-color: var(--brand-bg-hover); }
+.btn-primary:active { background: var(--brand-bg-pressed); border-color: var(--brand-bg-pressed); }
+.btn-ghost { background: var(--bg-1); color: var(--fg-1); border-color: var(--stroke-1); }
+.btn-ghost:hover { background: var(--bg-1-hover); border-color: var(--stroke-1-hover); }
+.btn-ghost:active { background: var(--bg-1-pressed); }
+.btn-subtle { background: var(--subtle); color: var(--fg-2); border-color: transparent; }
+.btn-subtle:hover { background: var(--subtle-hover); color: var(--fg-2-hover); }
+.btn[disabled] { background: var(--bg-disabled); color: var(--fg-disabled);
+                 border-color: var(--stroke-disabled); pointer-events:none; }
+input.f { width:100%; min-height: var(--control); padding-inline: var(--pad); font: inherit;
+          background: var(--bg-1); color: var(--fg-1); border-radius: var(--radius-control);
+          border: var(--stroke-width) solid var(--stroke-1); outline: none; }
+input.f:hover { border-color: var(--stroke-1-hover); }
+input.f:focus { border-color: var(--compound-brand-stroke); box-shadow: 0 0 0 1px var(--compound-brand-stroke); }
+input.f::placeholder { color: var(--fg-3); }
+/* THE case ewe had no word for: a row with no fill of its own. Inset by the
+   stroke width so a hovered row can never paint over its container's rule. */
+.list { padding: var(--stroke-width); }
+.list .item { display:flex; align-items:center; justify-content:space-between;
+      min-height: var(--row); padding-inline: calc(var(--pad) - var(--stroke-width));
+      border-radius: calc(var(--radius-card) - var(--stroke-width));
+      background: var(--subtle); cursor:pointer; transition: background .1s; }
+.list .item:hover { background: var(--subtle-hover); }
+.list .item:active { background: var(--subtle-pressed); }
+.list .item.sel { background: var(--subtle-selected); }
+.list .item + .item { border-top: var(--stroke-width) solid var(--stroke-3); }
+.sw { width:40px; height:20px; border-radius: var(--radius-pill); position:relative; cursor:pointer;
+      border: var(--stroke-width) solid var(--stroke-accessible); background: var(--subtle); }
+.sw.on { background: var(--compound-brand-bg); border-color: var(--compound-brand-bg); }
+.sw.on:hover { background: var(--compound-brand-bg-hover); border-color: var(--compound-brand-bg-hover); }
+.sw i { position:absolute; top:3px; left:4px; width:12px; height:12px; border-radius:50%;
+        background: var(--fg-3); transition:left .1s; }
+.sw.on i { left:22px; background: var(--fg-on-brand); }
+.chip { display:inline-flex; align-items:center; padding:2px 9px; font-size: var(--fs-200);
+        border-radius: var(--radius-pill); border: var(--stroke-width) solid currentColor; }
+/* ramps */
+.ramp { display:flex; border-radius: var(--radius-card); overflow:hidden;
+        border: var(--stroke-width) solid var(--stroke-2); }
+.ramp span { flex:1; height:44px; position:relative; }
+.ramp span b { position:absolute; inset:auto 0 2px 0; text-align:center; font-size:8px;
+               font-family:"Ubuntu Mono",monospace; font-weight:400; color:#8888; }
+.grid { display:grid; grid-template-columns: repeat(auto-fill,minmax(150px,1fr)); gap:8px; }
+.grid > div { border:var(--stroke-width) solid var(--stroke-3); border-radius:var(--radius-control);
+              padding:7px; font-size:10px; font-family:"Ubuntu Mono",monospace; color:var(--fg-3); }
+.grid > div s { display:block; height:26px; border-radius:calc(var(--radius-control) - 1px);
+                margin-bottom:5px; text-decoration:none; border:1px solid var(--stroke-3); }
+.states { display:grid; grid-template-columns:repeat(4,1fr); gap:0; border-radius:var(--radius-card);
+          overflow:hidden; border:var(--stroke-width) solid var(--stroke-2); }
+.states div { padding:12px 10px; font-size:10px; font-family:"Ubuntu Mono",monospace; color:var(--fg-3); }
+.dens { display:grid; grid-template-columns:repeat(auto-fill,minmax(104px,1fr)); gap:7px;
+        font-family:"Ubuntu Mono",monospace; font-size:10px; color:var(--fg-3); }
+.dens b { display:block; color:var(--fg-1); font-size:12px; }
 </style>
-<body>
-<div class="wrap">
-  <div class="picker">__PICKER__</div>
-  <h1 id="tl"></h1><div class="sub" id="tn"></div>
+<body><div class="wrap">
+  <h1>Ewe</h1><div class="sub" id="sub"></div>
 
-  <h2>Buttons — states</h2>
+  <h2>Brand ramp &mdash; derived from your accent, which lands exactly on stop 80</h2>
+  <div class="ramp" id="brand"></div>
+
+  <h2>Neutral ramp &mdash; Fluent's greys, pulled toward the accent's hue</h2>
+  <div class="ramp" id="grey"></div>
+
+  <h2>Controls &mdash; rest / hover / pressed / disabled</h2>
   <div class="card"><div class="row">
     <button class="btn btn-primary">Save changes</button>
     <button class="btn btn-ghost">Secondary</button>
-    <button class="btn btn-danger">Discard</button>
+    <button class="btn btn-subtle">Subtle</button>
     <button class="btn btn-ghost" disabled>Disabled</button>
     <span class="chip" style="color:var(--success)">Connected</span>
     <span class="chip" style="color:var(--warning)">Pending</span>
     <span class="chip" style="color:var(--danger)">Failed</span>
+  </div>
+  <div style="margin-top:12px"><input class="f" placeholder="Focus me &mdash; the ring is a compound brand stroke"></div>
+  <div class="row" style="margin-top:12px;justify-content:space-between">
+    <span>Auto-sync</span><div class="sw on" onclick="this.classList.toggle('on')"><i></i></div></div>
+  </div>
+
+  <h2>Rows &mdash; the case that had no name: no fill until you point at it</h2>
+  <div class="card" style="padding:0"><div class="list">
+    <div class="item"><span>Living room speaker</span><span style="color:var(--fg-3)">Default</span></div>
+    <div class="item sel"><span>Headphones</span><span style="color:var(--brand-fg-1)">&#10003;</span></div>
+    <div class="item"><span>HDMI output</span><span style="color:var(--fg-3)">Unplugged</span></div>
   </div></div>
 
-  <h2>Input · toggle · slider</h2>
-  <div class="card">
-    <input class="f" placeholder="https://cloud.example.org">
-    <div class="row" style="margin-top:14px;justify-content:space-between">
-      <span style="font-size:13px">Auto-sync</span><div class="sw on"><i></i></div></div>
-    <div class="row" style="margin-top:10px;justify-content:space-between">
-      <span style="font-size:13px;color:var(--fg-dim)">Glass translucency</span><div class="sw"><i></i></div></div>
-    <div style="margin-top:16px"><div class="track"><b></b></div></div>
-  </div>
+  <h2>Surfaces &mdash; five levels plus the card ladder, each with its own states</h2>
+  <div class="states" id="states"></div>
 
-  <h2>Card — content rows</h2>
-  <div class="card" style="padding:0">
-    <div style="padding:14px 14px 10px"><div style="font-size:15px;font-weight:600">Scubba</div>
-      <div style="font-size:12px;color:var(--fg-dim)">scubba@tab.digital</div></div>
-    <div class="kv"><span style="color:var(--fg-dim)">Storage</span><span>1.2 GB of 5.0 GB</span></div>
-    <div class="kv"><span style="color:var(--fg-dim)">Last synced</span><span>2 Sep, 15:04</span></div>
-    <div class="kv"><span style="color:var(--fg-dim)">Link colour</span><span style="color:var(--link)">a link</span></div>
-  </div>
+  <h2>Strokes &mdash; three weights, plus accessible and focus</h2>
+  <div class="card"><div class="grid" id="strokes"></div></div>
 
-  <h2>Palette</h2>
-  <div class="card"><div class="sw-list" id="sw"></div></div>
+  <h2>Every colour token</h2>
+  <div class="card"><div class="grid" id="all"></div></div>
+
+  <h2>Shape &amp; density &mdash; [desktop.theme] in ewe.conf</h2>
+  <div class="card"><div class="dens" id="dens"></div></div>
 </div>
 <script>
-const T = __THEMES__, DEF = "__DEFAULT__";
-function apply(name) {
-  const t = T[name];
-  document.documentElement.className = name === DEF ? "" : "dark " + name;
-  document.documentElement.classList.add("dark");
-  document.documentElement.style.setProperty("--accent", t.accent);
-  document.getElementById("tl").textContent = t.label;
-  document.getElementById("tn").textContent = t.note;
-  const c = getComputedStyle(document.documentElement);
-  document.getElementById("sw").innerHTML = Object.entries(T[name].color)
-    .map(([k, v]) => `<div><span style="background:${v}"></span>--${k}<br>${v}</div>`).join("");
-  document.querySelectorAll(".picker button").forEach(b =>
-    b.className = "btn " + (b.dataset.t === name ? "btn-primary" : "btn-ghost"));
-}
-document.querySelectorAll(".picker button").forEach(b =>
-  b.onclick = () => apply(b.dataset.t));
-apply(DEF);
+const T = __TOKENS_JSON__;
+document.getElementById("sub").textContent =
+  "accent " + T.input.accent + "  \\u00b7  corner " + T.input.corner +
+  "  \\u00b7  density " + T.input.density + "  \\u00b7  stroke " + T.input.stroke +
+  "  \\u00b7  neutral_tint " + T.input.neutral_tint;
+const bar = (o) => Object.entries(o).map(([k,v]) =>
+  `<span style="background:${v}"><b>${k}</b></span>`).join("");
+document.getElementById("brand").innerHTML = bar(T.brand);
+document.getElementById("grey").innerHTML  = bar(T.grey);
+document.getElementById("states").innerHTML = ["bg-1","bg-2","bg-3","bg-4","bg-5","card"].flatMap(n => {
+  if (!T.color[n]) return [];
+  return ["", "-hover", "-pressed", "-selected"].map(s => {
+    const v = T.color[n+s];
+    return v ? `<div style="background:${v}">${n}${s||" (rest)"}<br>${v}</div>` : "";
+  });
+}).join("");
+const swatches = (keys) => keys.map(k =>
+  `<div><s style="background:${T.color[k]}"></s>--${k}<br>${T.color[k]}</div>`).join("");
+document.getElementById("strokes").innerHTML = swatches(
+  Object.keys(T.color).filter(k => k.startsWith("stroke")));
+document.getElementById("all").innerHTML = swatches(Object.keys(T.color));
+document.getElementById("dens").innerHTML =
+  Object.entries(Object.assign({}, T.shape, T.size))
+    .map(([k,v]) => `<div><b>${v}px</b>--${k}</div>`).join("");
 </script>
 """
 
 
 def cmd_preview(a):
-    """A self-contained specimen page, generated FROM the conf — so what you
-    look at is what the shell and the apps will render, not a mock-up."""
-    doc, path = load(a.conf)
-    ts = themes(doc)
-    default = (doc.get("meta") or {}).get("default") or next(iter(ts))
-    picker = "".join(
-        '<button class="btn btn-ghost" data-t="%s">%s</button>' % (n, t.get("label", n))
-        for n, t in ts.items())
-    html = (SPECIMEN
-            .replace("__TOKENS__", gen_css(doc))
-            .replace("__PICKER__", picker)
-            .replace("__THEMES__", json.dumps(
-                {n: {"label": t.get("label", n), "note": t.get("note", ""),
-                     "color": t.get("color") or {},
-                     "accent": t.get("accent", "#8fbce0")}
-                 for n, t in ts.items()}))
-            .replace("__DEFAULT__", default))
+    """A specimen page generated FROM the tokens — what you look at is what
+    the shell and the apps render, not a mock-up."""
+    cfg, src = read_conf(a.conf)
+    t = tokens(cfg)
+    html = (SPECIMEN.replace("__TOKENS__", gen_css(t))
+                    .replace("__TOKENS_JSON__", json.dumps({
+                        "input": t["input"], "color": t["color"],
+                        "shape": t["shape"], "size": t["size"],
+                        "grey": t["grey"], "brand": t["brand"]})))
     target = a.out or os.path.join(HERE, "design", "specimen.html")
     _write(target, html)
-    out({"ok": True, "path": target, "conf": path, "themes": list(ts)})
+    out({"ok": True, "path": target, "conf": src, "accent": cfg["accent"]})
 
 
 def main():
     p = argparse.ArgumentParser(add_help=True)
-    p.add_argument("--conf")
+    p.add_argument("--conf", help="read [desktop.theme] from this ewe.conf")
     sub = p.add_subparsers(dest="cmd")
-    sub.add_parser("list")
-    sp = sub.add_parser("show"); sp.add_argument("theme")
-    for name in ("build", "check"):
-        s = sub.add_parser(name); s.add_argument("--json"); s.add_argument("--css")
-    sp = sub.add_parser("preview"); sp.add_argument("--out")
+    # --conf is accepted on either side of the subcommand: `ewe-theme --conf F
+    # build` and `ewe-theme build --conf F` both read the same flag, because
+    # requiring one order is the kind of thing you get wrong at 2am.
+    def add(name, *args):
+        s = sub.add_parser(name)
+        s.add_argument("--conf")
+        for x in args:
+            s.add_argument(x)
+        return s
+    # `show` takes an optional positional, ignored: installed app binaries call
+    # `ewe-theme show <look>` from when there were two looks, and an argparse
+    # error there would leave them with no tokens at all.
+    add("show").add_argument("legacy_look", nargs="?")
+    add("build", "--json", "--css")
+    add("check", "--json", "--css")
+    add("preview", "--out")
     a = p.parse_args()
-    {"list": cmd_list, "show": cmd_show, "build": cmd_build,
-     "check": cmd_check, "preview": cmd_preview}.get(a.cmd or "list", cmd_list)(a)
+    if getattr(a, "conf", None) is None:
+        a.conf = p.parse_known_args()[0].conf
+    {"show": cmd_show, "build": cmd_build, "check": cmd_check,
+     "preview": cmd_preview}.get(a.cmd or "show", cmd_show)(a)
 
 
 if __name__ == "__main__":

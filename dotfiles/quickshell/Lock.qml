@@ -113,7 +113,7 @@ Scope {
 
             Rectangle {
                 anchors.fill: parent
-                color: Theme.bg
+                color: Theme.bg3
 
                 // keyboard capture — multi-monitor safe (no TextInput focus juggling)
                 Item {
@@ -138,12 +138,12 @@ Scope {
                     Text {
                         anchors.horizontalCenter: parent.horizontalCenter
                         text: root.clock
-                        color: Theme.fg; font.family: Theme.fontDisplay; font.pixelSize: 76; font.weight: Font.Bold
+                        color: Theme.fg1; font.family: Theme.fontDisplay; font.pixelSize: 76; font.weight: Font.Bold
                     }
                     Text {
                         anchors.horizontalCenter: parent.horizontalCenter
                         text: root.dateStr
-                        color: Theme.fgSecondary; font.family: Theme.fontText; font.pixelSize: 18
+                        color: Theme.fg2; font.family: Theme.fontText; font.pixelSize: 18
                     }
 
                     // avatar + user name
@@ -156,14 +156,14 @@ Scope {
                     Text {
                         anchors.horizontalCenter: parent.horizontalCenter
                         text: root.userName
-                        color: Theme.fg; font.family: Theme.fontText; font.pixelSize: 16; font.weight: Font.DemiBold
+                        color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: 16; font.weight: Font.DemiBold
                     }
 
                     // password field — same look as the rest of the shell's inputs
                     Rectangle {
                         anchors.horizontalCenter: parent.horizontalCenter
                         width: 300; height: 46; radius: Theme.radiusInner
-                        color: Theme.elevated
+                        color: Theme.card
                         border.color: root.err !== "" ? Theme.danger : Theme.accent
                         border.width: Theme.border
                         Behavior on border.color { ColorAnimation { duration: 120 } }
@@ -175,14 +175,14 @@ Scope {
                             visible: root.pw.length > 0
                             Repeater {
                                 model: Math.min(root.pw.length, 18)
-                                delegate: Rectangle { width: 9; height: 9; radius: 5; color: Theme.fg }
+                                delegate: Rectangle { width: 9; height: 9; radius: 5; color: Theme.fg1 }
                             }
                         }
                         Text {
                             anchors.centerIn: parent
                             visible: root.pw.length === 0
                             text: root.busy ? "Authenticating…" : "Enter Password"
-                            color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
+                            color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
                         }
                     }
 

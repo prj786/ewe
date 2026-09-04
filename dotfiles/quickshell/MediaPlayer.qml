@@ -119,8 +119,8 @@ Scope {
             y: parent.height - height - 90
             width: 340
             height: col.implicitHeight + 28
-            radius: Theme.radius; color: Theme.panel
-            border.color: Theme.stroke; border.width: Theme.borderThin
+            radius: Theme.radius; color: Theme.bg1
+            border.color: Theme.stroke2; border.width: Theme.borderThin
             Sheen { radius: parent.radius }
             opacity: Globals.mediaOpen ? 1 : 0
             scale: Globals.mediaOpen ? 1 : 0.96
@@ -147,7 +147,7 @@ Scope {
                     Rectangle {
                         visible: box.hasArt
                         anchors.verticalCenter: parent.verticalCenter
-                        width: 84; height: 84; radius: Theme.r(10); color: Theme.hover; clip: true
+                        width: 84; height: 84; radius: Theme.r(10); color: Theme.card; clip: true
                         Image {
                             anchors.fill: parent; fillMode: Image.PreserveAspectCrop
                             source: box.hasArt ? box.pl.trackArtUrl : ""
@@ -161,8 +161,8 @@ Scope {
                         spacing: 2
                         // the playing source (player identity: "Spotify", "mpv", …)
                         Text { width: parent.width; text: box.pl ? (box.pl.identity || box.pl.desktopEntry || "Media") : ""; color: Theme.accent; font.family: Theme.fontText; font.pixelSize: 10; font.weight: Font.DemiBold; elide: Text.ElideRight }
-                        Text { width: parent.width; text: box.pl ? (box.pl.trackTitle || "—") : ""; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsBody; font.weight: Font.DemiBold; elide: Text.ElideRight }
-                        Text { width: parent.width; visible: text !== ""; text: box.pl ? (box.pl.trackArtist || "") : ""; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; elide: Text.ElideRight }
+                        Text { width: parent.width; text: box.pl ? (box.pl.trackTitle || "—") : ""; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsBody; font.weight: Font.DemiBold; elide: Text.ElideRight }
+                        Text { width: parent.width; visible: text !== ""; text: box.pl ? (box.pl.trackArtist || "") : ""; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; elide: Text.ElideRight }
 
                         Item { width: 1; height: 6 }
 
@@ -172,27 +172,27 @@ Scope {
                             spacing: 20
                             Text {
                                 anchors.verticalCenter: parent.verticalCenter
-                                text: Theme.icPrev; font.family: Theme.fontIcons; font.pixelSize: 17; color: Theme.fg
+                                text: Theme.icPrev; font.family: Theme.fontIcons; font.pixelSize: 17; color: Theme.fg1
                                 opacity: box.pl && box.pl.canGoPrevious ? 1 : 0.35
                                 MouseArea { anchors.fill: parent; anchors.margins: -8; cursorShape: Qt.PointingHandCursor; onClicked: if (box.pl && box.pl.canGoPrevious) box.pl.previous() }
                             }
                             Rectangle {
                                 anchors.verticalCenter: parent.verticalCenter
                                 width: 38; height: 38; radius: 19
-                                color: Theme.accent
+                                color: Theme.accentFill
                                 opacity: box.pl && (box.pl.isPlaying ? box.pl.canPause : box.pl.canPlay) ? 1 : 0.35
                                 scale: playMa.pressed ? 0.92 : 1
                                 Behavior on scale { NumberAnimation { duration: Theme.durFast; easing.type: Theme.ease } }
                                 Text {
                                     anchors.centerIn: parent
                                     text: box.pl && box.pl.isPlaying ? Theme.icPause : Theme.icPlay
-                                    font.family: Theme.fontIcons; font.pixelSize: 18; color: Theme.accentText
+                                    font.family: Theme.fontIcons; font.pixelSize: 18; color: Theme.accentOn
                                 }
                                 MouseArea { id: playMa; anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: if (box.pl && (box.pl.isPlaying ? box.pl.canPause : box.pl.canPlay)) root.playPause(box.pl) }
                             }
                             Text {
                                 anchors.verticalCenter: parent.verticalCenter
-                                text: Theme.icNext; font.family: Theme.fontIcons; font.pixelSize: 17; color: Theme.fg
+                                text: Theme.icNext; font.family: Theme.fontIcons; font.pixelSize: 17; color: Theme.fg1
                                 opacity: box.pl && box.pl.canGoNext ? 1 : 0.35
                                 MouseArea { anchors.fill: parent; anchors.margins: -8; cursorShape: Qt.PointingHandCursor; onClicked: if (box.pl && box.pl.canGoNext) box.pl.next() }
                             }
@@ -217,7 +217,7 @@ Scope {
                         Rectangle {
                             anchors.verticalCenter: parent.verticalCenter
                             width: parent.width; height: seekMa.containsMouse || seek.scrubbing ? 6 : 4
-                            radius: height / 2; color: Theme.hover
+                            radius: height / 2; color: Theme.bg2
                             Behavior on height { NumberAnimation { duration: Theme.durFast } }
                             Rectangle { height: parent.height; radius: parent.radius; width: parent.width * seek.frac; color: Theme.accent }
                         }
@@ -246,8 +246,8 @@ Scope {
 
                     Item {
                         width: parent.width; height: 14
-                        Text { anchors.left: parent.left; text: box.hasBar ? root.fmt(seek.frac * box.knownLength) : ""; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11 }
-                        Text { anchors.right: parent.right; text: box.hasBar ? root.fmt(box.knownLength) : ""; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11 }
+                        Text { anchors.left: parent.left; text: box.hasBar ? root.fmt(seek.frac * box.knownLength) : ""; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11 }
+                        Text { anchors.right: parent.right; text: box.hasBar ? root.fmt(box.knownLength) : ""; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11 }
                     }
                 }
             }

@@ -178,13 +178,13 @@ if command -v systemctl >/dev/null 2>&1; then
     fi
 fi
 
-# The looks, as data (ewe-theme.conf). Generate the shell's token file so
-# Theme.qml reads the CONF rather than only its compiled-in fallbacks. A user
-# copy at ~/.config/ewe/ewe-theme.conf wins over the shipped one, so editing
-# colours never means editing QML.
+# The look, derived. There is no theme file: `ewe-theme` reads [desktop.theme]
+# out of ewe.conf and computes the whole Fluent 2 token set from the one
+# accent, so the shell reads real tokens rather than only its compiled-in
+# fallbacks. `ewe-conf apply` does this too — this is just the first time.
 if command -v ewe-theme >/dev/null 2>&1; then
     ewe-theme build --css /dev/null >/dev/null 2>&1 \
-        && say "theme tokens generated (edit ~/.config/ewe/ewe-theme.conf, then: ewe-theme build)" \
+        && say "theme tokens generated (change: ewe-conf set desktop.theme.accent '#ffcc00')" \
         || true
 elif [ -x "$DEST/bin/ewe-theme" ]; then
     "$DEST/bin/ewe-theme" build --css /dev/null >/dev/null 2>&1 || true

@@ -106,16 +106,35 @@ debounced push when it is on.
 
 Version of this document's shape. Bumped only when a key changes meaning.
 
-### `[desktop.theme]` — colours and look
+### `[desktop.theme]` — the whole look, from one accent
+
+ewe's look is built on **Fluent 2**, and it is *derived*, not declared. There
+is no theme file to edit: `ewe-theme` reads this section and computes the
+entire token set — a 16-stop brand ramp, a 50-stop neutral ramp, and every
+alias token the shell and the apps consume. The six keys below are the whole
+user-facing surface; everything else lives in the repo, in `bin/ewe-theme`,
+because it is a derivation rather than a preference.
 
 | key | type | default | meaning |
 |---|---|---|---|
+| `accent` | hex string | `"#0a84ff"` | **the seed.** Your accent lands exactly on brand stop 80; the other fifteen stops, and the hue of the greys, come from it |
+| `corner` | `none` \| `small` \| `medium` \| `large` | `"medium"` | which rung of Fluent's radius ramp each role stands on. `none` squares the entire desktop |
+| `density` | `compact` \| `comfortable` \| `roomy` | `"comfortable"` | spacing rungs and control heights — Fluent's own 24 / 32 / 40 ladder |
+| `stroke` | `thin` \| `thick` | `"thin"` | 1px hairlines or 2px rules |
+| `neutral_tint` | int 0-40 | `8` | how far the greys follow the accent's hue. `0` is Fluent's pure neutrals; the pull is weighted to the dark end, where the large surfaces are, and gone by the time it reaches text |
 | `color_scheme` | `"dark"` | `"dark"` | always `"dark"` — ewe is dark-only by decision (2026-09-01); the key stays because Komble reads it to follow the DE |
-| `accent` | hex string | `"#0a84ff"` | recolours the whole shell live |
-| `theme_name` | `"flock"` \| `"blacksheep"` | `"flock"` | soft greys vs absolute black |
 | `tint_borders` | bool | `true` | accent-tinted window borders |
 | `window_transparency` | bool | `false` | translucent unfocused windows |
 | `avatar_shape` | `"circle"` \| `"rounded"` | `"circle"` | greeter/bar avatar mask |
+| `theme_name` | string | `"flock"` | **vestigial.** ewe has one look since the Fluent move; either legacy name resolves to it. Kept so a synced `ewe.conf` from an older machine still round-trips |
+
+Applying this section rebuilds `~/.config/quickshell/theme-tokens.json` — an
+artifact, so it happens even under `--no-hooks`, because the shell cannot
+derive the tokens itself. To see a change before committing to it:
+
+```
+ewe-theme preview && xdg-open design/specimen.html
+```
 
 Applying this section re-runs `colorscheme.sh`, which writes every toolkit's
 config (GTK, Qt, cursor, icon hue) in one pass.
@@ -262,5 +281,5 @@ document from the live system.
 
 | key | default | meaning |
 |---|---|---|
-| `desktop.browser.layout` | `"vertical"` | Helium tab layout: `"vertical"` (ewe's default) or `"horizontal"`. Applied by `helium-theme.sh` (run by every theme change) the next time the browser starts while closed; the browser chrome itself always follows `desktop.theme` (flock/blacksheep surface + accent). |
+| `desktop.browser.layout` | `"vertical"` | Helium tab layout: `"vertical"` (ewe's default) or `"horizontal"`. Applied by `helium-theme.sh` (run by every theme change) the next time the browser starts while closed; the browser chrome itself always follows `desktop.theme` (the derived surface ladder + accent). |
 

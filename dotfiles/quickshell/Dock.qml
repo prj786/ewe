@@ -179,23 +179,23 @@ Scope {
             height: win.dockH
             width: row.implicitWidth + 16
             radius: Theme.radius
-            color: Theme.panel
-            border.color: Theme.stroke; border.width: Theme.borderThin
+            color: Theme.bg1
+            border.color: Theme.stroke2; border.width: Theme.borderThin
             HoverHandler { id: dockHov }
             layer.enabled: true
             layer.effect: Elevation {}
             Sheen { radius: parent.radius }
 
-            // a square dock button — Phosphor glyph, same quiet-hover treatment
+            // a square dock button — icon glyph, same quiet-hover treatment
             // as the bar's StatusItems so bar and dock read as one system
             component DockBtn: Rectangle {
                 id: db
                 property string glyph: ""
                 property bool activeState: false
                 signal go()
-                width: win.cell; height: win.cell; radius: Math.round(13 * win.k)
+                width: win.cell; height: win.cell; radius: Theme.r(Math.round(13 * win.k))
                 color: activeState ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.16)
-                     : dbMa.containsMouse ? Theme.hover : "transparent"
+                     : dbMa.containsMouse ? Theme.subtleHover : Theme.subtle
                 border.color: activeState ? Theme.accent : "transparent"
                 border.width: activeState ? 1 : 0
                 Behavior on color { ColorAnimation { duration: Theme.durFast } }
@@ -205,7 +205,7 @@ Scope {
                     anchors.centerIn: parent
                     text: db.glyph
                     font.family: Theme.fontIcons; font.pixelSize: Math.round(22 * win.k)
-                    color: db.activeState ? Theme.accent : (dbMa.containsMouse ? Theme.fg : Theme.fgSecondary)
+                    color: db.activeState ? Theme.accent : (dbMa.containsMouse ? Theme.fg1 : Theme.fg2)
                     Behavior on color { ColorAnimation { duration: Theme.durFast } }
                 }
                 MouseArea { id: dbMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: db.go() }
@@ -225,7 +225,7 @@ Scope {
                 // now-playing — only exists while an MPRIS player does (MediaPlayer.qml resolves it)
                 DockBtn { id: mediaBtn; visible: Globals.mediaPlayer !== null; glyph: Theme.icMusic; activeState: Globals.mediaOpen; anchors.verticalCenter: parent.verticalCenter; onGo: { Globals.mediaAnchorX = mediaBtn.mapToItem(null, mediaBtn.width / 2, 0).x; Globals.launcherOpen = false; Globals.storeOpen = false; Globals.placesOpen = false; Globals.mediaOpen = !Globals.mediaOpen } }
 
-                Rectangle { anchors.verticalCenter: parent.verticalCenter; width: 1; height: Math.round(40 * win.k); color: Theme.stroke }
+                Rectangle { anchors.verticalCenter: parent.verticalCenter; width: 1; height: Math.round(40 * win.k); color: Theme.stroke3 }
 
                 // ── the Pen — ewe's hidden workspace (special:pen). Appears
                 //    only while something is stashed: package glyph + a tile
@@ -235,11 +235,11 @@ Scope {
                     id: penBox
                     visible: root.penWins.length > 0 || win.penOpen
                     anchors.verticalCenter: parent.verticalCenter
-                    height: win.cell; radius: Math.round(13 * win.k)
+                    height: win.cell; radius: Theme.r(Math.round(13 * win.k))
                     width: Math.max(win.cell, penRow.implicitWidth + 16)
                     color: win.penOpen ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.16)
-                         : penMa.containsMouse ? Theme.hover : Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.07)
-                    border.color: win.penOpen ? Theme.accent : Theme.stroke; border.width: Theme.borderThin
+                         : penMa.containsMouse ? Theme.subtleHover : Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.07)
+                    border.color: win.penOpen ? Theme.accent : Theme.stroke1; border.width: Theme.borderThin
                     Behavior on color { ColorAnimation { duration: 150 } }
                     MouseArea { id: penMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
                         onClicked: Hyprland.dispatch('hl.dsp.workspace.toggle_special("pen")') }
@@ -250,7 +250,7 @@ Scope {
                         Text {
                             anchors.verticalCenter: parent.verticalCenter
                             text: Theme.icPen
-                            color: win.penOpen ? Theme.accent : Theme.fgDim
+                            color: win.penOpen ? Theme.accent : Theme.fg3
                             font.family: Theme.fontIcons; font.pixelSize: Math.round(14 * win.k)
                         }
                         Repeater {
@@ -259,7 +259,7 @@ Scope {
                                 required property var modelData
                                 anchors.verticalCenter: parent.verticalCenter
                                 width: Math.round(34 * win.k); height: Math.round(30 * win.k); radius: Theme.r(8)
-                                color: modelData.activated && win.penOpen ? Theme.accent : Theme.hover
+                                color: modelData.activated && win.penOpen ? Theme.accent : Theme.card
                                 opacity: win.penOpen || penTileMa.containsMouse ? 1 : 0.75
                                 scale: penTileMa.containsMouse ? 1.1 : 1.0
                                 Behavior on scale { NumberAnimation { duration: Theme.durFast; easing.type: Easing.OutBack; easing.overshoot: 2 } }
@@ -296,11 +296,11 @@ Scope {
                         required property var modelData
                         readonly property bool focused: Hyprland.focusedWorkspace && Hyprland.focusedWorkspace.id === modelData.id
                         anchors.verticalCenter: parent.verticalCenter
-                        height: win.cell; radius: Math.round(13 * win.k)
+                        height: win.cell; radius: Theme.r(Math.round(13 * win.k))
                         width: Math.max(win.cell, wsRow.implicitWidth + 16)
                         color: focused ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.16)
-                             : wsMa.containsMouse ? Theme.hover : Theme.elevated
-                        border.color: focused ? Theme.accent : Theme.stroke; border.width: Theme.borderThin
+                             : wsMa.containsMouse ? Theme.cardHover : Theme.card
+                        border.color: focused ? Theme.accent : Theme.stroke1; border.width: Theme.borderThin
                         Behavior on color { ColorAnimation { duration: 150 } }
 
                         // background click → switch workspace (window tiles sit on top)
@@ -313,14 +313,14 @@ Scope {
                             Text {
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: wsBox.modelData.id + ":"
-                                color: wsBox.focused ? Theme.accent : Theme.fgDim
+                                color: wsBox.focused ? Theme.accent : Theme.fg3
                                 font.family: Theme.fontText; font.pixelSize: 12; font.weight: Font.DemiBold
                             }
                             // empty-workspace hint
                             Text {
                                 visible: wsBox.modelData.wins.length === 0
                                 anchors.verticalCenter: parent.verticalCenter
-                                text: "empty"; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11
+                                text: "empty"; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11
                             }
                             // window tiles
                             Repeater {
@@ -329,7 +329,7 @@ Scope {
                                     required property var modelData
                                     anchors.verticalCenter: parent.verticalCenter
                                     width: Math.round(34 * win.k); height: Math.round(30 * win.k); radius: Theme.r(8)
-                                    color: modelData.activated ? Theme.accent : Theme.hover
+                                    color: modelData.activated ? Theme.accent : Theme.card
                                     Behavior on color { ColorAnimation { duration: 120 } }
                                     scale: tileMa.containsMouse ? 1.1 : 1.0
                                     Behavior on scale { NumberAnimation { duration: Theme.durFast; easing.type: Easing.OutBack; easing.overshoot: 2 } }

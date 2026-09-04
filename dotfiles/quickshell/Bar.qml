@@ -196,7 +196,7 @@ Scope {
     component StatusItem: Item {
         id: si
         property string glyph: ""
-        property color fg: Theme.fgSecondary
+        property color fg: Theme.fg2
         property int fontPx: Theme.barIconPx
         property bool active: false      // its popup is open
         signal activated()
@@ -308,7 +308,7 @@ Scope {
                         Text {
                             anchors.centerIn: parent
                             text: Hyprland.focusedWorkspace ? Hyprland.focusedWorkspace.id : 1
-                            color: Theme.fg
+                            color: Theme.fg1
                             font.family: Theme.fontText; font.pixelSize: 12; font.weight: Font.Bold
                         }
                         Rectangle {
@@ -413,7 +413,7 @@ Scope {
                     Rectangle {
                         visible: SystemTray.items.values.length > 0
                         anchors.verticalCenter: parent.verticalCenter
-                        width: 1; height: 13; color: Theme.fgSecondary; opacity: 0.25
+                        width: 1; height: 13; color: Theme.fg2; opacity: 0.25
                     }
 
                     // screenshot (camera) — Left: region · Right: whole screen · Middle: a window
@@ -428,7 +428,7 @@ Scope {
                     StatusItem {
                         id: scissorsItem
                         glyph: Theme.icClipboard        // scissors
-                        fg: Globals.clipboardOpen ? Theme.fg : Theme.fgSecondary
+                        fg: Globals.clipboardOpen ? Theme.fg1 : Theme.fg2
                         active: Globals.clipboardOpen
                         onActivated: { Globals.clipAnchorX = scissorsItem.mapToItem(null, scissorsItem.width / 2, 0).x; Globals.clipboardOpen = !Globals.clipboardOpen }
                     }
@@ -450,7 +450,7 @@ Scope {
                             id: kbLbl
                             anchors.centerIn: parent
                             text: bar.kbLayout
-                            color: Theme.fgSecondary
+                            color: Theme.fg2
                             font.family: Theme.fontText
                             font.pixelSize: 12
                             font.weight: Font.DemiBold
@@ -498,7 +498,7 @@ Scope {
                                 text: Globals.updatesTotal > 0 ? Theme.icDownload : Theme.icCheck
                                 font.family: Theme.fontIcons
                                 font.pixelSize: Theme.barIconPx
-                                color: Globals.updatesTotal > 0 ? Theme.accent : Theme.fgSecondary
+                                color: Globals.updatesTotal > 0 ? Theme.accent : Theme.fg2
                                 opacity: Globals.updatesTotal > 0 ? 1 : 0.55
                             }
                             Text {
@@ -524,7 +524,7 @@ Scope {
                     }
 
                     // thin separator between the action buttons and the control centre
-                    Rectangle { anchors.verticalCenter: parent.verticalCenter; width: 1; height: 13; color: Theme.fgSecondary; opacity: 0.25 }
+                    Rectangle { anchors.verticalCenter: parent.verticalCenter; width: 1; height: 13; color: Theme.fg2; opacity: 0.25 }
 
                     // ── ONE wide Control-Centre button: active services + battery.
                     // Hovering highlights the whole group; click opens the sidebar.
@@ -567,7 +567,7 @@ Scope {
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: Theme.icEye
                                 font.family: Theme.fontIcons; font.pixelSize: Theme.barIconPx
-                                color: Theme.fgSecondary
+                                color: Theme.fg2
                             }
                             // Cast to TV — screencast glyph while a cast session exists;
                             // accent = picture on glass, dim = still handshaking
@@ -577,7 +577,7 @@ Scope {
                                 text: Theme.icCast
                                 font.family: Theme.fontIcons; font.pixelSize: Theme.barIconPx
                                 color: Globals.castState === "streaming" || Globals.castLegacy
-                                       ? Theme.accent : Theme.fgSecondary
+                                       ? Theme.accent : Theme.fg2
                             }
                             // SSH tunnel (a Quick Settings port-forward is up)
                             Text {
@@ -585,7 +585,7 @@ Scope {
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: Theme.icSsh
                                 font.family: Theme.fontIcons; font.pixelSize: Theme.barIconPx
-                                color: Theme.fgSecondary
+                                color: Theme.fg2
                             }
                             // VPN (only when active)
                             Text {
@@ -593,7 +593,7 @@ Scope {
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: Theme.icVpn
                                 font.family: Theme.fontIcons; font.pixelSize: Theme.barIconPx
-                                color: Theme.fgSecondary
+                                color: Theme.fg2
                             }
 
                             // ── comms ──
@@ -612,7 +612,7 @@ Scope {
                                     anchors.verticalCenter: parent.verticalCenter
                                     text: Globals.server ? String(Globals.server.trackedNotifications.values.length) : ""
                                     font.family: Theme.fontText; font.pixelSize: 11; font.weight: Font.DemiBold
-                                    color: Theme.fgSecondary
+                                    color: Theme.fg2
                                 }
                             }
                             // Mail (IMAP or Gmail) — envelope + count, only when there is unread mail
@@ -624,13 +624,13 @@ Scope {
                                     anchors.verticalCenter: parent.verticalCenter
                                     text: Theme.icMail
                                     font.family: Theme.fontIcons; font.pixelSize: Theme.barIconPx
-                                    color: Theme.fgSecondary
+                                    color: Theme.fg2
                                 }
                                 Text {
                                     anchors.verticalCenter: parent.verticalCenter
                                     text: Mail.unread > 99 ? "99+" : String(Mail.unread)
                                     font.family: Theme.fontText; font.pixelSize: 11; font.weight: Font.DemiBold
-                                    color: Theme.fgSecondary
+                                    color: Theme.fg2
                                 }
                             }
                             // Calendar — an event is running or starts within the hour
@@ -639,7 +639,7 @@ Scope {
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: Theme.icCalendar
                                 font.family: Theme.fontIcons; font.pixelSize: Theme.barIconPx
-                                color: Theme.fgSecondary
+                                color: Theme.fg2
                             }
                             // Phone (KDE Connect) — only when paired + reachable;
                             // battery % and an accent dot for unread phone notifications
@@ -654,7 +654,7 @@ Scope {
                                         id: phGlyph
                                         text: Theme.icPhone
                                         font.family: Theme.fontIcons; font.pixelSize: Theme.barIconPx
-                                        color: Theme.fgSecondary
+                                        color: Theme.fg2
                                     }
                                     Rectangle {
                                         visible: KdeConnect.unreadCount > 0
@@ -669,7 +669,7 @@ Scope {
                                     anchors.verticalCenter: parent.verticalCenter
                                     text: KdeConnect.connected ? KdeConnect.device.batteryCharge + "%" : ""
                                     font.family: Theme.fontText; font.pixelSize: 11
-                                    color: Theme.fgSecondary
+                                    color: Theme.fg2
                                 }
                             }
                             // Wired / ethernet (shown when a wired link is up and
@@ -678,7 +678,7 @@ Scope {
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: Theme.icEthernet
                                 font.family: Theme.fontIcons; font.pixelSize: Theme.barIconPx
-                                color: Theme.fgSecondary
+                                color: Theme.fg2
                                 visible: bar.wiredUp && !bar.wifiUp
                             }
                             // Wi-Fi (only when connected)
@@ -686,7 +686,7 @@ Scope {
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: Theme.icWifi
                                 font.family: Theme.fontIcons; font.pixelSize: Theme.barIconPx
-                                color: Theme.fgSecondary
+                                color: Theme.fg2
                                 visible: bar.wifiUp
                             }
                             // Bluetooth (only when adapter on); filled glyph when a device is connected
@@ -701,7 +701,7 @@ Scope {
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: conn > 0 ? Theme.icBluetoothOn : Theme.icBluetooth
                                 font.family: Theme.fontIcons; font.pixelSize: Theme.barIconPx
-                                color: Theme.fgSecondary
+                                color: Theme.fg2
                                 visible: adapter && adapter.enabled
                             }
                             // Power profile (leaf · balance · speedometer) — reflects tuned profile
@@ -711,7 +711,7 @@ Scope {
                                     : PowerProfiles.profile === PowerProfile.Performance ? Theme.icSpeed
                                     : Theme.icBalance
                                 font.family: Theme.fontIcons; font.pixelSize: Theme.barIconPx
-                                color: Theme.fgSecondary
+                                color: Theme.fg2
                             }
                             // Battery — icon + always-on percentage
                             Row {
@@ -734,21 +734,21 @@ Scope {
                                     // alone signals charging
                                     color: parent.pct <= 10 && !parent.charging ? Theme.danger
                                          : parent.pct <= 20 && !parent.charging ? Theme.warning
-                                         : Theme.fgSecondary
+                                         : Theme.fg2
                                 }
                                 Text {
                                     anchors.verticalCenter: parent.verticalCenter
                                     text: Math.round(parent.pct) + "%"
                                     font.family: Theme.fontText; font.pixelSize: 11
-                                    color: Theme.fgSecondary
+                                    color: Theme.fg2
                                 }
                             }
                             // thin separator, then the clock — all one button
-                            Rectangle { anchors.verticalCenter: parent.verticalCenter; width: 1; height: 13; color: Theme.fgSecondary; opacity: 0.25 }
+                            Rectangle { anchors.verticalCenter: parent.verticalCenter; width: 1; height: 13; color: Theme.fg2; opacity: 0.25 }
                             Text {
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: bar.clockText
-                                color: Theme.fg
+                                color: Theme.fg1
                                 font.family: Theme.fontText
                                 font.pixelSize: 13
                                 font.weight: Font.DemiBold

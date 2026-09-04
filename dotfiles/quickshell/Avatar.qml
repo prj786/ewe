@@ -21,14 +21,14 @@ Item {
     Rectangle {
         anchors.fill: parent
         radius: av.shapeRadius
-        color: Theme.elevated
-        border.color: Theme.stroke; border.width: Theme.borderThin
+        color: Theme.card
+        border.color: Theme.stroke2; border.width: Theme.borderThin
         antialiasing: true
         Text {
             anchors.centerIn: parent
             visible: !img.visible
             text: av.initial !== "" ? av.initial : Theme.icUser
-            color: av.initial !== "" ? Theme.fg : Theme.fgDim
+            color: av.initial !== "" ? Theme.fg1 : Theme.fg3
             font.family: av.initial !== "" ? Theme.fontDisplay : Theme.fontIcons
             font.pixelSize: Math.round(av.size * 0.45)
             font.weight: Font.Bold
@@ -63,7 +63,7 @@ Item {
         visible: img.visible
         radius: av.shapeRadius
         color: "transparent"
-        border.color: Theme.stroke; border.width: Theme.borderThin
+        border.color: Theme.stroke2; border.width: Theme.borderThin
         antialiasing: true
     }
 }

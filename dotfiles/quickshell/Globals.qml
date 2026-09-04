@@ -242,11 +242,11 @@ QtObject {
     }
 
     // ── Shell look ────────────────────────────────────────────────────────────
-    // "flock" (soft dark greys) or "blacksheep" (absolute-black surfaces) —
-    // Theme.pitchBlack switches the five neutral surface tokens on this.
-    // GTK apps follow too: any change re-runs colorscheme.sh, which reads
-    // themeName back out of user-theme.json (covers the in-shell chips AND
-    // ewe-settings, whose write lands here via the settings-reload poke).
+    // VESTIGIAL. There is ONE ewe look now (2026-09-04) and it is built from
+    // the accent in ewe.conf, not chosen from a list. This survives only as
+    // the key the token file still publishes both look names under, so a
+    // machine whose user-theme.json says "blacksheep" keeps resolving. It is
+    // still what re-runs colorscheme.sh, which drags GTK apps along.
     property string themeName: "flock"
     onThemeNameChanged: g.applyColorScheme()
 
@@ -256,8 +256,8 @@ QtObject {
     // user-theme.json and re-read here at startup (default = system blue).
     property color accentColor: "#0a84ff"
     // false = user-theme.json carries no accent, i.e. nobody has ever picked
-    // one. Theme.accent then falls back to the LOOK's own default from
-    // ewe-theme.conf (flock yellow, blacksheep blue) instead of this literal.
+    // one in the shell. Theme.accent then falls back to the accent in
+    // ewe.conf [desktop.theme], which is what the token file was built from.
     property bool accentExplicit: false
     property bool tintBorders: false        // mirror window border colour to the accent
     // false → fully opaque windows (decoration inactive_opacity forced to 1.0);
@@ -375,6 +375,11 @@ QtObject {
         g._pinLoad.running = false; g._pinLoad.running = true
         g._placesLoad.running = false; g._placesLoad.running = true
         g._animLoad.running = false; g._animLoad.running = true
+        // The accent lives in ewe.conf, so picking one re-runs `ewe-theme
+        // build` and REWRITES theme-tokens.json. Without this line the shell
+        // kept the old greys — the accent moved and nothing derived from it
+        // did — until the next restart.
+        g._tokenLoad.running = false; g._tokenLoad.running = true
         g.recheckFace()
     }
 
@@ -465,13 +470,24 @@ QtObject {
     // knows would silently delete everyone else's.
     property var prefsRaw: ({})
 
-    // ── Generated theme definitions (ewe-theme.conf -> `ewe-theme build`) ─────
+    // ── Generated theme tokens (ewe.conf -> `ewe-theme build`) ────────────────
     // What the looks ARE, as data: {flock: {color, shape, voice}, ...}. Theme.qml
-    // reads its tokens out of here, so a colour is changed in ewe-theme.conf and
+    // reads its tokens out of here, so the accent is changed in ewe.conf and
     // the whole shell follows without touching QML. The values compiled into
     // Theme.qml stay as the FALLBACK — a missing or unparsable file degrades to
     // the shipped look rather than to a colourless shell.
-    property var themeTokens: ({})
+    // The FLUENT maps, straight off the top level of theme-tokens.json: six
+    // background levels each with their own states, a card ladder, three
+    // stroke weights, `subtle` for a thing with no fill until you point at
+    // it. The file's `themes` block is the old five-colour sub-object and no
+    // longer has a reader here — every component moved 2026-09-04.
+    property var tokColor: ({})
+    property var tokShape: ({})
+    property var tokSize:  ({})
+    // what ewe.conf [desktop.theme] actually said — accent, corner, density,
+    // stroke, neutral_tint. The Settings pane shows the live value from here
+    // rather than keeping a second copy that can disagree with the file.
+    property var tokInput: ({})
     property Process _tokenLoad: Process {
         running: true
         command: ["sh", "-c", "cat \"$HOME/.config/quickshell/theme-tokens.json\" 2>/dev/null"]
@@ -479,7 +495,10 @@ QtObject {
             onStreamFinished: {
                 try {
                     var j = JSON.parse(this.text)
-                    if (j && j.themes && typeof j.themes === "object") g.themeTokens = j.themes
+                    if (j && j.color && typeof j.color === "object") g.tokColor = j.color
+                    if (j && j.shape && typeof j.shape === "object") g.tokShape = j.shape
+                    if (j && j.size  && typeof j.size  === "object") g.tokSize  = j.size
+                    if (j && j.input && typeof j.input === "object") g.tokInput = j.input
                 } catch (e) {}
             }
         }

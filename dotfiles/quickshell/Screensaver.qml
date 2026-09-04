@@ -221,13 +221,13 @@ Scope {
                         Text {
                             anchors.horizontalCenter: parent.horizontalCenter
                             text: Qt.formatTime(clockRoot.now, "h:mm")
-                            color: Theme.fg; opacity: 0.92
+                            color: Theme.fg1; opacity: 0.92
                             font.family: Theme.fontDisplay; font.pixelSize: 132; font.weight: Font.Bold
                         }
                         Text {
                             anchors.horizontalCenter: parent.horizontalCenter
                             text: Qt.formatDate(clockRoot.now, "dddd, d MMMM")
-                            color: Theme.fgSecondary
+                            color: Theme.fg2
                             font.family: Theme.fontText; font.pixelSize: 22
                         }
                     }

@@ -127,8 +127,8 @@ Scope {
             x: Math.max(12, Math.min(parent.width - width - 12, Globals.placesAnchorX - width / 2))
             y: parent.height - height - 90
             width: 400; height: 470
-            radius: Theme.radius; color: Theme.panel
-            border.color: Theme.stroke; border.width: Theme.borderThin
+            radius: Theme.radius; color: Theme.bg1
+            border.color: Theme.stroke2; border.width: Theme.borderThin
             Sheen { radius: parent.radius }
             opacity: Globals.placesOpen ? 1 : 0
             scale: Globals.placesOpen ? 1 : 0.96
@@ -156,9 +156,9 @@ Scope {
                 property bool enabledState: true
                 signal act()
                 width: 28; height: 28; radius: Theme.r(8)
-                color: ibMa.containsMouse && enabledState ? Theme.hover : "transparent"
+                color: ibMa.containsMouse && enabledState ? Theme.subtleHover : Theme.subtle
                 opacity: enabledState ? 1 : 0.35
-                Text { anchors.centerIn: parent; text: parent.glyph; font.family: Theme.fontIcons; font.pixelSize: 15; color: Theme.fg }
+                Text { anchors.centerIn: parent; text: parent.glyph; font.family: Theme.fontIcons; font.pixelSize: 15; color: Theme.fg1 }
                 MouseArea { id: ibMa; anchors.fill: parent; hoverEnabled: true; enabled: parent.enabledState; cursorShape: Qt.PointingHandCursor; onClicked: parent.act() }
             }
 
@@ -171,7 +171,7 @@ Scope {
                 property bool rPinned: false
                 width: parent ? parent.width : 100
                 height: 34; radius: Theme.r(8)
-                color: frMa.containsMouse ? Theme.hover : "transparent"
+                color: frMa.containsMouse ? Theme.subtleHover : Theme.subtle
 
                 Row {
                     anchors.left: parent.left; anchors.leftMargin: 8; anchors.right: rightBtns.left; anchors.rightMargin: 6
@@ -180,7 +180,7 @@ Scope {
                         anchors.verticalCenter: parent.verticalCenter; width: 22; height: 22; sourceSize.width: 44; sourceSize.height: 44; mipmap: true
                         source: Quickshell.iconPath(fr.rIsDir ? "folder" : "text-x-generic", fr.rIsDir ? "folder" : "application-x-zerosize")
                     }
-                    Text { anchors.verticalCenter: parent.verticalCenter; text: fr.rName; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsBody; elide: Text.ElideRight; width: Math.min(implicitWidth, fr.width - 90) }
+                    Text { anchors.verticalCenter: parent.verticalCenter; text: fr.rName; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsBody; elide: Text.ElideRight; width: Math.min(implicitWidth, fr.width - 90) }
                 }
 
                 // drag OUT → file URI (drop into another app)
@@ -202,11 +202,11 @@ Scope {
                     id: rightBtns
                     anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter; spacing: 4
                     // folder hint chevron (browse entries)
-                    Text { visible: fr.rIsDir && !fr.rPinned; anchors.verticalCenter: parent.verticalCenter; text: Theme.icChevronRight; font.family: Theme.fontIcons; font.pixelSize: 13; color: Theme.fgDim }
+                    Text { visible: fr.rIsDir && !fr.rPinned; anchors.verticalCenter: parent.verticalCenter; text: Theme.icChevronRight; font.family: Theme.fontIcons; font.pixelSize: 13; color: Theme.fg3 }
                     // unpin ✕ (pinned items)
                     Rectangle { visible: fr.rPinned; width: 20; height: 20; radius: 10; anchors.verticalCenter: parent.verticalCenter
                         color: upMa.containsMouse ? Theme.danger : Qt.rgba(0, 0, 0, 0.35)
-                        Text { anchors.centerIn: parent; text: Theme.icClose; font.family: Theme.fontIcons; font.pixelSize: 12; color: Theme.fg }
+                        Text { anchors.centerIn: parent; text: Theme.icClose; font.family: Theme.fontIcons; font.pixelSize: 12; color: Theme.fg1 }
                         MouseArea { id: upMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: Globals.togglePinPlace(fr.rPath) }
                     }
                 }
@@ -223,9 +223,9 @@ Scope {
                     Rectangle {
                         width: parent.width - 28*3 - 4*3; height: 30; radius: Theme.radiusInner
                         anchors.verticalCenter: parent.verticalCenter
-                        color: Theme.bg; border.color: Theme.stroke; border.width: Theme.borderThin
+                        color: Theme.bg3; border.color: Theme.stroke2; border.width: Theme.borderThin
                         Text { anchors.left: parent.left; anchors.right: parent.right; anchors.leftMargin: 10; anchors.rightMargin: 10; anchors.verticalCenter: parent.verticalCenter
-                            text: root.tilde(root.cwd); color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; elide: Text.ElideLeft }
+                            text: root.tilde(root.cwd); color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; elide: Text.ElideLeft }
                     }
                     IconBtn { glyph: (Globals.isPinnedPlace(root.cwd) ? Theme.icStar : Theme.icPin); enabledState: root.cwd !== ""; anchors.verticalCenter: parent.verticalCenter; onAct: Globals.togglePinPlace(root.cwd) }
                 }
@@ -238,20 +238,20 @@ Scope {
                         width: parent.width; spacing: 2
 
                         // pinned strip
-                        Text { width: parent.width; visible: (Globals.pinnedPlaces || []).length > 0; text: "PINNED"; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11; font.weight: Font.DemiBold; bottomPadding: 2 }
+                        Text { width: parent.width; visible: (Globals.pinnedPlaces || []).length > 0; text: "PINNED"; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11; font.weight: Font.DemiBold; bottomPadding: 2 }
                         Repeater {
                             model: (Globals.pinnedPlaces || [])
                             delegate: FsRow { required property var modelData; width: col.width; rName: root.baseName(modelData); rPath: modelData; rIsDir: root.pinTypes[modelData] === true; rPinned: true }
                         }
-                        Rectangle { visible: (Globals.pinnedPlaces || []).length > 0; width: parent.width; height: 1; color: Theme.stroke; opacity: 0.6 }
+                        Rectangle { visible: (Globals.pinnedPlaces || []).length > 0; width: parent.width; height: 1; color: Theme.stroke3 }
 
                         // current directory
-                        Text { width: parent.width; visible: root.entries.length > 0; text: "FOLDER"; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11; font.weight: Font.DemiBold; topPadding: 4; bottomPadding: 2 }
+                        Text { width: parent.width; visible: root.entries.length > 0; text: "FOLDER"; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11; font.weight: Font.DemiBold; topPadding: 4; bottomPadding: 2 }
                         Repeater {
                             model: root.entries
                             delegate: FsRow { required property var modelData; width: col.width; rName: modelData.name; rPath: modelData.path; rIsDir: modelData.isDir }
                         }
-                        Text { width: parent.width; visible: root.entries.length === 0; text: "Empty folder"; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; topPadding: 10 }
+                        Text { width: parent.width; visible: root.entries.length === 0; text: "Empty folder"; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; topPadding: 10 }
                     }
                 }
             }

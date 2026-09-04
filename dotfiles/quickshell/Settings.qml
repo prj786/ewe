@@ -23,20 +23,20 @@ Scope {
     // key is the stable identity: probe triggers and the pane component are
     // looked up by it, so inserting a nav item never silently renumbers others
     readonly property var navItems: [
-        { key: "system",    ic: 0xE610, label: "System" },
-        { key: "displays",  ic: 0xE32E, label: "Displays" },
-        { key: "network",   ic: 0xE4EA, label: "Networking" },
-        { key: "defaults",  ic: 0xE5DA, label: "Default Apps" },
-        { key: "input",     ic: 0xE2D8, label: "Keyboard & Mouse" },
-        { key: "shortcuts", ic: 0xE1C4, label: "Shortcuts" },
-        { key: "layout",    ic: 0xE6D6, label: "Layout" },
-        { key: "theme",     ic: 0xE6C8, label: "Theme" },
-        { key: "wallpaper", ic: 0xE2CA, label: "Wallpaper" },
-        { key: "saver",     ic: 0xE58E, label: "Screensaver" },
-        { key: "power",     ic: 0xE3DA, label: "Power" },
-        { key: "dock",      ic: 0xEE50, label: "Dock" },
-        { key: "startup",   ic: 0xE3FE, label: "Startup" },
-        { key: "user",      ic: 0xE4C2, label: "User" }
+        { key: "system",    ic: 0xE0A9, label: "System" },
+        { key: "displays",  ic: 0xE11D, label: "Displays" },
+        { key: "network",   ic: 0xE1AE, label: "Networking" },
+        { key: "defaults",  ic: 0xE426, label: "Default Apps" },
+        { key: "input",     ic: 0xE284, label: "Keyboard & Mouse" },
+        { key: "shortcuts", ic: 0xE09A, label: "Shortcuts" },
+        { key: "layout",    ic: 0xE1C1, label: "Layout" },
+        { key: "theme",     ic: 0xE1DD, label: "Theme" },
+        { key: "wallpaper", ic: 0xE0F6, label: "Wallpaper" },
+        { key: "saver",     ic: 0xE410, label: "Screensaver" },
+        { key: "power",     ic: 0xE140, label: "Power" },
+        { key: "dock",      ic: 0xE4CF, label: "Dock" },
+        { key: "startup",   ic: 0xE286, label: "Startup" },
+        { key: "user",      ic: 0xE19F, label: "User" }
     ]
     readonly property string paneKey: navItems[pane].key
     // Run the active pane's probes. Called on pane change AND on window open —
@@ -153,6 +153,12 @@ Scope {
     }
     Process { id: luaWriter }
     Process { id: jsonWriter }
+    // Shape & density writer. Hooks stay ON here (unlike the panes that write
+    // their own artifacts): `ewe-conf set desktop.theme.*` has to re-run
+    // `ewe-theme build` and poke the shell, or the change sits in the file
+    // and nothing on screen moves.
+    Process { id: shapeWriter }
+    function shapeWrite(argv) { shapeWriter.running = false; shapeWriter.command = argv; shapeWriter.running = true }
 
     // ── Animations (speed multiplier → Hyprland animation overrides) ────────────
     // Scaling the per-leaf `speed` (duration in ds): higher multiplier → smaller
@@ -516,12 +522,12 @@ Scope {
     property var defaults: ({})        // current default desktop-id per category
     property var appChoices: ({})      // category → [desktop-ids] that handle it (gio)
     readonly property var appCats: [
-        { key: "Browser",      ic: 0xE288, mime: "x-scheme-handler/https", mimes: ["x-scheme-handler/https", "x-scheme-handler/http", "text/html"] },
-        { key: "Mail",         ic: 0xE214, mime: "x-scheme-handler/mailto", mimes: ["x-scheme-handler/mailto"] },
-        { key: "Text Editor",  ic: 0xE23A, mime: "text/plain", mimes: ["text/plain"] },
-        { key: "Image Viewer", ic: 0xE2CA, mime: "image/png", mimes: ["image/png", "image/jpeg", "image/gif", "image/webp"] },
-        { key: "Video Player", ic: 0xE792, mime: "video/mp4", mimes: ["video/mp4", "video/x-matroska", "video/webm"] },
-        { key: "File Manager", ic: 0xE24A, mime: "inode/directory", mimes: ["inode/directory"] }
+        { key: "Browser",      ic: 0xE0E8, mime: "x-scheme-handler/https", mimes: ["x-scheme-handler/https", "x-scheme-handler/http", "text/html"] },
+        { key: "Mail",         ic: 0xE10F, mime: "x-scheme-handler/mailto", mimes: ["x-scheme-handler/mailto"] },
+        { key: "Text Editor",  ic: 0xE0CC, mime: "text/plain", mimes: ["text/plain"] },
+        { key: "Image Viewer", ic: 0xE0F6, mime: "image/png", mimes: ["image/png", "image/jpeg", "image/gif", "image/webp"] },
+        { key: "Video Player", ic: 0xE0D0, mime: "video/mp4", mimes: ["video/mp4", "video/x-matroska", "video/webm"] },
+        { key: "File Manager", ic: 0xE0D7, mime: "inode/directory", mimes: ["inode/directory"] }
     ]
     function entryForId(id) {
         var want = String(id || "").replace(/\.desktop$/, "")
@@ -1128,9 +1134,9 @@ Scope {
     // online-account provider → glyph (safe MDI codepoints only)
     function providerIcon(p) {
         p = String(p).toLowerCase()
-        if (p.indexOf("google") >= 0) return 0xE292           // google-logo
-        if (p.indexOf("imap") >= 0 || p.indexOf("smtp") >= 0) return 0xE214  // envelope
-        return 0xE1AA                                         // cloud (exchange/nextcloud/webdav/…)
+        if (p.indexOf("google") >= 0) return 0xE461           // circle-user — Lucide ships no brand marks
+        if (p.indexOf("imap") >= 0 || p.indexOf("smtp") >= 0) return 0xE10F  // mail
+        return 0xE088                                         // cloud (exchange/nextcloud/webdav/…)
     }
 
     // ── avatar: pick → crop (pan/zoom) → 512² PNG to ~/.face + AccountsService ──
@@ -1200,7 +1206,7 @@ Scope {
         implicitWidth: 880
         implicitHeight: 620
         minimumSize: Qt.size(720, 480)
-        color: Theme.panel
+        color: Theme.bg1
         Connections {
             target: Globals
             function onSettingsOpenChanged() { if (win.visible !== Globals.settingsOpen) win.visible = Globals.settingsOpen }
@@ -1227,26 +1233,26 @@ Scope {
             }
 
             // ════════ reusable bits ════════
-            component Dot: Rectangle { property string state: "info"; width: 9; height: 9; radius: 5; color: state === "ok" ? Theme.success : state === "bad" ? Theme.danger : Theme.fgDim }
+            component Dot: Rectangle { property string state: "info"; width: 9; height: 9; radius: 5; color: state === "ok" ? Theme.success : state === "bad" ? Theme.danger : Theme.fg3 }
             component Card: Rectangle {
                 default property alias content: inner.data
                 width: parent ? parent.width : 0
                 implicitHeight: inner.implicitHeight + 24
-                radius: Theme.radiusInner; color: Theme.elevated
+                radius: Theme.radiusInner; color: Theme.card
                 Column { id: inner; anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 12; spacing: 8 }
             }
-            component SectionTitle: Text { color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold; bottomPadding: 2 }
+            component SectionTitle: Text { color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold; bottomPadding: 2 }
             component KV: Item {
                 property string k: ""; property string v: ""; property string dot: ""
                 property bool action: false; property string actionLabel: ""
                 signal act()
                 width: parent ? parent.width : 0; height: 26
-                Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: k; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
+                Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: k; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
                 Row {
                     anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; spacing: 8
-                    Text { anchors.verticalCenter: parent.verticalCenter; visible: !action && v !== ""; text: v; color: Theme.fgSecondary; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; elide: Text.ElideRight; width: Math.min(implicitWidth, 340) }
-                    Rectangle { visible: action; anchors.verticalCenter: parent.verticalCenter; width: alab.implicitWidth + 18; height: 22; radius: Theme.r(7); color: aMa.containsMouse ? Theme.accent : Theme.hover; Behavior on color { ColorAnimation { duration: 120 } }
-                        Text { id: alab; anchors.centerIn: parent; text: actionLabel; color: aMa.containsMouse ? Theme.accentText : Theme.fg; font.family: Theme.fontText; font.pixelSize: 11; font.weight: Font.DemiBold }
+                    Text { anchors.verticalCenter: parent.verticalCenter; visible: !action && v !== ""; text: v; color: Theme.fg2; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; elide: Text.ElideRight; width: Math.min(implicitWidth, 340) }
+                    Rectangle { visible: action; anchors.verticalCenter: parent.verticalCenter; width: alab.implicitWidth + 18; height: 22; radius: Theme.r(7); color: aMa.containsMouse ? Theme.accentFill : Theme.card; Behavior on color { ColorAnimation { duration: 120 } }
+                        Text { id: alab; anchors.centerIn: parent; text: actionLabel; color: aMa.containsMouse ? Theme.accentOn : Theme.fg1; font.family: Theme.fontText; font.pixelSize: 11; font.weight: Font.DemiBold }
                         MouseArea { id: aMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: act() } }
                     Dot { anchors.verticalCenter: parent.verticalCenter; visible: dot !== ""; state: dot }
                 }
@@ -1264,12 +1270,12 @@ Scope {
                 property bool dragging: false
                 readonly property real shown: dragging ? dragVal : value
                 height: 40; width: parent ? parent.width : 0
-                Text { anchors.left: parent.left; anchors.top: parent.top; text: sld.label; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
+                Text { anchors.left: parent.left; anchors.top: parent.top; text: sld.label; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
                 Text { anchors.right: parent.right; anchors.top: parent.top; text: Number(sld.shown).toFixed(sld.decimals); color: Theme.accent; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold }
                 Rectangle {
-                    id: strk; anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; anchors.bottomMargin: 4; height: 8; radius: 4; color: Theme.hover
+                    id: strk; anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; anchors.bottomMargin: 4; height: 8; radius: 4; color: Theme.bg2
                     Rectangle { height: parent.height; radius: Theme.r(4); color: Theme.accent; width: parent.width * (sld.shown - sld.from) / Math.max(0.0001, sld.to - sld.from) }
-                    Rectangle { width: 14; height: 14; radius: 7; color: Theme.accentText; anchors.verticalCenter: parent.verticalCenter; x: Math.max(0, Math.min(strk.width - width, strk.width * (sld.shown - sld.from) / Math.max(0.0001, sld.to - sld.from) - width / 2)) }
+                    Rectangle { width: 14; height: 14; radius: 7; color: Theme.accentOn; anchors.verticalCenter: parent.verticalCenter; x: Math.max(0, Math.min(strk.width - width, strk.width * (sld.shown - sld.from) / Math.max(0.0001, sld.to - sld.from) - width / 2)) }
                     MouseArea {
                         anchors.fill: parent; anchors.topMargin: -8; anchors.bottomMargin: -8
                         function pick(mx) { var f = Math.max(0, Math.min(1, mx / strk.width)); var v = sld.from + f * (sld.to - sld.from); return Math.round(v / sld.step) * sld.step }
@@ -1282,25 +1288,25 @@ Scope {
             component Toggle: Rectangle {
                 property bool on: false
                 signal toggled()
-                width: 40; height: 24; radius: 12; color: on ? Theme.accent : Theme.hover; Behavior on color { ColorAnimation { duration: 150 } }
+                width: 40; height: 24; radius: 12; color: on ? Theme.accentFill : Theme.bg2; Behavior on color { ColorAnimation { duration: 150 } }
                 activeFocusOnTab: true
-                border.color: activeFocus ? Theme.fg : "transparent"; border.width: activeFocus ? 1 : 0
+                border.color: activeFocus ? Theme.fg1 : "transparent"; border.width: activeFocus ? 1 : 0
                 Keys.onSpacePressed: toggled()
                 Keys.onReturnPressed: toggled()
-                Rectangle { width: 18; height: 18; radius: 9; color: Theme.accentText; anchors.verticalCenter: parent.verticalCenter; x: parent.on ? parent.width - width - 3 : 3; Behavior on x { NumberAnimation { duration: 150 } } }
+                Rectangle { width: 18; height: 18; radius: 9; color: parent.on ? Theme.accentOn : Theme.fg2; anchors.verticalCenter: parent.verticalCenter; x: parent.on ? parent.width - width - 3 : 3; Behavior on x { NumberAnimation { duration: 150 } } }
                 MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: toggled() }
             }
             component Pill: Rectangle {
                 property string label: ""; property bool primary: false
                 signal go()
                 width: pl.implicitWidth + 22; height: 28; radius: Theme.r(8)
-                color: plMa.containsMouse ? Theme.accent : (primary ? Theme.accent : Theme.elevated)
+                color: (plMa.containsMouse || primary) ? Theme.accentFill : Theme.card
                 Behavior on color { ColorAnimation { duration: 120 } }
                 activeFocusOnTab: true
-                border.color: activeFocus ? Theme.fg : "transparent"; border.width: activeFocus ? 1 : 0
+                border.color: activeFocus ? Theme.fg1 : "transparent"; border.width: activeFocus ? 1 : 0
                 Keys.onSpacePressed: go()
                 Keys.onReturnPressed: go()
-                Text { id: pl; anchors.centerIn: parent; text: label; color: (plMa.containsMouse || primary) ? Theme.accentText : Theme.fg; font.family: Theme.fontText; font.pixelSize: 11; font.weight: Font.DemiBold }
+                Text { id: pl; anchors.centerIn: parent; text: label; color: (plMa.containsMouse || primary) ? Theme.accentOn : Theme.fg1; font.family: Theme.fontText; font.pixelSize: 11; font.weight: Font.DemiBold }
                 MouseArea { id: plMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: go() }
             }
             // ToggleRow — label (+ optional sub-caption) left, Toggle right
@@ -1311,8 +1317,8 @@ Scope {
                 opacity: dim ? 0.45 : 1
                 Column {
                     anchors.left: parent.left; anchors.right: trTog.left; anchors.rightMargin: 10; anchors.verticalCenter: parent.verticalCenter; spacing: 1
-                    Text { text: title; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; elide: Text.ElideRight; width: parent.width }
-                    Text { visible: sub !== ""; text: sub; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 10; elide: Text.ElideRight; width: parent.width }
+                    Text { text: title; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; elide: Text.ElideRight; width: parent.width }
+                    Text { visible: sub !== ""; text: sub; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 10; elide: Text.ElideRight; width: parent.width }
                 }
                 Toggle { id: trTog; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; on: parent.on; onToggled: if (!parent.dim) parent.toggled() }
             }
@@ -1323,10 +1329,10 @@ Scope {
             Row {
                 anchors.fill: parent; spacing: 0
                 Rectangle {
-                    width: 210; height: parent.height; color: Theme.bg
+                    width: 210; height: parent.height; color: Theme.bg3
                     Column {
                         anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 14; spacing: 12
-                        Text { text: "Settings"; color: Theme.fg; font.family: Theme.fontDisplay; font.pixelSize: Theme.fsLarge; font.weight: Font.Bold; bottomPadding: 2 }
+                        Text { text: "Settings"; color: Theme.fg1; font.family: Theme.fontDisplay; font.pixelSize: Theme.fsLarge; font.weight: Font.Bold; bottomPadding: 2 }
                         Column {
                             width: parent.width; spacing: 2
                             Repeater {
@@ -1336,12 +1342,12 @@ Scope {
                                     required property int index
                                     width: parent.width; height: 36; radius: Theme.radiusInner
                                     readonly property bool sel: root.pane === index
-                                    color: sel ? Theme.accent : (nMa.containsMouse ? Theme.hover : "transparent")
+                                    color: sel ? Theme.accentFill : (nMa.containsMouse ? Theme.subtleHover : Theme.subtle)
                                     Behavior on color { ColorAnimation { duration: 120 } }
                                     Row {
                                         anchors.left: parent.left; anchors.leftMargin: 11; anchors.verticalCenter: parent.verticalCenter; spacing: 11
-                                        Text { anchors.verticalCenter: parent.verticalCenter; width: 18; text: root.g(modelData.ic); font.family: Theme.fontIcons; font.pixelSize: 15; color: parent.parent.sel ? Theme.accentText : Theme.fg }
-                                        Text { anchors.verticalCenter: parent.verticalCenter; text: modelData.label; color: parent.parent.sel ? Theme.accentText : Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: parent.parent.sel ? Font.DemiBold : Font.Medium }
+                                        Text { anchors.verticalCenter: parent.verticalCenter; width: 18; text: root.g(modelData.ic); font.family: Theme.fontIcons; font.pixelSize: 15; color: parent.parent.sel ? Theme.accentOn : Theme.fg1 }
+                                        Text { anchors.verticalCenter: parent.verticalCenter; text: modelData.label; color: parent.parent.sel ? Theme.accentOn : Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: parent.parent.sel ? Font.DemiBold : Font.Medium }
                                     }
                                     MouseArea { id: nMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.pane = index }
                                 }
@@ -1350,21 +1356,21 @@ Scope {
                     }
                     Rectangle {
                         anchors.left: parent.left; anchors.bottom: parent.bottom; anchors.margins: 14
-                        width: 30; height: 30; radius: 15; color: xMa.containsMouse ? Theme.hover : Theme.elevated
-                        Text { anchors.centerIn: parent; text: Theme.icClose; font.family: Theme.fontIcons; font.pixelSize: 14; color: Theme.fg }
+                        width: 30; height: 30; radius: 15; color: xMa.containsMouse ? Theme.cardHover : Theme.card
+                        Text { anchors.centerIn: parent; text: Theme.icClose; font.family: Theme.fontIcons; font.pixelSize: 14; color: Theme.fg1 }
                         MouseArea { id: xMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: Globals.settingsOpen = false }
                     }
                     // version badge (bottom-right of the sidebar)
                     Text {
                         anchors.right: parent.right; anchors.bottom: parent.bottom; anchors.margins: 16
                         text: "ewe " + Globals.version
-                        color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 10
+                        color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 10
                     }
                 }
-                Rectangle { width: 1; height: parent.height; color: Theme.stroke }
+                Rectangle { width: 1; height: parent.height; color: Theme.stroke3 }
                 Item {
                     width: parent.width - 211; height: parent.height
-                    Text { anchors.left: parent.left; anchors.top: parent.top; anchors.margins: 20; text: root.navItems[root.pane].label; color: Theme.fg; font.family: Theme.fontDisplay; font.pixelSize: Theme.fsTitle; font.weight: Font.Bold }
+                    Text { anchors.left: parent.left; anchors.top: parent.top; anchors.margins: 20; text: root.navItems[root.pane].label; color: Theme.fg1; font.family: Theme.fontDisplay; font.pixelSize: Theme.fsTitle; font.weight: Font.Bold }
                     Flickable {
                         anchors.fill: parent; anchors.topMargin: 60; anchors.margins: 20
                         contentHeight: paneLoader.item ? paneLoader.item.implicitHeight : 0
@@ -1418,7 +1424,7 @@ Scope {
                     spacing: 14
                     Card {
                         visible: HyprMon.monitors.length === 0
-                        Text { width: parent.width; text: HyprMon.loading ? "Querying displays…" : "No displays reported by Hyprland."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
+                        Text { width: parent.width; text: HyprMon.loading ? "Querying displays…" : "No displays reported by Hyprland."; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
                     }
                     SectionTitle { visible: HyprMon.monitors.length > 0; text: "ARRANGEMENT  ·  drag a display; edges snap together" }
                     Card {
@@ -1439,15 +1445,15 @@ Scope {
                                     width: root.specW(modelData) * arena.factor; height: root.specH(modelData) * arena.factor; radius: Theme.r(8)
                                     x: arena.pad + modelData.x * arena.factor
                                     y: arena.pad + modelData.y * arena.factor
-                                    color: dragMa.drag.active ? Theme.hover : (root.isLaptop(modelData) ? Theme.elevated : Theme.panel)
-                                    border.color: dragMa.drag.active ? Theme.accent : Theme.stroke; border.width: dragMa.drag.active ? 2 : 1
+                                    color: dragMa.drag.active ? Theme.cardHover : (root.isLaptop(modelData) ? Theme.card : Theme.bg1)
+                                    border.color: dragMa.drag.active ? Theme.accent : Theme.stroke1; border.width: dragMa.drag.active ? 2 : 1
                                     Column { anchors.centerIn: parent; spacing: 1
                                         Row { anchors.horizontalCenter: parent.horizontalCenter; spacing: 5
-                                            Text { anchors.verticalCenter: parent.verticalCenter; text: monBox.modelData.name; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold }
+                                            Text { anchors.verticalCenter: parent.verticalCenter; text: monBox.modelData.name; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold }
                                             Text { anchors.verticalCenter: parent.verticalCenter; visible: monBox.modelData.primary; text: Theme.icStar; font.family: Theme.fontIcons; font.pixelSize: 10; color: Theme.accent }
                                         }
-                                        Text { anchors.horizontalCenter: parent.horizontalCenter; text: HyprMon.modeRes(monBox.modelData.mode).replace("x", "×") + " @ " + Math.round(HyprMon.modeHz(monBox.modelData.mode)) + "Hz"; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 10 }
-                                        Text { anchors.horizontalCenter: parent.horizontalCenter; text: "scale " + Number(monBox.modelData.scale).toFixed(2) + "×"; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 10 }
+                                        Text { anchors.horizontalCenter: parent.horizontalCenter; text: HyprMon.modeRes(monBox.modelData.mode).replace("x", "×") + " @ " + Math.round(HyprMon.modeHz(monBox.modelData.mode)) + "Hz"; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 10 }
+                                        Text { anchors.horizontalCenter: parent.horizontalCenter; text: "scale " + Number(monBox.modelData.scale).toFixed(2) + "×"; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 10 }
                                     }
                                     MouseArea {
                                         id: dragMa; anchors.fill: parent; cursorShape: Qt.SizeAllCursor
@@ -1464,7 +1470,7 @@ Scope {
                             Pill { label: "Auto-arrange left → right"; onGo: root.autoArrange() }
                             Pill { label: "Reset displays"; onGo: { HyprMon.resetDisplays(); root.flashApplied("Saved profile re-applied") } }
                         }
-                        Text { width: parent.width; visible: !HyprMon.profiles[HyprMon.currentKey()]; text: "No saved profile for this display set yet — change any setting (or drag a display) to create one."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
+                        Text { width: parent.width; visible: !HyprMon.profiles[HyprMon.currentKey()]; text: "No saved profile for this display set yet — change any setting (or drag a display) to create one."; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
                     }
                     SectionTitle { visible: HyprMon.monitors.length > 0; text: "MONITORS" }
                     Repeater {
@@ -1483,13 +1489,13 @@ Scope {
                                 width: parent.width; height: 24
                                 Row {
                                     anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; spacing: 8
-                                    Text { anchors.verticalCenter: parent.verticalCenter; text: monCard.modelData.name; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsBody; font.weight: Font.DemiBold }
-                                    Text { anchors.verticalCenter: parent.verticalCenter; visible: root.isLaptop(monCard.modelData); text: "built-in"; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 10 }
+                                    Text { anchors.verticalCenter: parent.verticalCenter; text: monCard.modelData.name; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsBody; font.weight: Font.DemiBold }
+                                    Text { anchors.verticalCenter: parent.verticalCenter; visible: root.isLaptop(monCard.modelData); text: "built-in"; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 10 }
                                     Text { anchors.verticalCenter: parent.verticalCenter; visible: monCard.modelData.primary; text: Theme.icStar + " primary"; color: Theme.accent; font.family: Theme.fontText; font.pixelSize: 10; font.weight: Font.DemiBold }
                                 }
                                 Row {
                                     anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; spacing: 10
-                                    Text { anchors.verticalCenter: parent.verticalCenter; text: monCard.modelData.desc; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 10; elide: Text.ElideRight; width: Math.min(implicitWidth, 190) }
+                                    Text { anchors.verticalCenter: parent.verticalCenter; text: monCard.modelData.desc; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 10; elide: Text.ElideRight; width: Math.min(implicitWidth, 190) }
                                     Toggle {
                                         anchors.verticalCenter: parent.verticalCenter
                                         on: !monCard.modelData.disabled
@@ -1512,7 +1518,7 @@ Scope {
                                 }
                                 Item {
                                     width: parent.width; height: 30
-                                    Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Scale"; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
+                                    Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Scale"; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
                                     Row {
                                         anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; spacing: 5
                                         Repeater {
@@ -1521,19 +1527,19 @@ Scope {
                                                 required property var modelData
                                                 readonly property bool sel: Math.abs(monCard.modelData.scale - modelData) < 0.001
                                                 width: 37; height: 24; radius: Theme.r(6)
-                                                color: sel ? Theme.accent : (spMa.containsMouse ? Theme.hover : Theme.panel)
-                                                border.color: sel ? Theme.accent : Theme.stroke; border.width: Theme.borderThin
-                                                Text { anchors.centerIn: parent; text: modelData === 1 || modelData === 2 ? modelData + "×" : String(modelData); color: sel ? Theme.accentText : Theme.fg; font.family: Theme.fontText; font.pixelSize: 10; font.weight: Font.DemiBold }
+                                                color: sel ? Theme.accentFill : (spMa.containsMouse ? Theme.bg1Hover : Theme.bg1)
+                                                border.color: sel ? Theme.accent : Theme.stroke1; border.width: Theme.borderThin
+                                                Text { anchors.centerIn: parent; text: modelData === 1 || modelData === 2 ? modelData + "×" : String(modelData); color: sel ? Theme.accentOn : Theme.fg1; font.family: Theme.fontText; font.pixelSize: 10; font.weight: Font.DemiBold }
                                                 MouseArea { id: spMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: if (!sel) root.riskyChange(monCard.modelData.name, { scale: modelData }) }
                                             }
                                         }
                                         Rectangle {
-                                            width: 52; height: 24; radius: Theme.r(6); color: Theme.panel
-                                            border.color: scIn.activeFocus ? Theme.accent : Theme.stroke; border.width: Theme.borderThin
+                                            width: 52; height: 24; radius: Theme.r(6); color: Theme.bg1
+                                            border.color: scIn.activeFocus ? Theme.accent : Theme.stroke1; border.width: Theme.borderThin
                                             TextInput {
                                                 id: scIn
                                                 anchors.fill: parent; horizontalAlignment: TextInput.AlignHCenter; verticalAlignment: TextInput.AlignVCenter
-                                                color: Theme.fg; font.family: Theme.fontMono; font.pixelSize: 11
+                                                color: Theme.fg1; font.family: Theme.fontMono; font.pixelSize: 11
                                                 text: Number(monCard.modelData.scale).toFixed(2)
                                                 onAccepted: { var v = parseFloat(text); if (!isNaN(v) && v >= 0.5 && v <= 3) root.riskyChange(monCard.modelData.name, { scale: Math.round(v * 100) / 100 }) }
                                             }
@@ -1545,7 +1551,7 @@ Scope {
                                     width: parent.width; height: 16
                                     readonly property var wh: HyprMon.modeRes(monCard.modelData.mode).split("x")
                                     readonly property bool frac: (wh[0] / monCard.modelData.scale) % 1 !== 0 || (wh[1] / monCard.modelData.scale) % 1 !== 0
-                                    Text { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; text: "Logical size: " + root.specW(monCard.modelData) + " × " + root.specH(monCard.modelData) + (effRow.frac ? "  ·  fractional — Hyprland rounds to whole pixels" : ""); color: effRow.frac ? Theme.warning : Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 10 }
+                                    Text { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; text: "Logical size: " + root.specW(monCard.modelData) + " × " + root.specH(monCard.modelData) + (effRow.frac ? "  ·  fractional — Hyprland rounds to whole pixels" : ""); color: effRow.frac ? Theme.warning : Theme.fg3; font.family: Theme.fontText; font.pixelSize: 10 }
                                 }
                                 DropRow {
                                     label: "Rotation"; ddId: "rot-" + monCard.modelData.name; buttonWidth: 110
@@ -1564,11 +1570,11 @@ Scope {
                                 KV { k: "Position"; v: monCard.modelData.x + ", " + monCard.modelData.y + "  ·  drag in Arrangement to move" }
                                 KV { visible: !monCard.modelData.primary; k: "Primary display"; action: true; actionLabel: "Make primary"; onAct: root.setPrimary(monCard.modelData.name) }
                             }
-                            Text { visible: monCard.modelData.disabled; width: parent.width; text: "Display is disabled — flip the toggle to re-enable it."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11 }
+                            Text { visible: monCard.modelData.disabled; width: parent.width; text: "Display is disabled — flip the toggle to re-enable it."; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11 }
                         }
                     }
-                    Text { width: parent.width; text: "Changes apply live (with a 10-second revert safety net) and persist per display-set profile: docking or undocking restores the matching profile automatically, including at boot."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
-                    Text { width: parent.width; text: "Screen goes black when (un)plugging the charger? The saved profile is re-asserted automatically a moment later. If the built-in panel still blanks, that's the xe graphics driver's panel self-refresh (kernel-side, not fixable from the shell) — use “Reset displays” to recover, or boot with xe.enable_psr=0."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
+                    Text { width: parent.width; text: "Changes apply live (with a 10-second revert safety net) and persist per display-set profile: docking or undocking restores the matching profile automatically, including at boot."; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
+                    Text { width: parent.width; text: "Screen goes black when (un)plugging the charger? The saved profile is re-asserted automatically a moment later. If the built-in panel still blanks, that's the xe graphics driver's panel self-refresh (kernel-side, not fixable from the shell) — use “Reset displays” to recover, or boot with xe.enable_psr=0."; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
                     Item { width: 1; height: 8 }
                 }
             }
@@ -1581,14 +1587,14 @@ Scope {
                     // Wired / Ethernet
                     SectionTitle { text: "WIRED" }
                     Card {
-                        Text { width: parent.width; visible: root.wiredList.length === 0; text: "No wired connection."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
+                        Text { width: parent.width; visible: root.wiredList.length === 0; text: "No wired connection."; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
                         Repeater {
                             model: root.wiredList
                             delegate: Item {
                                 required property var modelData
                                 width: parent.width; height: 30
-                                Text { anchors.left: parent.left; anchors.leftMargin: 4; anchors.verticalCenter: parent.verticalCenter; text: Theme.icEthernet; font.family: Theme.fontIcons; font.pixelSize: 13; color: modelData.state === "activated" ? Theme.accent : Theme.fgDim }
-                                Text { anchors.left: parent.left; anchors.leftMargin: 28; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; text: modelData.name + "  ·  " + modelData.dev + (modelData.state === "activated" ? "  ·  connected" : ""); color: modelData.state === "activated" ? Theme.accent : Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: modelData.state === "activated" ? Font.DemiBold : Font.Normal; elide: Text.ElideRight }
+                                Text { anchors.left: parent.left; anchors.leftMargin: 4; anchors.verticalCenter: parent.verticalCenter; text: Theme.icEthernet; font.family: Theme.fontIcons; font.pixelSize: 13; color: modelData.state === "activated" ? Theme.accent : Theme.fg3 }
+                                Text { anchors.left: parent.left; anchors.leftMargin: 28; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; text: modelData.name + "  ·  " + modelData.dev + (modelData.state === "activated" ? "  ·  connected" : ""); color: modelData.state === "activated" ? Theme.accent : Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: modelData.state === "activated" ? Font.DemiBold : Font.Normal; elide: Text.ElideRight }
                             }
                         }
                     }
@@ -1597,11 +1603,11 @@ Scope {
                         width: parent.width; height: 30
                         SectionTitle { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "WI-FI" }
                         Toggle { visible: root.hasWifi; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; on: root.wifiOn; onToggled: { Quickshell.execDetached(["nmcli", "radio", "wifi", root.wifiOn ? "off" : "on"]); wifiRescan.restart() } }
-                        Text { visible: !root.hasWifi; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; text: "Not available"; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
+                        Text { visible: !root.hasWifi; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; text: "Not available"; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
                     }
                     Card {
                         visible: !root.hasWifi
-                        Text { width: parent.width; text: Theme.icWifiOff + "  No Wi-Fi adapter detected — this machine has no wireless device (common in VMs). Use the wired connection above, or plug in a USB Wi-Fi dongle."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; wrapMode: Text.Wrap }
+                        Text { width: parent.width; text: Theme.icWifiOff + "  No Wi-Fi adapter detected — this machine has no wireless device (common in VMs). Use the wired connection above, or plug in a USB Wi-Fi dongle."; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; wrapMode: Text.Wrap }
                     }
                     Card {
                         visible: root.hasWifi && root.wifiOn
@@ -1612,18 +1618,18 @@ Scope {
                                 width: parent.width
                                 Item {
                                     width: parent.width; height: 30
-                                    Rectangle { anchors.fill: parent; radius: Theme.r(7); color: wMa.containsMouse ? Theme.hover : "transparent" }
-                                    Text { anchors.left: parent.left; anchors.leftMargin: 4; anchors.verticalCenter: parent.verticalCenter; text: modelData.signal >= 66 ? Theme.icWifi : (modelData.signal >= 33 ? Theme.icWifiMed : Theme.icWifiLow); font.family: Theme.fontIcons; font.pixelSize: 13; color: modelData.active ? Theme.accent : Theme.fgDim }
-                                    Text { anchors.left: parent.left; anchors.leftMargin: 28; anchors.right: parent.right; anchors.rightMargin: 22; anchors.verticalCenter: parent.verticalCenter; text: modelData.ssid; color: modelData.active ? Theme.accent : Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: modelData.active ? Font.DemiBold : Font.Normal; elide: Text.ElideRight }
-                                    Text { anchors.right: parent.right; anchors.rightMargin: 4; anchors.verticalCenter: parent.verticalCenter; visible: modelData.sec !== ""; text: Theme.icLock; font.family: Theme.fontIcons; font.pixelSize: 10; color: Theme.fgDim }
+                                    Rectangle { anchors.fill: parent; radius: Theme.r(7); color: wMa.containsMouse ? Theme.subtleHover : Theme.subtle }
+                                    Text { anchors.left: parent.left; anchors.leftMargin: 4; anchors.verticalCenter: parent.verticalCenter; text: modelData.signal >= 66 ? Theme.icWifi : (modelData.signal >= 33 ? Theme.icWifiMed : Theme.icWifiLow); font.family: Theme.fontIcons; font.pixelSize: 13; color: modelData.active ? Theme.accent : Theme.fg3 }
+                                    Text { anchors.left: parent.left; anchors.leftMargin: 28; anchors.right: parent.right; anchors.rightMargin: 22; anchors.verticalCenter: parent.verticalCenter; text: modelData.ssid; color: modelData.active ? Theme.accent : Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: modelData.active ? Font.DemiBold : Font.Normal; elide: Text.ElideRight }
+                                    Text { anchors.right: parent.right; anchors.rightMargin: 4; anchors.verticalCenter: parent.verticalCenter; visible: modelData.sec !== ""; text: Theme.icLock; font.family: Theme.fontIcons; font.pixelSize: 10; color: Theme.fg3 }
                                     MouseArea { id: wMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.connectWifi(modelData.ssid, modelData.sec) }
                                 }
                                 Item {
                                     width: parent.width; height: visible ? 34 : 0; visible: root.pwTarget === modelData.ssid
-                                    Rectangle { anchors.fill: parent; anchors.topMargin: 2; anchors.bottomMargin: 4; radius: Theme.r(7); color: Theme.panel; border.color: Theme.accent; border.width: Theme.borderThin
-                                        TextInput { id: pwIn; anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 52; verticalAlignment: TextInput.AlignVCenter; echoMode: TextInput.Password; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
+                                    Rectangle { anchors.fill: parent; anchors.topMargin: 2; anchors.bottomMargin: 4; radius: Theme.r(7); color: Theme.bg1; border.color: Theme.accent; border.width: Theme.borderThin
+                                        TextInput { id: pwIn; anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 52; verticalAlignment: TextInput.AlignVCenter; echoMode: TextInput.Password; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
                                             onTextChanged: root.pwText = text; Component.onCompleted: forceActiveFocus(); onAccepted: root.connectWifi(modelData.ssid, modelData.sec)
-                                            Text { anchors.verticalCenter: parent.verticalCenter; visible: pwIn.text.length === 0; text: "Password"; color: Theme.fgDim; font: pwIn.font } }
+                                            Text { anchors.verticalCenter: parent.verticalCenter; visible: pwIn.text.length === 0; text: "Password"; color: Theme.fg3; font: pwIn.font } }
                                         Text { anchors.right: parent.right; anchors.rightMargin: 12; anchors.verticalCenter: parent.verticalCenter; text: "Join"; color: Theme.accent; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold; MouseArea { anchors.fill: parent; anchors.margins: -6; cursorShape: Qt.PointingHandCursor; onClicked: root.connectWifi(modelData.ssid, modelData.sec) } } }
                                 }
                             }
@@ -1636,15 +1642,15 @@ Scope {
                         Text { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; text: "+ Add VPN"; color: Theme.accent; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold; MouseArea { anchors.fill: parent; anchors.margins: -6; cursorShape: Qt.PointingHandCursor; onClicked: Quickshell.execDetached(["nm-connection-editor"]) } }
                     }
                     Card {
-                        Text { width: parent.width; visible: root.vpnList.length === 0; text: "No VPN connections configured."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
+                        Text { width: parent.width; visible: root.vpnList.length === 0; text: "No VPN connections configured."; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
                         Repeater {
                             model: root.vpnList
                             delegate: Item {
                                 required property var modelData
                                 width: parent.width; height: 30
-                                Rectangle { anchors.fill: parent; radius: Theme.r(7); color: vMa.containsMouse ? Theme.hover : "transparent" }
-                                Text { anchors.left: parent.left; anchors.leftMargin: 4; anchors.verticalCenter: parent.verticalCenter; text: Theme.icVpn; font.family: Theme.fontIcons; font.pixelSize: 12; color: modelData.active ? Theme.accent : Theme.fgDim }
-                                Text { anchors.left: parent.left; anchors.leftMargin: 26; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; text: modelData.name + (modelData.active ? "  ·  connected" : ""); color: modelData.active ? Theme.accent : Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: modelData.active ? Font.DemiBold : Font.Normal; elide: Text.ElideRight }
+                                Rectangle { anchors.fill: parent; radius: Theme.r(7); color: vMa.containsMouse ? Theme.subtleHover : Theme.subtle }
+                                Text { anchors.left: parent.left; anchors.leftMargin: 4; anchors.verticalCenter: parent.verticalCenter; text: Theme.icVpn; font.family: Theme.fontIcons; font.pixelSize: 12; color: modelData.active ? Theme.accent : Theme.fg3 }
+                                Text { anchors.left: parent.left; anchors.leftMargin: 26; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; text: modelData.name + (modelData.active ? "  ·  connected" : ""); color: modelData.active ? Theme.accent : Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: modelData.active ? Font.DemiBold : Font.Normal; elide: Text.ElideRight }
                                 MouseArea { id: vMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: { Quickshell.execDetached(["nmcli", "connection", modelData.active ? "down" : "up", modelData.name]); vpnRescan.restart() } }
                             }
                         }
@@ -1656,15 +1662,15 @@ Scope {
                         Text { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; text: "Edit config"; color: Theme.accent; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold; MouseArea { anchors.fill: parent; anchors.margins: -6; cursorShape: Qt.PointingHandCursor; onClicked: Quickshell.execDetached(["kitty", "-e", "sh", "-c", "${EDITOR:-micro} ~/.ssh/config"]) } }
                     }
                     Card {
-                        Text { width: parent.width; visible: root.sshHosts.length === 0; text: "No hosts in ~/.ssh/config. Add one with “Edit config”."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; wrapMode: Text.Wrap }
+                        Text { width: parent.width; visible: root.sshHosts.length === 0; text: "No hosts in ~/.ssh/config. Add one with “Edit config”."; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; wrapMode: Text.Wrap }
                         Repeater {
                             model: root.sshHosts
                             delegate: Item {
                                 required property var modelData
                                 width: parent.width; height: 30
-                                Rectangle { anchors.fill: parent; radius: Theme.r(7); color: sMa.containsMouse ? Theme.hover : "transparent" }
-                                Text { anchors.left: parent.left; anchors.leftMargin: 4; anchors.verticalCenter: parent.verticalCenter; text: Theme.icLock; font.family: Theme.fontIcons; font.pixelSize: 12; color: Theme.fgDim }
-                                Text { anchors.left: parent.left; anchors.leftMargin: 26; anchors.verticalCenter: parent.verticalCenter; text: modelData; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
+                                Rectangle { anchors.fill: parent; radius: Theme.r(7); color: sMa.containsMouse ? Theme.subtleHover : Theme.subtle }
+                                Text { anchors.left: parent.left; anchors.leftMargin: 4; anchors.verticalCenter: parent.verticalCenter; text: Theme.icLock; font.family: Theme.fontIcons; font.pixelSize: 12; color: Theme.fg3 }
+                                Text { anchors.left: parent.left; anchors.leftMargin: 26; anchors.verticalCenter: parent.verticalCenter; text: modelData; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
                                 Text { anchors.right: parent.right; anchors.rightMargin: 6; anchors.verticalCenter: parent.verticalCenter; visible: sMa.containsMouse; text: "connect →"; color: Theme.accent; font.family: Theme.fontText; font.pixelSize: 11 }
                                 MouseArea { id: sMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: Quickshell.execDetached(["kitty", "-e", "ssh", modelData]) }
                             }
@@ -1701,31 +1707,31 @@ Scope {
                                 width: parent.width; height: 30
                                 Row {
                                     anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; spacing: 10
-                                    Text { anchors.verticalCenter: parent.verticalCenter; width: 18; text: root.g(appCard.modelData.ic); font.family: Theme.fontIcons; font.pixelSize: 15; color: Theme.fgDim }
-                                    Text { anchors.verticalCenter: parent.verticalCenter; text: appCard.modelData.key; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold }
+                                    Text { anchors.verticalCenter: parent.verticalCenter; width: 18; text: root.g(appCard.modelData.ic); font.family: Theme.fontIcons; font.pixelSize: 15; color: Theme.fg3 }
+                                    Text { anchors.verticalCenter: parent.verticalCenter; text: appCard.modelData.key; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold }
                                 }
                                 Rectangle {
                                     anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
-                                    width: 210; height: 26; radius: Theme.r(7); color: cMa.containsMouse ? Theme.hover : Theme.panel; border.color: Theme.stroke; border.width: Theme.borderThin
-                                    Text { anchors.left: parent.left; anchors.leftMargin: 9; anchors.right: chev.left; anchors.verticalCenter: parent.verticalCenter; text: root.appNameForId(appCard.curId); color: Theme.fg; font.family: Theme.fontText; font.pixelSize: 11; elide: Text.ElideRight }
-                                    Text { id: chev; anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter; text: Theme.icChevronDown; font.family: Theme.fontIcons; font.pixelSize: 9; color: Theme.fgDim }
+                                    width: 210; height: 26; radius: Theme.r(7); color: cMa.containsMouse ? Theme.bg1Hover : Theme.bg1; border.color: Theme.stroke1; border.width: Theme.borderThin
+                                    Text { anchors.left: parent.left; anchors.leftMargin: 9; anchors.right: chev.left; anchors.verticalCenter: parent.verticalCenter; text: root.appNameForId(appCard.curId); color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: 11; elide: Text.ElideRight }
+                                    Text { id: chev; anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter; text: Theme.icChevronDown; font.family: Theme.fontIcons; font.pixelSize: 9; color: Theme.fg3 }
                                     MouseArea { id: cMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: defCol.openCat = (defCol.openCat === appCard.modelData.key ? "" : appCard.modelData.key) }
                                 }
                             }
                             Column {
                                 width: parent.width; visible: defCol.openCat === appCard.modelData.key; spacing: 1
-                                Text { width: parent.width; visible: appCard.choices.length === 0; text: "No installed app handles this type."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11 }
+                                Text { width: parent.width; visible: appCard.choices.length === 0; text: "No installed app handles this type."; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11 }
                                 Repeater {
                                     model: appCard.choices
                                     delegate: Rectangle {
                                         required property var modelData
                                         readonly property var entry: root.entryForId(modelData)
                                         readonly property bool isCur: String(appCard.curId).replace(/\.desktop$/, "") === String(modelData).replace(/\.desktop$/, "")
-                                        width: parent.width; height: 32; radius: Theme.r(6); color: eMa.containsMouse ? Theme.hover : "transparent"
+                                        width: parent.width; height: 32; radius: Theme.r(6); color: eMa.containsMouse ? Theme.subtleHover : Theme.subtle
                                         Row {
                                             anchors.left: parent.left; anchors.leftMargin: 8; anchors.verticalCenter: parent.verticalCenter; spacing: 9
                                             Image { anchors.verticalCenter: parent.verticalCenter; width: 18; height: 18; sourceSize.width: 36; sourceSize.height: 36; mipmap: true; source: parent.parent.entry && parent.parent.entry.icon ? Quickshell.iconPath(parent.parent.entry.icon, "application-x-executable") : Quickshell.iconPath("application-x-executable") }
-                                            Text { anchors.verticalCenter: parent.verticalCenter; text: parent.parent.entry ? (parent.parent.entry.name || modelData) : modelData; color: parent.parent.isCur ? Theme.accent : Theme.fg; font.family: Theme.fontText; font.pixelSize: 11; font.weight: parent.parent.isCur ? Font.DemiBold : Font.Normal }
+                                            Text { anchors.verticalCenter: parent.verticalCenter; text: parent.parent.entry ? (parent.parent.entry.name || modelData) : modelData; color: parent.parent.isCur ? Theme.accent : Theme.fg1; font.family: Theme.fontText; font.pixelSize: 11; font.weight: parent.parent.isCur ? Font.DemiBold : Font.Normal }
                                         }
                                         Text { anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter; visible: parent.isCur; text: Theme.icCheck; font.family: Theme.fontIcons; font.pixelSize: 11; color: Theme.accent }
                                         MouseArea { id: eMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: { root.setDefaultApp(appCard.modelData.key, modelData); defCol.openCat = "" } }
@@ -1776,7 +1782,7 @@ Scope {
 
                     Card {
                         visible: !root.inpLoaded
-                        Text { width: parent.width; text: "Reading input configuration…"; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
+                        Text { width: parent.width; text: "Reading input configuration…"; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
                     }
 
                     SectionTitle { visible: root.inpLoaded; text: "KEYBOARD LAYOUTS  ·  drag to reorder — first is the default" }
@@ -1805,13 +1811,13 @@ Scope {
                                     z: rowDrag.drag.active || Globals.openDd === ("kbvar-" + index) ? 10 : 1
                                     Rectangle {
                                         anchors.fill: parent; anchors.bottomMargin: 6; radius: Theme.r(7)
-                                        color: rowDrag.drag.active ? Theme.hover : Theme.panel
-                                        border.color: Theme.stroke; border.width: Theme.borderThin
-                                        Text { anchors.left: parent.left; anchors.leftMargin: 10; anchors.verticalCenter: parent.verticalCenter; text: Theme.icKeyboard; font.family: Theme.fontIcons; font.pixelSize: 13; color: Theme.fgDim }
+                                        color: rowDrag.drag.active ? Theme.bg1Hover : Theme.bg1
+                                        border.color: Theme.stroke2; border.width: Theme.borderThin
+                                        Text { anchors.left: parent.left; anchors.leftMargin: 10; anchors.verticalCenter: parent.verticalCenter; text: Theme.icKeyboard; font.family: Theme.fontIcons; font.pixelSize: 13; color: Theme.fg3 }
                                         Text {
                                             anchors.left: parent.left; anchors.leftMargin: 32; anchors.right: kbRowRight.left; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter
                                             text: kbPane.nameOf(kbRow.modelData.code) + "  (" + kbRow.modelData.code + ")" + (kbRow.index === 0 ? "  ·  default" : "")
-                                            color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: kbRow.index === 0 ? Font.DemiBold : Font.Normal; elide: Text.ElideRight
+                                            color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: kbRow.index === 0 ? Font.DemiBold : Font.Normal; elide: Text.ElideRight
                                         }
                                         Row {
                                             id: kbRowRight
@@ -1820,16 +1826,16 @@ Scope {
                                                 visible: kbPane.variantOpts(kbRow.modelData.code).length > 1
                                                 anchors.verticalCenter: parent.verticalCenter
                                                 width: 118; height: 22; radius: Theme.r(6)
-                                                color: kvMa.containsMouse ? Theme.hover : Theme.elevated
-                                                border.color: Globals.openDd === ("kbvar-" + kbRow.index) ? Theme.accent : Theme.stroke; border.width: Theme.borderThin
-                                                Text { anchors.left: parent.left; anchors.leftMargin: 7; anchors.right: parent.right; anchors.rightMargin: 18; anchors.verticalCenter: parent.verticalCenter; text: kbRow.modelData.variant === "" ? "Default" : kbRow.modelData.variant; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: 10; elide: Text.ElideRight }
-                                                Text { anchors.right: parent.right; anchors.rightMargin: 6; anchors.verticalCenter: parent.verticalCenter; text: Theme.icChevronDown; font.family: Theme.fontIcons; font.pixelSize: 8; color: Theme.fgDim }
+                                                color: kvMa.containsMouse ? Theme.cardHover : Theme.card
+                                                border.color: Globals.openDd === ("kbvar-" + kbRow.index) ? Theme.accent : Theme.stroke1; border.width: Theme.borderThin
+                                                Text { anchors.left: parent.left; anchors.leftMargin: 7; anchors.right: parent.right; anchors.rightMargin: 18; anchors.verticalCenter: parent.verticalCenter; text: kbRow.modelData.variant === "" ? "Default" : kbRow.modelData.variant; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: 10; elide: Text.ElideRight }
+                                                Text { anchors.right: parent.right; anchors.rightMargin: 6; anchors.verticalCenter: parent.verticalCenter; text: Theme.icChevronDown; font.family: Theme.fontIcons; font.pixelSize: 8; color: Theme.fg3 }
                                                 MouseArea { id: kvMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: Globals.openDd = Globals.openDd === ("kbvar-" + kbRow.index) ? "" : ("kbvar-" + kbRow.index) }
                                             }
                                             Text {
                                                 visible: root.kbActive.length > 1
                                                 anchors.verticalCenter: parent.verticalCenter
-                                                text: Theme.icClose; font.family: Theme.fontIcons; font.pixelSize: 12; color: kxMa.containsMouse ? Theme.danger : Theme.fgDim
+                                                text: Theme.icClose; font.family: Theme.fontIcons; font.pixelSize: 12; color: kxMa.containsMouse ? Theme.danger : Theme.fg3
                                                 MouseArea { id: kxMa; anchors.fill: parent; anchors.margins: -6; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.kbRemove(kbRow.index) }
                                             }
                                         }
@@ -1839,7 +1845,7 @@ Scope {
                                         visible: Globals.openDd === ("kbvar-" + kbRow.index)
                                         x: parent.width - 158; y: 30; width: 148; z: 30
                                         height: Math.min(kvCol.implicitHeight + 10, 150)
-                                        radius: Theme.r(7); color: Theme.bg; border.color: Theme.stroke; border.width: Theme.borderThin
+                                        radius: Theme.r(7); color: Theme.bg3; border.color: Theme.stroke2; border.width: Theme.borderThin
                                         Flickable {
                                             anchors.fill: parent; anchors.margins: 5; contentHeight: kvCol.implicitHeight; clip: true; boundsBehavior: Flickable.StopAtBounds
                                             Column {
@@ -1849,8 +1855,8 @@ Scope {
                                                     delegate: Rectangle {
                                                         required property var modelData
                                                         readonly property bool sel: modelData.value === kbRow.modelData.variant
-                                                        width: parent.width; height: 24; radius: Theme.r(5); color: kvoMa.containsMouse ? Theme.hover : "transparent"
-                                                        Text { anchors.left: parent.left; anchors.leftMargin: 7; anchors.verticalCenter: parent.verticalCenter; text: modelData.label; color: sel ? Theme.accent : Theme.fg; font.family: Theme.fontText; font.pixelSize: 10; font.weight: sel ? Font.DemiBold : Font.Normal }
+                                                        width: parent.width; height: 24; radius: Theme.r(5); color: kvoMa.containsMouse ? Theme.subtleHover : Theme.subtle
+                                                        Text { anchors.left: parent.left; anchors.leftMargin: 7; anchors.verticalCenter: parent.verticalCenter; text: modelData.label; color: sel ? Theme.accent : Theme.fg1; font.family: Theme.fontText; font.pixelSize: 10; font.weight: sel ? Font.DemiBold : Font.Normal }
                                                         MouseArea { id: kvoMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: { Globals.openDd = ""; root.kbSetVariant(kbRow.index, modelData.value) } }
                                                     }
                                                 }
@@ -1875,32 +1881,32 @@ Scope {
                         // add a layout: searchable select
                         Rectangle {
                             width: parent.width; height: 34; radius: Theme.radiusInner
-                            color: Theme.bg; border.color: kbSearch.activeFocus ? Theme.accent : Theme.stroke; border.width: Theme.borderThin
-                            Text { anchors.left: parent.left; anchors.leftMargin: 11; anchors.verticalCenter: parent.verticalCenter; text: Theme.icSearch; font.family: Theme.fontIcons; font.pixelSize: 13; color: Theme.fgDim }
+                            color: Theme.bg3; border.color: kbSearch.activeFocus ? Theme.accent : Theme.stroke1; border.width: Theme.borderThin
+                            Text { anchors.left: parent.left; anchors.leftMargin: 11; anchors.verticalCenter: parent.verticalCenter; text: Theme.icSearch; font.family: Theme.fontIcons; font.pixelSize: 13; color: Theme.fg3 }
                             TextInput {
                                 id: kbSearch
                                 anchors.fill: parent; anchors.leftMargin: 34; anchors.rightMargin: 12; verticalAlignment: TextInput.AlignVCenter; clip: true
-                                color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
+                                color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
                                 onTextChanged: kbPane.kbQuery = text
                                 onAccepted: { var f = kbPane.filtered(); if (f.length) { root.kbAdd(f[0].c); text = "" } }
-                                Text { anchors.verticalCenter: parent.verticalCenter; visible: kbSearch.text.length === 0; text: "Add a layout — search by name or code…"; color: Theme.fgDim; font: kbSearch.font }
+                                Text { anchors.verticalCenter: parent.verticalCenter; visible: kbSearch.text.length === 0; text: "Add a layout — search by name or code…"; color: Theme.fg3; font: kbSearch.font }
                             }
                         }
                         Rectangle {
                             visible: kbSearch.activeFocus || kbPane.kbQuery !== ""
                             width: parent.width; height: Math.min(addCol.implicitHeight + 10, 168)
-                            radius: Theme.r(7); color: Theme.bg; border.color: Theme.stroke; border.width: Theme.borderThin
+                            radius: Theme.r(7); color: Theme.bg3; border.color: Theme.stroke2; border.width: Theme.borderThin
                             Flickable {
                                 anchors.fill: parent; anchors.margins: 5; contentHeight: addCol.implicitHeight; clip: true; boundsBehavior: Flickable.StopAtBounds
                                 Column {
                                     id: addCol; width: parent.width
-                                    Text { visible: kbPane.filtered().length === 0; text: "No matching layout."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11; leftPadding: 8; topPadding: 4 }
+                                    Text { visible: kbPane.filtered().length === 0; text: "No matching layout."; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11; leftPadding: 8; topPadding: 4 }
                                     Repeater {
                                         model: kbPane.filtered()
                                         delegate: Rectangle {
                                             required property var modelData
-                                            width: parent.width; height: 26; radius: Theme.r(6); color: kaMa.containsMouse ? Theme.hover : "transparent"
-                                            Text { anchors.left: parent.left; anchors.leftMargin: 8; anchors.verticalCenter: parent.verticalCenter; text: modelData.n + "  (" + modelData.c + ")"; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: 11 }
+                                            width: parent.width; height: 26; radius: Theme.r(6); color: kaMa.containsMouse ? Theme.subtleHover : Theme.subtle
+                                            Text { anchors.left: parent.left; anchors.leftMargin: 8; anchors.verticalCenter: parent.verticalCenter; text: modelData.n + "  (" + modelData.c + ")"; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: 11 }
                                             Text { anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter; visible: kaMa.containsMouse; text: "+ add"; color: Theme.accent; font.family: Theme.fontText; font.pixelSize: 10; font.weight: Font.DemiBold }
                                             // onPressed (not clicked): fire before the search field loses focus
                                             MouseArea { id: kaMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onPressed: { root.kbAdd(modelData.c); kbSearch.text = "" } }
@@ -1936,8 +1942,8 @@ Scope {
                             width: parent.width; height: 24
                             Row {
                                 anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; spacing: 6
-                                Text { anchors.verticalCenter: parent.verticalCenter; text: (kbPane.advOpen ? Theme.icChevronUp : Theme.icChevronDown); font.family: Theme.fontIcons; font.pixelSize: 10; color: Theme.fgDim }
-                                Text { anchors.verticalCenter: parent.verticalCenter; text: "Advanced"; color: Theme.fgSecondary; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold }
+                                Text { anchors.verticalCenter: parent.verticalCenter; text: (kbPane.advOpen ? Theme.icChevronUp : Theme.icChevronDown); font.family: Theme.fontIcons; font.pixelSize: 10; color: Theme.fg3 }
+                                Text { anchors.verticalCenter: parent.verticalCenter; text: "Advanced"; color: Theme.fg2; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold }
                             }
                             MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: kbPane.advOpen = !kbPane.advOpen }
                         }
@@ -1960,11 +1966,11 @@ Scope {
                             value: root.devTarget
                             onPicked: function (v) { root.devTarget = v }
                         }
-                        Text { visible: root.devTarget !== ""; width: parent.width; text: "Overriding this device only — everything else keeps the global values."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 10; wrapMode: Text.Wrap }
+                        Text { visible: root.devTarget !== ""; width: parent.width; text: "Overriding this device only — everything else keeps the global values."; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 10; wrapMode: Text.Wrap }
                         Slider { label: "Pointer speed"; value: kbPane.effSens; from: -1; to: 1; step: 0.05; decimals: 2; onMoved: function (v) { kbPane.setMouse({ sensitivity: Math.round(v * 100) / 100 }) } }
                         Item {
                             width: parent.width; height: 30
-                            Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Acceleration profile"; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
+                            Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Acceleration profile"; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
                             Row {
                                 anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; spacing: 5
                                 Repeater {
@@ -1973,9 +1979,9 @@ Scope {
                                         required property var modelData
                                         readonly property bool sel: kbPane.effAccel === modelData.v || (kbPane.effAccel === "" && modelData.v === "adaptive")
                                         width: 76; height: 24; radius: Theme.r(6)
-                                        color: sel ? Theme.accent : (apMa.containsMouse ? Theme.hover : Theme.panel)
-                                        border.color: sel ? Theme.accent : Theme.stroke; border.width: Theme.borderThin
-                                        Text { anchors.centerIn: parent; text: modelData.n; color: sel ? Theme.accentText : Theme.fg; font.family: Theme.fontText; font.pixelSize: 10; font.weight: Font.DemiBold }
+                                        color: sel ? Theme.accentFill : (apMa.containsMouse ? Theme.bg1Hover : Theme.bg1)
+                                        border.color: sel ? Theme.accent : Theme.stroke1; border.width: Theme.borderThin
+                                        Text { anchors.centerIn: parent; text: modelData.n; color: sel ? Theme.accentOn : Theme.fg1; font.family: Theme.fontText; font.pixelSize: 10; font.weight: Font.DemiBold }
                                         MouseArea { id: apMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: kbPane.setMouse({ accel_profile: modelData.v }) }
                                     }
                                 }
@@ -1989,7 +1995,7 @@ Scope {
                     SectionTitle { visible: root.inpLoaded; text: "TOUCHPAD" }
                     Card {
                         visible: root.inpLoaded && !root.hasTouchpad
-                        Text { width: parent.width; text: "No touchpad detected."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
+                        Text { width: parent.width; text: "No touchpad detected."; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
                     }
                     Card {
                         visible: root.inpLoaded && root.hasTouchpad
@@ -2002,7 +2008,7 @@ Scope {
                         ToggleRow { title: "Middle-click emulation"; sub: "Left+right button together = middle click."; on: root.inp.tp_mbe === true; onToggled: root.applyInput({ tp_mbe: !(root.inp.tp_mbe === true) }) }
                         Slider { label: "Scroll speed"; value: Number(root.inp.tp_scroll_factor); from: 0.1; to: 3; step: 0.1; decimals: 1; onMoved: function (v) { root.applyInput({ tp_scroll_factor: Math.round(v * 10) / 10 }) } }
                     }
-                    Text { width: parent.width; text: "Everything here applies live and persists to generated/input.lua. Two-finger vs edge scrolling follows the hardware default (libinput); Hyprland doesn't expose it."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
+                    Text { width: parent.width; text: "Everything here applies live and persists to generated/input.lua. Two-finger vs edge scrolling follows the hardware default (libinput); Hyprland doesn't expose it."; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
                     Item { width: 1; height: 8 }
                 }
             }
@@ -2018,9 +2024,9 @@ Scope {
                             required property var modelData
                             width: parent.width
                             height: modelData.h ? 30 : 24
-                            SectionTitle { visible: modelData.h; anchors.left: parent.left; anchors.bottom: parent.bottom; text: modelData.a; font.pixelSize: Theme.fsBody; color: Theme.fg }
+                            SectionTitle { visible: modelData.h; anchors.left: parent.left; anchors.bottom: parent.bottom; text: modelData.a; font.pixelSize: Theme.fsBody; color: Theme.fg1 }
                             Text { visible: !modelData.h; anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; width: 180; text: modelData.a; color: Theme.accent; font.family: Theme.fontMono; font.pixelSize: 11 }
-                            Text { visible: !modelData.h; anchors.left: parent.left; anchors.leftMargin: 190; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; text: modelData.b; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; elide: Text.ElideRight }
+                            Text { visible: !modelData.h; anchors.left: parent.left; anchors.leftMargin: 190; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; text: modelData.b; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; elide: Text.ElideRight }
                         }
                     }
                     Item { width: 1; height: 8 }
@@ -2044,7 +2050,7 @@ Scope {
                             onMoved: function (v) { root.rounding = Math.round(v); root.applyGaps() } }
                     }
                     Pill { label: "Reset to defaults"; onGo: { root.gapsIn = 6; root.gapsOut = 14; root.borderSize = 1; root.rounding = 12; root.applyGaps() } }
-                    Text { width: parent.width; text: "Sliders preview while dragging and apply on release — live via hyprctl, persisted to generated/user.lua so they survive reloads and relogin."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
+                    Text { width: parent.width; text: "Sliders preview while dragging and apply on release — live via hyprctl, persisted to generated/user.lua so they survive reloads and relogin."; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
                     Item { width: 1; height: 8 }
                 }
             }
@@ -2054,27 +2060,66 @@ Scope {
                 id: cTheme
                 Column {
                     spacing: 14
-                    SectionTitle { text: "SHELL STYLE" }
+                    SectionTitle { text: "SHAPE & DENSITY" }
                     Card {
-                        Row {
-                            width: parent.width; spacing: 8
-                            Repeater {
-                                model: [{ n: "Flock", m: "flock" }, { n: "Black Sheep", m: "blacksheep" }]
-                                delegate: Rectangle {
-                                    required property var modelData
-                                    readonly property bool sel: Globals.themeName === modelData.m
-                                    width: (parent.width - 8) / 2; height: 38; radius: Theme.radiusInner
-                                    color: sel ? Theme.accent : Theme.panel
-                                    border.color: sel ? Theme.accent : Theme.stroke; border.width: Theme.borderThin
-                                    Text { anchors.centerIn: parent; text: modelData.n; color: parent.sel ? Theme.accentText : Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold }
-                                    MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { Globals.themeName = modelData.m; root.writePrefs() } }
+                        // There is one ewe look now — it is not picked from a
+                        // list, it is BUILT from your accent. What is left to
+                        // choose is its shape and how tightly it packs, and
+                        // both are keys in ewe.conf [desktop.theme], so they
+                        // sync with everything else rather than living in a
+                        // second file that `ewe-conf pull` would overwrite.
+                        Repeater {
+                            model: [
+                                { k: "corner",  t: "Corners", d: "medium",
+                                  o: [["none","Square"],["small","Slight"],["medium","Rounded"],["large","Soft"]] },
+                                { k: "density", t: "Density", d: "comfortable",
+                                  o: [["compact","Compact"],["comfortable","Comfortable"],["roomy","Roomy"]] },
+                                { k: "stroke",  t: "Rules",   d: "thin",
+                                  o: [["thin","Hairline"],["thick","Bold"]] }
+                            ]
+                            delegate: Column {
+                                id: grp
+                                required property var modelData
+                                width: parent.width; spacing: 6
+                                Text { text: grp.modelData.t; color: Theme.fg2; font.family: Theme.fontText
+                                       font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold }
+                                Row {
+                                    id: grpRow
+                                    width: parent.width; spacing: 6
+                                    Repeater {
+                                        model: grp.modelData.o
+                                        delegate: Rectangle {
+                                            id: opt
+                                            required property var modelData
+                                            readonly property bool sel:
+                                                (Globals.tokInput[grp.modelData.k] || grp.modelData.d) === opt.modelData[0]
+                                            width: (grpRow.width - (grp.modelData.o.length - 1) * grpRow.spacing)
+                                                   / grp.modelData.o.length
+                                            height: 32; radius: Theme.radiusInner
+                                            color: opt.sel ? Theme.accentFill : Theme.bg1
+                                            border.color: opt.sel ? Theme.accentFill : Theme.stroke1
+                                            border.width: Theme.borderThin
+                                            Text { anchors.centerIn: parent; text: opt.modelData[1]
+                                                   color: opt.sel ? Theme.accentOn : Theme.fg1
+                                                   font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
+                                                   font.weight: Font.DemiBold }
+                                            MouseArea {
+                                                anchors.fill: parent; cursorShape: Qt.PointingHandCursor
+                                                // hooks ON: `ewe-conf set` rebuilds theme-tokens.json
+                                                // and pokes the shell, so the change lands live.
+                                                onClicked: root.shapeWrite(
+                                                    [Globals.eweConf, "set",
+                                                     "desktop.theme." + grp.modelData.k, opt.modelData[0]])
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
                         Text {
                             width: parent.width; wrapMode: Text.Wrap
-                            text: "Flock — bold and unapologetic: square corners, thick rules, flat blocks of colour. Black Sheep — serene and tonal: soft corners, hairline outlines, quiet surfaces. The two differ in SHAPE as well as colour. Your accent and the icons stay yours; applies instantly."
-                            color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11
+                            text: "Every colour in ewe is derived from your accent — there is no palette to pick. These three set the SHAPE of it. They live in ewe.conf, so they follow you to your other machines."
+                            color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11
                         }
                     }
                     // dark-only by decision (2026-09-01): light mode was deleted, so no Light/Dark toggle.
@@ -2088,8 +2133,10 @@ Scope {
                                     required property var modelData
                                     width: 46; height: 46; radius: 23; color: modelData.hex
                                     readonly property bool sel: root.hex6(Globals.accentColor).toLowerCase() === root.hex6(modelData.hex).toLowerCase()
-                                    border.color: sel ? Theme.fg : Qt.rgba(1, 1, 1, 0.15); border.width: sel ? 3 : 1
-                                    // accentText, not white: a white check vanishes on yellow/light swatches
+                                    border.color: sel ? Theme.fg1 : Qt.rgba(1, 1, 1, 0.15); border.width: sel ? 3 : 1
+                                    // accentText, not accentOn: the swatch paints an ARBITRARY colour, not the
+                                    // theme accent, so the tick contrasts against THAT (a white check
+                                    // vanishes on the yellow and light swatches).
                                     Text { anchors.centerIn: parent; visible: parent.sel; text: Theme.icCheck; font.family: Theme.fontIcons; font.pixelSize: 18; color: Theme.accentText }
                                     MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.setAccent(modelData.hex) }
                                 }
@@ -2097,9 +2144,9 @@ Scope {
                         }
                         Item {
                             width: parent.width; height: 30
-                            Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Custom hex"; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
-                            Rectangle { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; width: 130; height: 26; radius: Theme.r(7); color: Theme.panel; border.color: hexIn.activeFocus ? Theme.accent : Theme.stroke; border.width: Theme.borderThin
-                                TextInput { id: hexIn; anchors.fill: parent; anchors.leftMargin: 9; anchors.rightMargin: 9; verticalAlignment: TextInput.AlignVCenter; color: Theme.fg; font.family: Theme.fontMono; font.pixelSize: 12; text: String(Globals.accentColor)
+                            Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Custom hex"; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
+                            Rectangle { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; width: 130; height: 26; radius: Theme.r(7); color: Theme.bg1; border.color: hexIn.activeFocus ? Theme.accent : Theme.stroke1; border.width: Theme.borderThin
+                                TextInput { id: hexIn; anchors.fill: parent; anchors.leftMargin: 9; anchors.rightMargin: 9; verticalAlignment: TextInput.AlignVCenter; color: Theme.fg1; font.family: Theme.fontMono; font.pixelSize: 12; text: String(Globals.accentColor)
                                     onAccepted: { var t = text.trim(); if (/^#?[0-9a-fA-F]{6}$/.test(t)) root.setAccent(t[0] === "#" ? t : "#" + t) } } }
                         }
                     }
@@ -2134,16 +2181,16 @@ Scope {
                                     required property var modelData
                                     readonly property bool sel: Math.abs(Globals.animationSpeed - modelData.m) < 0.001
                                     width: (parent.width - 24) / 4; height: 32; radius: Theme.radiusInner
-                                    color: sel ? Theme.accent : Theme.panel
-                                    border.color: sel ? Theme.accent : Theme.stroke; border.width: Theme.borderThin
-                                    Text { anchors.centerIn: parent; text: modelData.n; color: parent.sel ? Theme.accentText : Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold }
+                                    color: sel ? Theme.accentFill : Theme.bg1
+                                    border.color: sel ? Theme.accent : Theme.stroke1; border.width: Theme.borderThin
+                                    Text { anchors.centerIn: parent; text: modelData.n; color: parent.sel ? Theme.accentOn : Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold }
                                     MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.setAnim(modelData.m) }
                                 }
                             }
                         }
                     }
-                    Text { width: parent.width; text: "Animation speed drives window + shell motion (shell: Fast 150 ms · Normal 300 ms · Slow 500 ms; window animations scale along); applies live and persists to user-theme.json + generated/user.lua."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
-                    Text { width: parent.width; text: "Accent recolours the whole shell instantly and persists in user-theme.json."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
+                    Text { width: parent.width; text: "Animation speed drives window + shell motion (shell: Fast 150 ms · Normal 300 ms · Slow 500 ms; window animations scale along); applies live and persists to user-theme.json + generated/user.lua."; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
+                    Text { width: parent.width; text: "Accent recolours the whole shell instantly and persists in user-theme.json."; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
                     Item { width: 1; height: 8 }
                 }
             }
@@ -2155,14 +2202,14 @@ Scope {
                     spacing: 14
                     Card {
                         visible: root.wpBackendLabel === "none"
-                        Text { width: parent.width; text: "No wallpaper backend found. Install swww (packaged as “awww”) for images and animated GIFs, mpvpaper for video wallpapers — or swaybg for static images only."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; wrapMode: Text.Wrap }
+                        Text { width: parent.width; text: "No wallpaper backend found. Install swww (packaged as “awww”) for images and animated GIFs, mpvpaper for video wallpapers — or swaybg for static images only."; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; wrapMode: Text.Wrap }
                     }
                     SectionTitle { visible: root.wpBackendLabel !== "none"; text: "WALLPAPER  ·  backend: " + root.wpBackendLabel }
                     Card {
                         visible: root.wpBackendLabel !== "none"
                         Item {
                             width: parent.width; height: 30
-                            Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Apply to"; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
+                            Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Apply to"; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
                             Row {
                                 anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; spacing: 5
                                 Repeater {
@@ -2171,9 +2218,9 @@ Scope {
                                         required property var modelData
                                         readonly property bool sel: root.wpTarget === modelData.value
                                         width: wptLbl.implicitWidth + 18; height: 24; radius: Theme.r(6)
-                                        color: sel ? Theme.accent : (wptMa.containsMouse ? Theme.hover : Theme.panel)
-                                        border.color: sel ? Theme.accent : Theme.stroke; border.width: Theme.borderThin
-                                        Text { id: wptLbl; anchors.centerIn: parent; text: modelData.label; color: sel ? Theme.accentText : Theme.fg; font.family: Theme.fontText; font.pixelSize: 10; font.weight: Font.DemiBold }
+                                        color: sel ? Theme.accentFill : (wptMa.containsMouse ? Theme.bg1Hover : Theme.bg1)
+                                        border.color: sel ? Theme.accent : Theme.stroke1; border.width: Theme.borderThin
+                                        Text { id: wptLbl; anchors.centerIn: parent; text: modelData.label; color: sel ? Theme.accentOn : Theme.fg1; font.family: Theme.fontText; font.pixelSize: 10; font.weight: Font.DemiBold }
                                         MouseArea { id: wptMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.wpTarget = modelData.value }
                                     }
                                 }
@@ -2191,7 +2238,7 @@ Scope {
                             on: root.wpMute
                             onToggled: { root.wpMute = !root.wpMute; root.wpWrite(); root.flashApplied() }
                         }
-                        Text { width: parent.width; visible: Object.keys(root.wpMap).length === 0; text: "No wallpaper set yet — pick one below."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11 }
+                        Text { width: parent.width; visible: Object.keys(root.wpMap).length === 0; text: "No wallpaper set yet — pick one below."; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11 }
                         Repeater {
                             model: Object.keys(root.wpMap).sort()
                             delegate: KV { required property var modelData; k: modelData === "*" ? "All displays" : modelData; v: String(root.wpMap[modelData]).replace(/^.*\//, "") }
@@ -2215,7 +2262,7 @@ Scope {
                             Pill { label: "Wallpapers folder"; onGo: root.wpList(root.home + "/Pictures/Wallpapers") }
                             Pill { label: "Pictures"; onGo: root.wpList(root.home + "/Pictures") }
                         }
-                        Text { width: parent.width; visible: root.wpFiles.length === 0; text: "No images in this folder — use “Browse files…” or drop images into " + root.wpDir + "."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
+                        Text { width: parent.width; visible: root.wpFiles.length === 0; text: "No images in this folder — use “Browse files…” or drop images into " + root.wpDir + "."; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
                         Flow {
                             width: parent.width; spacing: 8
                             Repeater {
@@ -2226,15 +2273,15 @@ Scope {
                                     readonly property bool isVid: root.wpIsVideo(modelData)
                                     readonly property bool isGif: root.wpIsGif(modelData)
                                     width: 122; height: 76; radius: Theme.r(7); clip: true
-                                    color: Theme.bg
-                                    border.color: cur ? Theme.accent : (wtMa.containsMouse ? Theme.fgDim : Theme.stroke); border.width: cur ? 2 : 1
+                                    color: Theme.bg3
+                                    border.color: cur ? Theme.accent : (wtMa.containsMouse ? Theme.fg3 : Theme.stroke1); border.width: cur ? 2 : 1
                                     Image { visible: !parent.isVid; anchors.fill: parent; anchors.margins: 1; source: parent.isVid ? "" : "file://" + modelData; fillMode: Image.PreserveAspectCrop; asynchronous: true; sourceSize.width: 244; sourceSize.height: 152 }
                                     // videos get a film tile — no thumbnail without a decode pass
                                     Column {
                                         visible: parent.isVid
                                         anchors.centerIn: parent; spacing: 3; width: parent.width - 14
-                                        Text { anchors.horizontalCenter: parent.horizontalCenter; text: root.g(0xE792); font.family: Theme.fontIcons; font.pixelSize: 20; color: Theme.fgDim }
-                                        Text { width: parent.width; horizontalAlignment: Text.AlignHCenter; text: String(modelData).replace(/^.*\//, ""); color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 9; elide: Text.ElideMiddle }
+                                        Text { anchors.horizontalCenter: parent.horizontalCenter; text: root.g(0xE0D0); font.family: Theme.fontIcons; font.pixelSize: 20; color: Theme.fg3 }
+                                        Text { width: parent.width; horizontalAlignment: Text.AlignHCenter; text: String(modelData).replace(/^.*\//, ""); color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 9; elide: Text.ElideMiddle }
                                     }
                                     Rectangle {
                                         visible: parent.isVid || parent.isGif
@@ -2249,7 +2296,7 @@ Scope {
                             }
                         }
                     }
-                    Text { width: parent.width; text: "Applied live and restored at every login by wallpaper.sh; when a monitor is plugged in, its wallpaper is re-applied automatically. Static images → " + (root.wpImgBackend || "no backend") + ", GIFs animate via swww, video plays via mpvpaper (always looped)."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
+                    Text { width: parent.width; text: "Applied live and restored at every login by wallpaper.sh; when a monitor is plugged in, its wallpaper is re-applied automatically. Static images → " + (root.wpImgBackend || "no backend") + ", GIFs animate via swww, video plays via mpvpaper (always looped)."; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
                     Text { visible: root.wpAnyAnimated; width: parent.width; text: "Animated wallpapers keep the GPU decoding continuously — expect measurable battery drain on the laptop."; color: Theme.warning; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
                     Item { width: 1; height: 8 }
                 }
@@ -2306,14 +2353,14 @@ Scope {
                             value: Globals.saverLockAfterMin
                             onPicked: function (v) { Globals.saverLockAfterMin = v; root.saverChanged() }
                         }
-                        Text { width: parent.width; text: "With the saver disabled the stock behaviour stays: auto-lock after 5 minutes idle. Idle-suspend on battery (15 min) is always kept."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
+                        Text { width: parent.width; text: "With the saver disabled the stock behaviour stays: auto-lock after 5 minutes idle. Idle-suspend on battery (15 min) is always kept."; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
                     }
                     Row {
                         spacing: 10
                         Pill { label: "Preview"; primary: true; onGo: Globals.saverActive = true }
-                        Text { anchors.verticalCenter: parent.verticalCenter; text: "Shows the saver now — press any key to dismiss."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11 }
+                        Text { anchors.verticalCenter: parent.verticalCenter; text: "Shows the saver now — press any key to dismiss."; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11 }
                     }
-                    Text { width: parent.width; text: "Playing media, a fullscreen window, or the bar's Insomnia toggle keep the screensaver (and auto-lock/suspend) away. Timing is enforced by hypridle via generated/hypridle.conf — settings apply immediately, no restart needed."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
+                    Text { width: parent.width; text: "Playing media, a fullscreen window, or the bar's Insomnia toggle keep the screensaver (and auto-lock/suspend) away. Timing is enforced by hypridle via generated/hypridle.conf — settings apply immediately, no restart needed."; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
                     Item { width: 1; height: 8 }
                 }
             }
@@ -2329,9 +2376,9 @@ Scope {
                         Item {
                             width: parent.width; height: 34
                             Column { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; spacing: 1
-                                Text { text: "Suspend even when docked"; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
+                                Text { text: "Suspend even when docked"; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
                                 Text { text: "On: closing the lid always suspends. Off (default): with an external monitor, keep working with the panel dark."
-                                       color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 10 }
+                                       color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 10 }
                             }
                             Toggle {
                                 anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
@@ -2339,19 +2386,19 @@ Scope {
                                 onToggled: { Globals.lidDockedSuspend = !Globals.lidDockedSuspend; root.writePrefs() }
                             }
                         }
-                        Rectangle { width: parent.width; height: 1; color: Theme.stroke; opacity: 0.5 }
+                        Rectangle { width: parent.width; height: 1; color: Theme.stroke3 }
                         KV { k: "Right now"; v: Lid.docked ? (Lid.externals + " external display" + (Lid.externals === 1 ? "" : "s") + " connected")
                                                            : "no external display — the lid always suspends" }
                     }
                     Text { width: parent.width
                            text: "With the laptop alone, closing the lid always suspends. The session is locked on the way down through a logind delay inhibitor, so the lock is up before the machine sleeps rather than racing it."
-                           color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
+                           color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
 
                     SectionTitle { text: "BATTERY" }
                     Card {
                         KV { k: "Charge"; v: Power.capacity >= 0 ? Power.capacity + "%  ·  " + Power.remainingText() : "—" }
                         KV { k: "Health"; v: Power.healthText() }
-                        Rectangle { visible: Power.hasChargeLimit; width: parent.width; height: 1; color: Theme.stroke; opacity: 0.5 }
+                        Rectangle { visible: Power.hasChargeLimit; width: parent.width; height: 1; color: Theme.stroke3 }
                         DropRow {
                             visible: Power.hasChargeLimit && Power.chargeLimitWritable
                             label: "Charge ceiling"; ddId: "chg-limit"; buttonWidth: 120
@@ -2373,7 +2420,7 @@ Scope {
                             visible: !Power.hasChargeLimit
                             width: parent.width; wrapMode: Text.Wrap
                             text: "This machine's battery exposes no charge-ceiling control."
-                            color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11
+                            color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11
                         }
                     }
 
@@ -2405,7 +2452,7 @@ Scope {
                             visible: !Power.degraded && Power.ppdRunning
                             width: parent.width
                             text: "Not thermally limited. Switch profiles from Quick Settings."
-                            color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11
+                            color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11
                         }
                     }
 
@@ -2414,9 +2461,9 @@ Scope {
                         Item {
                             width: parent.width; height: 34
                             Column { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; spacing: 1
-                                Text { text: "Low-power mode"; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
+                                Text { text: "Low-power mode"; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
                                 Text { text: "Slow background polling down while unplugged."
-                                       color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 10 }
+                                       color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 10 }
                             }
                             Toggle {
                                 anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
@@ -2424,7 +2471,7 @@ Scope {
                                 onToggled: { Globals.lowPowerEnabled = !Globals.lowPowerEnabled; root.writePrefs() }
                             }
                         }
-                        Rectangle { width: parent.width; height: 1; color: Theme.stroke; opacity: 0.5 }
+                        Rectangle { width: parent.width; height: 1; color: Theme.stroke3 }
                         KV { k: "Power source"; v: Globals.onBattery ? "battery" + (Globals.lowPower ? " · low-power active" : "") : "mains" }
                     }
 
@@ -2445,7 +2492,7 @@ Scope {
                                 ? "honoured by " + Logind.screensaverOwner
                                 : "nothing owns org.freedesktop.ScreenSaver" }
                         KV { k: "Insomnia"; v: Globals.caffeine ? "on — idle is blocked" : "off" }
-                        Rectangle { width: parent.width; height: 1; color: Theme.stroke; opacity: 0.5 }
+                        Rectangle { width: parent.width; height: 1; color: Theme.stroke3 }
                         Repeater {
                             model: Logind.blockingInhibitors()
                             delegate: KV {
@@ -2458,7 +2505,7 @@ Scope {
                             visible: Logind.blockingInhibitors().length === 0
                             width: parent.width; wrapMode: Text.Wrap
                             text: "Nothing is blocking idle or sleep right now."
-                            color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11
+                            color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11
                         }
                     }
                     Item { width: 1; height: 8 }
@@ -2474,28 +2521,28 @@ Scope {
                         Item {
                             width: parent.width; height: 30
                             Column { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; spacing: 1
-                                Text { text: "Show dock"; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
-                                Text { text: "Launcher · overview · workspace switcher at the bottom."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 10 }
+                                Text { text: "Show dock"; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
+                                Text { text: "Launcher · overview · workspace switcher at the bottom."; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 10 }
                             }
                             Toggle { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; on: Globals.dockEnabled; onToggled: { Globals.dockEnabled = !Globals.dockEnabled; root.writePrefs() } }
                         }
-                        Rectangle { width: parent.width; height: 1; color: Theme.stroke; opacity: 0.5 }
+                        Rectangle { width: parent.width; height: 1; color: Theme.stroke3 }
                         Item {
                             width: parent.width; height: 30
                             opacity: Globals.dockEnabled ? 1 : 0.4
                             Column { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; spacing: 1
-                                Text { text: "Intelligent hide"; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
-                                Text { text: "Auto-hide; reveal by moving the cursor to the bottom edge."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 10 }
+                                Text { text: "Intelligent hide"; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
+                                Text { text: "Auto-hide; reveal by moving the cursor to the bottom edge."; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 10 }
                             }
                             Toggle { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; on: Globals.dockAutohide; onToggled: { if (Globals.dockEnabled) { Globals.dockAutohide = !Globals.dockAutohide; root.writePrefs() } } }
                         }
-                        Rectangle { width: parent.width; height: 1; color: Theme.stroke; opacity: 0.5 }
+                        Rectangle { width: parent.width; height: 1; color: Theme.stroke3 }
                         Item {
                             width: parent.width; height: 30
                             opacity: Globals.dockEnabled ? 1 : 0.4
                             Column { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; spacing: 1
-                                Text { text: "Icon size"; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
-                                Text { text: "How big the dock buttons and workspace boxes are."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 10 }
+                                Text { text: "Icon size"; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
+                                Text { text: "How big the dock buttons and workspace boxes are."; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 10 }
                             }
                             Row {
                                 anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; spacing: 6
@@ -2505,16 +2552,16 @@ Scope {
                                         required property var modelData
                                         readonly property bool sel: Globals.dockIconSize === modelData.v
                                         width: 60; height: 26; radius: Theme.radiusPill
-                                        color: sel ? Theme.accent : Theme.panel
-                                        border.color: sel ? Theme.accent : Theme.stroke; border.width: Theme.borderThin
-                                        Text { anchors.centerIn: parent; text: modelData.n; color: parent.sel ? Theme.accentText : Theme.fg; font.family: Theme.fontText; font.pixelSize: 11; font.weight: Font.DemiBold }
+                                        color: sel ? Theme.accentFill : Theme.bg1
+                                        border.color: sel ? Theme.accent : Theme.stroke1; border.width: Theme.borderThin
+                                        Text { anchors.centerIn: parent; text: modelData.n; color: parent.sel ? Theme.accentOn : Theme.fg1; font.family: Theme.fontText; font.pixelSize: 11; font.weight: Font.DemiBold }
                                         MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { if (Globals.dockEnabled) { Globals.dockIconSize = modelData.v; root.writePrefs() } } }
                                     }
                                 }
                             }
                         }
                     }
-                    Text { width: parent.width; text: "The dock replaces the workspace row that used to be in the top bar."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
+                    Text { width: parent.width; text: "The dock replaces the workspace row that used to be in the top bar."; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
                     Item { width: 1; height: 8 }
                 }
             }
@@ -2531,7 +2578,7 @@ Scope {
                             visible: root.startupApps.length === 0
                             width: parent.width; wrapMode: Text.Wrap
                             text: "Nothing starts automatically yet. Search below to add an application."
-                            color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
+                            color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
                         }
                         Repeater {
                             model: root.startupApps
@@ -2554,8 +2601,8 @@ Scope {
                                     anchors.right: saCtl.left; anchors.rightMargin: 8
                                     anchors.verticalCenter: parent.verticalCenter
                                     spacing: 1
-                                    Text { width: parent.width; text: saRow.modelData.name || saRow.modelData.exec; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold; elide: Text.ElideRight }
-                                    Text { width: parent.width; text: saRow.modelData.exec; color: Theme.fgDim; font.family: Theme.fontMono; font.pixelSize: 10; elide: Text.ElideRight }
+                                    Text { width: parent.width; text: saRow.modelData.name || saRow.modelData.exec; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold; elide: Text.ElideRight }
+                                    Text { width: parent.width; text: saRow.modelData.exec; color: Theme.fg3; font.family: Theme.fontMono; font.pixelSize: 10; elide: Text.ElideRight }
                                 }
                                 Row {
                                     id: saCtl
@@ -2565,7 +2612,7 @@ Scope {
                                         anchors.verticalCenter: parent.verticalCenter
                                         width: 22; height: 22; radius: Theme.r(6)
                                         color: saDelMa.containsMouse ? Theme.danger : "transparent"
-                                        Text { anchors.centerIn: parent; text: Theme.icClose; font.family: Theme.fontIcons; font.pixelSize: 11; color: saDelMa.containsMouse ? Theme.accentText : Theme.fgDim }
+                                        Text { anchors.centerIn: parent; text: Theme.icClose; font.family: Theme.fontIcons; font.pixelSize: 11; color: saDelMa.containsMouse ? Theme.fgInverted : Theme.fg3 }
                                         MouseArea { id: saDelMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.startupRemove(saRow.index) }
                                     }
                                 }
@@ -2578,15 +2625,15 @@ Scope {
                         // search over installed desktop entries
                         Rectangle {
                             width: parent.width; height: 32; radius: Theme.r(8)
-                            color: Theme.bg; border.color: saSearch.activeFocus ? Theme.accent : Theme.stroke; border.width: Theme.borderThin
-                            Text { anchors.left: parent.left; anchors.leftMargin: 10; anchors.verticalCenter: parent.verticalCenter; text: Theme.icSearch; font.family: Theme.fontIcons; font.pixelSize: 13; color: Theme.fgDim }
+                            color: Theme.bg3; border.color: saSearch.activeFocus ? Theme.accent : Theme.stroke1; border.width: Theme.borderThin
+                            Text { anchors.left: parent.left; anchors.leftMargin: 10; anchors.verticalCenter: parent.verticalCenter; text: Theme.icSearch; font.family: Theme.fontIcons; font.pixelSize: 13; color: Theme.fg3 }
                             TextInput {
                                 id: saSearch
                                 anchors.fill: parent; anchors.leftMargin: 30; anchors.rightMargin: 10
                                 verticalAlignment: TextInput.AlignVCenter
-                                color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
+                                color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
                                 onTextChanged: root.startupQuery = text
-                                Text { anchors.verticalCenter: parent.verticalCenter; visible: saSearch.text.length === 0; text: "Search apps — or type any command…"; color: Theme.fgDim; font: saSearch.font }
+                                Text { anchors.verticalCenter: parent.verticalCenter; visible: saSearch.text.length === 0; text: "Search apps — or type any command…"; color: Theme.fg3; font: saSearch.font }
                             }
                         }
                         Column {
@@ -2608,7 +2655,7 @@ Scope {
                                     id: saRes
                                     required property var modelData
                                     width: parent.width; height: 30
-                                    Rectangle { anchors.fill: parent; radius: Theme.r(6); color: saResMa.containsMouse ? Theme.hover : "transparent" }
+                                    Rectangle { anchors.fill: parent; radius: Theme.r(6); color: saResMa.containsMouse ? Theme.subtleHover : Theme.subtle }
                                     Image {
                                         anchors.left: parent.left; anchors.leftMargin: 4; anchors.verticalCenter: parent.verticalCenter
                                         width: 18; height: 18
@@ -2618,7 +2665,7 @@ Scope {
                                     Text {
                                         anchors.left: parent.left; anchors.leftMargin: 30; anchors.right: parent.right; anchors.rightMargin: 60
                                         anchors.verticalCenter: parent.verticalCenter
-                                        text: saRes.modelData.name; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; elide: Text.ElideRight
+                                        text: saRes.modelData.name; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; elide: Text.ElideRight
                                     }
                                     Text {
                                         anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter
@@ -2633,13 +2680,13 @@ Scope {
                             // raw command fallback — whatever was typed runs via sh -c
                             Item {
                                 width: parent.width; height: 30
-                                Rectangle { anchors.fill: parent; radius: Theme.r(6); color: saCmdMa.containsMouse ? Theme.hover : "transparent" }
-                                Text { anchors.left: parent.left; anchors.leftMargin: 8; anchors.verticalCenter: parent.verticalCenter; text: Theme.icSsh; font.family: Theme.fontIcons; font.pixelSize: 12; color: Theme.fgDim }
+                                Rectangle { anchors.fill: parent; radius: Theme.r(6); color: saCmdMa.containsMouse ? Theme.subtleHover : Theme.subtle }
+                                Text { anchors.left: parent.left; anchors.leftMargin: 8; anchors.verticalCenter: parent.verticalCenter; text: Theme.icSsh; font.family: Theme.fontIcons; font.pixelSize: 12; color: Theme.fg3 }
                                 Text {
                                     anchors.left: parent.left; anchors.leftMargin: 30; anchors.right: parent.right; anchors.rightMargin: 90
                                     anchors.verticalCenter: parent.verticalCenter
                                     text: "Run command: " + root.startupQuery.trim()
-                                    color: Theme.fgSecondary; font.family: Theme.fontMono; font.pixelSize: 11; elide: Text.ElideRight
+                                    color: Theme.fg2; font.family: Theme.fontMono; font.pixelSize: 11; elide: Text.ElideRight
                                 }
                                 Text {
                                     anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter
@@ -2655,7 +2702,7 @@ Scope {
                     Text {
                         width: parent.width; wrapMode: Text.Wrap
                         text: "Entries launch once at login (autostart). Changes apply at the next login — the toggle disables an entry without removing it. This list is included in Settings sync."
-                        color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11
+                        color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11
                     }
                     Item { width: 1; height: 8 }
                 }
@@ -2676,21 +2723,21 @@ Scope {
                                 // display name — click to edit, saved to AccountsService
                                 Rectangle {
                                     width: Math.max(220, nameIn.implicitWidth + 26); height: 32; radius: Theme.r(6)
-                                    color: nameIn.activeFocus ? Theme.bg : "transparent"
-                                    border.color: nameIn.activeFocus ? Theme.accent : (nameHov.hovered ? Theme.stroke : "transparent"); border.width: Theme.borderThin
+                                    color: nameIn.activeFocus ? Theme.bg3 : "transparent"
+                                    border.color: nameIn.activeFocus ? Theme.accent : (nameHov.hovered ? Theme.stroke1 : "transparent"); border.width: Theme.borderThin
                                     HoverHandler { id: nameHov }
                                     TextInput {
                                         id: nameIn
                                         anchors.fill: parent; anchors.leftMargin: 8; anchors.rightMargin: 24; verticalAlignment: TextInput.AlignVCenter
                                         text: root.userRealName !== "" ? root.userRealName : (Quickshell.env("USER") || "user")
-                                        color: Theme.fg; font.family: Theme.fontDisplay; font.pixelSize: Theme.fsLarge; font.weight: Font.Bold
+                                        color: Theme.fg1; font.family: Theme.fontDisplay; font.pixelSize: Theme.fsLarge; font.weight: Font.Bold
                                         selectByMouse: true; clip: true
                                         onAccepted: focus = false
                                         onActiveFocusChanged: if (!activeFocus && text.trim() !== "" && text.trim() !== root.userRealName) root.setRealName(text.trim())
                                     }
-                                    Text { anchors.right: parent.right; anchors.rightMargin: 7; anchors.verticalCenter: parent.verticalCenter; visible: nameHov.hovered && !nameIn.activeFocus; text: Theme.icPencil; font.family: Theme.fontMono; font.pixelSize: 11; color: Theme.fgDim }
+                                    Text { anchors.right: parent.right; anchors.rightMargin: 7; anchors.verticalCenter: parent.verticalCenter; visible: nameHov.hovered && !nameIn.activeFocus; text: Theme.icPencil; font.family: Theme.fontMono; font.pixelSize: 11; color: Theme.fg3 }
                                 }
-                                Text { leftPadding: 9; text: "@" + (Quickshell.env("USER") || "user"); color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
+                                Text { leftPadding: 9; text: "@" + (Quickshell.env("USER") || "user"); color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
                                 Item { width: 1; height: 3 }
                                 Row {
                                     spacing: 8
@@ -2715,7 +2762,7 @@ Scope {
                             onPicked: function (p) { root.avatarCropSrc = p }
                         }
                     }
-                    Text { width: parent.width; text: "Avatar is saved to ~/.face (used by login/greeters); the system account icon and display name update via AccountsService."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
+                    Text { width: parent.width; text: "Avatar is saved to ~/.face (used by login/greeters); the system account icon and display name update via AccountsService."; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
 
                     SectionTitle { text: "SESSION" }
                     Card {
@@ -2731,34 +2778,34 @@ Scope {
                     // account is the user's own Nextcloud; nothing is baked in)
                     Card {
                         visible: Cloud.probed && !Cloud.signedIn
-                        Text { width: parent.width; text: "Sign in to your Nextcloud — a server you run, or a hosted account (Murena, Disroot, Infomaniak…) — and ewe lights up around it: your machine kept in sync as one file, your apps restorable through Komble, your calendar in the Control Center, your files in ~/Nextcloud. ewe never sees your password: the server hands it an app password you can revoke any time."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; wrapMode: Text.Wrap }
+                        Text { width: parent.width; text: "Sign in to your Nextcloud — a server you run, or a hosted account (Murena, Disroot, Infomaniak…) — and ewe lights up around it: your machine kept in sync as one file, your apps restorable through Komble, your calendar in the Control Center, your files in ~/Nextcloud. ewe never sees your password: the server hands it an app password you can revoke any time."; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; wrapMode: Text.Wrap }
                         Item {
                             width: parent.width; height: 34
                             Rectangle {
                                 anchors.left: parent.left; anchors.right: ncSignIn.left; anchors.rightMargin: 10; height: 34; radius: Theme.r(8)
-                                color: Theme.bg; border.color: ncSrv.activeFocus ? Theme.accent : Theme.stroke; border.width: Theme.borderThin
+                                color: Theme.bg3; border.color: ncSrv.activeFocus ? Theme.accent : Theme.stroke1; border.width: Theme.borderThin
                                 TextInput {
                                     id: ncSrv
                                     anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10
                                     verticalAlignment: TextInput.AlignVCenter
                                     text: Cloud.lastServer
-                                    color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
+                                    color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
                                     clip: true; selectByMouse: true
                                     onAccepted: if (text.trim() !== "") Cloud.signIn(text)
-                                    Text { visible: ncSrv.text === "" && !ncSrv.activeFocus; anchors.verticalCenter: parent.verticalCenter; text: "https://cloud.example.org"; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
+                                    Text { visible: ncSrv.text === "" && !ncSrv.activeFocus; anchors.verticalCenter: parent.verticalCenter; text: "https://cloud.example.org"; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
                                 }
                             }
                             Pill { id: ncSignIn; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; visible: Cloud.busy !== "signin"; label: "Sign in"; primary: true; onGo: Cloud.signIn(ncSrv.text) }
                             Pill { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; visible: Cloud.busy === "signin"; label: "Cancel"; onGo: Cloud.cancelSignIn() }
                         }
-                        Text { visible: Cloud.busy === "signin"; width: parent.width; text: "Waiting for the browser — sign in on your server's page and grant access to ewe…"; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; wrapMode: Text.Wrap }
+                        Text { visible: Cloud.busy === "signin"; width: parent.width; text: "Waiting for the browser — sign in on your server's page and grant access to ewe…"; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; wrapMode: Text.Wrap }
                         Row {
                             visible: Cloud.loginUrl !== ""; spacing: 10
                             Pill { label: "Open the sign-in page"; onGo: Cloud.openLoginUrl() }
                             Pill { label: "Copy the link"; onGo: Cloud.copyLoginUrl() }
                         }
                         Text { visible: Cloud.reason === "revoked"; width: parent.width; text: "This machine's access was revoked on the server — sign in again."; color: Theme.warning; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; wrapMode: Text.Wrap }
-                        Text { visible: Cloud.keyringPromptExpected; width: parent.width; text: Cloud.keyringState === "locked" ? "Your keyring is locked: an “Unlock keyring” prompt will appear during sign-in — answer it with your login password." : "A “Choose password for new keyring” prompt will appear during sign-in — use your login password so it unlocks by itself at every login."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
+                        Text { visible: Cloud.keyringPromptExpected; width: parent.width; text: Cloud.keyringState === "locked" ? "Your keyring is locked: an “Unlock keyring” prompt will appear during sign-in — answer it with your login password." : "A “Choose password for new keyring” prompt will appear during sign-in — use your login password so it unlocks by itself at every login."; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
                         Text { visible: Google.legacyGoogleSync; width: parent.width; text: "Settings sync now uses a Nextcloud account — sign in to keep your backups going. Your Google Drive backup stays where it is, untouched."; color: Theme.warning; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
                     }
                     // signed in → identity + what the account provides + sign out
@@ -2768,8 +2815,8 @@ Scope {
                             width: parent.width; height: 46
                             Rectangle {
                                 anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter
-                                width: 40; height: 40; radius: 20; color: Theme.hover
-                                Text { anchors.centerIn: parent; visible: ncAv.status !== Image.Ready; text: (Cloud.displayName || "?").charAt(0).toUpperCase(); color: Theme.fg; font.family: Theme.fontText; font.pixelSize: 16; font.weight: Font.DemiBold }
+                                width: 40; height: 40; radius: 20; color: Theme.card
+                                Text { anchors.centerIn: parent; visible: ncAv.status !== Image.Ready; text: (Cloud.displayName || "?").charAt(0).toUpperCase(); color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: 16; font.weight: Font.DemiBold }
                                 Image {
                                     id: ncAv
                                     anchors.fill: parent
@@ -2783,8 +2830,8 @@ Scope {
                             }
                             Column {
                                 anchors.left: parent.left; anchors.leftMargin: 52; anchors.right: ncOut.left; anchors.rightMargin: 10; anchors.verticalCenter: parent.verticalCenter; spacing: 1
-                                Text { width: parent.width; text: Cloud.displayName || "Nextcloud account"; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsBody; font.weight: Font.DemiBold; elide: Text.ElideRight }
-                                Text { width: parent.width; text: (Cloud.email !== "" ? Cloud.email + " · " : "") + Cloud.serverHost; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; elide: Text.ElideRight }
+                                Text { width: parent.width; text: Cloud.displayName || "Nextcloud account"; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsBody; font.weight: Font.DemiBold; elide: Text.ElideRight }
+                                Text { width: parent.width; text: (Cloud.email !== "" ? Cloud.email + " · " : "") + Cloud.serverHost; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; elide: Text.ElideRight }
                             }
                             Pill { id: ncOut; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; label: "Sign out"; onGo: Cloud.signOut() }
                         }
@@ -2829,7 +2876,7 @@ Scope {
                             // only offered when the server refused a push
                             Pill { visible: Cloud.syncConflict; label: "Push anyway"; onGo: Cloud.pushForce() }
                         }
-                        Text { width: parent.width; text: "The machine file (ewe.conf) lives in the ewe/ folder of your account: theme + accent, dock, animations, power, display profiles, window rules, wallpapers, pinned/startup apps, places, VPN and SSH definitions, and Komble's installed-apps list (reinstalling from it is always opt-in). Credentials never sync — that is the rule the file is built on."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
+                        Text { width: parent.width; text: "The machine file (ewe.conf) lives in the ewe/ folder of your account: theme + accent, dock, animations, power, display profiles, window rules, wallpapers, pinned/startup apps, places, VPN and SSH definitions, and Komble's installed-apps list (reinstalling from it is always opt-in). Credentials never sync — that is the rule the file is built on."; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
                         Text { visible: Cloud.syncError !== ""; width: parent.width; text: Cloud.syncError; color: Theme.danger; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
                         Text { visible: Cloud.restoreSummary !== ""; width: parent.width; text: Cloud.restoreSummary; color: Theme.success; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
                     }
@@ -2838,12 +2885,12 @@ Scope {
                         visible: Cloud.pendingRestore !== null
                         width: parent.width
                         implicitHeight: restCol.implicitHeight + 24
-                        radius: Theme.radiusInner; color: Theme.elevated
+                        radius: Theme.radiusInner; color: Theme.card
                         border.color: Theme.accent; border.width: Theme.borderThin
                         Column {
                             id: restCol
                             anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 12; spacing: 8
-                            Text { text: "Restore settings from the backup in your account?"; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsBody; font.weight: Font.DemiBold }
+                            Text { text: "Restore settings from the backup in your account?"; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsBody; font.weight: Font.DemiBold }
                             KV { k: "Saved on"; v: Cloud.pendingRestore ? ("“" + (Cloud.pendingRestore.device || "?") + "” · " + root.fmtSyncTime(Cloud.pendingRestore.updatedAt || "")) : "" }
                             KV { k: "Restores"; v: "the machine file (ewe.conf) — theme, dock, displays, rules, apps list; your current file is kept as a timestamped backup" }
                             KV { k: "Applications"; v: "reinstall offers appear in Komble → For you (never auto-installed)" }
@@ -2861,8 +2908,8 @@ Scope {
                     // for people who bring their own OAuth client file
                     Card {
                         visible: !Google.personalClient
-                        Text { width: parent.width; text: "For Gmail in the Control Center and Google Drive as a folder. ewe ships no Google client: create your own OAuth client of type “Desktop app” (docs/GOOGLE-CLIENT.md), save it as the file below, and this card turns into Connect."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; wrapMode: Text.Wrap }
-                        Text { width: parent.width; text: Google.clientPath; color: Theme.fgSecondary; font.family: Theme.fontMono; font.pixelSize: 11; elide: Text.ElideMiddle }
+                        Text { width: parent.width; text: "For Gmail in the Control Center and Google Drive as a folder. ewe ships no Google client: create your own OAuth client of type “Desktop app” (docs/GOOGLE-CLIENT.md), save it as the file below, and this card turns into Connect."; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; wrapMode: Text.Wrap }
+                        Text { width: parent.width; text: Google.clientPath; color: Theme.fg2; font.family: Theme.fontMono; font.pixelSize: 11; elide: Text.ElideMiddle }
                     }
                     Card {
                         visible: Google.personalClient && Google.probed && !Google.configured
@@ -2870,11 +2917,11 @@ Scope {
                     }
                     Card {
                         visible: Google.probed && Google.configured && !Google.signedIn
-                        Text { width: parent.width; text: "Your client file is in place. Connect to get Gmail in the Control Center and ~/Google Drive in Files. Settings sync never goes through Google."; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; wrapMode: Text.Wrap }
+                        Text { width: parent.width; text: "Your client file is in place. Connect to get Gmail in the Control Center and ~/Google Drive in Files. Settings sync never goes through Google."; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; wrapMode: Text.Wrap }
                         Row {
                             spacing: 10
                             Pill { visible: Google.busy !== "signin"; label: "Connect Google"; primary: true; onGo: Google.signIn() }
-                            Text { visible: Google.busy === "signin"; anchors.verticalCenter: parent.verticalCenter; text: "Waiting for the browser sign-in…"; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
+                            Text { visible: Google.busy === "signin"; anchors.verticalCenter: parent.verticalCenter; text: "Waiting for the browser sign-in…"; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
                             Pill { visible: Google.busy === "signin"; label: "Cancel"; onGo: Google.cancelSignIn() }
                         }
                         Row {
@@ -2890,8 +2937,8 @@ Scope {
                             Rectangle {
                                 id: gAvBox
                                 anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter
-                                width: 40; height: 40; radius: 20; color: Theme.hover
-                                Text { anchors.centerIn: parent; visible: gAv.status !== Image.Ready; text: ((Google.profile && Google.profile.name) || "?").charAt(0).toUpperCase(); color: Theme.fg; font.family: Theme.fontText; font.pixelSize: 16; font.weight: Font.DemiBold }
+                                width: 40; height: 40; radius: 20; color: Theme.card
+                                Text { anchors.centerIn: parent; visible: gAv.status !== Image.Ready; text: ((Google.profile && Google.profile.name) || "?").charAt(0).toUpperCase(); color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: 16; font.weight: Font.DemiBold }
                                 Image {
                                     id: gAv
                                     anchors.fill: parent
@@ -2905,8 +2952,8 @@ Scope {
                             }
                             Column {
                                 anchors.left: parent.left; anchors.leftMargin: 52; anchors.right: gOut.left; anchors.rightMargin: 10; anchors.verticalCenter: parent.verticalCenter; spacing: 1
-                                Text { width: parent.width; text: (Google.profile && Google.profile.name) || "Google account"; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsBody; font.weight: Font.DemiBold; elide: Text.ElideRight }
-                                Text { width: parent.width; text: (Google.profile && Google.profile.email) || ""; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; elide: Text.ElideRight }
+                                Text { width: parent.width; text: (Google.profile && Google.profile.name) || "Google account"; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsBody; font.weight: Font.DemiBold; elide: Text.ElideRight }
+                                Text { width: parent.width; text: (Google.profile && Google.profile.email) || ""; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; elide: Text.ElideRight }
                             }
                             Pill { id: gOut; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; label: "Disconnect"; onGo: Google.signOut() }
                         }
@@ -2934,17 +2981,17 @@ Scope {
                                 width: parent.width; height: 36
                                 Rectangle {
                                     anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter
-                                    width: 26; height: 26; radius: 13; color: Theme.hover
-                                    Text { anchors.centerIn: parent; text: (modelData.name || "?").charAt(0).toUpperCase(); color: Theme.fg; font.family: Theme.fontText; font.pixelSize: 12; font.weight: Font.DemiBold }
+                                    width: 26; height: 26; radius: 13; color: Theme.card
+                                    Text { anchors.centerIn: parent; text: (modelData.name || "?").charAt(0).toUpperCase(); color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: 12; font.weight: Font.DemiBold }
                                 }
                                 Column {
                                     anchors.left: parent.left; anchors.leftMargin: 36; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; spacing: 1
-                                    Text { width: parent.width; text: modelData.name; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; elide: Text.ElideRight }
-                                    Text { width: parent.width; text: (modelData.emails[0] || "") + (modelData.phones && modelData.phones.length ? "  ·  " + modelData.phones[0] : ""); color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 10; elide: Text.ElideRight }
+                                    Text { width: parent.width; text: modelData.name; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; elide: Text.ElideRight }
+                                    Text { width: parent.width; text: (modelData.emails[0] || "") + (modelData.phones && modelData.phones.length ? "  ·  " + modelData.phones[0] : ""); color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 10; elide: Text.ElideRight }
                                 }
                             }
                         }
-                        Text { visible: Accounts.contacts.length > 25; text: "…and " + (Accounts.contacts.length - 25) + " more"; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11 }
+                        Text { visible: Accounts.contacts.length > 25; text: "…and " + (Accounts.contacts.length - 25) + " more"; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11 }
                     }
                     Item { width: 1; height: 8 }
                 }
@@ -2955,19 +3002,19 @@ Scope {
                 visible: root.errorMsg !== ""
                 anchors.horizontalCenter: parent.horizontalCenter; anchors.bottom: parent.bottom; anchors.bottomMargin: 14
                 width: Math.min(errText.implicitWidth + 66, card.width - 40); height: 36; radius: Theme.r(10); z: 60
-                color: Theme.elevated; border.color: Theme.danger; border.width: Theme.borderThin
+                color: Theme.card; border.color: Theme.danger; border.width: Theme.borderThin
                 Text { anchors.left: parent.left; anchors.leftMargin: 12; anchors.verticalCenter: parent.verticalCenter; text: Theme.icWarning; font.family: Theme.fontIcons; font.pixelSize: 13; color: Theme.danger }
-                Text { id: errText; anchors.left: parent.left; anchors.leftMargin: 34; anchors.right: parent.right; anchors.rightMargin: 32; anchors.verticalCenter: parent.verticalCenter; text: root.errorMsg; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: 11; elide: Text.ElideRight }
-                Text { anchors.right: parent.right; anchors.rightMargin: 11; anchors.verticalCenter: parent.verticalCenter; text: Theme.icClose; font.family: Theme.fontIcons; font.pixelSize: 12; color: Theme.fgDim
+                Text { id: errText; anchors.left: parent.left; anchors.leftMargin: 34; anchors.right: parent.right; anchors.rightMargin: 32; anchors.verticalCenter: parent.verticalCenter; text: root.errorMsg; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: 11; elide: Text.ElideRight }
+                Text { anchors.right: parent.right; anchors.rightMargin: 11; anchors.verticalCenter: parent.verticalCenter; text: Theme.icClose; font.family: Theme.fontIcons; font.pixelSize: 12; color: Theme.fg3
                     MouseArea { anchors.fill: parent; anchors.margins: -8; cursorShape: Qt.PointingHandCursor; onClicked: root.clearError() } }
             }
             Rectangle {
                 visible: root.appliedMsg !== "" && root.errorMsg === ""
                 anchors.right: parent.right; anchors.bottom: parent.bottom; anchors.margins: 14
                 width: apText.implicitWidth + 40; height: 30; radius: Theme.r(9); z: 60
-                color: Theme.elevated; border.color: Theme.stroke; border.width: Theme.borderThin
+                color: Theme.card; border.color: Theme.stroke2; border.width: Theme.borderThin
                 Text { anchors.left: parent.left; anchors.leftMargin: 11; anchors.verticalCenter: parent.verticalCenter; text: Theme.icCheck; font.family: Theme.fontIcons; font.pixelSize: 12; color: Theme.success }
-                Text { id: apText; anchors.right: parent.right; anchors.rightMargin: 11; anchors.verticalCenter: parent.verticalCenter; text: root.appliedMsg; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: 11; font.weight: Font.DemiBold }
+                Text { id: apText; anchors.right: parent.right; anchors.rightMargin: 11; anchors.verticalCenter: parent.verticalCenter; text: root.appliedMsg; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: 11; font.weight: Font.DemiBold }
             }
             Rectangle {
                 // avatar crop: pan (drag) + zoom (slider) inside a square viewport;
@@ -2977,11 +3024,11 @@ Scope {
                 MouseArea { anchors.fill: parent }   // swallow clicks
                 Rectangle {
                     anchors.centerIn: parent; width: 340; height: cropCol.implicitHeight + 40
-                    radius: Theme.radius; color: Theme.panel; border.color: Theme.stroke; border.width: Theme.borderThin
+                    radius: Theme.radius; color: Theme.bg1; border.color: Theme.stroke2; border.width: Theme.borderThin
                     Column {
                         id: cropCol
                         anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 20; spacing: 12
-                        Text { text: "Crop avatar"; color: Theme.fg; font.family: Theme.fontDisplay; font.pixelSize: Theme.fsLarge; font.weight: Font.Bold }
+                        Text { text: "Crop avatar"; color: Theme.fg1; font.family: Theme.fontDisplay; font.pixelSize: Theme.fsLarge; font.weight: Font.Bold }
                         Item {
                             id: cropView
                             anchors.horizontalCenter: parent.horizontalCenter
@@ -3001,7 +3048,7 @@ Scope {
                                 }
                             }
                             // overlay chrome lives OUTSIDE cropCanvas so the grab stays clean
-                            Rectangle { anchors.fill: parent; color: "transparent"; border.color: Theme.stroke; border.width: Theme.borderThin }
+                            Rectangle { anchors.fill: parent; color: "transparent"; border.color: Theme.stroke2; border.width: Theme.borderThin }
                             Rectangle { anchors.fill: parent; radius: Theme.r(128); color: "transparent"; border.color: Qt.rgba(1, 1, 1, 0.4); border.width: Theme.borderThin }
                             MouseArea {
                                 anchors.fill: parent
@@ -3038,12 +3085,12 @@ Scope {
                 MouseArea { anchors.fill: parent }   // swallow clicks
                 Rectangle {
                     anchors.centerIn: parent; width: 380; height: revCol.implicitHeight + 40
-                    radius: Theme.radius; color: Theme.panel; border.color: Theme.stroke; border.width: Theme.borderThin
+                    radius: Theme.radius; color: Theme.bg1; border.color: Theme.stroke2; border.width: Theme.borderThin
                     Column {
                         id: revCol
                         anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 20; spacing: 10
-                        Text { text: "Keep these display settings?"; color: Theme.fg; font.family: Theme.fontDisplay; font.pixelSize: Theme.fsLarge; font.weight: Font.Bold }
-                        Text { width: parent.width; text: "Reverting to the previous configuration in " + root.revertLeft + " s if you can't see this."; color: Theme.fgSecondary; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; wrapMode: Text.Wrap }
+                        Text { text: "Keep these display settings?"; color: Theme.fg1; font.family: Theme.fontDisplay; font.pixelSize: Theme.fsLarge; font.weight: Font.Bold }
+                        Text { width: parent.width; text: "Reverting to the previous configuration in " + root.revertLeft + " s if you can't see this."; color: Theme.fg2; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; wrapMode: Text.Wrap }
                         Row {
                             anchors.right: parent.right; spacing: 8
                             Pill { label: "Revert now"; onGo: root.doRevert() }

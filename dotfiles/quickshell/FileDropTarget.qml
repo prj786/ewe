@@ -21,8 +21,8 @@ Rectangle {
 
     implicitHeight: 52
     radius: Theme.r(8)
-    color: hovering ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.14) : Theme.bg
-    border.color: (hovering || zoneMa.containsMouse) ? Theme.accent : Theme.stroke
+    color: hovering ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.14) : Theme.bg3
+    border.color: (hovering || zoneMa.containsMouse) ? Theme.accent : Theme.stroke1
     border.width: Theme.borderThin
     Behavior on color { ColorAnimation { duration: 120 } }
 
@@ -39,8 +39,8 @@ Rectangle {
 
     Row {
         anchors.centerIn: parent; spacing: 9
-        Text { anchors.verticalCenter: parent.verticalCenter; text: Theme.icDownload; font.family: Theme.fontIcons; font.pixelSize: 15; color: root.hovering ? Theme.accent : Theme.fgDim }
-        Text { anchors.verticalCenter: parent.verticalCenter; text: root.label; color: root.hovering ? Theme.fg : Theme.fgSecondary; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
+        Text { anchors.verticalCenter: parent.verticalCenter; text: Theme.icDownload; font.family: Theme.fontIcons; font.pixelSize: 15; color: root.hovering ? Theme.accent : Theme.fg3 }
+        Text { anchors.verticalCenter: parent.verticalCenter; text: root.label; color: root.hovering ? Theme.fg1 : Theme.fg2; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
     }
     MouseArea { id: zoneMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.browse() }
     DropArea {

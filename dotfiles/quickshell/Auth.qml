@@ -58,8 +58,8 @@ Scope {
             width: 380
             height: col.implicitHeight + 40
             radius: Theme.radius
-            color: Theme.panel
-            border.color: Theme.stroke
+            color: Theme.bg1
+            border.color: Theme.stroke2
             border.width: Theme.borderThin
             MouseArea { anchors.fill: parent }   // swallow clicks
 
@@ -72,26 +72,26 @@ Scope {
                 Text {
                     width: parent.width; horizontalAlignment: Text.AlignHCenter
                     text: "Authentication Required"
-                    color: Theme.fg; font.family: Theme.fontDisplay; font.pixelSize: Theme.fsLarge; font.weight: Font.Bold
+                    color: Theme.fg1; font.family: Theme.fontDisplay; font.pixelSize: Theme.fsLarge; font.weight: Font.Bold
                 }
                 Text {
                     width: parent.width; horizontalAlignment: Text.AlignHCenter
                     text: (agent ? agent.flow : null) ? (agent ? agent.flow : null).message : ""
                     visible: text.length > 0
-                    color: Theme.fgSecondary; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; wrapMode: Text.Wrap
+                    color: Theme.fg2; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; wrapMode: Text.Wrap
                 }
 
                 // password field
                 Rectangle {
                     width: parent.width; height: 38; radius: Theme.r(9)
-                    color: Theme.bg
-                    border.color: pwField.activeFocus ? Theme.accent : Theme.stroke
+                    color: Theme.bg3
+                    border.color: pwField.activeFocus ? Theme.accent : Theme.stroke1
                     border.width: Theme.borderThin
                     TextInput {
                         id: pwField
                         anchors.fill: parent; anchors.leftMargin: 12; anchors.rightMargin: 12
                         verticalAlignment: TextInput.AlignVCenter
-                        color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsBody
+                        color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsBody
                         echoMode: ((agent ? agent.flow : null) && (agent ? agent.flow : null).responseVisible) ? TextInput.Normal : TextInput.Password
                         enabled: (agent ? agent.flow : null) && (agent ? agent.flow : null).isResponseRequired
                         onAccepted: if ((agent ? agent.flow : null)) { (agent ? agent.flow : null).submit(text); text = "" }
@@ -100,7 +100,7 @@ Scope {
                             anchors.verticalCenter: parent.verticalCenter
                             visible: pwField.text.length === 0
                             text: (agent ? agent.flow : null) && (agent ? agent.flow : null).inputPrompt ? (agent ? agent.flow : null).inputPrompt : "Password"
-                            color: Theme.fgDim; font: pwField.font
+                            color: Theme.fg3; font: pwField.font
                         }
                     }
                 }
@@ -110,7 +110,7 @@ Scope {
                     width: parent.width; horizontalAlignment: Text.AlignHCenter
                     text: (agent ? agent.flow : null) ? ((agent ? agent.flow : null).supplementaryMessage !== "" ? (agent ? agent.flow : null).supplementaryMessage : ((agent ? agent.flow : null).failed ? "Authentication failed — try again" : "")) : ""
                     visible: text.length > 0
-                    color: ((agent ? agent.flow : null) && ((agent ? agent.flow : null).supplementaryIsError || (agent ? agent.flow : null).failed)) ? Theme.danger : Theme.fgDim
+                    color: ((agent ? agent.flow : null) && ((agent ? agent.flow : null).supplementaryIsError || (agent ? agent.flow : null).failed)) ? Theme.danger : Theme.fg3
                     font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; wrapMode: Text.Wrap
                 }
 
@@ -121,16 +121,16 @@ Scope {
                     spacing: 10
                     Rectangle {
                         width: (parent.width - 10) / 2; height: 36; radius: Theme.r(9)
-                        color: cancelMa.containsMouse ? Theme.hover : Theme.elevated
+                        color: cancelMa.containsMouse ? Theme.cardHover : Theme.card
                         Behavior on color { ColorAnimation { duration: Theme.durFast } }
-                        Text { anchors.centerIn: parent; text: "Cancel"; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsBody }
+                        Text { anchors.centerIn: parent; text: "Cancel"; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsBody }
                         MouseArea { id: cancelMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: if ((agent ? agent.flow : null)) (agent ? agent.flow : null).cancelAuthenticationRequest() }
                     }
                     Rectangle {
                         width: (parent.width - 10) / 2; height: 36; radius: Theme.r(9)
-                        color: okMa.containsMouse ? Qt.lighter(Theme.accent, 1.12) : Theme.accent
+                        color: okMa.containsMouse ? Theme.brandBgHover : Theme.accentFill
                         Behavior on color { ColorAnimation { duration: Theme.durFast } }
-                        Text { anchors.centerIn: parent; text: "Authenticate"; color: Theme.accentText; font.family: Theme.fontText; font.pixelSize: Theme.fsBody; font.weight: Font.DemiBold }
+                        Text { anchors.centerIn: parent; text: "Authenticate"; color: Theme.accentOn; font.family: Theme.fontText; font.pixelSize: Theme.fsBody; font.weight: Font.DemiBold }
                         MouseArea { id: okMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: if ((agent ? agent.flow : null)) { (agent ? agent.flow : null).submit(pwField.text); pwField.text = "" } }
                     }
                 }

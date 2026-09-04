@@ -120,8 +120,8 @@ Scope {
                         anchors.top: parent.top; anchors.topMargin: 6
                         anchors.horizontalCenter: parent.horizontalCenter
                         width: parent.width - 14; height: card.height
-                        radius: Theme.radiusInner; color: Theme.panel; opacity: 0.55
-                        border.color: Theme.stroke; border.width: Theme.borderThin
+                        radius: Theme.radiusInner; color: Theme.bg1; opacity: 0.55
+                        border.color: Theme.stroke2; border.width: Theme.borderThin
                     }
 
                     Rectangle {
@@ -129,8 +129,8 @@ Scope {
                         width: parent.width
                         height: col.implicitHeight + 24
                         radius: Theme.radiusInner
-                        color: Theme.panel
-                        border.color: Theme.stroke
+                        color: Theme.bg1
+                        border.color: Theme.stroke2
                         border.width: Theme.borderThin
                         layer.enabled: true
                         layer.effect: Elevation {}
@@ -159,7 +159,7 @@ Scope {
                                     width: parent.width; spacing: 6
                                     Text {
                                         text: groupItem.latest.appName || "Notification"
-                                        color: Theme.fgDim
+                                        color: Theme.fg3
                                         font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
                                         elide: Text.ElideRight
                                         width: Math.min(implicitWidth, parent.width - 30)
@@ -168,14 +168,14 @@ Scope {
                                         visible: groupItem.count > 1
                                         anchors.verticalCenter: parent.verticalCenter
                                         width: cnt.implicitWidth + 10; height: 15; radius: Theme.r(7)
-                                        color: Theme.accent
-                                        Text { id: cnt; anchors.centerIn: parent; text: groupItem.count; color: Theme.accentText; font.family: Theme.fontText; font.pixelSize: 9; font.weight: Font.Bold }
+                                        color: Theme.accentFill
+                                        Text { id: cnt; anchors.centerIn: parent; text: groupItem.count; color: Theme.accentOn; font.family: Theme.fontText; font.pixelSize: 9; font.weight: Font.Bold }
                                     }
                                 }
                                 Text {
                                     width: parent.width
                                     text: groupItem.latest.summary || ""
-                                    color: Theme.fg
+                                    color: Theme.fg1
                                     font.family: Theme.fontText; font.pixelSize: Theme.fsBody; font.weight: Font.DemiBold
                                     elide: Text.ElideRight
                                 }
@@ -183,7 +183,7 @@ Scope {
                                     width: parent.width
                                     visible: text.length > 0
                                     text: groupItem.latest.body || ""
-                                    color: Theme.fgSecondary
+                                    color: Theme.fg2
                                     font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
                                     wrapMode: Text.Wrap
                                     maximumLineCount: 3

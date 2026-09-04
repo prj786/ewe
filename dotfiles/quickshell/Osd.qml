@@ -90,8 +90,8 @@ Scope {
             anchors.bottomMargin: 40
             width: 320; height: 56
             radius: Theme.radius
-            color: Theme.panel
-            border.color: Theme.stroke; border.width: Theme.borderThin
+            color: Theme.bg1
+            border.color: Theme.stroke2; border.width: Theme.borderThin
             layer.enabled: true
             layer.effect: Elevation {}
             Sheen { radius: parent.radius }
@@ -116,18 +116,18 @@ Scope {
                         : root.muted ? Theme.icVolLow
                         : Theme.icVolHigh
                     font.family: Theme.fontIcons; font.pixelSize: 19
-                    color: root.muted ? Theme.fgDim : Theme.fg
+                    color: root.muted ? Theme.fg3 : Theme.fg1
                 }
                 Rectangle {
                     id: trk
                     anchors.verticalCenter: parent.verticalCenter
                     width: parent.width - 24 - 14 - 44 - 14
                     height: 7; radius: 4
-                    color: Theme.hover
+                    color: Theme.bg2
                     Rectangle {
                         height: parent.height; radius: Theme.r(4)
                         width: parent.width * Math.max(0, Math.min(1, root.level))
-                        color: (root.mode === "volume" && root.muted) ? Theme.fgDim : Theme.accent
+                        color: (root.mode === "volume" && root.muted) ? Theme.fg3 : Theme.accent
                         Behavior on width { NumberAnimation { duration: Theme.durFast } }
                     }
                 }
@@ -136,7 +136,7 @@ Scope {
                     width: 44
                     horizontalAlignment: Text.AlignRight
                     text: (root.mode === "volume" && root.muted) ? "Muted" : Math.round(root.level * 100) + "%"
-                    color: Theme.fgSecondary; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold
+                    color: Theme.fg2; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold
                 }
             }
         }

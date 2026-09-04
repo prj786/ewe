@@ -142,8 +142,8 @@ Scope {
             width: Math.min(900, parent.width - 80)
             height: Math.min(body.implicitHeight + 48, parent.height - 80)
             radius: Theme.radius
-            color: Theme.panel
-            border.color: Theme.stroke
+            color: Theme.bg1
+            border.color: Theme.stroke2
             border.width: Theme.borderThin
             MouseArea { anchors.fill: parent }       // eat clicks so they don't cancel
 
@@ -161,19 +161,19 @@ Scope {
                     width: parent.width; spacing: 4
                     Text {
                         text: "Share your screen"
-                        color: Theme.fg; font.family: Theme.fontDisplay; font.pixelSize: Theme.fsLarge; font.weight: Font.Bold
+                        color: Theme.fg1; font.family: Theme.fontDisplay; font.pixelSize: Theme.fsLarge; font.weight: Font.Bold
                     }
                     Text {
                         width: parent.width; wrapMode: Text.Wrap
                         text: "An app wants to see your screen. Click what it may have — a whole display, one window, or a region."
-                        color: Theme.fgSecondary; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
+                        color: Theme.fg2; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
                     }
                 }
 
                 // ── screens: live thumbnails, named by model ──
                 Column {
                     width: parent.width; spacing: 10
-                    Text { text: "Displays"; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11; font.weight: Font.DemiBold; font.capitalization: Font.AllUppercase }
+                    Text { text: "Displays"; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11; font.weight: Font.DemiBold; font.capitalization: Font.AllUppercase }
                     Flow {
                         width: parent.width; spacing: 12
                         Repeater {
@@ -200,14 +200,14 @@ Scope {
                                 width: Quickshell.screens.length > 2 ? (body.width - 24) / 3 : (body.width - 12) / 2
                                 height: thumb.height + 54
                                 radius: Theme.radiusInner
-                                color: sMa.containsMouse ? Theme.hover : Theme.elevated
+                                color: sMa.containsMouse ? Theme.cardHover : Theme.card
                                 border.color: sMa.containsMouse ? Theme.accent : "transparent"; border.width: Theme.border
                                 Behavior on color { ColorAnimation { duration: Theme.durFast } }
                                 Rectangle {
                                     id: thumb
                                     anchors { top: parent.top; left: parent.left; right: parent.right; margins: 8 }
                                     height: Math.round((width) / scard.aspect)
-                                    radius: Theme.r(8); color: Theme.bg; clip: true
+                                    radius: Theme.r(8); color: Theme.bg3; clip: true
                                     ScreencopyView {
                                         anchors.fill: parent
                                         // belt and braces: drop the source the moment
@@ -220,8 +220,8 @@ Scope {
                                 Column {
                                     anchors { left: parent.left; right: parent.right; bottom: parent.bottom; margins: 10 }
                                     spacing: 1
-                                    Text { width: parent.width; elide: Text.ElideRight; text: root.screenLabel(scard.modelData); color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold }
-                                    Text { text: scard.modelData.name + " · " + scard.modelData.width + "×" + scard.modelData.height; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 10 }
+                                    Text { width: parent.width; elide: Text.ElideRight; text: root.screenLabel(scard.modelData); color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold }
+                                    Text { text: scard.modelData.name + " · " + scard.modelData.width + "×" + scard.modelData.height; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 10 }
                                 }
                                 MouseArea { id: sMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.answer("screen:" + scard.modelData.name) }
                             }
@@ -233,7 +233,7 @@ Scope {
                 Column {
                     width: parent.width; spacing: 10
                     visible: root.windows.length > 0
-                    Text { text: "Windows"; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11; font.weight: Font.DemiBold; font.capitalization: Font.AllUppercase }
+                    Text { text: "Windows"; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11; font.weight: Font.DemiBold; font.capitalization: Font.AllUppercase }
                     Flickable {
                         width: parent.width
                         height: Math.min(winFlow.implicitHeight, 260)
@@ -250,13 +250,13 @@ Scope {
                                     width: (body.width - 30) / 4
                                     height: 118
                                     radius: Theme.radiusInner
-                                    color: wMa.containsMouse ? Theme.hover : Theme.elevated
+                                    color: wMa.containsMouse ? Theme.cardHover : Theme.card
                                     border.color: wMa.containsMouse ? Theme.accent : "transparent"; border.width: Theme.border
                                     Behavior on color { ColorAnimation { duration: Theme.durFast } }
                                     Rectangle {
                                         id: wthumb
                                         anchors { top: parent.top; left: parent.left; right: parent.right; margins: 8 }
-                                        height: 70; radius: Theme.r(8); color: Theme.bg; clip: true
+                                        height: 70; radius: Theme.r(8); color: Theme.bg3; clip: true
                                         ScreencopyView {
                                             id: wsc
                                             anchors.fill: parent
@@ -273,8 +273,8 @@ Scope {
                                     Column {
                                         anchors { left: parent.left; right: parent.right; bottom: parent.bottom; margins: 8 }
                                         spacing: 0
-                                        Text { width: parent.width; elide: Text.ElideRight; text: wcard.modelData.title; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: 11; font.weight: Font.DemiBold }
-                                        Text { width: parent.width; elide: Text.ElideRight; text: wcard.modelData.cls; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 10 }
+                                        Text { width: parent.width; elide: Text.ElideRight; text: wcard.modelData.title; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: 11; font.weight: Font.DemiBold }
+                                        Text { width: parent.width; elide: Text.ElideRight; text: wcard.modelData.cls; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 10 }
                                     }
                                     MouseArea { id: wMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.answer("window:" + wcard.modelData.handle) }
                                 }
@@ -291,15 +291,15 @@ Scope {
                         Rectangle {
                             width: 18; height: 18; radius: Theme.r(5)
                             anchors.verticalCenter: parent.verticalCenter
-                            color: root.allowToken ? Theme.accent : Theme.bg
-                            border.color: root.allowToken ? Theme.accent : Theme.stroke
-                            Text { anchors.centerIn: parent; visible: root.allowToken; text: Theme.icCheck; font.family: Theme.fontIcons; font.pixelSize: 11; color: Theme.accentText }
+                            color: root.allowToken ? Theme.accentFill : Theme.bg3
+                            border.color: root.allowToken ? Theme.accent : Theme.stroke1
+                            Text { anchors.centerIn: parent; visible: root.allowToken; text: Theme.icCheck; font.family: Theme.fontIcons; font.pixelSize: 11; color: Theme.accentOn }
                             MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.allowToken = !root.allowToken }
                         }
                         Text {
                             anchors.verticalCenter: parent.verticalCenter
                             text: "Remember for this app (no prompt next time)"
-                            color: Theme.fgSecondary; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
+                            color: Theme.fg2; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
                             MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.allowToken = !root.allowToken }
                         }
                     }
@@ -307,14 +307,14 @@ Scope {
                         anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; spacing: 10
                         Rectangle {
                             width: 150; height: 36; radius: Theme.r(9)
-                            color: rMa.containsMouse ? Theme.hover : Theme.elevated
-                            Text { anchors.centerIn: parent; text: "Select a region…"; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsBody }
+                            color: rMa.containsMouse ? Theme.cardHover : Theme.card
+                            Text { anchors.centerIn: parent; text: "Select a region…"; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsBody }
                             MouseArea { id: rMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: { root.hidden = true; slurp.running = true } }
                         }
                         Rectangle {
                             width: 100; height: 36; radius: Theme.r(9)
-                            color: cMa.containsMouse ? Theme.hover : Theme.elevated
-                            Text { anchors.centerIn: parent; text: "Cancel"; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsBody }
+                            color: cMa.containsMouse ? Theme.cardHover : Theme.card
+                            Text { anchors.centerIn: parent; text: "Cancel"; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsBody }
                             MouseArea { id: cMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.answer("") }
                         }
                     }

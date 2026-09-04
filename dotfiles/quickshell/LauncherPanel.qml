@@ -85,8 +85,8 @@ Scope {
             y: parent.height - height - 90        // float above the dock
             width: 380; height: 440
             radius: Theme.radius
-            color: Theme.panel
-            border.color: Theme.stroke; border.width: Theme.borderThin
+            color: Theme.bg1
+            border.color: Theme.stroke2; border.width: Theme.borderThin
             opacity: Globals.launcherOpen ? 1 : 0
             scale: Globals.launcherOpen ? 1 : 0.96
             transformOrigin: Item.BottomLeft
@@ -104,30 +104,30 @@ Scope {
                 // search
                 Rectangle {
                     width: parent.width; height: 36; radius: Theme.radiusInner
-                    color: Theme.bg; border.color: searchIn.activeFocus ? Theme.accent : Theme.stroke; border.width: Theme.borderThin
-                    Text { anchors.left: parent.left; anchors.leftMargin: 11; anchors.verticalCenter: parent.verticalCenter; text: Theme.icSearch; font.family: Theme.fontIcons; font.pixelSize: 14; color: Theme.fgDim }
+                    color: Theme.bg3; border.color: searchIn.activeFocus ? Theme.accent : Theme.stroke1; border.width: Theme.borderThin
+                    Text { anchors.left: parent.left; anchors.leftMargin: 11; anchors.verticalCenter: parent.verticalCenter; text: Theme.icSearch; font.family: Theme.fontIcons; font.pixelSize: 14; color: Theme.fg3 }
                     TextInput {
                         id: searchIn
                         anchors.fill: parent; anchors.leftMargin: 34; anchors.rightMargin: 12; verticalAlignment: TextInput.AlignVCenter
-                        color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsBody; clip: true
+                        color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsBody; clip: true
                         onTextChanged: root.query = text
                         Keys.onEscapePressed: Globals.launcherOpen = false
                         onAccepted: { var a = root.shownApps(); if (a.length > 0) root.launch(a[0]) }
-                        Text { anchors.verticalCenter: parent.verticalCenter; visible: searchIn.text.length === 0; text: "Search apps…"; color: Theme.fgDim; font: searchIn.font }
+                        Text { anchors.verticalCenter: parent.verticalCenter; visible: searchIn.text.length === 0; text: "Search apps…"; color: Theme.fg3; font: searchIn.font }
                     }
                 }
 
                 Text {
                     width: parent.width
                     text: root.query.trim() === "" ? "PINNED" : "RESULTS"
-                    color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: 11; font.weight: Font.DemiBold
+                    color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11; font.weight: Font.DemiBold
                 }
 
                 // empty-pinned hint
                 Text {
                     width: parent.width; visible: root.query.trim() === "" && root.shownApps().length === 0
                     text: "No pinned apps yet. Search for an app and tap its pin badge to add it here."
-                    color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; wrapMode: Text.Wrap
+                    color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; wrapMode: Text.Wrap
                 }
 
                 // app grid
@@ -146,11 +146,11 @@ Scope {
                                 required property var modelData
                                 width: grid.width / 4; height: 86
                                 readonly property string did: (modelData.id || "") + (String(modelData.id).match(/\.desktop$/) ? "" : ".desktop")
-                                Rectangle { anchors.fill: parent; anchors.margins: 3; radius: Theme.r(12); color: tMa.containsMouse ? Theme.hover : "transparent" }
+                                Rectangle { anchors.fill: parent; anchors.margins: 3; radius: Theme.r(12); color: tMa.containsMouse ? Theme.subtleHover : Theme.subtle }
                                 Column {
                                     anchors.centerIn: parent; spacing: 6
                                     Image { anchors.horizontalCenter: parent.horizontalCenter; width: 40; height: 40; sourceSize.width: 64; sourceSize.height: 64; mipmap: true; source: modelData.icon ? Quickshell.iconPath(modelData.icon, "application-x-executable") : "" }
-                                    Text { width: tile.width - 10; horizontalAlignment: Text.AlignHCenter; text: modelData.name || ""; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: 11; elide: Text.ElideRight; maximumLineCount: 1 }
+                                    Text { width: tile.width - 10; horizontalAlignment: Text.AlignHCenter; text: modelData.name || ""; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: 11; elide: Text.ElideRight; maximumLineCount: 1 }
                                 }
                                 MouseArea { id: tMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; acceptedButtons: Qt.LeftButton | Qt.MiddleButton; onClicked: function (mouse) { root.launch(tile.modelData, mouse.button === Qt.MiddleButton) } }
                                 // pin badge (top-right)
@@ -158,8 +158,8 @@ Scope {
                                     anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 5
                                     width: 20; height: 20; radius: 10
                                     visible: tMa.containsMouse || pMa.containsMouse || Globals.isPinned(tile.did)
-                                    color: Globals.isPinned(tile.did) ? Theme.accent : Qt.rgba(0, 0, 0, 0.35)
-                                    Text { anchors.centerIn: parent; text: Theme.icPin; font.family: Theme.fontIcons; font.pixelSize: 11; color: Globals.isPinned(tile.did) ? Theme.accentText : Theme.fg }
+                                    color: Globals.isPinned(tile.did) ? Theme.accentFill : Qt.rgba(0, 0, 0, 0.35)
+                                    Text { anchors.centerIn: parent; text: Theme.icPin; font.family: Theme.fontIcons; font.pixelSize: 11; color: Globals.isPinned(tile.did) ? Theme.accentOn : Theme.fg1 }
                                     MouseArea { id: pMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: Globals.togglePin(tile.did) }
                                 }
                             }

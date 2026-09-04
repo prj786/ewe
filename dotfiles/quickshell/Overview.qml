@@ -65,14 +65,14 @@ Scope {
                     visible: rr.icon === ""
                     anchors.fill: parent; radius: Theme.r(7)
                     color: Qt.rgba(1, 1, 1, 0.10)
-                    Text { anchors.centerIn: parent; text: rr.glyph; font.family: Theme.fontIcons; font.pixelSize: 15; color: Theme.fgSecondary }
+                    Text { anchors.centerIn: parent; text: rr.glyph; font.family: Theme.fontIcons; font.pixelSize: 15; color: Theme.fg2 }
                 }
             }
             Column {
                 anchors.verticalCenter: parent.verticalCenter; spacing: 1
                 width: parent.width - 28 - 13 - tagLbl.implicitWidth - 8
-                Text { width: parent.width; text: rr.title; elide: Text.ElideRight; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsBody; font.weight: Font.Medium }
-                Text { visible: rr.sub !== ""; width: parent.width; text: rr.sub; elide: Text.ElideRight; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
+                Text { width: parent.width; text: rr.title; elide: Text.ElideRight; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsBody; font.weight: Font.Medium }
+                Text { visible: rr.sub !== ""; width: parent.width; text: rr.sub; elide: Text.ElideRight; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
             }
         }
         Text {
@@ -80,7 +80,7 @@ Scope {
             anchors.right: parent.right; anchors.rightMargin: 14
             anchors.verticalCenter: parent.verticalCenter
             text: rr.tag
-            color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
+            color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
         }
         MouseArea {
             id: rrMa
@@ -379,7 +379,7 @@ Scope {
             Behavior on scale   { NumberAnimation { duration: Theme.durSlow; easing.type: Theme.ease } }
 
             readonly property real monAR: (win.screen && win.screen.height > 0) ? (win.screen.width / win.screen.height) : 1.6
-            readonly property color glassBg: Qt.rgba(Theme.panel.r, Theme.panel.g, Theme.panel.b, 0.90)
+            readonly property color glassBg: Qt.rgba(Theme.bg1.r, Theme.bg1.g, Theme.bg1.b, 0.90)
             readonly property color hairline: Qt.rgba(1, 1, 1, 0.16)
 
             // ══ WINDOW CARDS — always present; dim + freeze while searching ═══
@@ -529,7 +529,7 @@ Scope {
                                 width: dragArea.width
                                 height: dragArea.height
                                 radius: Theme.r(14)
-                                color: Theme.panel
+                                color: Theme.bg1
                                 border.color: dragArea.seld ? Theme.accent : stage.hairline
                                 border.width: dragArea.seld ? 2 : 1
 
@@ -571,7 +571,7 @@ Scope {
                                         verticalAlignment: Text.AlignVCenter
                                         horizontalAlignment: Text.AlignHCenter
                                         text: root.titleOf(dragArea.modelData)
-                                        color: dragArea.seld ? Theme.fg : Theme.fgSecondary
+                                        color: dragArea.seld ? Theme.fg1 : Theme.fg2
                                         font.family: Theme.fontText; font.pixelSize: 12
                                         font.weight: dragArea.seld ? Font.DemiBold : Font.Normal
                                         elide: Text.ElideRight
@@ -604,7 +604,7 @@ Scope {
                                         id: grpRow
                                         anchors.centerIn: parent; spacing: 5
                                         Text { anchors.verticalCenter: parent.verticalCenter; text: Theme.icStack; font.family: Theme.fontIcons; font.pixelSize: 12; color: Theme.accent }
-                                        Text { anchors.verticalCenter: parent.verticalCenter; text: dragArea.groupN; color: Theme.fg; font.family: Theme.fontText; font.pixelSize: 11; font.weight: Font.DemiBold }
+                                        Text { anchors.verticalCenter: parent.verticalCenter; text: dragArea.groupN; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: 11; font.weight: Font.DemiBold }
                                     }
                                 }
                             }
@@ -621,7 +621,7 @@ Scope {
                                     anchors.fill: parent
                                     horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
                                     text: Theme.icClose; font.family: Theme.fontIcons; font.pixelSize: 14
-                                    color: closeMa.containsMouse ? Theme.accentText : Theme.accent
+                                    color: closeMa.containsMouse ? Theme.fgInverted : Theme.accent
                                 }
                                 MouseArea { id: closeMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.killWin(dragArea.modelData) }
                             }
@@ -634,7 +634,7 @@ Scope {
                     anchors.centerIn: parent
                     visible: win.winWins.length === 0 && !root.searching
                     text: "No active windows"
-                    color: Theme.fg
+                    color: Theme.fg1
                     opacity: 0.35
                     font.family: Theme.fontDisplay; font.pixelSize: Theme.fsTitle
                 }
@@ -674,12 +674,12 @@ Scope {
                     anchors.fill: parent
                     anchors.leftMargin: 20; anchors.rightMargin: 20
                     spacing: 12
-                    Text { anchors.verticalCenter: parent.verticalCenter; text: Theme.icSearch; font.family: Theme.fontIcons; font.pixelSize: 16; color: Theme.fgDim }
+                    Text { anchors.verticalCenter: parent.verticalCenter; text: Theme.icSearch; font.family: Theme.fontIcons; font.pixelSize: 16; color: Theme.fg3 }
                     TextInput {
                         id: search
                         width: parent.width - 40
                         anchors.verticalCenter: parent.verticalCenter
-                        color: Theme.fg; font.family: Theme.fontDisplay; font.pixelSize: Theme.fsLarge
+                        color: Theme.fg1; font.family: Theme.fontDisplay; font.pixelSize: Theme.fsLarge
                         selectionColor: Theme.accent; selectByMouse: true; clip: true
                         // accent caret, macOS-style blink
                         cursorDelegate: Rectangle {
@@ -695,7 +695,7 @@ Scope {
                             }
                         }
                         onTextChanged: root.query = text
-                        Text { visible: search.text.length === 0; anchors.verticalCenter: parent.verticalCenter; text: "Search apps, windows and files…"; color: Theme.fgDim; font: search.font }
+                        Text { visible: search.text.length === 0; anchors.verticalCenter: parent.verticalCenter; text: "Search apps, windows and files…"; color: Theme.fg3; font: search.font }
                         Keys.onPressed: function (ev) {
                             if (ev.key === Qt.Key_Escape) { root.close(); ev.accepted = true }
                             else if (ev.key === Qt.Key_Return || ev.key === Qt.Key_Enter) { root.activateSel(); ev.accepted = true }
@@ -780,8 +780,8 @@ Scope {
                             width: resCol.width; height: 46
                             Row {
                                 anchors.centerIn: parent; spacing: 10
-                                Text { anchors.verticalCenter: parent.verticalCenter; text: Theme.icSearchOff; font.family: Theme.fontIcons; font.pixelSize: 16; color: Theme.fgDim }
-                                Text { anchors.verticalCenter: parent.verticalCenter; text: "Nothing matches “" + root.query + "”"; color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsBody }
+                                Text { anchors.verticalCenter: parent.verticalCenter; text: Theme.icSearchOff; font.family: Theme.fontIcons; font.pixelSize: 16; color: Theme.fg3 }
+                                Text { anchors.verticalCenter: parent.verticalCenter; text: "Nothing matches “" + root.query + "”"; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: Theme.fsBody }
                             }
                         }
                     }
@@ -856,7 +856,7 @@ Scope {
                                 anchors.centerIn: parent
                                 visible: root.dragActive
                                 text: thumb.wsId
-                                color: thumbDrop.containsDrag ? Theme.fg : Theme.fgSecondary
+                                color: thumbDrop.containsDrag ? Theme.fg1 : Theme.fg2
                                 font.family: Theme.fontDisplay; font.pixelSize: 14; font.weight: Font.DemiBold
                             }
                         }

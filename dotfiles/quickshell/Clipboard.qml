@@ -126,7 +126,7 @@ Scope {
                 topRightRadius: 0
                 bottomLeftRadius: Theme.radius
                 bottomRightRadius: Theme.radius
-                color: Theme.panel
+                color: Theme.bg1
                 border.width: 0
                 layer.enabled: true
                 layer.effect: Elevation {}
@@ -142,18 +142,18 @@ Scope {
                     width: parent.width
                     spacing: 8
                     Repeater {
-                        model: [{ ic: 0xE198, label: "Clipboard" }, { ic: 0xE436, label: "Emoji" }]
+                        model: [{ ic: 0xE086, label: "Clipboard" }, { ic: 0xE164, label: "Emoji" }]
                         delegate: Rectangle {
                             required property var modelData
                             required property int index
                             width: (parent.width - 8) / 2
                             height: 34
                             radius: Theme.radiusInner
-                            color: root.tab === index ? Theme.accent : Theme.elevated
+                            color: root.tab === index ? Theme.accentFill : Theme.card
                             Row {
                                 anchors.centerIn: parent; spacing: 8
-                                Text { anchors.verticalCenter: parent.verticalCenter; text: root.g(modelData.ic); font.family: Theme.fontIcons; font.pixelSize: 14; color: root.tab === index ? Theme.accentText : Theme.fg }
-                                Text { anchors.verticalCenter: parent.verticalCenter; text: modelData.label; color: root.tab === index ? Theme.accentText : Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold }
+                                Text { anchors.verticalCenter: parent.verticalCenter; text: root.g(modelData.ic); font.family: Theme.fontIcons; font.pixelSize: 14; color: root.tab === index ? Theme.accentOn : Theme.fg1 }
+                                Text { anchors.verticalCenter: parent.verticalCenter; text: modelData.label; color: root.tab === index ? Theme.accentOn : Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold }
                             }
                             MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.tab = index }
                         }
@@ -166,23 +166,23 @@ Scope {
                     Rectangle {
                         anchors.left: parent.left; anchors.right: clearBtn.left; anchors.rightMargin: 8
                         height: parent.height; radius: Theme.radiusInner
-                        color: Theme.bg; border.color: searchField.activeFocus ? Theme.accent : Theme.stroke; border.width: Theme.borderThin
-                        Text { anchors.left: parent.left; anchors.leftMargin: 10; anchors.verticalCenter: parent.verticalCenter; text: Theme.icSearch; font.family: Theme.fontIcons; font.pixelSize: 12; color: Theme.fgDim }
+                        color: Theme.bg3; border.color: searchField.activeFocus ? Theme.accent : Theme.stroke1; border.width: Theme.borderThin
+                        Text { anchors.left: parent.left; anchors.leftMargin: 10; anchors.verticalCenter: parent.verticalCenter; text: Theme.icSearch; font.family: Theme.fontIcons; font.pixelSize: 12; color: Theme.fg3 }
                         TextInput {
                             id: searchField
                             anchors.fill: parent; anchors.leftMargin: 30; anchors.rightMargin: 10; verticalAlignment: TextInput.AlignVCenter
-                            color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
+                            color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
                             onTextChanged: root.filter = text
                             Keys.onEscapePressed: Globals.clipboardOpen = false
-                            Text { anchors.verticalCenter: parent.verticalCenter; visible: searchField.text.length === 0; text: "Search clipboard…"; color: Theme.fgDim; font: searchField.font }
+                            Text { anchors.verticalCenter: parent.verticalCenter; visible: searchField.text.length === 0; text: "Search clipboard…"; color: Theme.fg3; font: searchField.font }
                         }
                     }
                     Rectangle {
                         id: clearBtn
                         anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
                         width: 34; height: 34; radius: Theme.radiusInner
-                        color: clearMa.containsMouse ? Qt.rgba(Theme.danger.r, Theme.danger.g, Theme.danger.b, 0.2) : Theme.elevated
-                        Text { anchors.centerIn: parent; text: Theme.icTrash; font.family: Theme.fontIcons; font.pixelSize: 13; color: clearMa.containsMouse ? Theme.danger : Theme.fgDim }
+                        color: clearMa.containsMouse ? Qt.rgba(Theme.danger.r, Theme.danger.g, Theme.danger.b, 0.2) : Theme.card
+                        Text { anchors.centerIn: parent; text: Theme.icTrash; font.family: Theme.fontIcons; font.pixelSize: 13; color: clearMa.containsMouse ? Theme.danger : Theme.fg3 }
                         MouseArea { id: clearMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.clearClips() }
                     }
                 }
@@ -207,12 +207,12 @@ Scope {
                         width: clipView.width
                         height: 46
                         radius: Theme.radiusInner
-                        color: clMa.containsMouse ? Theme.hover : Theme.elevated
+                        color: clMa.containsMouse ? Theme.cardHover : Theme.card
                         Text {
                             anchors.fill: parent; anchors.margins: 10
                             verticalAlignment: Text.AlignVCenter
                             text: modelData.preview
-                            color: Theme.fg; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
+                            color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
                             elide: Text.ElideRight; maximumLineCount: 2; wrapMode: Text.Wrap
                         }
                         MouseArea { id: clMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.copyClip(modelData.id) }
@@ -224,7 +224,7 @@ Scope {
                         horizontalAlignment: Text.AlignHCenter
                         visible: clipView.count === 0
                         text: root.cliphistOk ? "Clipboard history is empty.\nCopy something to get started." : "cliphist isn't installed.\nRun: sudo pacman -S cliphist"
-                        color: Theme.fgDim; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; wrapMode: Text.Wrap
+                        color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; wrapMode: Text.Wrap
                     }
                 }
 
@@ -247,7 +247,7 @@ Scope {
                                 width: emojiGrid.width / 8
                                 height: width
                                 radius: Theme.r(8)
-                                color: emMa.containsMouse ? Theme.hover : "transparent"
+                                color: emMa.containsMouse ? Theme.subtleHover : Theme.subtle
                                 Text { anchors.centerIn: parent; text: modelData; font.family: "Noto Color Emoji"; font.pixelSize: 22 }
                                 MouseArea { id: emMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.copyEmoji(modelData) }
                             }

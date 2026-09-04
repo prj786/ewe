@@ -6,7 +6,7 @@ import QtQuick
 // the RIGHT of its top-right corner (right:true), flush with the bar's bottom.
 Canvas {
     id: c
-    property color fillColor: Theme.bg
+    property color fillColor: Theme.bg3
     property bool rightSide: false
     property int r: 12
     width: r
