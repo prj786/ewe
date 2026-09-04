@@ -38,7 +38,7 @@ Scope {
     }
     // focus-or-launch: a running app's window is jumped to; `fresh` (middle
     // click) forces a new instance anyway
-    function launch(e, fresh) { if (e && (fresh || !Globals.activateAppWindow(e))) e.execute(); Globals.launcherOpen = false }
+    function launch(e, fresh) { Globals.launchEntry(e, fresh); Globals.launcherOpen = false }
 
     // Latch the monitor when opening — binding `screen` to focusedMonitor makes it
     // churn under focus-follows-mouse (surface remaps → visible blink).

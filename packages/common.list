@@ -64,6 +64,10 @@ wireless-regdb          # regulatory database; phase 30 sets the country. Withou
                         # pinned to crowded 2.4 GHz — the "laggy / frozen mirror" of 2026-08-21
 gst-plugin-va           # vah264enc — hardware H.264 for Cast to TV (gnome-network-displays prefers it over
                         # x264); Intel iHD + AMD Mesa both expose it via VA-API
+gst-plugins-bad         # fdkaacenc / faac — the AAC encoders Cast to TV needs for the audio half of the
+                        # stream. Without one the daemon casts video only; it used to route the user's
+                        # audio into a null sink it could not read back, so casting silenced the machine.
+                        # Pulled in transitively on most desktops; an ISO cannot rely on "most".
 bluez
 bluez-utils
 blueman

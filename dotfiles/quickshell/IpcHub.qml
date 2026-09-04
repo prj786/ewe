@@ -10,6 +10,16 @@ import Quickshell.Io
 // verbs live HERE, permanently registered, and deep-links route through
 // Globals for the panel to consume when it materialises.
 Scope {
+    // ewe-sync reports its state here on every change. Public API — the
+    // shipped ewe-sync binary depends on this name.
+    IpcHandler {
+        target: "sync"
+        function state(name: string, detail: string): void {
+            Globals.syncState = name
+            Globals.syncDetail = detail
+        }
+    }
+
     IpcHandler {
         target: "settings"
         // Every "open" verb routes through Globals.openSettings(): the

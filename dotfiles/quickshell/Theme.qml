@@ -478,5 +478,9 @@ QtObject {
     readonly property string icPen:          ic(0xE129)  // package — dock: stashed windows
     readonly property string icDownload:     ic(0xE0B2)  // download — dock downloads
     readonly property string icKeyboard:     ic(0xE284)  // keyboard
+    // ewe-sync's state, shown on the bar (see Globals.syncState)
+    readonly property string icCloudOk:      ic(0xE66E)  // cloud-check — everything is up to date
+    readonly property string icCloudOff:     ic(0xE08D)  // cloud-off — signed out or unreachable
+    readonly property string icCloudAlert:   ic(0xE633)  // cloud-alert — a conflict needs a decision
     readonly property string icPlus:         ic(0xE13D)  // plus
 }

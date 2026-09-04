@@ -492,23 +492,13 @@ Scope {
                                     duration: 1400
                                 }
                             }
-                            Text {
+                            BarIcon {
                                 visible: !updItem.updating
                                 anchors.verticalCenter: parent.verticalCenter
-                                text: Globals.updatesTotal > 0 ? Theme.icDownload : Theme.icCheck
-                                font.family: Theme.fontIcons
-                                font.pixelSize: Theme.barIconPx
+                                glyph: Globals.updatesTotal > 0 ? Theme.icDownload : Theme.icCheck
                                 color: Globals.updatesTotal > 0 ? Theme.accent : Theme.fg2
                                 opacity: Globals.updatesTotal > 0 ? 1 : 0.55
-                            }
-                            Text {
-                                visible: !updItem.updating && Globals.updatesTotal > 0
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: Globals.updatesTotal
-                                color: Theme.accent
-                                font.family: Theme.fontText
-                                font.pixelSize: 12
-                                font.weight: Font.DemiBold
+                                count: Globals.updatesTotal
                             }
                         }
                         MouseArea {
@@ -596,42 +586,57 @@ Scope {
                                 color: Theme.fg2
                             }
 
-                            // ── comms ──
-                            // Notifications — bell + count while the history holds anything
-                            Row {
-                                visible: Globals.server && Globals.server.trackedNotifications.values.length > 0
+                            // ewe-sync — the account app's state, so "is my
+                            // stuff safe" is answerable from the bar. Hidden
+                            // while idle: a green tick that is always there
+                            // teaches people to stop reading it, so the bar
+                            // only speaks up when syncing or when something
+                            // actually needs the user. Click opens ewe-sync.
+                            Item {
+                                readonly property string st: Globals.syncState
+                                readonly property bool busy: st === "syncing"
+                                id: syncItem
+                                visible: st === "syncing" || st === "conflict" || st === "offline"
                                 anchors.verticalCenter: parent.verticalCenter
-                                spacing: 4
+                                width: visible ? Theme.barIconPx : 0
+                                height: Theme.barIconPx
                                 Text {
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    text: Theme.icBell
+                                    anchors.centerIn: parent
+                                    text: syncItem.busy ? Theme.icRefresh
+                                        : syncItem.st === "conflict" ? Theme.icCloudAlert
+                                        : Theme.icCloudOff
                                     font.family: Theme.fontIcons; font.pixelSize: Theme.barIconPx
-                                    color: Theme.accent
+                                    color: syncItem.st === "conflict" ? Theme.danger
+                                         : syncItem.busy ? Theme.accent : Theme.fg3
+                                    RotationAnimation on rotation {
+                                        running: syncItem.busy
+                                        loops: Animation.Infinite
+                                        from: 0; to: 360
+                                        duration: 1400
+                                    }
                                 }
-                                Text {
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    text: Globals.server ? String(Globals.server.trackedNotifications.values.length) : ""
-                                    font.family: Theme.fontText; font.pixelSize: 11; font.weight: Font.DemiBold
-                                    color: Theme.fg2
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: Globals.openSync()
                                 }
                             }
+
+                            // ── comms ──
+                            // Notifications — bell + count while the history holds anything
+                            BarIcon {
+                                visible: count > 0
+                                anchors.verticalCenter: parent.verticalCenter
+                                glyph: Theme.icBell
+                                color: Theme.accent
+                                count: Globals.server ? Globals.server.trackedNotifications.values.length : 0
+                            }
                             // Mail (IMAP or Gmail) — envelope + count, only when there is unread mail
-                            Row {
+                            BarIcon {
                                 visible: Mail.available && Mail.unread > 0
                                 anchors.verticalCenter: parent.verticalCenter
-                                spacing: 4
-                                Text {
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    text: Theme.icMail
-                                    font.family: Theme.fontIcons; font.pixelSize: Theme.barIconPx
-                                    color: Theme.fg2
-                                }
-                                Text {
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    text: Mail.unread > 99 ? "99+" : String(Mail.unread)
-                                    font.family: Theme.fontText; font.pixelSize: 11; font.weight: Font.DemiBold
-                                    color: Theme.fg2
-                                }
+                                glyph: Theme.icMail
+                                count: Mail.unread
                             }
                             // Calendar — an event is running or starts within the hour
                             Text {
@@ -647,22 +652,13 @@ Scope {
                                 visible: KdeConnect.connected
                                 anchors.verticalCenter: parent.verticalCenter
                                 spacing: 4
-                                Item {
+                                BarIcon {
                                     anchors.verticalCenter: parent.verticalCenter
-                                    width: phGlyph.implicitWidth; height: phGlyph.implicitHeight
-                                    Text {
-                                        id: phGlyph
-                                        text: Theme.icPhone
-                                        font.family: Theme.fontIcons; font.pixelSize: Theme.barIconPx
-                                        color: Theme.fg2
-                                    }
-                                    Rectangle {
-                                        visible: KdeConnect.unreadCount > 0
-                                        anchors.right: parent.right; anchors.top: parent.top
-                                        anchors.rightMargin: -2; anchors.topMargin: -1
-                                        width: 6; height: 6; radius: 3
-                                        color: Theme.accent
-                                    }
+                                    glyph: Theme.icPhone
+                                    // the phone's own count is already on the
+                                    // phone — here it only has to say "unread"
+                                    count: KdeConnect.unreadCount
+                                    dotOnly: true
                                 }
                                 Text {
                                     visible: KdeConnect.connected && KdeConnect.device.batteryCharge >= 0

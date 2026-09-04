@@ -16,6 +16,39 @@ Scope {
     id: root
 
     // all colours come from Theme.qml (single source of truth)
+    // ── Audio device lists ────────────────────────────────────────────────
+    // Two things made these lists fill up with what looked like the same
+    // device over and over:
+    //
+    //  1. PipeWire publishes a MONITOR source for every sink — a loopback of
+    //     what is playing. wpctl hides them; Pipewire.nodes does not, so a
+    //     laptop with five sinks grew five extra "inputs" that read almost
+    //     identically to the real ones. Nobody picks a monitor as their
+    //     microphone from a control centre, so they are dropped.
+    //  2. The same physical device can hold more than one node (profile
+    //     switches, a card re-announcing itself), and both render the same
+    //     label. Dedupe on the label actually shown, keeping whichever node
+    //     is currently the default so the tick never lands on the loser.
+    function audioNodes(wantSink) {
+        var n = Pipewire.nodes.values, seen = {}, out = []
+        var def = wantSink ? Pipewire.defaultAudioSink : Pipewire.defaultAudioSource
+        for (var pass = 0; pass < 2; pass++)
+            for (var i = 0; i < n.length; i++) {
+                var d = n[i]
+                if (!d.audio || d.isStream || d.isSink !== wantSink) continue
+                var nm = String(d.name || "")
+                if (!wantSink && nm.indexOf(".monitor") >= 0) continue
+                var isDef = def && def.id === d.id
+                if (pass === 0 ? !isDef : isDef) continue   // defaults claim their label first
+                var label = d.description || d.nickname || d.name
+                if (seen[label]) continue
+                seen[label] = true
+                out.push(d)
+            }
+        return out
+    }
+
+
     function g(c) { return String.fromCodePoint(c) }   // handles MDI glyphs > U+FFFF
 
     // calendar
@@ -1022,11 +1055,7 @@ Scope {
                                     id: outCol
                                     anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 5
                                     Repeater {
-                                        model: {
-                                            var out = [], n = Pipewire.nodes.values
-                                            for (var i = 0; i < n.length; i++) if (n[i].isSink && !n[i].isStream && n[i].audio) out.push(n[i])
-                                            return out
-                                        }
+                                        model: root.audioNodes(true)
                                         delegate: Item {
                                             required property var modelData
                                             readonly property bool isDefault: Pipewire.defaultAudioSink && Pipewire.defaultAudioSink.id === modelData.id
@@ -1049,11 +1078,7 @@ Scope {
                                     id: inCol
                                     anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 5
                                     Repeater {
-                                        model: {
-                                            var out = [], n = Pipewire.nodes.values
-                                            for (var i = 0; i < n.length; i++) if (!n[i].isSink && !n[i].isStream && n[i].audio) out.push(n[i])
-                                            return out
-                                        }
+                                        model: root.audioNodes(false)
                                         delegate: Item {
                                             required property var modelData
                                             readonly property bool isDefault: Pipewire.defaultAudioSource && Pipewire.defaultAudioSource.id === modelData.id

@@ -101,6 +101,37 @@ QtObject {
         }
         return false
     }
+    // ── ewe-sync state (RFC-006) ──────────────────────────────────────────
+    // The account app owns the state machine; it pokes the value in here on
+    // every change (qs ipc call sync state …), the same out-of-process
+    // contract ewe-conf and ewe-settings use. The bar renders it so "is my
+    // stuff safe" is answerable without opening anything.
+    //   "" (unknown, nothing reported yet) · signed-out · offline
+    //   · syncing · conflict · idle
+    property string syncState: ""
+    property string syncDetail: ""
+
+    // ── Launching a .desktop entry ────────────────────────────────────────
+    // Quickshell's DesktopEntry.execute() ignores Terminal=true, so every
+    // console app in the launcher (micro, htop, anything TUI) appeared to do
+    // nothing at all when clicked — the process started, wrote to a terminal
+    // that did not exist, and died. Route those through kitty instead.
+    //
+    // `command` is the already-parsed argv, which is what we want: re-parsing
+    // execString would have to redo %f/%U field-code removal that Quickshell
+    // has done for us. Everything else takes the normal path.
+    function launchEntry(e, fresh) {
+        if (!e) return
+        if (!fresh && g.activateAppWindow(e)) return
+        if (e.runInTerminal) {
+            var argv = ["kitty"]
+            if (e.workingDirectory) argv = argv.concat(["--directory", e.workingDirectory])
+            Quickshell.execDetached(argv.concat(["-e"]).concat(e.command))
+            return
+        }
+        e.execute()
+    }
+
     function openSettings() {
         if (g.focusWindowByClass("ewe-settings") || g.focusWindowByClass("hypr-settings")) return
         if (g.settingsAppInstalled) Quickshell.execDetached([g.settingsAppBin])

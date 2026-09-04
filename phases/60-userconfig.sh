@@ -126,6 +126,45 @@ phase_userconfig() {
         fi
     fi
 
+    # Nemo "Open in Terminal": Nemo spawns whatever
+    # org.cinnamon.desktop.default-applications.terminal says, and Cinnamon's
+    # shipped default is gnome-terminal — which ewe does not install. The menu
+    # item was therefore present and silently did nothing. Point it at kitty,
+    # the terminal ewe actually ships (phase 20 / postcheck both assert it).
+    # exec-arg is what Nemo puts before a command when it runs one there.
+    # NOT stamped: this is ours to keep correct, and re-asserting a key the
+    # user has no UI to change costs nothing.
+    if command -v gsettings >/dev/null 2>&1 && command -v nemo >/dev/null 2>&1; then
+        if run gsettings set org.cinnamon.desktop.default-applications.terminal exec kitty 2>/dev/null; then
+            run gsettings set org.cinnamon.desktop.default-applications.terminal exec-arg "-e" 2>/dev/null || true
+            ok "nemo: Open in Terminal now opens kitty (was gnome-terminal, which is not installed)"
+        fi
+    fi
+
+    # RFC-006: the Nextcloud DESKTOP CLIENT is not part of ewe. We depend on
+    # the package only for `nextcloudcmd`, the headless engine ewe-sync drives,
+    # so the package cannot simply be dropped — nextcloudcmd goes with it.
+    #
+    # Hiding the launcher entry (system/applications/) was not enough: the
+    # package also ships a D-Bus activation file, so ANY caller that pokes
+    # com.nextcloudgmbh.Nextcloud makes systemd start `/usr/bin/nextcloud
+    # --background` — a second tray icon, account wizard and sync engine,
+    # competing with ewe-sync over the same folders. A user-level activation
+    # file wins over /usr/share, so point it at true; and mask the user unit
+    # so nothing can enable it later either.
+    if [ -e /usr/share/dbus-1/services/com.nextcloudgmbh.Nextcloud.service ]; then
+        run mkdir -p "$HOME/.local/share/dbus-1/services"
+        run sh -c "printf '%s\n' \
+'[D-BUS Service]' \
+'# ewe: neutralises nextcloud-client D-Bus activation. The package stays for' \
+'# nextcloudcmd (the engine ewe-sync drives); its GUI is not part of ewe.' \
+'Name=com.nextcloudgmbh.Nextcloud' \
+'Exec=/bin/true' \
+> '$HOME/.local/share/dbus-1/services/com.nextcloudgmbh.Nextcloud.service'"
+        run systemctl --user mask com.nextcloud.desktopclient.nextcloud.service 2>/dev/null || true
+        ok "nextcloud desktop client neutralised (nextcloudcmd kept for ewe-sync)"
+    fi
+
     # (Reversal icon theme + Mocu cursor are installed system-wide in phase 20.)
 
     # default app appearance: dark across GTK + Qt + KDE, tinted with the default

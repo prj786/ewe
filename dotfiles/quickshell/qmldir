@@ -15,6 +15,7 @@ singleton Mail 1.0 Mail.qml
 singleton KdeConnect 1.0 KdeConnect.qml
 Elevation 1.0 Elevation.qml
 Spinner 1.0 Spinner.qml
+BarIcon 1.0 BarIcon.qml
 Sheen 1.0 Sheen.qml
 FileDropTarget 1.0 FileDropTarget.qml
 DropRow 1.0 DropRow.qml

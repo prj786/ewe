@@ -125,7 +125,12 @@ Scope {
     // ── merge apps + files into one normalized result list ────────────────
     // each item: { type:"app"|"file", name, sub, iconSource, entry?|path?, isDir? }
     // synthetic in-shell actions (e.g. open Settings) surfaced when the query matches
-    readonly property var actions: [
+    // Only what has no .desktop entry of its own. ewe-settings ships
+    // ewe-settings.desktop, so listing Settings here too put TWO identical
+    // results in the launcher that opened the same window. The synthetic one
+    // survives solely for a machine where the app is absent and the in-shell
+    // fallback panel is the only Settings there is.
+    readonly property var actions: Globals.settingsAppInstalled ? [] : [
         { name: "Settings", sub: "System preferences", ic: "preferences-system", run: function () { Quickshell.execDetached(["qs", "ipc", "call", "settings", "toggle"]) } }
     ]
     function matchActions(q) {
@@ -166,7 +171,7 @@ Scope {
         if (!item) return
         // focus-or-launch: jump to the app's existing window unless a new
         // instance was explicitly asked for (middle click / fresh=true)
-        if (item.type === "app") { if (item.entry && (fresh || !Globals.activateAppWindow(item.entry))) item.entry.execute() }
+        if (item.type === "app") { Globals.launchEntry(item.entry, fresh) }
         else if (item.type === "action") { if (item.run) item.run() }
         else Quickshell.execDetached(["xdg-open", item.path])
         root.hide()

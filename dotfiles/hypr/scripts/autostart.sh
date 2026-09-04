@@ -32,7 +32,22 @@ fi
 # (the account app's tray, enabled by ewe-setup) among them. Do not run_once
 # them below as well: that starts them twice.
 if command -v systemctl >/dev/null 2>&1; then
+    # ewe-sync is not optional and is not a "startup application" the user has
+    # to know about — it is the account app's tray, and the desktop expects it
+    # the way it expects the bar. ewe-setup enables the unit, but only when the
+    # payload VERSION moves, so an install that never bumped left it disabled
+    # and people wired it up by hand through Settings -> Startup. Enable it
+    # here instead: idempotent, every login, independent of any version check.
+    if systemctl --user cat ewe-sync.service >/dev/null 2>&1; then
+        systemctl --user is-enabled ewe-sync.service >/dev/null 2>&1 \
+            || systemctl --user enable ewe-sync.service >/dev/null 2>&1 || true
+    fi
     systemctl --user start hyprland-session.target >/dev/null 2>&1 || true
+    # ...and if the target was already up when it got enabled, nothing would
+    # have pulled it in until the next login.
+    if systemctl --user cat ewe-sync.service >/dev/null 2>&1; then
+        systemctl --user start ewe-sync.service >/dev/null 2>&1 || true
+    fi
 fi
 
 # Polkit authentication agent is now Quickshell's own (Auth.qml) — no
