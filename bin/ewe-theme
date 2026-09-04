@@ -770,7 +770,14 @@ def main():
     add("preview", "--out")
     a = p.parse_args()
     if getattr(a, "conf", None) is None:
-        a.conf = p.parse_known_args()[0].conf
+        # The subparser carries its own --conf, and argparse writes its
+        # default (None) into the SAME namespace — wiping a value given
+        # before the subcommand. Re-reading with `p` cannot recover it: `p`
+        # knows the subcommands too, so it wipes the value all over again.
+        # A parser that knows only the flag is the one that can.
+        pre = argparse.ArgumentParser(add_help=False)
+        pre.add_argument("--conf")
+        a.conf = pre.parse_known_args()[0].conf
     {"show": cmd_show, "build": cmd_build, "check": cmd_check,
      "preview": cmd_preview}.get(a.cmd or "show", cmd_show)(a)
 
