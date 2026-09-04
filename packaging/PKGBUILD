@@ -20,6 +20,13 @@ pkgname=ewe
 # step with VERSION rather than the value that ships — which is why it had
 # drifted to 0.9.4. pkgrel is NOT rewritten, so it matters: it resets to 1 here
 # because pkgver moved, and 0.11.0-1 sorts above the published 0.10.2-2.
+# _tag is the GIT TAG; pkgver is what pacman sees. They differ for a
+# pre-release: a tag may read v0.12.0-beta, but an Arch pkgver may not contain
+# a hyphen, and of the legal spellings only 0.12.0beta sorts BELOW the eventual
+# 0.12.0 under vercmp. GitHub's archive is addressed by the TAG and extracts to
+# <repo>-<tag without the leading v>, so both the source URL and the directory
+# below follow _tag, never pkgver. ewe-repo's publish workflow rewrites both.
+_tag=v0.12.0-beta
 pkgver=0.12.0beta
 pkgrel=1
 pkgdesc="ewe — a clean, dark Hyprland + Quickshell desktop environment"
@@ -39,13 +46,13 @@ depends=('pipewire-jack'            # claims 'jack' before ffmpeg/mpv/portaudio 
          'reversal-icon-theme' 'mocu-cursor-theme'
          'python')   # ewe-conf; + the lists, appended in package()
 install=ewe.install
-source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz"
+source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/$_tag.tar.gz"
         'ewe-setup')
 sha256sums=('SKIP'
             'SKIP')
 
 package() {
-    cd "$pkgname-$pkgver"
+    cd "$pkgname-${_tag#v}"
 
     # Dependency lists → package metadata. Comments stripped, first word only.
     # (mapfile, not depends+= in a loop: makepkg's linter extracts +=-lines
