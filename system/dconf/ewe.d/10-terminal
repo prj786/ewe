@@ -1,0 +1,21 @@
+# ewe system defaults — dconf, not gsettings.
+#
+# WHY A SYSTEM DB. Nemo's "Open in Terminal" spawns whatever
+# org.cinnamon.desktop.default-applications.terminal names, and Cinnamon's
+# SCHEMA DEFAULT is gnome-terminal, which ewe does not install — so the menu
+# item was present and silently did nothing.
+#
+# Phase 60 used to fix that with `gsettings set`, which has two faults: it
+# only runs at a login that reaches phase 60 (a machine that never re-logged
+# stayed broken — verified on 2026-09-08, the key was still at its schema
+# default), and it writes into the USER db, which then shadows anything we
+# ship here forever. A system db is read for every user, on every login,
+# without a script having to run first, and a user who really wants another
+# terminal can still override it.
+#
+# Applied by `dconf update` (phase 30). Lowest precedence after the schema
+# default, so it never fights a deliberate user choice.
+[org/cinnamon/desktop/default-applications/terminal]
+exec='kitty'
+# what Nemo puts before the command when it runs one there
+exec-arg='-e'

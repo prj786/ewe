@@ -126,19 +126,27 @@ phase_userconfig() {
         fi
     fi
 
-    # Nemo "Open in Terminal": Nemo spawns whatever
-    # org.cinnamon.desktop.default-applications.terminal says, and Cinnamon's
-    # shipped default is gnome-terminal — which ewe does not install. The menu
-    # item was therefore present and silently did nothing. Point it at kitty,
-    # the terminal ewe actually ships (phase 20 / postcheck both assert it).
-    # exec-arg is what Nemo puts before a command when it runs one there.
-    # NOT stamped: this is ours to keep correct, and re-asserting a key the
-    # user has no UI to change costs nothing.
-    if command -v gsettings >/dev/null 2>&1 && command -v nemo >/dev/null 2>&1; then
-        if run gsettings set org.cinnamon.desktop.default-applications.terminal exec kitty 2>/dev/null; then
-            run gsettings set org.cinnamon.desktop.default-applications.terminal exec-arg "-e" 2>/dev/null || true
-            ok "nemo: Open in Terminal now opens kitty (was gnome-terminal, which is not installed)"
-        fi
+    # Nemo "Open in Terminal" now comes from the dconf SYSTEM db that phase 30
+    # installs (system/dconf/ewe.d/10-terminal), because a `gsettings set` here
+    # only ever helped a machine that reached this phase — and one that had
+    # not was left with Cinnamon's schema default, gnome-terminal, which ewe
+    # does not install.
+    #
+    # What is left to do is undo our own past writes: a value in the USER db
+    # SHADOWS the system default forever, so an earlier ewe that set this key
+    # would permanently pin the machine to whatever it wrote. Reset it — but
+    # only when it still holds a value we recognise as ours or as the broken
+    # default, never a terminal the user deliberately chose.
+    if command -v dconf >/dev/null 2>&1; then
+        _term_now="$(dconf read /org/cinnamon/desktop/default-applications/terminal/exec 2>/dev/null || true)"
+        case "$_term_now" in
+            "'kitty'"|"'gnome-terminal'")
+                run dconf reset /org/cinnamon/desktop/default-applications/terminal/exec || true
+                run dconf reset /org/cinnamon/desktop/default-applications/terminal/exec-arg || true
+                ok "nemo: dropped the per-user terminal override; the system default (kitty) applies"
+                ;;
+        esac
+        unset _term_now
     fi
 
     # RFC-006: the Nextcloud DESKTOP CLIENT is not part of ewe. We depend on

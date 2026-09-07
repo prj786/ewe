@@ -311,5 +311,30 @@ phase_services() {
             && ok "opened ufw 1714-1764 (KDE Connect device discovery + transfer)"
     fi
 
+    # ── GSettings system defaults (dconf) ──────────────────────────────────
+    # Currently one key: Nemo's "Open in Terminal", whose Cinnamon schema
+    # default is gnome-terminal — a program ewe does not install, so the menu
+    # item did nothing at all. Phase 60 used to `gsettings set` it, which only
+    # helped a machine that reached phase 60 AND wrote into the user db, where
+    # it shadowed us forever. A system db is read for every user at every
+    # login with no script in the path, and still loses to a real user choice.
+    if command -v dconf >/dev/null 2>&1 && [ -d "$DOTREPO/system/dconf/ewe.d" ]; then
+        sudo_run install -d /etc/dconf/db/ewe.d /etc/dconf/profile
+        for _f in "$DOTREPO/system/dconf/ewe.d/"*; do
+            [ -f "$_f" ] || continue
+            sudo_run install -m 644 "$_f" "/etc/dconf/db/ewe.d/${_f##*/}"
+        done
+        # The profile decides the lookup ORDER for every GSettings read on the
+        # machine, so it is not ours to clobber: write it only when absent, or
+        # when the file already names our db and is therefore already ours.
+        if [ ! -e /etc/dconf/profile/user ] || grep -q '^system-db:ewe$' /etc/dconf/profile/user 2>/dev/null; then
+            sudo_run install -m 644 "$DOTREPO/system/dconf/profile-user" /etc/dconf/profile/user
+            sudo_run dconf update && ok "installed GSettings system defaults (nemo opens kitty)"
+        else
+            warn "/etc/dconf/profile/user belongs to something else — left alone."
+            info "  add 'system-db:ewe' to it by hand to pick up ewe's GSettings defaults."
+        fi
+    fi
+
     ok "services done"
 }

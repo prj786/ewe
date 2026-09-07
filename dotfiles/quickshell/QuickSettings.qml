@@ -17,18 +17,50 @@ Scope {
 
     // all colours come from Theme.qml (single source of truth)
     // ── Audio device lists ────────────────────────────────────────────────
-    // Two things made these lists fill up with what looked like the same
-    // device over and over:
+    // THE LIST IS PORTS, NOT CARDS. A sound card publishes one PipeWire node
+    // per ALSA UCM device, not per usable output. This laptop has five sinks
+    // — Speaker, Headphones, HDMI1, HDMI2, HDMI3 — and their descriptions are
+    // all "Core Ultra 200V Series Processors HD Audio <something>", so in a
+    // sidebar-width row every one of them elides to the same
+    // "Core Ultra 200V Series Processors HD Aud…". They were never duplicates;
+    // they were five rows whose only distinguishing word was off-screen.
     //
-    //  1. PipeWire publishes a MONITOR source for every sink — a loopback of
-    //     what is playing. wpctl hides them; Pipewire.nodes does not, so a
-    //     laptop with five sinks grew five extra "inputs" that read almost
-    //     identically to the real ones. Nobody picks a monitor as their
-    //     microphone from a control centre, so they are dropped.
-    //  2. The same physical device can hold more than one node (profile
-    //     switches, a card re-announcing itself), and both render the same
-    //     label. Dedupe on the label actually shown, keeping whichever node
-    //     is currently the default so the tick never lands on the loser.
+    // Three things, then:
+    //
+    //  1. LABEL WITH THE NICK. node.nick is already the short, human name —
+    //     "Speaker", "Headphones", "LS27D60xU" (the monitor's own model), "HDMI
+    //     2". description is the CARD talking, and the card is the same for
+    //     every row, so it belongs last. Dedupe follows the label that is
+    //     actually rendered, which now distinguishes.
+    //  2. DROP DEAD PORTS. Nothing is plugged into HDMI 2, so offering it is
+    //     offering silence. Availability lives on the card's PORT and PipeWire
+    //     does not copy it onto the node, so it is not reachable from here at
+    //     all — scripts/audio-ports.py asks pactl and names the nodes to hide.
+    //     An unreadable answer hides nothing, so the list can never go empty.
+    //  3. DROP MONITORS. PipeWire publishes a monitor SOURCE for every sink —
+    //     a loopback of what is playing. Nobody picks one as their microphone.
+    property var deadNodes: ({})
+
+    Process {
+        id: portScan
+        command: ["python3", Quickshell.env("HOME") + "/.config/quickshell/scripts/audio-ports.py"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                var m = {}, lines = this.text.split("\n")
+                for (var i = 0; i < lines.length; i++)
+                    if (lines[i].trim() !== "") m[lines[i].trim()] = true
+                root.deadNodes = m
+            }
+        }
+    }
+    // Re-ask when the node set changes — plugging headphones in adds a node
+    // AND flips a port's availability, and only the first is observable here.
+    Connections {
+        target: Pipewire.nodes
+        function onValuesChanged() { portScan.running = false; portScan.running = true }
+    }
+    Component.onCompleted: portScan.running = true
+
     function audioNodes(wantSink) {
         var n = Pipewire.nodes.values, seen = {}, out = []
         var def = wantSink ? Pipewire.defaultAudioSink : Pipewire.defaultAudioSource
@@ -38,14 +70,21 @@ Scope {
                 if (!d.audio || d.isStream || d.isSink !== wantSink) continue
                 var nm = String(d.name || "")
                 if (!wantSink && nm.indexOf(".monitor") >= 0) continue
+                if (root.deadNodes[nm]) continue
                 var isDef = def && def.id === d.id
                 if (pass === 0 ? !isDef : isDef) continue   // defaults claim their label first
-                var label = d.description || d.nickname || d.name
+                var label = root.audioLabel(d)
                 if (seen[label]) continue
                 seen[label] = true
                 out.push(d)
             }
         return out
+    }
+
+    // The one place a device's name is decided, so the row, the dedupe and
+    // anything else that names a device cannot disagree.
+    function audioLabel(d) {
+        return d.nickname || d.description || d.name
     }
 
 
@@ -1012,7 +1051,7 @@ Scope {
                                 anchors.right: parent.right; anchors.rightMargin: 34; anchors.verticalCenter: parent.verticalCenter
                                 anchors.left: parent.left; anchors.leftMargin: 90
                                 horizontalAlignment: Text.AlignRight
-                                text: Pipewire.defaultAudioSink ? (Pipewire.defaultAudioSink.description || Pipewire.defaultAudioSink.nickname || "") : ""
+                                text: Pipewire.defaultAudioSink ? root.audioLabel(Pipewire.defaultAudioSink) : ""
                                 color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 10; elide: Text.ElideRight
                             }
                             Text {
@@ -1061,7 +1100,7 @@ Scope {
                                             readonly property bool isDefault: Pipewire.defaultAudioSink && Pipewire.defaultAudioSink.id === modelData.id
                                             width: outCol.width; height: 28
                                             Rectangle { anchors.fill: parent; radius: Theme.r(6); color: outMa.containsMouse ? Theme.subtleHover : Theme.subtle }
-                                            Text { anchors.left: parent.left; anchors.leftMargin: 8; anchors.right: parent.right; anchors.rightMargin: 26; anchors.verticalCenter: parent.verticalCenter; text: modelData.description || modelData.nickname || modelData.name; color: isDefault ? Theme.accent : Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: isDefault ? Font.DemiBold : Font.Normal; elide: Text.ElideRight }
+                                            Text { anchors.left: parent.left; anchors.leftMargin: 8; anchors.right: parent.right; anchors.rightMargin: 26; anchors.verticalCenter: parent.verticalCenter; text: root.audioLabel(modelData); color: isDefault ? Theme.accent : Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: isDefault ? Font.DemiBold : Font.Normal; elide: Text.ElideRight }
                                             Text { anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter; visible: isDefault; text: Theme.icCheck; font.family: Theme.fontIcons; font.pixelSize: 11; color: Theme.accent }
                                             MouseArea { id: outMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: { Pipewire.preferredDefaultAudioSink = modelData; volumeProc.running = true } }
                                         }
@@ -1084,7 +1123,7 @@ Scope {
                                             readonly property bool isDefault: Pipewire.defaultAudioSource && Pipewire.defaultAudioSource.id === modelData.id
                                             width: inCol.width; height: 28
                                             Rectangle { anchors.fill: parent; radius: Theme.r(6); color: inMa.containsMouse ? Theme.subtleHover : Theme.subtle }
-                                            Text { anchors.left: parent.left; anchors.leftMargin: 8; anchors.right: parent.right; anchors.rightMargin: 26; anchors.verticalCenter: parent.verticalCenter; text: modelData.description || modelData.nickname || modelData.name; color: isDefault ? Theme.accent : Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: isDefault ? Font.DemiBold : Font.Normal; elide: Text.ElideRight }
+                                            Text { anchors.left: parent.left; anchors.leftMargin: 8; anchors.right: parent.right; anchors.rightMargin: 26; anchors.verticalCenter: parent.verticalCenter; text: root.audioLabel(modelData); color: isDefault ? Theme.accent : Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: isDefault ? Font.DemiBold : Font.Normal; elide: Text.ElideRight }
                                             Text { anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter; visible: isDefault; text: Theme.icCheck; font.family: Theme.fontIcons; font.pixelSize: 11; color: Theme.accent }
                                             MouseArea { id: inMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: Pipewire.preferredDefaultAudioSource = modelData }
                                         }

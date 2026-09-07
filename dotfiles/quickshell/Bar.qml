@@ -203,14 +203,18 @@ Scope {
         signal secondary()
         signal tertiary()
         signal scrolled(real dy)
-        implicitWidth: lbl.implicitWidth + 14
+        implicitWidth: lbl.implicitWidth + Theme.barItemPad * 2
         height: parent ? parent.height : Theme.barHeight
         Rectangle {
             anchors.centerIn: parent
             width: parent.width; height: Theme.barItemHeight
             radius: Theme.barItemRadius
-            color: si.active ? Theme.barActive : (ma.containsMouse ? Theme.barHover : "transparent")
-            visible: si.active
+            color: si.active ? Theme.barActive : Theme.barHover
+            // `visible: si.active` alone made the hover branch above dead
+            // code — no bar item had ever painted a hover fill, and the only
+            // feedback was the glyph growing. A bar item is `subtle`: no fill
+            // of its own until you point at it, and then it takes one.
+            visible: si.active || ma.containsMouse
             Behavior on color { ColorAnimation { duration: Theme.durFast } }
         }
         Text {
@@ -434,11 +438,14 @@ Scope {
                     }
 
                     // tiling ⇄ floating — the icon IS the state (grid = tiling,
-                    // stacked windows = floating). Settings.qml owns persisting
-                    // the flip and reloading Hyprland.
+                    // stacked windows = floating). Globals.setTiling goes
+                    // through ewe-conf, which regenerates user.lua and reloads
+                    // Hyprland; the icon follows when the reload poke lands.
+                    // Assigning Globals.tilingEnabled here instead only worked
+                    // while the Settings panel happened to be loaded.
                     StatusItem {
                         glyph: Globals.tilingEnabled ? Theme.icTiling : Theme.icFloating
-                        onActivated: Globals.tilingEnabled = !Globals.tilingEnabled
+                        onActivated: Globals.setTiling(!Globals.tilingEnabled)
                     }
 
                     // keyboard layout — plain text (US / GE); click cycles the layout

@@ -297,9 +297,25 @@ QtObject {
 
     // Tiling on (the Hyprland default) vs every new window opening floating, for
     // people who want the DE to behave like GNOME/Unity rather than a tiling WM.
-    // Implemented as a catch-all float window rule in hypr/generated/user.lua —
-    // see Settings.tilingLua(). Persisted in user-theme.json.
+    // Implemented as a catch-all float window rule in hypr/generated/user.lua.
+    //
+    // READ-ONLY FROM OUTSIDE. Assigning this flips the icon and nothing else:
+    // a window rule cannot be withdrawn at runtime, so the change only becomes
+    // real once user.lua is regenerated and Hyprland reloads. Settings.qml had
+    // a Connections that did exactly that — but Settings is destroyed 30 s
+    // after its window closes, so the bar's toggle wrote the bool into a shell
+    // with nobody listening. It worked from Settings and nowhere else.
+    // Go through setTiling(), which is always here.
     property bool tilingEnabled: true
+
+    // The one way to change it: ewe-conf owns the file, regenerates user.lua
+    // and reloads Hyprland, then pokes `settings reload` — which comes back
+    // through reloadUserState() and moves the property above. WITH hooks, and
+    // deliberately so: the regeneration IS the feature here.
+    function setTiling(on) {
+        g._tilingWriter.command = [g.eweConf, "set", "desktop.tiling.enabled", on ? "true" : "false"]
+        g._tilingWriter.running = false; g._tilingWriter.running = true
+    }
 
     // Animation speed multiplier driving both the QML shell (Theme.dur*) and the
     // Hyprland window animations (Settings writes scaled hl.animation overrides).
@@ -487,6 +503,7 @@ QtObject {
     }
 
     property Process _pinWriter: Process {}
+    property Process _tilingWriter: Process {}
     property Process _pinLoad: Process {
         running: true
         command: ["sh", "-c", "cat \"$HOME/.config/quickshell/pinned-apps.json\" 2>/dev/null"]

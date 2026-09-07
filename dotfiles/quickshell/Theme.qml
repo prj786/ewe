@@ -205,8 +205,18 @@ QtObject {
     readonly property color barHover:    subtleHover
     readonly property color barActive:   subtleSelected
     readonly property int barItemRadius: radiusPill
-    readonly property int barItemHeight: 22
+    // The hover/active pill behind a bar item. Derived from the bar, not a
+    // literal: `density` moves bar-height, and a 22px pill left an 8px gutter
+    // above and below on a roomy 38px bar — enough that the highlight read as
+    // a small chip floating in the bar rather than as the item lighting up.
+    // 10px of breathing room total — a 5px gutter above and below, enough to
+    // read as inset without floating. Clamped so the compact bar (30px) keeps
+    // the 22px pill it already had rather than shrinking.
+    readonly property int barItemHeight: Math.max(22, barHeight - 10)
     readonly property int barItemSpacing: 6
+    // Horizontal padding inside that pill. A glyph is narrow, so 14px total
+    // made the highlight barely wider than the icon itself.
+    readonly property int barItemPad: 10
     // every glyph on the bar renders at this size — no per-site literals
     readonly property int barIconPx:     _z("icon", 18)
 

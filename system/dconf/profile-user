@@ -1,0 +1,8 @@
+# /etc/dconf/profile/user — the lookup order for every GSettings read.
+#
+# `user-db:user` FIRST so a real user choice always wins; ewe's defaults sit
+# underneath it and above the schema defaults. Installed by phase 30 only when
+# absent, or when it is already ours — another desktop's profile is not ours
+# to overwrite.
+user-db:user
+system-db:ewe
