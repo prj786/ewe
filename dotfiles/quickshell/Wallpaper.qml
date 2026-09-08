@@ -1,6 +1,7 @@
 pragma Singleton
 import QtQuick
 import Quickshell
+import Quickshell.Io
 
 // Wallpaper — freeze the video wallpaper whenever nobody can benefit from it.
 //
@@ -46,12 +47,45 @@ QtObject {
     // A re-apply spawns a FRESH mpvpaper that is running unpaused, so our idea
     // of the state is stale — without this the wallpaper would keep decoding
     // behind a lock screen until something else happened to toggle.
-    function reapplied() {
-        wp.paused = false
-        wp._settle.restart()
-    }
+    signal reapplied()
+    onReapplied: { wp.paused = false; wp._settle.restart() }
     // give the new process time to come up before re-asserting the freeze
     property Timer _settle: Timer { interval: 1200; onTriggered: wp._apply() }
 
-    function start() { Log.debug("wallpaper", "policy armed") }
+    // ── Which file is on which output ─────────────────────────────────────
+    // The overview paints the wallpaper itself as its backdrop (an opaque one,
+    // so a window is not seen twice — once live, once as its card). The
+    // assignments live in generated/wallpapers.conf, written by Settings and
+    // read by wallpaper.sh; this is the one reader in the shell, so nothing
+    // else has to know the file's shape. `*` is the default, any other key an
+    // output name. Re-read after every re-apply, which is when it changes.
+    property var _perOutput: ({})
+    property string _default: ""
+    function pathFor(outputName) {
+        var p = wp._perOutput[outputName] || wp._default
+        // a video or gif wallpaper cannot be painted by Image; the overview
+        // falls back to a flat ground rather than a broken icon
+        return /\.(mp4|webm|mkv|mov|avi|m4v|gif)$/i.test(p) ? "" : p
+    }
+    property Process _conf: Process {
+        command: ["sh", "-c", 'cat "$HOME/.config/hypr/generated/wallpapers.conf" 2>/dev/null']
+        stdout: StdioCollector {
+            onStreamFinished: {
+                var per = {}, def = "", ls = this.text.split("\n")
+                for (var i = 0; i < ls.length; i++) {
+                    var l = ls[i].trim()
+                    if (l === "" || l[0] === "#") continue
+                    var eq = l.indexOf("="); if (eq < 0) continue
+                    var k = l.slice(0, eq), v = l.slice(eq + 1)
+                    if (k === "mode" || k === "mute") continue
+                    if (k === "*") def = v; else per[k] = v
+                }
+                wp._perOutput = per; wp._default = def
+                Log.debug("wallpaper", "conf read: default=" + def + " outputs=" + JSON.stringify(per))
+            }
+        }
+    }
+    function _readConf() { wp._conf.running = false; wp._conf.running = true }
+
+    function start() { Log.debug("wallpaper", "policy armed"); wp._readConf() }
 }

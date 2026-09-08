@@ -359,12 +359,48 @@ Scope {
             function onQueryChanged() { if (search.text !== root.query) search.text = root.query }
         }
 
-        // light scrim — the wallpaper stays part of the picture; click to dismiss
-        Rectangle {
+        // ── the backdrop: the WALLPAPER, opaque, not a see-through scrim ──
+        // A 45 % scrim left every real window visible behind its own card, so
+        // each app was on screen twice — live, and as a thumbnail floating
+        // over itself. GNOME's overview never shows the live windows: it
+        // shows the wallpaper, dimmed, and the cards on top of that. Same
+        // here. The image is blurred so the cards read against any picture,
+        // and a video wallpaper (which Image cannot draw) falls back to a
+        // flat ground. Click anywhere on it to dismiss.
+        Item {
+            id: backdrop
             anchors.fill: parent
-            color: Qt.rgba(0, 0, 0, 0.45)
             opacity: Globals.overviewOpen ? 1 : 0
             Behavior on opacity { NumberAnimation { duration: Theme.durSlow; easing.type: Theme.ease } }
+
+            readonly property string wall: win.screen ? Wallpaper.pathFor(win.screen.name) : ""
+
+            Rectangle { anchors.fill: parent; color: Theme.bg4 }   // opaque ground, always
+            Image {
+                id: wallImg
+                anchors.fill: parent
+                source: backdrop.wall ? "file://" + backdrop.wall : ""
+                fillMode: Image.PreserveAspectCrop
+                asynchronous: true
+                cache: true
+                // decoded at screen size, not the file's — a 6000px photo
+                // would otherwise cost tens of MB of texture per monitor
+                sourceSize: Qt.size(win.width, win.height)
+                visible: false
+            }
+            MultiEffect {
+                anchors.fill: parent
+                source: wallImg
+                visible: wallImg.status === Image.Ready
+                blurEnabled: true
+                blurMax: 48
+                blur: 0.75
+                // dimmed, but not to black: the shipped wallpapers are already
+                // near-black gradients, and any darker reads as no wallpaper
+                // at all. A bright photo still drops far enough for cards.
+                brightness: -0.18
+                saturation: -0.15
+            }
             MouseArea { anchors.fill: parent; onClicked: root.close() }
         }
 
