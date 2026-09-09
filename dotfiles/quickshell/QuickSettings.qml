@@ -269,6 +269,17 @@ Scope {
         for (var i = 0; i < v.length; i++) v[i].dismiss()
     }
     property string wifiPending: ""   // SSID being joined — its row + the bar show a spinner
+    // Bluetooth: pair → trust → connect. A device that "connected for a second
+    // and dropped" was paired but never TRUSTED — bluez accepts one connection
+    // from an untrusted device and refuses the reconnect that follows — so
+    // trust is set on every tap, and an unpaired device is paired first (the
+    // Connections below then connects it once pairing lands).
+    function btTap(d) {
+        if (d.connected) { d.disconnect(); return }
+        d.trusted = true
+        if (d.paired) d.connect(); else d.pair()
+    }
+
     function connectWifi(ssid, sec) {
         // already on this network → nothing to do (clicking the active row
         // used to pop a password box, which read as "why is it asking AGAIN")
@@ -1294,7 +1305,10 @@ Scope {
                                                 Text { anchors.left: parent.left; anchors.leftMargin: 8; anchors.verticalCenter: parent.verticalCenter; text: (modelData.connected ? Theme.icBluetoothOn : Theme.icBluetooth); font.family: Theme.fontIcons; font.pixelSize: 12; color: modelData.connected ? Theme.accent : Theme.fg3 }
                                                 Text { anchors.left: parent.left; anchors.leftMargin: 30; anchors.right: parent.right; anchors.rightMargin: 26; anchors.verticalCenter: parent.verticalCenter; text: (modelData.name || modelData.deviceName || modelData.address) + (modelData.connected ? "" : (modelData.paired ? "" : "  ·  new")); color: modelData.connected ? Theme.accent : Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: modelData.connected ? Font.DemiBold : Font.Normal; elide: Text.ElideRight }
                                                 Text { anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter; visible: modelData.connected; text: Theme.icCheck; font.family: Theme.fontIcons; font.pixelSize: 11; color: Theme.accent }
-                                                MouseArea { id: bMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: modelData.connected ? modelData.disconnect() : (modelData.paired ? modelData.connect() : modelData.pair()) }
+                                                MouseArea { id: bMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.btTap(modelData) }
+                                                // a pairing that just completed connects by itself — the tap that started it
+                                                // was the intent, and bluez does not connect on pair
+                                                Connections { target: modelData; function onPairedChanged() { if (modelData.paired && !modelData.connected) { modelData.trusted = true; modelData.connect() } } }
                                             }
                                         }
                                     }

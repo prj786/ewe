@@ -109,9 +109,11 @@ if [ "${DE_SOFTWARE_RENDER:-0}" = "1" ]; then
 fi
 
 # WebKitGTK's DMA-BUF renderer aborts (SIGABRT) under VM GPUs (virtio/llvmpipe)
-# — Komble kept "closing automatically" in QEMU testing. The standard Tauri/
-# WebKitGTK remedy: disable that renderer inside VMs; bare metal is untouched.
-if systemd-detect-virt --vm --quiet 2>/dev/null; then
+# — Komble kept "closing automatically" in QEMU testing — and on the NVIDIA
+# driver under Wayland, where Komble and Settings opened and vanished within
+# a blink on a freshly installed desktop (2026-09-09). The standard Tauri/
+# WebKitGTK remedy: disable that renderer there; other bare metal is untouched.
+if systemd-detect-virt --vm --quiet 2>/dev/null || [ -d /sys/module/nvidia ]; then
     export WEBKIT_DISABLE_DMABUF_RENDERER=1
 fi
 
