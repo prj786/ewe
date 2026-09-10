@@ -93,6 +93,13 @@
   --info: #9ea2a6;
   --info-bg: #222527;
   --info-border: #9ea2a6;
+  --surface-kind: solid;
+  --surface-alpha: 1.0;
+  --bg-1-glass: rgba(40, 41, 44, 1);
+  --bg-2-glass: rgba(30, 31, 34, 1);
+  --bg-3-glass: rgba(19, 20, 23, 1);
+  --bg-4-glass: rgba(9, 10, 14, 1);
+  --card-glass: rgba(50, 51, 55, 1);
   --radius-control: 4px;
   --radius-card: 6px;
   --radius-panel: 8px;

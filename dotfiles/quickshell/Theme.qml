@@ -197,8 +197,19 @@ QtObject {
     // Identical stops render the gradient node flat — kept so Bar.qml needs
     // no conditional, and a future look can reintroduce a real gradient by
     // touching only these two tokens.
-    readonly property color barTop:      bg3
-    readonly property color barBottom:   bg3
+    // ── Surface: solid or glass ───────────────────────────────────────────
+    // `surface = "glass"` in ewe.conf [desktop.theme]: every floating panel
+    // and the bar are painted at glassAlpha and the compositor blurs what is
+    // behind them (generated/user.lua carries the blur + layer rule). Where
+    // blur is off by policy (Globals.noBlur) the shell paints solid too.
+    // Content INSIDE a panel (cards, chips, inputs) stays opaque — that is
+    // what keeps text legible over a bright wallpaper.
+    readonly property bool glass:        !Globals.noBlur && !!(Globals.tokSurface && Globals.tokSurface.kind === "glass")
+    readonly property real glassAlpha:   (Globals.tokSurface && Globals.tokSurface.alpha !== undefined) ? Globals.tokSurface.alpha : 0.72
+    function surf(c) { return glass ? Qt.rgba(c.r, c.g, c.b, glassAlpha) : c }
+    readonly property color panel:       surf(bg1)   // every floating panel's fill
+    readonly property color barTop:      surf(bg3)
+    readonly property color barBottom:   surf(bg3)
     readonly property color barBorder:   stroke2
     // A bar item has no fill of its own until you point at it — `subtle` is
     // exactly that case, and the reason the two are the same token now.

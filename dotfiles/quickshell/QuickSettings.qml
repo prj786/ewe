@@ -732,7 +732,7 @@ Scope {
             height: Math.min(parent.height - 20, Math.max(wantH, railNeed, 430))
             Behavior on height { NumberAnimation { duration: Theme.durBase; easing.type: Theme.ease } }
             radius: Theme.radius
-            color: Theme.bg1
+            color: Theme.panel
             border.color: Theme.stroke2
             border.width: Theme.borderThin
             clip: true

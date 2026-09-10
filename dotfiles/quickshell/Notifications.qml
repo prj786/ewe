@@ -129,7 +129,7 @@ Scope {
                         width: parent.width
                         height: col.implicitHeight + 24
                         radius: Theme.radiusInner
-                        color: Theme.bg1
+                        color: Theme.panel
                         border.color: Theme.stroke2
                         border.width: Theme.borderThin
                         layer.enabled: true

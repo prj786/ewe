@@ -115,6 +115,10 @@ fi
 # WebKitGTK remedy: disable that renderer there; other bare metal is untouched.
 if systemd-detect-virt --vm --quiet 2>/dev/null || [ -d /sys/module/nvidia ]; then
     export WEBKIT_DISABLE_DMABUF_RENDERER=1
+    # …and no compositor blur there either: the glass surface (ewe.conf
+    # desktop.theme.surface) falls back to solid panels. generated/user.lua
+    # and Theme.qml both read this.
+    export EWE_NO_BLUR=1
 fi
 
 exec Hyprland
