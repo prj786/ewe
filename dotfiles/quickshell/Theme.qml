@@ -218,7 +218,12 @@ QtObject {
     // made the highlight barely wider than the icon itself.
     readonly property int barItemPad: 10
     // every glyph on the bar renders at this size — no per-site literals
-    readonly property int barIconPx:     _z("icon", 18)
+    // The bar's status glyphs: the theme's icon size (density-driven, 16/18/20)
+    // nudged by Settings → Layout → Top bar. "small" is what the row looks
+    // best at next to its 11 px labels; the default stays the theme's own.
+    readonly property int barIconPx:     Globals.barIconSize === "small" ? _z("icon", 18) - 4
+                                       : Globals.barIconSize === "large" ? _z("icon", 18) + 2
+                                       : _z("icon", 18)
 
     // Accent — whatever Settings → Theme wrote into user-theme.json. The
     // user's in-shell pick always wins; until there is one this falls back to
