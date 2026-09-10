@@ -212,6 +212,45 @@ def _busctl(args, timeout=5):
     return r.returncode, (r.stdout or "").strip() + ("\n" + r.stderr.strip() if r.stderr else "")
 
 
+
+def _secret_probe_one_connection():
+    """The Secret Service probe on ONE bus connection, via GLib (python-gobject
+    is in the package set). gnome-keyring keys its per-client state on the
+    D-Bus connection, and `busctl get-property` is a fresh connection each
+    time — a bare property read on a collection with no session for that
+    connection tripped `gkd_secret_service_get_pkcs11_session: assertion
+    'client' failed` and ABORTED the daemon (GIO: "invoke_get_property_in_idle_cb:
+    assertion failed: (error != NULL)"): six keyring coredumps a day on the
+    first bare-metal box (2026-09-08), every stored secret gone until re-login.
+    OpenSession first, then ReadAlias and the Locked read, all on the same
+    connection — exactly what libsecret does. Returns the probe dict, or None
+    when GLib is unavailable (caller falls back to the session-less subset)."""
+    try:
+        import gi
+        gi.require_version("Gio", "2.0")
+        from gi.repository import Gio, GLib
+    except Exception:
+        return None
+    try:
+        bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+        call = lambda path, iface, method, args: bus.call_sync(
+            "org.freedesktop.secrets", path, iface, method, args, None,
+            Gio.DBusCallFlags.NONE, 5000, None)
+        try:
+            call("/org/freedesktop/secrets", "org.freedesktop.Secret.Service",
+                 "OpenSession", GLib.Variant("(sv)", ("plain", GLib.Variant("s", ""))))
+        except Exception:
+            pass   # a service that refuses "plain" still answers ReadAlias
+        path = call("/org/freedesktop/secrets", "org.freedesktop.Secret.Service",
+                    "ReadAlias", GLib.Variant("(s)", ("default",))).unpack()[0]
+        if not path or path == "/":
+            return {"state": "missing", "collection": ""}
+        locked = call(path, "org.freedesktop.DBus.Properties", "Get",
+                      GLib.Variant("(ss)", ("org.freedesktop.Secret.Collection", "Locked"))).unpack()[0]
+        return {"state": "locked" if locked else "ok", "collection": path}
+    except Exception as e:
+        return {"state": "unavailable", "collection": "", "detail": str(e)[-200:]}
+
 def keyring_probe():
     """Ask the Secret Service itself, WITHOUT triggering a prompt:
       {"state": "ok" | "missing" | "locked" | "unavailable", "collection": path}
@@ -225,6 +264,11 @@ def keyring_probe():
     not running yet — the same thing secret-tool would have done."""
     if FAKE_KEYRING is not None:
         return {"state": "ok", "collection": "fake"}
+    probe = _secret_probe_one_connection()
+    if probe is not None:
+        return probe
+    # no GLib: ReadAlias is a Service method (safe over busctl); the Locked
+    # read is NOT (it killed the daemon — see above), so report ok|missing only
     rc, outp = _busctl(["call", "org.freedesktop.secrets", "/org/freedesktop/secrets",
                         "org.freedesktop.Secret.Service", "ReadAlias", "s", "default"])
     if rc is None or rc != 0:
@@ -234,10 +278,6 @@ def keyring_probe():
     path = m.group(1) if m else "/"
     if path == "/":
         return {"state": "missing", "collection": ""}
-    rc, outp = _busctl(["get-property", "org.freedesktop.secrets", path,
-                        "org.freedesktop.Secret.Collection", "Locked"])
-    if rc == 0 and outp.split()[-1:] == ["true"]:
-        return {"state": "locked", "collection": path}
     return {"state": "ok", "collection": path}
 
 
@@ -315,6 +355,13 @@ def do_refresh(cid, csec):
     })
     if err == "invalid_grant":
         signed_out("invalid_grant")
+    # the OAuth client itself is gone/disabled in Google Cloud (the user deleted
+    # it, or the project): no refresh can ever succeed with it, yet the shell
+    # asked again on every calendar/mail poll — 17 "token refresh failed:
+    # deleted_client" in 12 minutes (2026-09-10). Terminal, like invalid_grant;
+    # the reason tells Settings what to say ("set up the client again").
+    if err in ("deleted_client", "invalid_client", "unauthorized_client"):
+        signed_out(err)
     if err or "access_token" not in (tok or {}):
         out({"ok": False, "error": err or "no access_token"})
     exp = int(time.time()) + int(tok.get("expires_in", 3600))

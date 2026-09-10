@@ -123,7 +123,9 @@ Scope {
     Process {
         id: netMon
         running: true
-        command: ["nmcli", "monitor"]
+        // --pdeathsig: dies with the shell even on an abrupt exit(255) — see
+        // Screensaver.qml's pactl; nmcli was the other left-over per restart
+        command: ["setpriv", "--pdeathsig", "TERM", "--", "nmcli", "monitor"]
         stdout: SplitParser { onRead: function (line) { bar._netMonTries = 0; netDebounce.restart() } }
         // if NetworkManager isn't running, nmcli monitor exits immediately — back
         // off and stop rather than respawning it forever (the bug the KDE Connect

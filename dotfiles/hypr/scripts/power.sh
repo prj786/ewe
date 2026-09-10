@@ -21,6 +21,15 @@ case "${1:-}" in
         # End the graphical session cleanly. Prefer logind (it knows our
         # session id); fall back to terminating the user, then to SIGTERM on the
         # compositor (Hyprland exits cleanly on TERM).
+        #
+        # First stop the session units (ewe.service, ewe-sync, the portals —
+        # everything PartOf=graphical-session.target). Killing the compositor
+        # under them made each one die of "Wayland connection broke" and
+        # restart into nothing: qs and ewe-sync coredumped every second until
+        # the manager gave up (2026-09-08). Stopping the target is the orderly
+        # exit; `--no-block` so this script (spawned BY the shell) isn't waiting
+        # on its own parent's stop.
+        systemctl --user stop --no-block hyprland-session.target 2>/dev/null || true
         if [ -n "${XDG_SESSION_ID:-}" ] && loginctl terminate-session "$XDG_SESSION_ID" 2>/dev/null; then
             exit 0
         fi

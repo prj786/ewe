@@ -170,6 +170,7 @@ QtObject {
         if (!goo.configured) return
         goo._accessToken = ""
         goo._expiresAt = 0
+        goo._refreshFailedAt = 0
         if (!goo.signedIn) {
             // the boot probe gives up after 3 tries and never re-arms, so a
             // keyring that was locked at login leaves the shell believing it is
@@ -266,8 +267,16 @@ QtObject {
     property Process _logoutProc: Process { command: ["python3", goo.helper, "logout"] }
 
     // ── token plumbing (single-flight refresh; callers queue) ──────────────────
+    // After a failed refresh, hold off for 5 min instead of asking the helper
+    // again on every calendar/mail poll: a dead OAuth client produced 17
+    // "token refresh failed: deleted_client" in 12 minutes (2026-09-10), each
+    // a helper process and a Google round-trip that could not succeed. Cleared
+    // by a successful refresh and by the wake path (a network blip is worth
+    // retrying after a suspend).
+    property double _refreshFailedAt: 0
     function ensureToken(cb) {
         if (goo._accessToken !== "" && Date.now() < goo._expiresAt - 60000) { cb(goo._accessToken); return }
+        if (goo._refreshFailedAt > 0 && Date.now() - goo._refreshFailedAt < 5 * 60 * 1000) { cb(""); return }
         goo._tokenWaiters.push(cb)
         if (goo.busy !== "refresh") {
             goo.busy = "refresh"
@@ -290,13 +299,22 @@ QtObject {
                         // to leave a permanent red banner in Settings long after
                         // everything had recovered
                         goo.error = ""
+                        goo._refreshFailedAt = 0
                     } else if (j.error === "signed-out") {
-                        // refresh token revoked server-side — drop the session cleanly
+                        // refresh token revoked server-side, or the OAuth client
+                        // itself is gone (deleted in Google Cloud) — drop the
+                        // session cleanly, and say why when it's the client:
+                        // signing in again with the same file cannot work
                         goo.signedIn = false
                         goo.profile = null
+                        if (/^(deleted_client|invalid_client|unauthorized_client)$/.test(j.reason || "")) {
+                            goo.error = "Google signed out: the OAuth client no longer exists (" + j.reason + ") — create one and set it up again in Settings → User"
+                            Log.warn("google", "signed out — OAuth client gone:", j.reason)
+                        }
                         goo.sessionClosed()
                     } else {
                         goo.error = "Google token refresh failed: " + j.error
+                        goo._refreshFailedAt = Date.now()
                         Log.warn("google", "token refresh failed:", j.error)
                     }
                 } catch (e) {

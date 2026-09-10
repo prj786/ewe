@@ -2,7 +2,26 @@
 # per-user deploy is a separate step — pointed at here, and run automatically
 # at login by the session wrapper once a user is set up.
 
+# L2TP/IPsec VPNs need IKEv1, which libreswan (a dependency) ships disabled
+# by a runtime policy in /etc/ipsec.conf. install.sh phase 30 sets it, but the
+# pacman path never re-runs install.sh on upgrade — so set it here too, as
+# root, idempotently. Same edit as phase 30 (keep the two in step).
+_ewe_ikev1_accept() {
+    [ -f /etc/ipsec.conf ] || return 0
+    ipsec --version 2>/dev/null | grep -qi libreswan || return 0
+    grep -qE '^[[:space:]]*ikev1-policy[[:space:]]*=[[:space:]]*accept' /etc/ipsec.conf && return 0
+    if grep -qE '^[[:space:]]*#?[[:space:]]*ikev1-policy[[:space:]]*=' /etc/ipsec.conf; then
+        sed -i -E 's/^[[:space:]]*#?[[:space:]]*ikev1-policy[[:space:]]*=.*/\tikev1-policy=accept/' /etc/ipsec.conf
+    elif grep -qE '^config setup' /etc/ipsec.conf; then
+        sed -i -E '/^config setup/a\\tikev1-policy=accept' /etc/ipsec.conf
+    else
+        printf 'config setup\n\tikev1-policy=accept\n' >> /etc/ipsec.conf
+    fi
+    echo ":: ewe: enabled IKEv1 in /etc/ipsec.conf (L2TP/IPsec VPNs)"
+}
+
 post_install() {
+    _ewe_ikev1_accept
     cat <<'EOF'
 :: ewe is installed. Two steps remain:
 ::   1. per user:  ewe-setup            (deploys the dotfiles into your home)
@@ -12,6 +31,7 @@ EOF
 }
 
 post_upgrade() {
+    _ewe_ikev1_accept
     cat <<'EOF'
 :: ewe payload updated. Each user's desktop refreshes itself at next login
 :: (or run `ewe-setup` now and restart the shell).

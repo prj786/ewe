@@ -129,7 +129,9 @@ Scope {
     // default for the installing user); anyone else just gets no diagnosis.
     Process {
         id: journal
-        command: ["journalctl", "-f", "-n", "0", "-o", "cat", "-u", "NetworkManager", "-u", "wpa_supplicant"]
+        // --pdeathsig: a follower left behind by a shell that exited mid-attempt
+        // would tail the journal forever (see Screensaver.qml's pactl)
+        command: ["setpriv", "--pdeathsig", "TERM", "--", "journalctl", "-f", "-n", "0", "-o", "cat", "-u", "NetworkManager", "-u", "wpa_supplicant"]
         stdout: SplitParser { onRead: line => root.diagnose(line) }
     }
     function diag(key, urgency, title, body) {

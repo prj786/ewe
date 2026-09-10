@@ -45,6 +45,16 @@ depends=('pipewire-jack'            # claims 'jack' before ffmpeg/mpv/portaudio 
          'ewe-sync'                 # the account app (RFC-006), served from [ewe]
          'reversal-icon-theme' 'mocu-cursor-theme'
          'python')   # ewe-conf; + the lists, appended in package()
+# The IPsec backend moved from strongswan to libreswan (packages/aur.list —
+# strongSwan 6.1 has no IKEv1, L2TP/IPsec needs it). The two conflict, and
+# every updater in this DE runs `pacman -Syu --noconfirm` (Komble, the Welcome
+# screen), under which pacman's "remove strongswan?" defaults to NO and the
+# whole upgrade aborts on "unresolvable package conflicts". `replaces` turns
+# it into "Replace strongswan with ewe/ewe?", whose default is YES — the
+# upgrade removes strongswan on its own and libreswan comes in as a
+# dependency. (install.sh phase 20 does the same for the tarball path.)
+conflicts=('strongswan')
+replaces=('strongswan')
 install=ewe.install
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/$_tag.tar.gz"
         'ewe-setup')

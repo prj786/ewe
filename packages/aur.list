@@ -15,3 +15,9 @@ gnome-network-displays     # Cast to TV — Miracast (Samsung "Screen Mirroring"
                            # avahi-daemon for Chromecast discovery (phase 30). Driven by Cast.qml.
 helium-browser-bin      # THE browser: Chromium-based, private, vertical tabs — themed by helium-theme.sh
 mpv-uosc-git            # uosc controller for mpv — themed by colorscheme.sh (script-opts/uosc.conf)
+libreswan               # IPsec for networkmanager-l2tp (L2TP/IPsec VPNs). Replaces strongswan: strongSwan 6.1
+                        # disabled IKEv1 at build time and Arch ships it that way, and L2TP/IPsec IS IKEv1
+                        # (Windows RRAS, MikroTik, every ISP box) — so no L2TP profile could connect
+                        # (2026-09-10, "IKE version 1 not supported"). libreswan 5 keeps IKEv1 behind
+                        # `ikev1-policy=accept` in /etc/ipsec.conf, which phase 30 sets. Conflicts with
+                        # strongswan — phase 20 removes that first. Not in the official repos.

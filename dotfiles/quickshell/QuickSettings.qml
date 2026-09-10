@@ -600,7 +600,42 @@ Scope {
                 // credentials form on that row instead of only shouting
                 if (/secrets|--ask|no agents|agent/i.test(msg)) { root.setTab("vpn"); root.vpnAskCredentials(vpnUpProc.name); return }
                 if (root.vpnCredTarget === vpnUpProc.name) { root.vpnCredError = msg !== "" ? msg.split("\n")[0] : ("nmcli exited with code " + exitCode); return }
-                Quickshell.execDetached(["notify-send", "-u", "critical", "-a", "VPN", root.vpnPending + " failed", msg !== "" ? msg : ("nmcli exited with code " + exitCode)])
+                var title = root.vpnPending + " failed", body = msg !== "" ? msg : ("nmcli exited with code " + exitCode)
+                // "The VPN service failed to start" says nothing — the reason
+                // is a journal line back; fetch it before shouting
+                if (/VPN service failed to start|activation failed/i.test(msg)) {
+                    vpnWhyProc.name = vpnUpProc.name; vpnWhyProc.title = title; vpnWhyProc.fallback = body
+                    vpnWhyProc.running = false; vpnWhyProc.running = true
+                    return
+                }
+                Quickshell.execDetached(["notify-send", "-u", "critical", "-a", "VPN", title, body])
+            }
+        }
+    }
+    // NetworkManager reports a VPN plugin failure as "The VPN service failed
+    // to start" and keeps the actual reason for the journal:
+    //   vpn[…,"work-vpn"]: failed to connect: 'Could not establish IPsec connection.'
+    // (that one is the strongSwan-6.1-has-no-IKEv1 case, 2026-09-10). Read the
+    // last such line for this profile and put IT in the notification. The
+    // journal is readable for wheel/systemd-journal members (the installing
+    // user); anyone else just gets nmcli's line.
+    Process {
+        id: vpnWhyProc
+        property string name: ""
+        property string title: ""
+        property string fallback: ""
+        command: ["journalctl", "-u", "NetworkManager", "-n", "150", "-o", "cat", "--since", "-3min", "--no-pager"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                var why = "", lines = (this.text || "").split("\n")
+                for (var i = lines.length - 1; i >= 0; i--) {
+                    if (lines[i].indexOf('"' + vpnWhyProc.name + '"') < 0) continue
+                    var m = /failed to connect: '([^']+)'/.exec(lines[i])
+                    if (m) { why = m[1]; break }
+                }
+                var body = vpnWhyProc.fallback
+                if (why !== "") body = why + (/ipsec/i.test(why) ? " — L2TP/IPsec needs IKEv1: libreswan with ikev1-policy=accept (install.sh sets it up; see the manual's VPN section)" : "")
+                Quickshell.execDetached(["notify-send", "-u", "critical", "-a", "VPN", vpnWhyProc.title, body])
             }
         }
     }

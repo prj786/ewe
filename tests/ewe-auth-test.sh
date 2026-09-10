@@ -22,6 +22,16 @@ class H(BaseHTTPRequestHandler):
     def do_POST(self):
         global n
         n += 1
+        form = self.rfile.read(int(self.headers.get("Content-Length", "0"))).decode()
+        # a deleted/disabled OAuth client: Google answers 401 {"error":"deleted_client"}
+        if "client_id=dead-id" in form:
+            body = json.dumps({"error": "deleted_client"}).encode()
+            self.send_response(401)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
         body = json.dumps({"access_token": f"AT-{n}", "expires_in": 3600}).encode()
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
@@ -63,6 +73,14 @@ printf '{"client_id":"other-id","client_secret":"s"}' > "$SB/cfg/ewe/oauth-clien
 r="$(./bin/ewe-auth refresh | python3 -c 'import json,sys;d=json.load(sys.stdin);print(d.get("reason",""))')"
 [ "$r" = "client-changed" ] && echo "ok  client swap detected → clean signed-out" || fail "swap ($r)"
 [ ! -e "$SB/keyring" ] && echo "ok  swap cleared the stale refresh token" || fail swap-clear
+
+# 5b · deleted OAuth client → terminal signed-out (not retried every poll)
+printf '{"client_id":"dead-id","client_secret":"s"}' > "$SB/cfg/ewe/oauth-client.json"
+printf 'fake-refresh-token' > "$SB/keyring"
+printf '{"client_id":"dead-id","email":"t@t"}' > "$SB/cfg/ewe/auth.json"
+r="$(./bin/ewe-auth refresh | python3 -c 'import json,sys;d=json.load(sys.stdin);print(d.get("error",""), d.get("reason",""))')"
+[ "$r" = "signed-out deleted_client" ] && echo "ok  deleted client → signed-out with reason" || fail "deleted client ($r)"
+[ ! -e "$SB/keyring" ] && echo "ok  deleted client cleared the refresh token" || fail dead-clear
 
 # 6 · logout is quiet and clean when already signed out
 [ "$(./bin/ewe-auth logout | python3 -c 'import json,sys;print(json.load(sys.stdin)["ok"])')" = "True" ] \

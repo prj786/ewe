@@ -199,7 +199,13 @@ in the Control Center.
 
 ewe ships the NetworkManager plugins for **OpenVPN** and **L2TP/IPsec**
 (the corporate/ISP kind: server, username, password, pre-shared key);
-WireGuard is native. Add a VPN in **Settings → Network → Add VPN** — an
+WireGuard is native. The IPsec half of L2TP is **libreswan** with IKEv1
+enabled (`ikev1-policy=accept` in `/etc/ipsec.conf`, set by the installer):
+L2TP/IPsec *is* IKEv1, and strongSwan 6.1 as Arch ships it no longer speaks
+it — on such a box every L2TP profile fails with "The VPN service failed to
+start" and `journalctl -u NetworkManager` shows "Could not establish IPsec
+connection". Re-running `install.sh` (or `install.sh --check-only` to just
+look) swaps the backend and flips the policy. Add a VPN in **Settings → Network → Add VPN** — an
 L2TP one from its four facts, an OpenVPN or WireGuard one from its file —
 or import from a terminal (`nmcli connection import type openvpn file
 x.ovpn`). Then toggle it in the **Control Center → VPN** card. The first

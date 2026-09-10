@@ -12,9 +12,25 @@ Type=simple
 # The launch wrapper pins the shell's GL stack to the live GPU's vendor
 # (sheds ~86 MB of dead driver probing on Intel-only machines — ewe#18);
 # it exec's qs resolved from the session-imported PATH.
+# Only start when there is a compositor to draw on. Logout is `loginctl
+# terminate-session` (power.sh): the session scope kills Hyprland, the shell
+# exits 255 ("The Wayland connection broke"), and Restart=on-failure with
+# StartLimitIntervalSec=0 then relaunched qs EVERY SECOND against the dead
+# socket — each attempt a qFatal inside QGuiApplication and a coredump
+# (three per logout on 2026-09-08, plus ewe-sync's), until the manager gave
+# up. ExecCondition skips the start (unit goes inactive, not failed → no
+# restart) when the Wayland socket is gone; the next login's autostart.sh
+# re-imports the env and starts it fresh. `$$` is systemd's escape for a
+# literal `$`, so sh expands the variables at run time.
+ExecCondition=/bin/sh -c 'test -S "$${XDG_RUNTIME_DIR:-/run/user/$$(id -u)}/$${WAYLAND_DISPLAY:-none}"'
 ExecStart=%h/.config/quickshell/scripts/qs-launch.sh
 Restart=on-failure
 RestartSec=1
+# qs exits 255 for "no display" AND for a config that fails to load. Neither
+# is cured by relaunching: the socket check above catches most of the first,
+# this catches the rest (a stale socket after a SIGKILLed compositor). Runtime
+# crashes are signals, not 255, and still restart.
+RestartPreventExitStatus=255
 Slice=session.slice
 # Apps launched from the shell (launcher, dock, xdg-open) inherit the shell's
 # cgroup, so ewe.service's cgroup holds the user's whole desktop — browsers,

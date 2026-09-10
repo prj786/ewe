@@ -109,10 +109,16 @@ Scope {
     // orphaned the pipeline — 64 immortal `pactl subscribe` processes later
     // (2026-08-30), pipewire-pulse hit its client cap and audio control died
     // session-wide. The filter lives here instead.
+    // setpriv --pdeathsig: a direct child still outlives a shell that EXITS
+    // rather than reloads — "Wayland connection broke" is exit(255), no
+    // destructors — and KillMode=process (ewe.service) deliberately leaves the
+    // cgroup alone, so every shell restart stacked another immortal pactl
+    // ("Found left-over process 1444 (pactl) in control group", 2026-09-08).
+    // The kernel now SIGTERMs it the moment its parent is gone, whatever way.
     Process {
         id: micEvents
         running: true
-        command: ["pactl", "subscribe"]
+        command: ["setpriv", "--pdeathsig", "TERM", "--", "pactl", "subscribe"]
         stdout: SplitParser { onRead: line => { if (line.indexOf("source-output") !== -1) micProbeDebounce.restart() } }
         onExited: micEventsRespawn.restart()   // pipewire restarted under us
     }

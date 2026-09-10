@@ -107,6 +107,18 @@ phase_packages() {
         info "installing the optional gaming stack (${#game[@]} packages)"
         install_official "${game[@]}"
     fi
+    # L2TP/IPsec moved from strongswan to libreswan (aur.list explains: strongSwan
+    # 6.1 dropped IKEv1, L2TP/IPsec is IKEv1-only). The two conflict (both own
+    # /usr/bin/ipsec) and `--noconfirm` answers NO to pacman's "remove
+    # strongswan?" — so the AUR batch would skip libreswan and the VPN would
+    # stay dead. Remove strongswan first (upgrade path; a fresh install never
+    # has it). Only when libreswan is actually on the list, so a user who
+    # trims aur.list keeps their strongswan. (The pacman path needs none of
+    # this: the ewe PACKAGE `replaces` strongswan, so -Syu removes it itself.)
+    if pkg_present strongswan && printf '%s\n' "${aur[@]}" | grep -qx libreswan; then
+        info "replacing strongswan with libreswan (IKEv1 for L2TP/IPsec VPNs)"
+        sudo_run pacman -R --noconfirm strongswan || warn "could not remove strongswan — libreswan will be skipped and L2TP/IPsec VPNs stay broken"
+    fi
     if [ "${#aur[@]}" -gt 0 ]; then
         ask_yes "Build & install ${#aur[@]} AUR packages now? (compiles from source)" \
             && install_aur "${aur[@]}" || warn "skipped AUR packages"

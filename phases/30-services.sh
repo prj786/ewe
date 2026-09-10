@@ -246,6 +246,34 @@ phase_services() {
             && ok "installed automatic-timezone hook (follows your network location)"
     fi
 
+    # ── L2TP/IPsec VPNs are IKEv1 (Windows RRAS, MikroTik, every ISP box — that
+    # is what the protocol IS). libreswan 5 (phase 20) keeps IKEv1 but gates it
+    # behind a runtime policy in /etc/ipsec.conf; its stock file ships the line
+    # commented out (`#ikev1-policy=drop`). Without `accept`, pluto refuses the
+    # connection and NetworkManager reports only "The VPN service failed to
+    # start". Idempotent: rewrites the (commented or not) policy line, else
+    # inserts one into `config setup`. Skipped when the IPsec daemon isn't
+    # libreswan (strongSwan has no such knob).
+    if [ -f /etc/ipsec.conf ] && ipsec --version 2>/dev/null | grep -qi libreswan; then
+        if grep -qE '^[[:space:]]*ikev1-policy[[:space:]]*=[[:space:]]*accept' /etc/ipsec.conf; then
+            ok "vpn: libreswan accepts IKEv1 (L2TP/IPsec profiles can connect)"
+        else
+            sudo_run cp /etc/ipsec.conf "/etc/ipsec.conf.bak.$RUN_STAMP"
+            if grep -qE '^[[:space:]]*#?[[:space:]]*ikev1-policy[[:space:]]*=' /etc/ipsec.conf; then
+                sudo_run sed -i -E 's/^[[:space:]]*#?[[:space:]]*ikev1-policy[[:space:]]*=.*/\tikev1-policy=accept/' /etc/ipsec.conf
+            elif grep -qE '^config setup' /etc/ipsec.conf; then
+                sudo_run sed -i -E '/^config setup/a\\tikev1-policy=accept' /etc/ipsec.conf
+            else
+                printf 'config setup\n\tikev1-policy=accept\n' | sudo_run tee -a /etc/ipsec.conf >/dev/null
+            fi
+            grep -qE '^[[:space:]]*ikev1-policy[[:space:]]*=[[:space:]]*accept' /etc/ipsec.conf || [ "${DRY_RUN:-0}" = "1" ] \
+                && ok "vpn: enabled IKEv1 in /etc/ipsec.conf (L2TP/IPsec profiles can connect)" \
+                || warn "vpn: could not set ikev1-policy=accept in /etc/ipsec.conf — L2TP/IPsec VPNs will fail with 'The VPN service failed to start'"
+        fi
+    elif pkg_present strongswan; then
+        warn "vpn: strongswan is installed instead of libreswan — L2TP/IPsec VPNs cannot connect (strongSwan 6.1 has no IKEv1); re-run phase 20"
+    fi
+
     # ── Lid ownership: Hyprland's lid.sh does clamshell (panel off when docked,
     # lock+suspend when alone) — logind must not ALSO suspend on lid close.
     sudo_run install -d /etc/systemd/logind.conf.d

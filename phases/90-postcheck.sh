@@ -38,6 +38,11 @@ phase_postcheck() {
     _check "audio: a default sink exists"         sh -c 'wpctl status 2>/dev/null | grep -qi sink'
     _check "audio: SOF + UCM firmware present"     sh -c 'pacman -Qq sof-firmware && pacman -Qq alsa-ucm-conf'
     _check "network: NetworkManager active"       systemctl is-active NetworkManager.service
+    # L2TP/IPsec = IKEv1; only libreswan still speaks it (strongSwan 6.1 does not)
+    # and only with the policy line phase 30 writes — both, or "The VPN service
+    # failed to start" on every L2TP profile
+    _check "vpn: L2TP/IPsec backend is libreswan" sh -c 'ipsec --version 2>/dev/null | grep -qi libreswan'
+    _check "vpn: IKEv1 accepted (ipsec.conf)"      grep -qE '^[[:space:]]*ikev1-policy[[:space:]]*=[[:space:]]*accept' /etc/ipsec.conf
     _check "power: power-profiles-daemon active"   systemctl is-active power-profiles-daemon.service
     _check "bluetooth: service active"            systemctl is-active bluetooth.service
     # Cast to TV (control-centre tile). Miracast additionally needs a Wi-Fi card
