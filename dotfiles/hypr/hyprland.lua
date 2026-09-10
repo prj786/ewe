@@ -95,9 +95,12 @@ hl.config({
             color        = 0x40000000,  -- 0xAARRGGBB: ~25% black, soft
         },
 
-        -- Blur is OFF everywhere: every shell surface is solid, and the frosted
+        -- Blur is OFF by default: every shell surface is solid, and the frosted
         -- scrims (Overview/Settings) read fine as plain translucent dims. Blur
-        -- was also a constant multi-pass GPU cost on the whole desktop.
+        -- was also a constant multi-pass GPU cost on the whole desktop. The
+        -- `surface = "glass"` theme turns it on — only for the shell's own
+        -- layers, xray, via generated/user.lua (ewe-conf) — unless
+        -- EWE_NO_BLUR=1 (VMs, NVIDIA; start-hyprland.sh).
         blur = {
             enabled = false,
         },
@@ -606,9 +609,10 @@ hl.window_rule({
 -- ╭───────────────────────────────────────────────────────────────╮
 -- │ LAYER RULES                                                     │
 -- ╰───────────────────────────────────────────────────────────────╯
--- No blur rules: decoration.blur is disabled (see above). Every Quickshell
--- surface is solid (colours from Theme.qml); the Overview/Settings scrims are
--- plain translucent dims with nothing frosted behind them.
+-- No blur rules HERE: decoration.blur is off by default (see above) and every
+-- Quickshell surface is solid; the Overview/Settings scrims are plain
+-- translucent dims. The glass surface adds its blur layer rule from
+-- generated/user.lua, so it follows ewe.conf like the rest of the theme.
 
 -- Quickshell surfaces that animate their own open/close in QML (zoom/fade over
 -- Theme.dur*) stay mapped through the close animation — `visible` only drops

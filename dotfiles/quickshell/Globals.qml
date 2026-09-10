@@ -30,7 +30,7 @@ QtObject {
     // Project version — the shell's runtime copy. Keep in sync with the repo-root
     // VERSION file (the canonical source used for git tags / releases). Semver, with
     // an -alpha/-beta pre-release suffix until the first stable cut.
-    readonly property string version: "0.12.7-beta"
+    readonly property string version: "0.12.8-beta"
 
     // ── event sounds (GNOME-style; the freedesktop sound theme, one toggle) ──
     // playSound("message-new-instant") etc — names are theme event ids from
@@ -540,6 +540,11 @@ QtObject {
     // stroke, neutral_tint. The Settings pane shows the live value from here
     // rather than keeping a second copy that can disagree with the file.
     property var tokInput: ({})
+    property var tokSurface: ({})           // {kind: solid|glass, alpha, blur} — Theme.glass reads it
+    // start-hyprland.sh exports EWE_NO_BLUR=1 in VMs and on NVIDIA, where the
+    // compositor's blur is a known cost or glitch; the shell paints solid there
+    // whatever the theme says (alpha without blur is just a see-through panel)
+    readonly property bool noBlur: Quickshell.env("EWE_NO_BLUR") === "1"
     property Process _tokenLoad: Process {
         running: true
         command: ["sh", "-c", "cat \"$HOME/.config/quickshell/theme-tokens.json\" 2>/dev/null"]
@@ -551,6 +556,7 @@ QtObject {
                     if (j && j.shape && typeof j.shape === "object") g.tokShape = j.shape
                     if (j && j.size  && typeof j.size  === "object") g.tokSize  = j.size
                     if (j && j.input && typeof j.input === "object") g.tokInput = j.input
+                    g.tokSurface = (j && j.surface && typeof j.surface === "object") ? j.surface : {}
                 } catch (e) {}
             }
         }

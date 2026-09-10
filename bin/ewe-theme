@@ -56,7 +56,12 @@ OUT_JSON = os.path.join(CFG_DIR, "quickshell", "theme-tokens.json")
 OUT_CSS = os.path.join(HERE, "design", "tokens.css")
 
 DEFAULTS = {"accent": "#0a84ff", "corner": "medium", "density": "comfortable",
-            "stroke": "thin", "neutral_tint": 8}
+            "stroke": "thin", "neutral_tint": 8, "surface": "solid"}
+# surface: solid = every panel opaque (the default); glass = the shell's
+# panels are painted translucent and the compositor blurs what is behind them
+# (ewe-conf writes the blur + layer rule into generated/user.lua). The apps
+# get rgba variants of the surface tokens (--bg-1-glass …) to opt in with.
+SURFACE = {"solid": {"alpha": 1.0, "blur": 0}, "glass": {"alpha": 0.72, "blur": 6}}
 
 
 def out(o):
@@ -336,7 +341,8 @@ def read_conf(path=None):
             pass  # a broken conf must never leave the desktop unthemed
     if not isinstance(cfg["accent"], str) or not cfg["accent"].startswith("#"):
         cfg["accent"] = DEFAULTS["accent"]
-    for k, table in (("corner", CORNER), ("density", DENSITY), ("stroke", STROKE_RAMP)):
+    for k, table in (("corner", CORNER), ("density", DENSITY), ("stroke", STROKE_RAMP),
+                     ("surface", SURFACE)):
         if cfg[k] not in table:
             cfg[k] = DEFAULTS[k]
     try:
@@ -386,8 +392,9 @@ def tokens(cfg):
     size["fs-small"] = FONT_RAMP[max(100, base - 100)][0]
     size["fs-large"] = FONT_RAMP[base + 100][0]
     size["fs-title"] = FONT_RAMP[600][0]
+    surface = dict(SURFACE[cfg["surface"]], kind=cfg["surface"])
     return {"input": cfg, "color": color, "shape": shape, "size": size,
-            "grey": grey, "brand": brand}
+            "grey": grey, "brand": brand, "surface": surface}
 
 
 # ═══ the compatibility layer ══════════════════════════════════════════════
@@ -455,15 +462,30 @@ def gen_json(t):
         "version": 2,
         "input": t["input"],
         "color": t["color"], "shape": t["shape"], "size": t["size"],
-        "grey": t["grey"], "brand": t["brand"],
+        "grey": t["grey"], "brand": t["brand"], "surface": t["surface"],
         "themes": legacy(t),
     }, indent=2) + "\n"
+
+
+def _rgba(hex6, alpha):
+    h = hex6.lstrip("#")
+    return "rgba(%d, %d, %d, %s)" % (int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16),
+                                     ("%.2f" % alpha).rstrip("0").rstrip("."))
 
 
 def css_vars(t):
     v = {}
     for k, val in t["color"].items():
         v["--" + k] = val
+    # surface: the kind, its alpha, and each surface level at that alpha — an
+    # app that wants glass paints --bg-1-glass on a transparent window; on a
+    # solid theme those are the same colours at alpha 1, so the same CSS
+    # works for both
+    sf = t.get("surface", {"kind": "solid", "alpha": 1.0, "blur": 0})
+    v["--surface-kind"] = sf["kind"]
+    v["--surface-alpha"] = str(sf["alpha"])
+    for k in ("bg-1", "bg-2", "bg-3", "bg-4", "card"):
+        v["--%s-glass" % k] = _rgba(t["color"][k], sf["alpha"])
     for k, val in t["shape"].items():
         v["--" + k] = "%dpx" % val
     for k, val in t["size"].items():
@@ -534,7 +556,7 @@ def cmd_show(a):
     # the greys its tint produced — without being rebuilt.
     out({"ok": True, "conf": src, "input": cfg, "color": t["color"],
          "shape": t["shape"], "size": t["size"], "brand": t["brand"],
-         "css_vars": css_vars(t)})
+         "surface": t["surface"], "css_vars": css_vars(t)})
 
 
 def cmd_build(a):
@@ -742,7 +764,8 @@ def cmd_preview(a):
                     .replace("__TOKENS_JSON__", json.dumps({
                         "input": t["input"], "color": t["color"],
                         "shape": t["shape"], "size": t["size"],
-                        "grey": t["grey"], "brand": t["brand"]})))
+                        "grey": t["grey"], "brand": t["brand"],
+                        "surface": t["surface"]})))
     target = a.out or os.path.join(HERE, "design", "specimen.html")
     _write(target, html)
     out({"ok": True, "path": target, "conf": src, "accent": cfg["accent"]})

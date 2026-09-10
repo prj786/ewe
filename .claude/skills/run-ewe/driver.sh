@@ -60,6 +60,9 @@ hl.config({
     },
 })
 EOF
+  # HS_EXTRA_LUA=<file>: appended to the nested config — e.g. the glass blur
+  # block from `ewe-conf`'s GLASS_LUA, to see translucent panels for real
+  [ -n "${HS_EXTRA_LUA:-}" ] && [ -f "$HS_EXTRA_LUA" ] && cat "$HS_EXTRA_LUA" >> "$WORK/hypr-min.lua"
 
   local before after sock
   before="$(ls "$XDG_RUNTIME_DIR"/wayland-* 2>/dev/null)"

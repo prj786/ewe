@@ -81,7 +81,7 @@ def _scalar(v):
 # Section comments — regenerated on every write, so the file explains itself.
 SECTION_NOTES = {
     "desktop": "everything the Settings surfaces manage",
-    "desktop.theme": "accent + shape/density; every colour is derived from accent by ewe-theme",
+    "desktop.theme": "accent + shape/density/surface (solid|glass); every colour is derived from accent by ewe-theme",
     "desktop.dock": "the bottom dock (autohide = intelligent hide)",
     "desktop.animations": "speed multiplies every duration; detail = per-leaf tuning",
     "desktop.displays": "per-monitor-set profiles (Settings → Displays owns this)",
@@ -753,6 +753,21 @@ def _hex6(c):
     return s[2:] if len(s) == 8 else s
 
 
+# desktop.theme.surface = "glass": the shell's panels are translucent and the
+# compositor blurs what is behind them. Skipped where blur is a known cost or
+# glitch — start-hyprland.sh exports EWE_NO_BLUR=1 in VMs and on NVIDIA — and
+# the shell (Theme.qml) then paints solid too, because alpha without blur is
+# just a see-through panel. xray: blur the wallpaper, not the windows the
+# panel happens to cover — cheaper and steadier. ignore_alpha: the panels'
+# transparent margins (shadows, rounded corners) stay unblurred.
+GLASS_LUA = """\
+if os.getenv("EWE_NO_BLUR") ~= "1" then
+    hl.config({ decoration = { blur = { enabled = true, size = 6, passes = 3, xray = true, ignore_opacity = true, new_optimizations = true, noise = 0.012 } } })
+    hl.layer_rule({ name = "ewe-glass", match = { namespace = "^quickshell:(bar|dock|control|launcher|applauncher|osd|clipboard|places|traymenu|mediaplayer|preview|share-picker|notifications|store|settings)$" }, blur = true, ignore_alpha = 0.2 })
+end
+"""
+
+
 def gen_user_lua(doc):
     def gv(key, dflt):
         node, last = dig(doc, key)
@@ -777,6 +792,8 @@ def gen_user_lua(doc):
               "fullscreen_on_one_column = true } })\n") % _lua_num(lay.get("column_width", 0.5))
     s += ("hl.config({ decoration = { active_opacity = 1.0, inactive_opacity = %s } })\n"
           % ("0.97" if gv("desktop.theme.window_transparency", False) else "1.0"))
+    if gv("desktop.theme.surface", "solid") == "glass":
+        s += GLASS_LUA
     speed = gv("desktop.animations.speed", 1)
     if abs(speed - 1) >= 0.001:
         s += "\n".join(_anim_lua_lines(speed)) + "\n"

@@ -85,7 +85,7 @@ Scope {
             y: parent.height - height - 90        // float above the dock
             width: 380; height: 440
             radius: Theme.radius
-            color: Theme.bg1
+            color: Theme.panel
             border.color: Theme.stroke2; border.width: Theme.borderThin
             opacity: Globals.launcherOpen ? 1 : 0
             scale: Globals.launcherOpen ? 1 : 0.96

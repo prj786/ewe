@@ -179,7 +179,7 @@ Scope {
             height: win.dockH
             width: row.implicitWidth + 16
             radius: Theme.radius
-            color: Theme.bg1
+            color: Theme.panel
             border.color: Theme.stroke2; border.width: Theme.borderThin
             HoverHandler { id: dockHov }
             layer.enabled: true

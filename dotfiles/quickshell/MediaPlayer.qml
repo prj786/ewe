@@ -119,7 +119,7 @@ Scope {
             y: parent.height - height - 90
             width: 340
             height: col.implicitHeight + 28
-            radius: Theme.radius; color: Theme.bg1
+            radius: Theme.radius; color: Theme.panel
             border.color: Theme.stroke2; border.width: Theme.borderThin
             Sheen { radius: parent.radius }
             opacity: Globals.mediaOpen ? 1 : 0
