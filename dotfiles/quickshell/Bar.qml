@@ -545,6 +545,7 @@ Scope {
                             //   spinner (transient) → TOGGLER STATES the user
                             //   switched on (insomnia · cast · ssh · vpn) → COMMS
                             //   (notifications · mail · calendar · phone) →
+                            //   AUDIO (where sound goes · mic in use) →
                             //   RADIOS (wired/wifi · bluetooth) → SYSTEM (power
                             //   profile · battery) → clock.
                             // Metrics are uniform on purpose: every glyph is
@@ -687,6 +688,27 @@ Scope {
                                 visible: bar.wiredUp && !bar.wifiUp
                             }
                             // Wi-Fi (only when connected)
+                            // Where sound goes — a headset / headphones / an external box.
+                            // The built-in speakers show nothing: the bar names the
+                            // unusual, not the default. (AudioState reads the sink's own
+                            // PipeWire properties; nothing polls.)
+                            Text {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: AudioState.outputGlyph
+                                font.family: Theme.fontIcons; font.pixelSize: Theme.barIconPx
+                                color: Theme.fg2
+                                visible: AudioState.outputGlyph !== ""
+                            }
+                            // Microphone in use — shown only while an app is actually
+                            // capturing (an Active link on the default source), in the
+                            // accent so it reads as "live", the way a camera light does.
+                            Text {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: Theme.icMic
+                                font.family: Theme.fontIcons; font.pixelSize: Theme.barIconPx
+                                color: Theme.accent
+                                visible: AudioState.micInUse
+                            }
                             Text {
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: Theme.icWifi
