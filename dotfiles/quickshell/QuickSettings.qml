@@ -273,11 +273,17 @@ Scope {
     // and dropped" was paired but never TRUSTED — bluez accepts one connection
     // from an untrusted device and refuses the reconnect that follows — so
     // trust is set on every tap, and an unpaired device is paired first (the
-    // Connections below then connects it once pairing lands).
+    // Connections below then connects it once pairing lands). Pairing goes
+    // through BtAgent (the bluez agent bridge), not device.pair(): that is
+    // what answers "confirm 123456?" / "type the PIN" for phones, keyboards
+    // and modern headsets, and it reports WHY a pairing failed — Quickshell's
+    // own pair() swallows the error and the tap looked like it did nothing.
     function btTap(d) {
+        BtAgent.clearError()
         if (d.connected) { d.disconnect(); return }
+        if (BtAgent.pairingAddress === d.address) { BtAgent.cancelPairing(d.address); return }
         d.trusted = true
-        if (d.paired) d.connect(); else d.pair()
+        if (d.paired) BtAgent.connectDevice(d.address); else BtAgent.pair(d.address)
     }
 
     function connectWifi(ssid, sec) {
@@ -1333,20 +1339,56 @@ Scope {
                                         Repeater {
                                             model: Bluetooth.devices ? Bluetooth.devices.values : []
                                             delegate: Item {
+                                                id: bRow
                                                 required property var modelData
                                                 visible: modelData.paired || modelData.connected || (Bluetooth.defaultAdapter && Bluetooth.defaultAdapter.discovering)
                                                 width: btOptCol.width; height: visible ? 28 : 0
+                                                readonly property bool working: modelData.pairing || BtAgent.pairingAddress === modelData.address || BtAgent.busyAddress === modelData.address
+                                                readonly property string status: working ? (modelData.paired ? "Connecting…" : "Pairing…")
+                                                                               : (modelData.connected && modelData.batteryAvailable ? Math.round(modelData.battery <= 1 ? modelData.battery * 100 : modelData.battery) + "%" : "")
                                                 Rectangle { anchors.fill: parent; radius: Theme.r(6); color: bMa.containsMouse ? Theme.subtleHover : Theme.subtle }
-                                                Text { anchors.left: parent.left; anchors.leftMargin: 8; anchors.verticalCenter: parent.verticalCenter; text: (modelData.connected ? Theme.icBluetoothOn : Theme.icBluetooth); font.family: Theme.fontIcons; font.pixelSize: 12; color: modelData.connected ? Theme.accent : Theme.fg3 }
-                                                Text { anchors.left: parent.left; anchors.leftMargin: 30; anchors.right: parent.right; anchors.rightMargin: 26; anchors.verticalCenter: parent.verticalCenter; text: (modelData.name || modelData.deviceName || modelData.address) + (modelData.connected ? "" : (modelData.paired ? "" : "  ·  new")); color: modelData.connected ? Theme.accent : Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: modelData.connected ? Font.DemiBold : Font.Normal; elide: Text.ElideRight }
-                                                Text { anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter; visible: modelData.connected; text: Theme.icCheck; font.family: Theme.fontIcons; font.pixelSize: 11; color: Theme.accent }
-                                                MouseArea { id: bMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.btTap(modelData) }
+                                                // device-kind glyph (bluez's Icon → headphones / keyboard / phone / …)
+                                                Text { anchors.left: parent.left; anchors.leftMargin: 8; anchors.verticalCenter: parent.verticalCenter; text: BtAgent.glyph(modelData.icon, modelData.connected); font.family: Theme.fontIcons; font.pixelSize: 12; color: modelData.connected ? Theme.accent : Theme.fg3 }
+                                                Text { anchors.left: parent.left; anchors.leftMargin: 30; anchors.right: bRight.left; anchors.rightMargin: 6; anchors.verticalCenter: parent.verticalCenter; text: (modelData.name || modelData.deviceName || modelData.address) + (modelData.connected ? "" : (modelData.paired ? "" : "  ·  new")); color: modelData.connected ? Theme.accent : Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: modelData.connected ? Font.DemiBold : Font.Normal; elide: Text.ElideRight }
+                                                // right edge: spinner while pairing/connecting · battery + check when
+                                                // connected · a trash glyph on hover for anything paired (forget)
+                                                Row {
+                                                    id: bRight
+                                                    anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter
+                                                    spacing: 6
+                                                    Text { visible: bRow.status !== "" && !bForget.visible; text: bRow.status; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; anchors.verticalCenter: parent.verticalCenter }
+                                                    Spinner { visible: bRow.working; anchors.verticalCenter: parent.verticalCenter; font.pixelSize: 11 }
+                                                    Text { visible: modelData.connected && !bRow.working && !bForget.visible; text: Theme.icCheck; font.family: Theme.fontIcons; font.pixelSize: 11; color: Theme.accent; anchors.verticalCenter: parent.verticalCenter }
+                                                    Text {
+                                                        id: bForget
+                                                        visible: bMa.containsMouse && modelData.paired && !bRow.working
+                                                        text: Theme.icTrash; font.family: Theme.fontIcons; font.pixelSize: 11
+                                                        color: bForgetMa.containsMouse ? Theme.danger : Theme.fg3
+                                                        anchors.verticalCenter: parent.verticalCenter
+                                                        MouseArea { id: bForgetMa; anchors.fill: parent; anchors.margins: -4; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: { BtAgent.clearError(); bRow.modelData.forget() } }
+                                                    }
+                                                }
+                                                MouseArea { id: bMa; anchors.fill: parent; anchors.rightMargin: bForget.visible ? 22 : 0; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.btTap(modelData) }
                                                 // a pairing that just completed connects by itself — the tap that started it
                                                 // was the intent, and bluez does not connect on pair
                                                 Connections { target: modelData; function onPairedChanged() { if (modelData.paired && !modelData.connected) { modelData.trusted = true; modelData.connect() } } }
                                             }
                                         }
                                     }
+                                }
+                                // why the last tap failed ("codes did not match", "not in pairing
+                                // mode", …) — from BtAgent; cleared by the next tap
+                                Text {
+                                    width: parent.width; leftPadding: 8; rightPadding: 8; topPadding: 4
+                                    visible: BtAgent.lastError !== ""
+                                    text: BtAgent.lastError
+                                    color: Theme.danger; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; wrapMode: Text.Wrap
+                                }
+                                Text {
+                                    width: parent.width; leftPadding: 8; rightPadding: 8; topPadding: 4
+                                    visible: Bluetooth.defaultAdapter && Bluetooth.defaultAdapter.enabled && !BtAgent.registered
+                                    text: BtAgent.bridgeError !== "" ? BtAgent.bridgeError : "Pairing agent not registered yet — devices that ask for a code cannot pair"
+                                    color: Theme.warning; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; wrapMode: Text.Wrap
                                 }
                             }
                         }

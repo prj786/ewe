@@ -488,6 +488,15 @@ QtObject {
     readonly property string icPen:          ic(0xE129)  // package — dock: stashed windows
     readonly property string icDownload:     ic(0xE0B2)  // download — dock downloads
     readonly property string icKeyboard:     ic(0xE284)  // keyboard
+    // Bluetooth device kinds (bluez Icon strings → BtAgent.glyph)
+    readonly property string icHeadphones:   ic(0xE0F1)  // headphones
+    readonly property string icHeadset:      ic(0xE5BD)  // headset
+    readonly property string icSpeaker:      ic(0xE166)  // speaker
+    readonly property string icMouse:        ic(0xE28E)  // mouse
+    readonly property string icGamepad:      ic(0xE0DF)  // gamepad-2
+    readonly property string icTablet:       ic(0xE17E)  // tablet
+    readonly property string icLaptop:       ic(0xE1CD)  // laptop
+    readonly property string icPrinter:      ic(0xE141)  // printer
     // ewe-sync's state, shown on the bar (see Globals.syncState)
     readonly property string icCloudOk:      ic(0xE66E)  // cloud-check — everything is up to date
     readonly property string icCloudOff:     ic(0xE08D)  // cloud-off — signed out or unreachable

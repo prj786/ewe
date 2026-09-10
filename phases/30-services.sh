@@ -30,6 +30,49 @@ phase_services() {
     _enable_system NetworkManager.service
     _enable_system bluetooth.service
     _enable_system power-profiles-daemon.service
+
+    # ── bluez tuning for modern devices ──
+    # /etc/bluetooth/main.conf ships every key commented out. Three matter:
+    #   JustWorksRepairing = always   a device that was paired to another host
+    #                                 (AirPods, a phone that "forgot" us) re-pairs
+    #                                 instead of failing with AuthenticationFailed
+    #   Experimental = true           battery level for headsets / LE devices
+    #                                 (Battery1 via PipeWire's provider) — the %
+    #                                 Quick Settings and the Settings app show
+    #   AutoEnable = true             the adapter is powered at boot and when a
+    #                                 USB dongle appears, not after a first toggle
+    # The pairing DIALOG itself is the shell's job (BtAgent — a bluez agent);
+    # this is only what bluezd needs on its side. Idempotent: rewrites the
+    # (commented or not) line, appends a key its section lacks; one backup per
+    # run; the service restarts only when something changed.
+    if [ -f /etc/bluetooth/main.conf ]; then
+        local btconf=/etc/bluetooth/main.conf btchanged=0
+        _bt_set() {  # <section> <key> <value>
+            grep -qE "^[[:space:]]*$2[[:space:]]*=[[:space:]]*$3[[:space:]]*$" "$btconf" && return 0
+            [ "$btchanged" = 0 ] && sudo_run cp "$btconf" "$btconf.bak.$RUN_STAMP"
+            btchanged=1
+            if grep -qE "^[[:space:]]*#?[[:space:]]*$2[[:space:]]*=" "$btconf"; then
+                sudo_run sed -i -E "s/^[[:space:]]*#?[[:space:]]*$2[[:space:]]*=.*/$2 = $3/" "$btconf"
+            elif grep -qE "^\[$1\]" "$btconf"; then
+                sudo_run sed -i -E "/^\[$1\]/a $2 = $3" "$btconf"
+            else
+                printf '\n[%s]\n%s = %s\n' "$1" "$2" "$3" | sudo_run tee -a "$btconf" >/dev/null
+            fi
+        }
+        _bt_set General JustWorksRepairing always
+        _bt_set General Experimental true
+        _bt_set Policy AutoEnable true
+        if [ "$btchanged" = 1 ]; then
+            sudo_run systemctl restart bluetooth.service 2>/dev/null || true
+            ok "bluetooth: main.conf tuned (re-pairing, battery reporting, adapter on at boot) — service restarted"
+        else
+            ok "bluetooth: main.conf already tuned"
+        fi
+    fi
+    # a soft rfkill block (an Fn key, a previous OS) makes the adapter look absent
+    if command -v rfkill >/dev/null 2>&1 && rfkill list bluetooth 2>/dev/null | grep -q "Soft blocked: yes"; then
+        sudo_run rfkill unblock bluetooth && ok "bluetooth: cleared the soft rfkill block"
+    fi
     # ── Cast to TV: Chromecast / Google TV discovery is mDNS, which is avahi's
     # job (Miracast needs nothing extra — NetworkManager + wpa_supplicant do the
     # Wi-Fi P2P). Start it now too: the Cast tile should work without a reboot.

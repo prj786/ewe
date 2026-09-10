@@ -45,6 +45,10 @@ phase_postcheck() {
     _check "vpn: IKEv1 accepted (ipsec.conf)"      grep -qE '^[[:space:]]*ikev1-policy[[:space:]]*=[[:space:]]*accept' /etc/ipsec.conf
     _check "power: power-profiles-daemon active"   systemctl is-active power-profiles-daemon.service
     _check "bluetooth: service active"            systemctl is-active bluetooth.service
+    # the shell's pairing agent (BtAgent) is python — without these two nothing
+    # answers "confirm 123456?" and only Just-Works devices pair from the GUI
+    _check "bluetooth: agent deps (python-dbus, python-gobject)" sh -c 'pacman -Qq python-dbus && pacman -Qq python-gobject'
+    _check "bluetooth: main.conf re-pairing enabled" grep -qE '^[[:space:]]*JustWorksRepairing[[:space:]]*=[[:space:]]*always' /etc/bluetooth/main.conf
     # Cast to TV (control-centre tile). Miracast additionally needs a Wi-Fi card
     # with Wi-Fi Direct (P2P) — hardware, so a note rather than a red cross; the
     # Chromecast path works regardless.

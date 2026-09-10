@@ -1,0 +1,422 @@
+#!/usr/bin/env python3
+"""ewe-bt — Bluetooth for the Settings app (and scripts), over bluez's D-Bus.
+
+ewe-settings is a Tauri window with no D-Bus client of its own; like ewe-mail
+and ewe-theme it shells out to this tool, which prints ONE JSON object per
+call and exits 0 (errors are {"ok": false, "error": "..."}). Every verb is a
+plain org.bluez call — no bluetoothctl parsing, no shell strings.
+
+WHY NOT bluetoothctl: it registers its OWN pairing agent for every call, so a
+`bluetoothctl pair` never reaches the desktop's dialog — the question goes to
+a process with no terminal and pairing hangs. This tool registers no agent
+(unless --auto, see below): bluez then routes the "confirm 123456?" to the
+DEFAULT agent, which is the shell's BtAgent (scripts/bt-agent.py). One dialog
+for the whole desktop, whoever started the pairing.
+
+  status                 adapter {powered, discoverable, discovering, alias,
+                         address} + devices [{address, name, icon, paired,
+                         trusted, connected, blocked, battery, rssi}]
+  power on|off           adapter Powered
+  discoverable on|off    adapter Discoverable (the phone-side "find my PC")
+  scan [seconds]         discover for N s (default 30) — bluez stops discovery
+                         when the caller disconnects, so this call BLOCKS; the
+                         app runs it detached and polls `status`
+  pair <addr> [--auto]   Pair → Trusted=true → Connect. --auto registers a
+                         NoInputNoOutput agent for the call (headphones pair
+                         without the shell; anything that asks a question is
+                         rejected) — the app passes it only when the shell is
+                         not running
+  connect <addr>         Trusted=true, then Connect
+  disconnect <addr>
+  trust <addr> on|off
+  forget <addr>          Adapter.RemoveDevice (unpair)
+"""
+
+import json
+import re
+import sys
+import time
+
+try:
+    import dbus
+    import dbus.service
+    from dbus.mainloop.glib import DBusGMainLoop
+    from gi.repository import GLib
+except ImportError as e:
+    print(json.dumps({"ok": False, "error": "missing python deps (python-dbus, python-gobject): %s" % e}))
+    sys.exit(0)
+
+BLUEZ = "org.bluez"
+ADAPTER = "org.bluez.Adapter1"
+DEVICE = "org.bluez.Device1"
+BATTERY = "org.bluez.Battery1"
+MGR = "org.bluez.AgentManager1"
+AGENT = "org.bluez.Agent1"
+PROPS = "org.freedesktop.DBus.Properties"
+OM = "org.freedesktop.DBus.ObjectManager"
+MAC = re.compile(r"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$")
+
+ERRORS = {
+    "org.bluez.Error.AuthenticationCanceled": "Pairing cancelled",
+    "org.bluez.Error.AuthenticationFailed": "Pairing failed — the codes did not match, or the device refused",
+    "org.bluez.Error.AuthenticationRejected": "The device rejected the pairing",
+    "org.bluez.Error.AuthenticationTimeout": "Pairing timed out — put the device in pairing mode and try again",
+    "org.bluez.Error.AlreadyExists": "Already paired",
+    "org.bluez.Error.AlreadyConnected": "Already connected",
+    "org.bluez.Error.ConnectionAttemptFailed": "Could not reach the device — is it in pairing mode and nearby?",
+    "org.bluez.Error.InProgress": "Still working on the last request — wait a moment",
+    "org.bluez.Error.NotReady": "Bluetooth is off",
+    "org.bluez.Error.NotAvailable": "The device is not available right now",
+    "org.bluez.Error.DoesNotExist": "The device is gone — search again",
+    "org.bluez.Error.NotPermitted": "Not permitted",
+    "org.bluez.Error.Rejected": "Rejected",
+    "org.bluez.Error.Canceled": "Cancelled",
+}
+FAILED_HINTS = (
+    ("br-connection-profile-unavailable", "No matching profile — for audio devices, check that PipeWire is running"),
+    ("br-connection-page-timeout", "The device did not answer — is it switched on and nearby?"),
+    ("br-connection-canceled", "Connection cancelled"),
+    ("br-connection-refused", "The device refused the connection"),
+    ("br-connection-key-missing", "The device forgot this computer — forget it here and pair again"),
+    ("Protocol not available", "No matching profile — for audio devices, check that PipeWire is running"),
+    ("Input/output error", "The device did not answer — is it switched on and nearby?"),
+    ("Host is down", "The device is off or out of range"),
+    ("No such adapter", "No Bluetooth adapter found"),
+)
+
+
+def out(obj):
+    print(json.dumps(obj))
+    sys.exit(0)
+
+
+def fail(msg):
+    out({"ok": False, "error": msg})
+
+
+def friendly(exc):
+    try:
+        name = exc.get_dbus_name() or ""
+        msg = exc.get_dbus_message() or ""
+    except Exception:
+        name, msg = "", str(exc)
+    if name in ERRORS:
+        return ERRORS[name]
+    for needle, text in FAILED_HINTS:
+        if needle in msg:
+            return text
+    return ("Failed: " + msg) if msg else "Failed"
+
+
+def plain(v):
+    if isinstance(v, (dbus.String, dbus.ObjectPath)):
+        return str(v)
+    if isinstance(v, dbus.Boolean):
+        return bool(v)
+    if isinstance(v, (dbus.Byte, dbus.Int16, dbus.UInt16, dbus.Int32, dbus.UInt32, dbus.Int64, dbus.UInt64)):
+        return int(v)
+    if isinstance(v, dbus.Double):
+        return float(v)
+    if isinstance(v, (dbus.Array, list, tuple)):
+        return [plain(x) for x in v]
+    if isinstance(v, (dbus.Dictionary, dict)):
+        return {str(k): plain(x) for k, x in v.items()}
+    return v
+
+
+class Bt:
+    def __init__(self):
+        DBusGMainLoop(set_as_default=True)
+        try:
+            self.bus = dbus.SystemBus()
+        except dbus.exceptions.DBusException as e:
+            fail("no system bus: %s" % e)
+        try:
+            self.objs = dbus.Interface(self.bus.get_object(BLUEZ, "/"), OM).GetManagedObjects()
+        except dbus.exceptions.DBusException as e:
+            if "ServiceUnknown" in (e.get_dbus_name() or ""):
+                fail("bluetooth.service is not running")
+            fail(friendly(e))
+        self.adapter_path = None
+        for path, ifaces in self.objs.items():
+            if ADAPTER in ifaces:
+                self.adapter_path = str(path)
+                break
+
+    def need_adapter(self):
+        if not self.adapter_path:
+            fail("No Bluetooth adapter found")
+        return self.adapter_path
+
+    def props(self, path, iface):
+        return dbus.Interface(self.bus.get_object(BLUEZ, path), PROPS), iface
+
+    def get(self, path, iface, name, default=None):
+        try:
+            p, i = self.props(path, iface)
+            return plain(p.Get(i, name))
+        except dbus.exceptions.DBusException:
+            return default
+
+    def set(self, path, iface, name, value):
+        p, i = self.props(path, iface)
+        p.Set(i, name, value)
+
+    def device_path(self, address):
+        if not MAC.match(address or ""):
+            fail("bad device address")
+        want = address.upper()
+        for path, ifaces in self.objs.items():
+            d = ifaces.get(DEVICE)
+            if d and str(d.get("Address", "")).upper() == want:
+                return str(path)
+        fail("The device is gone — search again")
+
+    def device_iface(self, address):
+        return dbus.Interface(self.bus.get_object(BLUEZ, self.device_path(address)), DEVICE)
+
+    # ── verbs ───────────────────────────────────────────────────────────────
+    def status(self):
+        ad = self.adapter_path
+        adapter = None
+        if ad:
+            a = self.objs[ad][ADAPTER]
+            adapter = {
+                "address": str(a.get("Address", "")),
+                "alias": str(a.get("Alias") or a.get("Name") or ""),
+                "powered": bool(a.get("Powered", False)),
+                "discoverable": bool(a.get("Discoverable", False)),
+                "discovering": bool(a.get("Discovering", False)),
+                "pairable": bool(a.get("Pairable", False)),
+            }
+        devices = []
+        for path, ifaces in self.objs.items():
+            d = ifaces.get(DEVICE)
+            if not d:
+                continue
+            batt = ifaces.get(BATTERY, {})
+            devices.append({
+                "address": str(d.get("Address", "")),
+                "name": str(d.get("Alias") or d.get("Name") or d.get("Address", "")),
+                "icon": str(d.get("Icon", "")),
+                "paired": bool(d.get("Paired", False)),
+                "trusted": bool(d.get("Trusted", False)),
+                "connected": bool(d.get("Connected", False)),
+                "blocked": bool(d.get("Blocked", False)),
+                "rssi": int(d["RSSI"]) if "RSSI" in d else None,
+                "battery": int(batt["Percentage"]) if "Percentage" in batt else None,
+            })
+        # connected first, then paired, then by signal — the list the app shows
+        devices.sort(key=lambda x: (not x["connected"], not x["paired"], -(x["rssi"] or -999), x["name"].lower()))
+        out({"ok": True, "adapter": adapter, "devices": devices})
+
+    def power(self, on):
+        ad = self.need_adapter()
+        try:
+            self.set(ad, ADAPTER, "Powered", dbus.Boolean(on))
+        except dbus.exceptions.DBusException as e:
+            fail(friendly(e))
+        out({"ok": True, "powered": on})
+
+    def discoverable(self, on):
+        ad = self.need_adapter()
+        try:
+            if on:
+                # 3 minutes of visibility, the same window phones use — not forever
+                self.set(ad, ADAPTER, "DiscoverableTimeout", dbus.UInt32(180))
+            self.set(ad, ADAPTER, "Discoverable", dbus.Boolean(on))
+        except dbus.exceptions.DBusException as e:
+            fail(friendly(e))
+        out({"ok": True, "discoverable": on})
+
+    def scan(self, seconds):
+        ad = self.need_adapter()
+        a = dbus.Interface(self.bus.get_object(BLUEZ, ad), ADAPTER)
+        try:
+            # both BR/EDR and LE — a BLE mouse is as real as a headset
+            a.SetDiscoveryFilter({"Transport": dbus.String("auto")})
+            a.StartDiscovery()
+        except dbus.exceptions.DBusException as e:
+            if (e.get_dbus_name() or "") != "org.bluez.Error.InProgress":
+                fail(friendly(e))
+        loop = GLib.MainLoop()
+        GLib.timeout_add_seconds(max(1, min(seconds, 300)), loop.quit)
+        loop.run()
+        try:
+            a.StopDiscovery()
+        except dbus.exceptions.DBusException:
+            pass
+        out({"ok": True, "scanned": seconds})
+
+    def _wait(self, call, timeout):
+        """Run one async bluez call under a GLib loop; return (ok, error)."""
+        result = {"ok": None, "error": ""}
+        loop = GLib.MainLoop()
+
+        def done(*_):
+            result["ok"] = True
+            loop.quit()
+
+        def failed(e):
+            result["ok"] = False
+            result["error"] = friendly(e)
+            loop.quit()
+        call(reply_handler=done, error_handler=failed, timeout=timeout)
+        loop.run()
+        return result["ok"], result["error"]
+
+    def pair(self, address, auto):
+        path = self.device_path(address)
+        dev = dbus.Interface(self.bus.get_object(BLUEZ, path), DEVICE)
+        agent = None
+        if auto:
+            agent = AutoAgent(self.bus)
+            try:
+                dbus.Interface(self.bus.get_object(BLUEZ, "/org/bluez"), MGR).RegisterAgent(AutoAgent.PATH, "NoInputNoOutput")
+            except dbus.exceptions.DBusException:
+                agent = None
+        if not self.get(path, DEVICE, "Paired", False):
+            ok, err = self._wait(dev.Pair, 180)
+            if not ok:
+                fail(err)
+        try:
+            self.set(path, DEVICE, "Trusted", dbus.Boolean(True))
+        except dbus.exceptions.DBusException:
+            pass
+        ok, err = self._wait(dev.Connect, 60)
+        if agent is not None:
+            try:
+                dbus.Interface(self.bus.get_object(BLUEZ, "/org/bluez"), MGR).UnregisterAgent(AutoAgent.PATH)
+            except dbus.exceptions.DBusException:
+                pass
+        if not ok and err != ERRORS["org.bluez.Error.AlreadyConnected"]:
+            # paired and trusted — the connect can be retried from the list
+            out({"ok": True, "paired": True, "connected": False, "warning": err})
+        out({"ok": True, "paired": True, "connected": True})
+
+    def connect(self, address):
+        path = self.device_path(address)
+        dev = dbus.Interface(self.bus.get_object(BLUEZ, path), DEVICE)
+        try:
+            self.set(path, DEVICE, "Trusted", dbus.Boolean(True))
+        except dbus.exceptions.DBusException:
+            pass
+        ok, err = self._wait(dev.Connect, 60)
+        if not ok and err != ERRORS["org.bluez.Error.AlreadyConnected"]:
+            fail(err)
+        out({"ok": True, "connected": True})
+
+    def disconnect(self, address):
+        dev = self.device_iface(address)
+        ok, err = self._wait(dev.Disconnect, 30)
+        if not ok:
+            fail(err)
+        out({"ok": True, "connected": False})
+
+    def trust(self, address, on):
+        path = self.device_path(address)
+        try:
+            self.set(path, DEVICE, "Trusted", dbus.Boolean(on))
+        except dbus.exceptions.DBusException as e:
+            fail(friendly(e))
+        out({"ok": True, "trusted": on})
+
+    def forget(self, address):
+        path = self.device_path(address)
+        ad = self.need_adapter()
+        try:
+            dbus.Interface(self.bus.get_object(BLUEZ, ad), ADAPTER).RemoveDevice(dbus.ObjectPath(path))
+        except dbus.exceptions.DBusException as e:
+            fail(friendly(e))
+        out({"ok": True, "removed": address})
+
+
+class AutoAgent(dbus.service.Object):
+    """--auto: a Just-Works-only agent for this one call (no shell to ask)."""
+    PATH = "/org/ewe/bt/auto"
+
+    def __init__(self, bus):
+        super().__init__(bus, self.PATH)
+
+    def _reject(self):
+        raise dbus.exceptions.DBusException("no one to ask — start the ewe shell to pair devices that show a code", name="org.bluez.Error.Rejected")
+
+    @dbus.service.method(AGENT, in_signature="", out_signature="")
+    def Release(self):
+        pass
+
+    @dbus.service.method(AGENT, in_signature="o", out_signature="s")
+    def RequestPinCode(self, device):
+        self._reject()
+
+    @dbus.service.method(AGENT, in_signature="os", out_signature="")
+    def DisplayPinCode(self, device, pincode):
+        pass
+
+    @dbus.service.method(AGENT, in_signature="o", out_signature="u")
+    def RequestPasskey(self, device):
+        self._reject()
+
+    @dbus.service.method(AGENT, in_signature="ouq", out_signature="")
+    def DisplayPasskey(self, device, passkey, entered):
+        pass
+
+    @dbus.service.method(AGENT, in_signature="ou", out_signature="")
+    def RequestConfirmation(self, device, passkey):
+        self._reject()
+
+    @dbus.service.method(AGENT, in_signature="o", out_signature="")
+    def RequestAuthorization(self, device):
+        self._reject()
+
+    @dbus.service.method(AGENT, in_signature="os", out_signature="")
+    def AuthorizeService(self, device, uuid):
+        pass    # we started this pairing — its profiles are wanted
+
+    @dbus.service.method(AGENT, in_signature="", out_signature="")
+    def Cancel(self):
+        pass
+
+
+def onoff(v):
+    if v in ("on", "true", "1", "yes"):
+        return True
+    if v in ("off", "false", "0", "no"):
+        return False
+    fail("expected on|off")
+
+
+def main(argv):
+    if len(argv) < 2:
+        fail("usage: ewe-bt status | power on|off | discoverable on|off | scan [s] | pair <addr> [--auto] | connect <addr> | disconnect <addr> | trust <addr> on|off | forget <addr>")
+    verb = argv[1]
+    args = argv[2:]
+    bt = Bt()
+    if verb == "status":
+        bt.status()
+    elif verb == "power" and len(args) == 1:
+        bt.power(onoff(args[0]))
+    elif verb == "discoverable" and len(args) == 1:
+        bt.discoverable(onoff(args[0]))
+    elif verb == "scan":
+        try:
+            secs = int(args[0]) if args else 30
+        except ValueError:
+            fail("scan takes a number of seconds")
+        bt.scan(secs)
+    elif verb == "pair" and 1 <= len(args) <= 2:
+        bt.pair(args[0], "--auto" in args[1:])
+    elif verb == "connect" and len(args) == 1:
+        bt.connect(args[0])
+    elif verb == "disconnect" and len(args) == 1:
+        bt.disconnect(args[0])
+    elif verb == "trust" and len(args) == 2:
+        bt.trust(args[0], onoff(args[1]))
+    elif verb == "forget" and len(args) == 1:
+        bt.forget(args[0])
+    else:
+        fail("unknown verb or arguments: %s" % " ".join(argv[1:]))
+
+
+if __name__ == "__main__":
+    main(sys.argv)
