@@ -179,8 +179,8 @@ Scope {
             height: win.dockH
             width: row.implicitWidth + 16
             radius: Theme.radius
-            color: Theme.panel
-            border.color: Theme.stroke2; border.width: Theme.borderThin
+            color: Theme.dockFill
+            border.color: Theme.dockStroke; border.width: Theme.borderThin
             HoverHandler { id: dockHov }
             layer.enabled: true
             layer.effect: Elevation {}

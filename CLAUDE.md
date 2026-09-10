@@ -164,12 +164,14 @@ through to apps behind it.
 
 ### Theming (single source: `scripts/colorscheme.sh`)
 
-**Surface:** `desktop.theme.surface = solid | glass` in ewe.conf. Glass paints
-the shell's panels at `Theme.glassAlpha` (`Theme.panel`, `Theme.barTop`) and
-`ewe-conf` writes the compositor blur + `quickshell:*` layer rule into
+**Bar & dock opacity:** `desktop.theme.bar_opacity = 0..100` in ewe.conf
+(Settings → Appearance slider). The bar and dock are painted at
+`Theme.barAlpha` (`barTop`, `dockFill`); between 10 and 99 `ewe-conf` writes
+the compositor blur + a `quickshell:(bar|dock)` layer rule into
 `generated/user.lua`; `EWE_NO_BLUR=1` (VMs, NVIDIA — `start-hyprland.sh`)
-forces solid on both sides. Content inside a panel stays opaque. Apps get
-`--bg-N-glass` rgba tokens to opt in.
+skips the blur. Every other panel (`Theme.panel`) stays opaque. Prefs the
+Settings app writes MUST be in `ewe-conf`'s `THEME_MAP`, or `absorb` drops
+them on the next write (that was the 0.12.7 "Top bar settings do nothing").
 
 `colorscheme.sh <mode> [accent-hex]` writes *every* toolkit's config in one
 pass — ewe is **dark-only by decision (2026-09-01)**; the mode argument is

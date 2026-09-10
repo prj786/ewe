@@ -56,12 +56,14 @@ OUT_JSON = os.path.join(CFG_DIR, "quickshell", "theme-tokens.json")
 OUT_CSS = os.path.join(HERE, "design", "tokens.css")
 
 DEFAULTS = {"accent": "#0a84ff", "corner": "medium", "density": "comfortable",
-            "stroke": "thin", "neutral_tint": 8, "surface": "solid"}
-# surface: solid = every panel opaque (the default); glass = the shell's
-# panels are painted translucent and the compositor blurs what is behind them
-# (ewe-conf writes the blur + layer rule into generated/user.lua). The apps
-# get rgba variants of the surface tokens (--bg-1-glass …) to opt in with.
-SURFACE = {"solid": {"alpha": 1.0, "blur": 0}, "glass": {"alpha": 0.72, "blur": 6}}
+            "stroke": "thin", "neutral_tint": 8, "bar_opacity": 100}
+# bar_opacity: how solid the TOP BAR and DOCK are, 0 (see-through) … 100
+# (opaque, the default). Below 100 the compositor blurs what is behind them
+# (ewe-conf writes the blur + layer rule into generated/user.lua) — except
+# under BAR_BLUR_MIN, where there is too little surface left to frost and the
+# bar simply floats on the wallpaper. Every other panel stays opaque: that is
+# what keeps the control centre and launcher legible over a bright picture.
+BAR_BLUR_MIN = 10
 
 
 def out(o):
@@ -341,14 +343,20 @@ def read_conf(path=None):
             pass  # a broken conf must never leave the desktop unthemed
     if not isinstance(cfg["accent"], str) or not cfg["accent"].startswith("#"):
         cfg["accent"] = DEFAULTS["accent"]
-    for k, table in (("corner", CORNER), ("density", DENSITY), ("stroke", STROKE_RAMP),
-                     ("surface", SURFACE)):
+    for k, table in (("corner", CORNER), ("density", DENSITY), ("stroke", STROKE_RAMP)):
         if cfg[k] not in table:
             cfg[k] = DEFAULTS[k]
     try:
         cfg["neutral_tint"] = max(0, min(40, int(cfg["neutral_tint"])))
     except (TypeError, ValueError):
         cfg["neutral_tint"] = DEFAULTS["neutral_tint"]
+    try:
+        cfg["bar_opacity"] = max(0, min(100, int(cfg["bar_opacity"])))
+    except (TypeError, ValueError):
+        cfg["bar_opacity"] = DEFAULTS["bar_opacity"]
+    # 0.12.8's one-release `surface = "glass"` reads as its old tint
+    if str(cfg.pop("surface", "solid")) == "glass" and cfg["bar_opacity"] == 100:
+        cfg["bar_opacity"] = 72
     return cfg, src
 
 
@@ -392,7 +400,8 @@ def tokens(cfg):
     size["fs-small"] = FONT_RAMP[max(100, base - 100)][0]
     size["fs-large"] = FONT_RAMP[base + 100][0]
     size["fs-title"] = FONT_RAMP[600][0]
-    surface = dict(SURFACE[cfg["surface"]], kind=cfg["surface"])
+    op = cfg["bar_opacity"]
+    surface = {"bar_alpha": op / 100.0, "blur": BAR_BLUR_MIN <= op < 100}
     return {"input": cfg, "color": color, "shape": shape, "size": size,
             "grey": grey, "brand": brand, "surface": surface}
 
@@ -477,15 +486,11 @@ def css_vars(t):
     v = {}
     for k, val in t["color"].items():
         v["--" + k] = val
-    # surface: the kind, its alpha, and each surface level at that alpha — an
-    # app that wants glass paints --bg-1-glass on a transparent window; on a
-    # solid theme those are the same colours at alpha 1, so the same CSS
-    # works for both
-    sf = t.get("surface", {"kind": "solid", "alpha": 1.0, "blur": 0})
-    v["--surface-kind"] = sf["kind"]
-    v["--surface-alpha"] = str(sf["alpha"])
-    for k in ("bg-1", "bg-2", "bg-3", "bg-4", "card"):
-        v["--%s-glass" % k] = _rgba(t["color"][k], sf["alpha"])
+    # the bar/dock alpha, and the bar's own colour at it (an app that wants
+    # to match the bar paints --bg-3-bar on a transparent window)
+    sf = t.get("surface", {"bar_alpha": 1.0, "blur": False})
+    v["--bar-alpha"] = ("%.2f" % sf["bar_alpha"]).rstrip("0").rstrip(".") or "0"
+    v["--bg-3-bar"] = _rgba(t["color"]["bg-3"], sf["bar_alpha"])
     for k, val in t["shape"].items():
         v["--" + k] = "%dpx" % val
     for k, val in t["size"].items():

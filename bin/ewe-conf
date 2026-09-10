@@ -81,7 +81,7 @@ def _scalar(v):
 # Section comments — regenerated on every write, so the file explains itself.
 SECTION_NOTES = {
     "desktop": "everything the Settings surfaces manage",
-    "desktop.theme": "accent + shape/density/surface (solid|glass); every colour is derived from accent by ewe-theme",
+    "desktop.theme": "accent + shape/density + bar_opacity; every colour is derived from accent by ewe-theme",
     "desktop.dock": "the bottom dock (autohide = intelligent hide)",
     "desktop.animations": "speed multiplies every duration; detail = per-leaf tuning",
     "desktop.displays": "per-monitor-set profiles (Settings → Displays owns this)",
@@ -266,6 +266,11 @@ THEME_MAP = [  # ewe.conf key ↔ user-theme.json key (with defaults)
     ("desktop.dock.enabled", "dockEnabled", True),
     ("desktop.dock.autohide", "dockAutohide", False),
     ("desktop.dock.icon_size", "dockIconSize", "medium"),
+    # the top bar (Settings → Layout → Top bar). `show` is a map of
+    # indicator → bool; a missing key means shown, so {} is "everything"
+    ("desktop.bar.enabled", "barEnabled", True),
+    ("desktop.bar.icon_size", "barIconSize", "normal"),
+    ("desktop.bar.show", "barShow", {}),
     ("desktop.animations.speed", "animationSpeed", 1),
     ("desktop.tiling.enabled", "tilingEnabled", True),
     ("desktop.sound.event_sounds", "eventSounds", True),
@@ -753,17 +758,17 @@ def _hex6(c):
     return s[2:] if len(s) == 8 else s
 
 
-# desktop.theme.surface = "glass": the shell's panels are translucent and the
+# desktop.theme.bar_opacity < 100: the top bar and dock are translucent and the
 # compositor blurs what is behind them. Skipped where blur is a known cost or
 # glitch — start-hyprland.sh exports EWE_NO_BLUR=1 in VMs and on NVIDIA — and
-# the shell (Theme.qml) then paints solid too, because alpha without blur is
-# just a see-through panel. xray: blur the wallpaper, not the windows the
-# panel happens to cover — cheaper and steadier. ignore_alpha: the panels'
-# transparent margins (shadows, rounded corners) stay unblurred.
-GLASS_LUA = """\
+# under BAR_BLUR_MIN, where the bar is nearly see-through anyway. xray: blur
+# the wallpaper, not the windows the bar covers — cheaper and steadier.
+# ignore_alpha: the bar's transparent margins (shadow strip) stay unblurred.
+BAR_BLUR_MIN = 10
+BAR_BLUR_LUA = """\
 if os.getenv("EWE_NO_BLUR") ~= "1" then
     hl.config({ decoration = { blur = { enabled = true, size = 6, passes = 3, xray = true, ignore_opacity = true, new_optimizations = true, noise = 0.012 } } })
-    hl.layer_rule({ name = "ewe-glass", match = { namespace = "^quickshell:(bar|dock|control|launcher|applauncher|osd|clipboard|places|traymenu|mediaplayer|preview|share-picker|notifications|store|settings)$" }, blur = true, ignore_alpha = 0.2 })
+    hl.layer_rule({ name = "ewe-bar-blur", match = { namespace = "^quickshell:(bar|dock)$" }, blur = true, ignore_alpha = 0.05 })
 end
 """
 
@@ -792,8 +797,14 @@ def gen_user_lua(doc):
               "fullscreen_on_one_column = true } })\n") % _lua_num(lay.get("column_width", 0.5))
     s += ("hl.config({ decoration = { active_opacity = 1.0, inactive_opacity = %s } })\n"
           % ("0.97" if gv("desktop.theme.window_transparency", False) else "1.0"))
-    if gv("desktop.theme.surface", "solid") == "glass":
-        s += GLASS_LUA
+    try:
+        op = max(0, min(100, int(gv("desktop.theme.bar_opacity", 100))))
+    except (TypeError, ValueError):
+        op = 100
+    if op == 100 and gv("desktop.theme.surface", "solid") == "glass":
+        op = 72                              # 0.12.8's one-release knob
+    if BAR_BLUR_MIN <= op < 100:
+        s += BAR_BLUR_LUA
     speed = gv("desktop.animations.speed", 1)
     if abs(speed - 1) >= 0.001:
         s += "\n".join(_anim_lua_lines(speed)) + "\n"
@@ -1783,7 +1794,7 @@ def _domain(dotted):
     # first meaningful routing segment: desktop.<domain>… or apps.* / system.*
     parts = dotted.split(".")
     if parts[0] == "desktop" and len(parts) > 1:
-        return {"theme": "theme", "dock": "theme", "tiling": "theme",
+        return {"theme": "theme", "dock": "theme", "bar": "theme", "tiling": "theme",
                 "power": "theme", "animations": "animations",
                 "displays": "displays", "window_rules": "window_rules",
                 "wallpapers": "wallpapers", "input": "input",
