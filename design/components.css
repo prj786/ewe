@@ -238,7 +238,10 @@
   background: var(--subtle-hover);
 }
 @utility divide-hairline {
-  & > * + * {
+  /* every child, not `* + *`: Tailwind's divide-y draws the rule on the
+     BOTTOM of each row but the last, so the first row's rule was the one
+     left in the default (text) colour — the bright line under row one */
+  & > * {
     border-color: var(--stroke-3);
   }
 }

@@ -197,20 +197,21 @@ QtObject {
     // Identical stops render the gradient node flat — kept so Bar.qml needs
     // no conditional, and a future look can reintroduce a real gradient by
     // touching only these two tokens.
-    // ── Surface: solid or glass ───────────────────────────────────────────
-    // `surface = "glass"` in ewe.conf [desktop.theme]: every floating panel
-    // and the bar are painted at glassAlpha and the compositor blurs what is
-    // behind them (generated/user.lua carries the blur + layer rule). Where
-    // blur is off by policy (Globals.noBlur) the shell paints solid too.
-    // Content INSIDE a panel (cards, chips, inputs) stays opaque — that is
-    // what keeps text legible over a bright wallpaper.
-    readonly property bool glass:        !Globals.noBlur && !!(Globals.tokSurface && Globals.tokSurface.kind === "glass")
-    readonly property real glassAlpha:   (Globals.tokSurface && Globals.tokSurface.alpha !== undefined) ? Globals.tokSurface.alpha : 0.72
-    function surf(c) { return glass ? Qt.rgba(c.r, c.g, c.b, glassAlpha) : c }
-    readonly property color panel:       surf(bg1)   // every floating panel's fill
-    readonly property color barTop:      surf(bg3)
-    readonly property color barBottom:   surf(bg3)
-    readonly property color barBorder:   stroke2
+    // ── Bar & dock opacity ────────────────────────────────────────────────
+    // `bar_opacity` in ewe.conf [desktop.theme] (Settings → Appearance): the
+    // top bar and the dock are painted at barAlpha and, above 10%, the
+    // compositor blurs what is behind them (generated/user.lua carries the
+    // blur + layer rule; Globals.noBlur machines just get the alpha). Every
+    // OTHER panel stays opaque — that is what keeps the control centre and
+    // launcher legible over a bright wallpaper.
+    readonly property real barAlpha:     (Globals.tokSurface && Globals.tokSurface.bar_alpha !== undefined) ? Globals.tokSurface.bar_alpha : 1
+    function withAlpha(c, a) { return Qt.rgba(c.r, c.g, c.b, a) }
+    readonly property color panel:       bg1                          // every floating panel's fill
+    readonly property color barTop:      withAlpha(bg3, barAlpha)
+    readonly property color barBottom:   withAlpha(bg3, barAlpha)
+    readonly property color barBorder:   withAlpha(stroke2, barAlpha)
+    readonly property color dockFill:    withAlpha(bg1, barAlpha)
+    readonly property color dockStroke:  withAlpha(stroke2, barAlpha)
     // A bar item has no fill of its own until you point at it — `subtle` is
     // exactly that case, and the reason the two are the same token now.
     readonly property color barHover:    subtleHover

@@ -144,6 +144,14 @@ config (GTK, Qt, cursor, icon hue) in one pass.
 `enabled` (bool) · `autohide` (bool — "intelligent hide") ·
 `icon_size` (`"small"`/`"medium"`/`"large"`).
 
+### `[desktop.bar]`
+
+`enabled` (bool) · `icon_size` (`"small"`/`"normal"`/`"large"`, relative to
+the theme's icon size) · `show` (table of indicator → bool: `sound mic wifi
+bluetooth battery power keyboard tray screenshot clipboard tiling`; a missing
+key means shown). `[desktop.theme].bar_opacity` (0–100) sets how solid the
+bar and dock are; below 100 the compositor blurs behind them.
+
 ### `[desktop.animations]`
 
 `speed` — one multiplier over every animation: `0` (off), `0.6` (brisk),
