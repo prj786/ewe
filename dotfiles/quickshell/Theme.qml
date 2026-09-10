@@ -452,6 +452,8 @@ QtObject {
     readonly property string icSpeed:        ic(0xE1BF)  // gauge — performance
     readonly property string icVolHigh:      ic(0xE1AB)  // volume-2
     readonly property string icVolLow:       ic(0xE1AA)  // volume-1
+    readonly property string icVolOff:       ic(0xE1A9)  // volume — no waves: quiet
+    readonly property string icVolMute:      ic(0xE1AC)  // volume-x — muted / silent
     readonly property string icMic:          ic(0xE118)  // mic — bar: something is recording
     readonly property string icPlay:         ic(0xE13C)  // play
     readonly property string icPause:        ic(0xE12E)  // pause

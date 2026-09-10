@@ -545,8 +545,7 @@ Scope {
                             //   spinner (transient) → TOGGLER STATES the user
                             //   switched on (insomnia · cast · ssh · vpn) → COMMS
                             //   (notifications · mail · calendar · phone) →
-                            //   AUDIO (where sound goes · mic in use) →
-                            //   RADIOS (wired/wifi · bluetooth) → SYSTEM (power
+                            //   RADIOS (wired/wifi · SOUND · bluetooth) → SYSTEM (power
                             //   profile · battery) → clock.
                             // Metrics are uniform on purpose: every glyph is
                             //   Theme.barIconPx, every count/label 11 px, 4 px
@@ -688,33 +687,34 @@ Scope {
                                 visible: bar.wiredUp && !bar.wifiUp
                             }
                             // Wi-Fi (only when connected)
-                            // Where sound goes — a headset / headphones / an external box.
-                            // The built-in speakers show nothing: the bar names the
-                            // unusual, not the default. (AudioState reads the sink's own
-                            // PipeWire properties; nothing polls.)
-                            Text {
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: AudioState.outputGlyph
-                                font.family: Theme.fontIcons; font.pixelSize: Theme.barIconPx
-                                color: Theme.fg2
-                                visible: AudioState.outputGlyph !== ""
-                            }
-                            // Microphone in use — shown only while an app is actually
-                            // capturing (an Active link on the default source), in the
-                            // accent so it reads as "live", the way a camera light does.
-                            Text {
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: Theme.icMic
-                                font.family: Theme.fontIcons; font.pixelSize: Theme.barIconPx
-                                color: Theme.accent
-                                visible: AudioState.micInUse
-                            }
                             Text {
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: Theme.icWifi
                                 font.family: Theme.fontIcons; font.pixelSize: Theme.barIconPx
                                 color: Theme.fg2
                                 visible: bar.wifiUp
+                            }
+                            // Sound — always there, between the radios: the level as
+                            // volume waves on the built-in speakers, and the DEVICE when
+                            // output is somewhere else (headset · headphones · a speaker
+                            // box). AudioState reads the sink's own PipeWire properties;
+                            // nothing polls.
+                            Text {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: AudioState.outputGlyph
+                                font.family: Theme.fontIcons; font.pixelSize: Theme.barIconPx
+                                color: AudioState.muted && AudioState.outputKind === "internal" ? Theme.fg3 : Theme.fg2
+                                visible: AudioState.sink !== null
+                            }
+                            // Microphone open — an app has it (a link from the default
+                            // source to a stream), in the accent so it reads as "live",
+                            // the way a camera light does.
+                            Text {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: Theme.icMic
+                                font.family: Theme.fontIcons; font.pixelSize: Theme.barIconPx
+                                color: Theme.accent
+                                visible: AudioState.micInUse
                             }
                             // Bluetooth (only when adapter on); filled glyph when a device is connected
                             Text {
