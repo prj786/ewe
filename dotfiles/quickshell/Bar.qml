@@ -418,7 +418,7 @@ Scope {
 
                     // thin separator between the tray and the action buttons
                     Rectangle {
-                        visible: SystemTray.items.values.length > 0
+                        visible: Globals.barShows("tray") && SystemTray.items.values.length > 0
                         anchors.verticalCenter: parent.verticalCenter
                         width: 1; height: 13; color: Theme.fg2; opacity: 0.25
                     }
@@ -527,8 +527,12 @@ Scope {
                         }
                     }
 
-                    // thin separator between the action buttons and the control centre
-                    Rectangle { anchors.verticalCenter: parent.verticalCenter; width: 1; height: 13; color: Theme.fg2; opacity: 0.25 }
+                    // thin separator between the action buttons and the control centre —
+                    // only while at least one of them is shown
+                    Rectangle {
+                        visible: Globals.barShows("screenshot") || Globals.barShows("clipboard") || Globals.barShows("tiling") || Globals.barShows("keyboard")
+                        anchors.verticalCenter: parent.verticalCenter; width: 1; height: 13; color: Theme.fg2; opacity: 0.25
+                    }
 
                     // ── ONE wide Control-Centre button: active services + battery.
                     // Hovering highlights the whole group; click opens the sidebar.
