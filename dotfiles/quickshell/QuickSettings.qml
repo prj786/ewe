@@ -283,7 +283,8 @@ Scope {
         if (d.connected) { d.disconnect(); return }
         if (BtAgent.pairingAddress === d.address) { BtAgent.cancelPairing(d.address); return }
         d.trusted = true
-        if (d.paired) BtAgent.connectDevice(d.address); else BtAgent.pair(d.address)
+        if (!d.paired) { BtAgent.pair(d.address); return }
+        if (!BtAgent.connectDevice(d.address)) d.connect()   // no bridge: Quickshell connects, silently
     }
 
     function connectWifi(ssid, sec) {

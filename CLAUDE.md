@@ -127,6 +127,14 @@ registered in `qmldir`. Two singletons tie everything together:
   and connecting go through `BtAgent.pair()/connectDevice()` so failures have a
   reason. `bin/ewe-bt` is the same for the Settings app (see
   `docs/SETTINGS-BACKEND.md`).
+- **`AudioState.qml`** — where sound goes (headset / headphones / external /
+  built-in, from the default sink's PipeWire properties), the level, whether an
+  app has the mic open (a link from the default source to a stream — Quickshell
+  0.3.1 never reports link STATE, so "open" is the signal), and the
+  follow-the-device policy: a headset that appears becomes the output (and
+  input), and output returns to where it was when the headset leaves.
+  WirePlumber will not do this once a user ever picked a default. The bar's
+  sound and mic glyphs read it.
 - **`HyprMon.qml`** — display manager: per-monitor-set profiles
   (`display-profiles.json` → `hypr/generated/monitors.lua`), live apply via
   `hyprctl eval 'hl.monitor{…}'`, re-assert on hotplug/AC events. The Settings

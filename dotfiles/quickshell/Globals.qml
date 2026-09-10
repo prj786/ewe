@@ -30,7 +30,7 @@ QtObject {
     // Project version — the shell's runtime copy. Keep in sync with the repo-root
     // VERSION file (the canonical source used for git tags / releases). Semver, with
     // an -alpha/-beta pre-release suffix until the first stable cut.
-    readonly property string version: "0.12.6-beta"
+    readonly property string version: "0.12.7-beta"
 
     // ── event sounds (GNOME-style; the freedesktop sound theme, one toggle) ──
     // playSound("message-new-instant") etc — names are theme event ids from
@@ -339,6 +339,10 @@ QtObject {
     property bool dockEnabled: true
     property bool dockAutohide: false       // intelligent hide: slide away, reveal on bottom-edge hover
     property string dockIconSize: "normal"  // dock icon size: "small" | "normal" | "large"
+    // ── top bar (Settings → Layout → Top bar; user-theme.json) ──
+    property string barIconSize: "normal"   // status glyph size: "small" | "normal" | "large" (relative to the theme's icon size)
+    property var barShow: ({})              // { tray, screenshot, clipboard, tiling, keyboard, sound, mic, wifi, bluetooth, power, battery } — absent = shown
+    function barShows(key) { return !(barShow && barShow[key] === false) }
 
     // ── Screensaver (persisted in user-theme.json; hypridle owns the timing via
     // the generated hypridle.conf — see Settings.writeIdleConf) ────────────────
@@ -571,6 +575,9 @@ QtObject {
                     if (j && j.dockEnabled !== undefined) g.dockEnabled = j.dockEnabled
                     if (j && j.dockAutohide !== undefined) g.dockAutohide = j.dockAutohide
                     if (j && j.dockIconSize) g.dockIconSize = j.dockIconSize
+                    if (j && j.barEnabled !== undefined) g.barVisible = j.barEnabled !== false
+                    if (j && j.barIconSize) g.barIconSize = j.barIconSize
+                    if (j && j.barShow && typeof j.barShow === "object") g.barShow = j.barShow
                     if (j && j.animationSpeed !== undefined) g.animationSpeed = j.animationSpeed
                     // dark-only by decision (2026-09-01): a persisted "light" is ignored
                     if (j && j.avatarShape) g.avatarShape = j.avatarShape

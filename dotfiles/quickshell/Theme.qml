@@ -218,7 +218,12 @@ QtObject {
     // made the highlight barely wider than the icon itself.
     readonly property int barItemPad: 10
     // every glyph on the bar renders at this size — no per-site literals
-    readonly property int barIconPx:     _z("icon", 18)
+    // The bar's status glyphs: the theme's icon size (density-driven, 16/18/20)
+    // nudged by Settings → Layout → Top bar. "small" is what the row looks
+    // best at next to its 11 px labels; the default stays the theme's own.
+    readonly property int barIconPx:     Globals.barIconSize === "small" ? _z("icon", 18) - 4
+                                       : Globals.barIconSize === "large" ? _z("icon", 18) + 2
+                                       : _z("icon", 18)
 
     // Accent — whatever Settings → Theme wrote into user-theme.json. The
     // user's in-shell pick always wins; until there is one this falls back to
@@ -452,6 +457,9 @@ QtObject {
     readonly property string icSpeed:        ic(0xE1BF)  // gauge — performance
     readonly property string icVolHigh:      ic(0xE1AB)  // volume-2
     readonly property string icVolLow:       ic(0xE1AA)  // volume-1
+    readonly property string icVolOff:       ic(0xE1A9)  // volume — no waves: quiet
+    readonly property string icVolMute:      ic(0xE1AC)  // volume-x — muted / silent
+    readonly property string icMic:          ic(0xE118)  // mic — bar: something is recording
     readonly property string icPlay:         ic(0xE13C)  // play
     readonly property string icPause:        ic(0xE12E)  // pause
     readonly property string icPrev:         ic(0xE15F)  // skip-back
