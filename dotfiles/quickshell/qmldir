@@ -13,6 +13,7 @@ singleton Google 1.0 Google.qml
 singleton Agenda 1.0 Agenda.qml
 singleton Mail 1.0 Mail.qml
 singleton KdeConnect 1.0 KdeConnect.qml
+singleton BtAgent 1.0 BtAgent.qml
 Elevation 1.0 Elevation.qml
 Spinner 1.0 Spinner.qml
 BarIcon 1.0 BarIcon.qml
@@ -26,6 +27,7 @@ Bar 1.0 Bar.qml
 Notifications 1.0 Notifications.qml
 QuickSettings 1.0 QuickSettings.qml
 Auth 1.0 Auth.qml
+BtPairing 1.0 BtPairing.qml
 Clipboard 1.0 Clipboard.qml
 ScreenshotPreview 1.0 ScreenshotPreview.qml
 InvertedCorner 1.0 InvertedCorner.qml

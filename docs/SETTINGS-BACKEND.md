@@ -160,6 +160,37 @@ against kdeconnect 26.04 (conversations arrive as single message events;
 the conversation list is "latest message per thread"; sends are echoed
 optimistically and reconciled on the real signal).
 
+## Bluetooth — the shell's pairing agent + `ewe-bt`
+
+Pairing is a conversation: bluez asks "does 123456 match?", "type the PIN",
+"may this phone pair?" and needs an `org.bluez.Agent1` in the session to
+answer. Quickshell ships none, so the shell runs one — `BtAgent.qml` owns
+`scripts/bt-agent.py` (dbus-python, NDJSON over stdio like the KDE Connect
+bridge), registered as the **default** agent with capability KeyboardDisplay.
+`BtPairing.qml` renders the question (big code, PIN field, Allow/Deny). Any
+`Pair()` from a client without its own agent — Quickshell, `ewe-bt`, a GTK
+app — lands in that one dialog.
+
+The Settings app has no D-Bus client; its Bluetooth pane shells out to
+**`bin/ewe-bt`** (one JSON object per call, like ewe-mail):
+
+| verb | does |
+|---|---|
+| `status` | adapter {powered, discoverable, discovering, alias} + devices [{address, name, icon, paired, trusted, connected, battery, rssi}] |
+| `power on\|off` · `discoverable on\|off` | adapter properties (discoverable times out after 3 min) |
+| `scan [s]` | discovery for N s — **blocks**: bluez stops discovery when the caller disconnects, so the app runs it detached and polls `status` |
+| `pair <addr> [--auto]` | Pair → Trusted → Connect; `--auto` brings a Just-Works-only agent for when the shell is not running |
+| `connect` · `disconnect` · `trust <addr> on\|off` · `forget <addr>` | the obvious |
+
+Why not `bluetoothctl`: it registers its **own** agent on every call, so a
+`bluetoothctl pair` never reaches the desktop's dialog — the question goes to
+a process with no terminal, and the pairing hangs. That was the "works in the
+terminal, not in the GUI" of 0.12.4–0.12.5.
+
+Phase 30 also tunes `/etc/bluetooth/main.conf`: `JustWorksRepairing = always`
+(a device paired elsewhere re-pairs instead of failing), `Experimental = true`
+(battery levels), `AutoEnable = true` (adapter on at boot).
+
 ## Screensaver (hypridle-driven)
 
 Quickshell 0.3.0 has no `IdleMonitor`, so idle timing stays with **hypridle**:

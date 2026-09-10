@@ -121,6 +121,12 @@ registered in `qmldir`. Two singletons tie everything together:
   In-shell toggles flip a `Globals` bool directly (no IPC round-trip).
 - **`Theme.qml`** — the palette/metrics; `accent` binds to `Globals.accentColor`
   so changing the accent recolours the whole shell live.
+- **`BtAgent.qml`** — the bluez pairing agent (`scripts/bt-agent.py`, default
+  `org.bluez.Agent1`, NDJSON over stdio like `KdeConnect.qml`); `BtPairing.qml`
+  is its dialog. Device state still comes from `Quickshell.Bluetooth`; pairing
+  and connecting go through `BtAgent.pair()/connectDevice()` so failures have a
+  reason. `bin/ewe-bt` is the same for the Settings app (see
+  `docs/SETTINGS-BACKEND.md`).
 - **`HyprMon.qml`** — display manager: per-monitor-set profiles
   (`display-profiles.json` → `hypr/generated/monitors.lua`), live apply via
   `hyprctl eval 'hl.monitor{…}'`, re-assert on hotplug/AC events. The Settings

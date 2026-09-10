@@ -199,3 +199,41 @@ What to look for:
 
 Report what `journalctl -b -1` showed when asking for help — with the
 persistent journal in place there is finally something to read.
+
+## Bluetooth: pairs from the terminal, not from the desktop
+
+**Symptom.** `bluetoothctl pair XX:XX…` works; tapping the same device in
+Quick Settings or the Settings app does nothing, or connects for a second
+and drops. Phones never show a "confirm this code" prompt on the PC side.
+
+**Cause.** Pairing needs an `org.bluez.Agent1` in the session to answer
+bluez's questions ("does 123456 match?", "type the PIN"). `bluetoothctl`
+registers one for itself, which is why the terminal works. Quickshell has
+none, blueman-applet is not run in ewe, so before 0.12.6 nothing answered and
+bluez failed the pairing silently. The "drops after a second" half was a
+device that was paired but never **trusted**.
+
+**Fix (0.12.6).** The shell registers its own default agent (`BtAgent` →
+`scripts/bt-agent.py`) and shows the question as a dialog; a tap pairs,
+trusts and connects in one go, and a failure now says why under the list.
+Check it is up:
+
+```
+grep bt-agent ~/.local/state/ewe/*.log        # "registered as default pairing agent"
+pacman -Qq python-dbus python-gobject          # the agent's two deps
+busctl --system tree org.bluez | grep dev_     # bluez sees the device at all?
+```
+
+If the agent line says "not registered", `systemctl restart bluetooth` and
+the shell re-registers by itself.
+
+**Still failing?** The error under the device list is bluez's, translated:
+
+- *codes did not match / device refused* — the device wants to pair fresh:
+  forget it on **both** sides and start over.
+- *not in pairing mode / did not answer* — hold the device's pairing button
+  until it blinks; many headsets stop advertising after 60 s.
+- *device forgot this computer* — it was paired to another host; phase 30
+  sets `JustWorksRepairing = always` so this re-pairs on the next attempt.
+- *no matching profile* (audio) — `systemctl --user status wireplumber`;
+  PipeWire's bluez plugin is what provides A2DP/HFP.
