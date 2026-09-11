@@ -118,9 +118,11 @@ because it is a derivation rather than a preference.
 | key | type | default | meaning |
 |---|---|---|---|
 | `accent` | hex string | `"#0a84ff"` | **the seed.** Your accent lands exactly on brand stop 80; the other fifteen stops, and the hue of the greys, come from it |
-| `corner` | `none` \| `small` \| `medium` \| `large` | `"medium"` | which rung of Fluent's radius ramp each role stands on. `none` squares the entire desktop |
+| `corner` | `none` \| `small` \| `medium` \| `large` \| `round` | `"round"` | which radius each role gets. The first four stand on Fluent's ramp; `round` (the 2026-09 revamp) is pitched by role — control 12, card 20, panel 26, capsule buttons. `none` squares the entire desktop |
 | `density` | `compact` \| `comfortable` \| `roomy` | `"comfortable"` | spacing rungs and control heights — Fluent's own 24 / 32 / 40 ladder |
-| `stroke` | `thin` \| `thick` | `"thin"` | 1px hairlines or 2px rules |
+| `stroke` | `none` \| `thin` \| `thick` | `"none"` | the width of a component's own outline (`--outline-width`). `none` draws no edge around buttons, inputs, cards or tiles — the layer step separates them; hairlines inside a surface and the window ring stay 1px (`--stroke-width`) whatever this says |
+| `bar_opacity` | int 0-100 | `100` | the top bar and dock's opacity. Emitted as `--bar-alpha`; every other panel stays opaque |
+| `app_blur` | bool | `false` | blur behind every window at a fixed level (off on VMs and NVIDIA by policy) |
 | `neutral_tint` | int 0-40 | `8` | how far the greys follow the accent's hue. `0` is Fluent's pure neutrals; the pull is weighted to the dark end, where the large surfaces are, and gone by the time it reaches text |
 | `color_scheme` | `"dark"` | `"dark"` | always `"dark"` — ewe is dark-only by decision (2026-09-01); the key stays because Komble reads it to follow the DE |
 | `tint_borders` | bool | `true` | accent-tinted window borders |
@@ -135,6 +137,10 @@ derive the tokens itself. To see a change before committing to it:
 ```
 ewe-theme preview && xdg-open design/specimen.html
 ```
+
+The values the engine derives are held to the designer's reference sheet,
+`design/spec/ewe-design-system.html`, by `design/check-spec.sh` — run it after
+any change to `bin/ewe-theme`.
 
 Applying this section re-runs `colorscheme.sh`, which writes every toolkit's
 config (GTK, Qt, cursor, icon hue) in one pass.

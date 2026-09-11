@@ -9,10 +9,12 @@ that describes your machine:
 
     [desktop.theme]
     accent       = "#ffcc00"      # THE seed. brand[10..160] comes from this.
-    corner       = "medium"       # none | small | medium | large
+    corner       = "round"        # none | small | medium | large | round
     density      = "comfortable"  # compact | comfortable | roomy
-    stroke       = "thin"         # thin | thick
+    stroke       = "none"         # none | thin | thick   (component outlines)
     neutral_tint = 8              # 0 = pure neutral greys; higher = more accent
+    bar_opacity  = 100            # 0-100, the bar and dock only
+    app_blur     = false          # blur behind every window at a fixed level
 
 That is the whole surface. One accent in, a complete Fluent 2 token set out,
 written to the two artefacts the desktop reads:
@@ -41,6 +43,18 @@ WHERE WE DEVIATE, deliberately, and why:
   2. Fluent hard-codes text-on-brand to white, which is safe only because its
      brand fills are always dark blue. ewe lets you pick yellow, so the
      foreground is chosen from the fill's measured lightness instead.
+
+THE 2026-09 REVAMP (design/spec/ewe-design-system.html is the reference, and
+design/check-spec.sh holds this file to it). Same 150 token names, new values
+and new rules, all expressed as a remap in `alias()` so the derivation stays:
+  - the background ladder sits at HALF the grey stops it used to (bg-1 g16 ->
+    g8, card g20 -> g10) — the desktop got a lot darker;
+  - the filled brand roles moved two stops down the brand ramp (b70 -> b50);
+  - strokes carry alpha 0.5, and nothing is OUTLINED by default: the `stroke`
+    knob gained `none`, which zeroes `outline-width` (component edges) while
+    `stroke-width` (hairlines, the window ring) stays 1;
+  - the `round` corner preset (12 / 20 / 26 / capsule) is pitched by role
+    rather than taken off Fluent's ladder, and is the default.
 """
 import argparse
 import json
@@ -55,8 +69,9 @@ EWE_CONF = os.path.join(CFG_DIR, "ewe", "ewe.conf")
 OUT_JSON = os.path.join(CFG_DIR, "quickshell", "theme-tokens.json")
 OUT_CSS = os.path.join(HERE, "design", "tokens.css")
 
-DEFAULTS = {"accent": "#0a84ff", "corner": "medium", "density": "comfortable",
-            "stroke": "thin", "neutral_tint": 8}
+DEFAULTS = {"accent": "#0a84ff", "corner": "round", "density": "comfortable",
+            "stroke": "none", "neutral_tint": 8,
+            "bar_opacity": 100, "app_blur": False}
 
 
 def out(o):
@@ -132,10 +147,10 @@ def lch_to_hex(L, C, H):
 
 # ═══ global ramp 1: the greys ══════════════════════════════════════════════
 # Fluent's grey ramp is 50 stops keyed by percent lightness, and the value is
-# simply round(2.55 * key) in all three channels — grey[20] is #333333. We keep
-# the exact same keys and lightness so every alias mapping below is Fluent's
-# verbatim, and only bend the hue.
-GREY_KEYS = list(range(2, 100, 2)) + [99]
+# simply round(2.55 * key) in all three channels — grey[20] is #333333. Fluent
+# publishes the even keys; the odd ones are the same formula and exist because
+# the revamp's background ladder is Fluent's at HALF the stop index (g22 -> g11).
+GREY_KEYS = list(range(1, 100))
 
 
 def grey_ramp(accent, tint):
@@ -180,18 +195,32 @@ ANCHOR = 80          # the stop your accent lands on, exactly
 TORSION = -13.0      # degrees of hue twist toward the ends
 
 
-def brand_ramp(accent):
+def _ref_at(stop):
+    """REF_L / REF_C read at any stop, linear between the published ones."""
+    stop = max(BRAND_STOPS[0], min(BRAND_STOPS[-1], stop))
+    j = max(i for i, s in enumerate(BRAND_STOPS) if s <= stop)
+    if j == len(BRAND_STOPS) - 1:
+        return REF_L[j], REF_C[j]
+    f = (stop - BRAND_STOPS[j]) / (BRAND_STOPS[j + 1] - BRAND_STOPS[j])
+    return (REF_L[j] + (REF_L[j + 1] - REF_L[j]) * f,
+            REF_C[j] + (REF_C[j + 1] - REF_C[j]) * f)
+
+
+def brand_at(accent, stop):
+    """One brand colour at `stop` — the published 16 stops or anything between
+    them. The revamp's filled roles sit at 45 and 38, which Fluent never named,
+    and inventing a hex for them would move the decision out of the accent."""
     L0, C0, H0 = hex_to_lch(accent)
-    i = BRAND_STOPS.index(ANCHOR)
-    La, Ca = REF_L[i], REF_C[i]
+    La, Ca = _ref_at(ANCHOR)
     ks = (C0 / Ca) if Ca else 0
-    ramp = {}
-    for j, s in enumerate(BRAND_STOPS):
-        L = REF_L[j]
-        Lo = L0 * (L / La) if L <= La else L0 + (100 - L0) * (L - La) / (100 - La)
-        t = (L - La) / (100 - La) if L >= La else (La - L) / La * 0.55
-        ramp[s] = lch_to_hex(Lo, REF_C[j] * ks, (H0 + TORSION * t) % 360)
-    return ramp
+    L, C = _ref_at(stop)
+    Lo = L0 * (L / La) if L <= La else L0 + (100 - L0) * (L - La) / (100 - La)
+    t = (L - La) / (100 - La) if L >= La else (La - L) / La * 0.55
+    return lch_to_hex(Lo, C * ks, (H0 + TORSION * t) % 360)
+
+
+def brand_ramp(accent):
+    return {s: brand_at(accent, s) for s in BRAND_STOPS}
 
 
 def on(fill):
@@ -203,7 +232,18 @@ def on(fill):
 # ═══ the alias layer — Fluent's dark theme, verbatim ══════════════════════
 # Every right-hand side below is Fluent's own dark mapping. Read it as the
 # contract: a component asks for a ROLE and this table decides the value.
-def alias(grey, brand, white="#ffffff", black="#000000"):
+# The strokes that carry alpha (0.5, per the spec). alias() keeps them as
+# opaque hex so the maths stays in one colour space; the two emitters below
+# apply the alpha in the form each consumer reads — `rgba()` for CSS,
+# `#AARRGGBB` for QML. Focus strokes stay opaque: a ring must not fade.
+STROKE_ALPHA = 0.5
+ALPHA_ROLES = ("stroke-1", "stroke-1-hover", "stroke-1-pressed", "stroke-1-selected",
+               "stroke-2", "stroke-3", "stroke-accessible", "stroke-disabled")
+
+
+def alias(grey, brand, bx, white="#ffffff", black="#000000"):
+    """`grey` and `brand` are the ramps; `bx(stop)` is the brand ramp read
+    between its stops, for the filled roles the revamp pitched off-grid."""
     g, b = grey, brand
     return {
         # ── foregrounds ────────────────────────────────────────────────────
@@ -215,15 +255,20 @@ def alias(grey, brand, white="#ffffff", black="#000000"):
         "fg-4": g[60],                    # the quietest readable text
         "fg-disabled": g[36],
         "fg-inverted": g[14],             # text on a light fill
-        "fg-on-brand": on(b[70]),         # DEVIATION: measured, not white
+        "fg-on-brand": on(bx(50)),        # DEVIATION: measured, not white
         # ── backgrounds: six levels, each with its own states ─────────────
-        "bg-1": g[16], "bg-1-hover": g[24], "bg-1-pressed": g[12], "bg-1-selected": g[22],
-        "bg-2": g[12], "bg-2-hover": g[20], "bg-2-pressed": g[8], "bg-2-selected": g[18],
-        "bg-3": g[8], "bg-3-hover": g[16], "bg-3-pressed": g[4], "bg-3-selected": g[14],
-        "bg-4": g[4], "bg-4-hover": g[12], "bg-4-pressed": black, "bg-4-selected": g[10],
-        "bg-5": black, "bg-5-hover": g[8], "bg-5-pressed": g[2], "bg-5-selected": g[6],
-        "bg-6": g[20],
-        "bg-disabled": g[8],
+        # Fluent's dark ladder is bg-1 g16 / bg-2 g12 / bg-3 g8 / bg-4 g4 and
+        # the hover/pressed/selected deltas are +8 / -4 / +6. The revamp keeps
+        # the ladder and the deltas but at HALF the stop index throughout —
+        # bg-1 g8, hover g12, pressed g6, selected g11 — so the whole desktop
+        # sits two stops deeper and a card no longer reads as a grey slab.
+        "bg-1": g[8], "bg-1-hover": g[12], "bg-1-pressed": g[6], "bg-1-selected": g[11],
+        "bg-2": g[6], "bg-2-hover": g[10], "bg-2-pressed": g[4], "bg-2-selected": g[9],
+        "bg-3": g[4], "bg-3-hover": g[8], "bg-3-pressed": g[2], "bg-3-selected": g[7],
+        "bg-4": g[2], "bg-4-hover": g[6], "bg-4-pressed": black, "bg-4-selected": g[5],
+        "bg-5": black, "bg-5-hover": g[4], "bg-5-pressed": g[1], "bg-5-selected": g[3],
+        "bg-6": g[10],
+        "bg-disabled": g[4],
         # ── card: a raised, FILLED surface that reacts to the pointer ──────
         # DEVIATION. Fluent's bg-6 has no state variants, because its Card
         # component carries its own. ewe's panels are full of cards and tiles
@@ -231,18 +276,19 @@ def alias(grey, brand, white="#ffffff", black="#000000"):
         # deltas off bg-1 (+8 hover, -4 pressed, +6 selected) applied to g20.
         # Without this a hovered card had to borrow `subtle-hover`, which is a
         # DIFFERENT surface — that is why hovering a tile made it jump colour.
-        "card": g[20],
-        "card-hover": g[28],
-        "card-pressed": g[16],
-        "card-selected": g[26],
+        "card": g[10],
+        "card-hover": g[14],
+        "card-pressed": g[8],
+        "card-selected": g[13],
         # ── subtle: a thing with no fill of its own until you point at it ──
         # THIS is the token ewe never had. Every "hover a bare row" bug was
         # this concept being spelled with a surface colour instead.
         "subtle": "transparent",
-        "subtle-hover": g[22],
-        "subtle-pressed": g[18],
-        "subtle-selected": g[20],
+        "subtle-hover": g[11],
+        "subtle-pressed": g[9],
+        "subtle-selected": g[10],
         # ── strokes: three weights, not one ────────────────────────────────
+        # (the greys Fluent uses, at alpha 0.5 — see ALPHA_ROLES)
         "stroke-1": g[40],                # a real UI border
         "stroke-1-hover": g[46],
         "stroke-1-pressed": g[42],
@@ -254,16 +300,19 @@ def alias(grey, brand, white="#ffffff", black="#000000"):
         "stroke-focus-1": black,          # the inner half of a focus ring
         "stroke-focus-2": white,          # the outer half
         # ── brand ──────────────────────────────────────────────────────────
-        "brand-bg": b[70],                # a filled primary control
-        "brand-bg-hover": b[80],
-        "brand-bg-pressed": b[40],
-        "brand-bg-selected": b[60],
+        # The filled roles sit two stops lower than Fluent's b70/b80/b40/b60
+        # since the revamp: a primary button is a deep fill under white text,
+        # not the accent itself. The accent as a colour stays at b100 below.
+        "brand-bg": bx(50),               # a filled primary control
+        "brand-bg-hover": bx(60),
+        "brand-bg-pressed": bx(38),
+        "brand-bg-selected": bx(45),
         "brand-fg-1": b[100],             # accent AS text / icon on dark
         "brand-fg-2": b[110],
         "brand-fg-link": b[100],
         "brand-fg-link-hover": b[110],
         "brand-stroke-1": b[100],
-        "brand-stroke-2": b[50],
+        "brand-stroke-2": bx(40),
         # compound = a control whose fill and stroke move together (checkbox,
         # radio, switch): the one place Fluent brightens on hover instead of
         # darkening, so the control reads as "live" under the pointer
@@ -292,21 +341,34 @@ STATUS = {
 # ═══ the non-colour ramps ═════════════════════════════════════════════════
 # Fluent's global ramps, verbatim. Nothing here is invented.
 RADIUS_RAMP = {"none": 0, "small": 2, "medium": 4, "large": 6, "xlarge": 8,
-               "2xlarge": 12, "3xlarge": 16, "4xlarge": 24, "circular": 9999}
+               "2xlarge": 12, "3xlarge": 16, "4xlarge": 24,
+               # 999, not Fluent's 10000: the spec says 999 and both Qt and the
+               # browser clamp it to half the box anyway — a capsule either way.
+               "circular": 999}
 SPACING_RAMP = {"none": 0, "xxs": 2, "xs": 4, "snudge": 6, "s": 8, "mnudge": 10,
                 "m": 12, "l": 16, "xl": 20, "xxl": 24, "xxxl": 32}
-STROKE_RAMP = {"thin": 1, "thick": 2, "thicker": 3, "thickest": 4}
+# `none` is the revamp's default: component OUTLINES go to 0 while hairlines
+# and the window ring keep 1px — see `outline-width` vs `stroke-width` below.
+STROKE_RAMP = {"none": 0, "thin": 1, "thick": 2, "thicker": 3, "thickest": 4}
 FONT_RAMP = {100: (10, 14), 200: (12, 16), 300: (14, 20), 400: (16, 22),
              500: (20, 28), 600: (24, 32), 700: (28, 36), 800: (32, 40)}
 
 # `corner` picks which rung of the radius ramp each ROLE stands on. One knob,
 # and the whole desktop's cornering moves together.
+# A value is a rung name on RADIUS_RAMP, or a pixel count for a preset that
+# is pitched by role instead: `round` (the default since the 2026-09 revamp)
+# is 12 / 20 / 26 / capsule, which is not on Fluent's ladder on purpose.
 CORNER = {
     "none":   {"control": "none", "card": "none", "panel": "none", "pill": "none"},
     "small":  {"control": "small", "card": "medium", "panel": "large", "pill": "small"},
     "medium": {"control": "medium", "card": "large", "panel": "xlarge", "pill": "medium"},
     "large":  {"control": "large", "card": "xlarge", "panel": "2xlarge", "pill": "circular"},
+    "round":  {"control": 12, "card": 20, "panel": 26, "pill": "circular"},
 }
+
+
+def radius(v):
+    return RADIUS_RAMP[v] if isinstance(v, str) else int(v)
 # `density` picks the spacing rungs and the control heights. Fluent's own
 # button sizes are 24 / 32 / 40, which is exactly this ladder.
 DENSITY = {
@@ -343,6 +405,13 @@ def read_conf(path=None):
         cfg["neutral_tint"] = max(0, min(40, int(cfg["neutral_tint"])))
     except (TypeError, ValueError):
         cfg["neutral_tint"] = DEFAULTS["neutral_tint"]
+    try:
+        cfg["bar_opacity"] = max(0, min(100, int(cfg["bar_opacity"])))
+    except (TypeError, ValueError):
+        cfg["bar_opacity"] = DEFAULTS["bar_opacity"]
+    # ewe-settings writes the toggle through `ewe-conf set`, which may land
+    # it as a string; both spellings mean the same thing.
+    cfg["app_blur"] = str(cfg["app_blur"]).lower() in ("1", "true", "yes", "on")
     return cfg, src
 
 
@@ -350,18 +419,24 @@ def tokens(cfg):
     """The whole token set, derived. This is the only place it is decided."""
     grey = grey_ramp(cfg["accent"], cfg["neutral_tint"])
     brand = brand_ramp(cfg["accent"])
-    color = alias(grey, brand)
+    color = alias(grey, brand, lambda s: brand_at(cfg["accent"], s))
     color.update(STATUS)
 
     corner, dens = CORNER[cfg["corner"]], DENSITY[cfg["density"]]
-    thin = STROKE_RAMP[cfg["stroke"]]
+    w = STROKE_RAMP[cfg["stroke"]]
     shape = {
-        "radius-control": RADIUS_RAMP[corner["control"]],
-        "radius-card": RADIUS_RAMP[corner["card"]],
-        "radius-panel": RADIUS_RAMP[corner["panel"]],
-        "radius-pill": RADIUS_RAMP[corner["pill"]],
-        "stroke-width": thin,
-        "stroke-width-thick": min(4, thin + 1),
+        "radius-control": radius(corner["control"]),
+        "radius-card": radius(corner["card"]),
+        "radius-panel": radius(corner["panel"]),
+        "radius-pill": radius(corner["pill"]),
+        # Two widths since the revamp. `outline-width` is the edge a component
+        # draws around ITSELF (button, input, card, tile, dock) and is 0 under
+        # `stroke = none`: the layer step separates it from what is behind.
+        # `stroke-width` is a rule INSIDE a surface — a divider, the rail's
+        # hairline, the 1px window ring — and never drops below 1.
+        "outline-width": w,
+        "stroke-width": max(1, w),
+        "stroke-width-thick": max(2, min(4, w + 1)),
         "focus-width": 2,
     }
     size = {
@@ -420,8 +495,8 @@ LEGACY_COLOR = {
 }
 LEGACY_SHAPE = {
     "radius": "radius-panel", "radius-inner": "radius-card",
-    "radius-pill": "radius-pill", "border": "stroke-width",
-    "border-thin": "stroke-width", "hover-inset": "stroke-width",
+    "radius-pill": "radius-pill", "border": "outline-width",
+    "border-thin": "outline-width", "hover-inset": "stroke-width",
     "focus": "focus-width",
 }
 LEGACY_SIZE = ("pad", "gap", "row", "control", "bar-height", "icon",
@@ -450,20 +525,48 @@ def legacy(t):
 
 
 # ═══ artefacts ════════════════════════════════════════════════════════════
+def _rgb(hexv):
+    h = hexv.lstrip("#")
+    return int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+
+
+def color_css(role, hexv):
+    """A colour as CSS reads it: strokes carry their alpha as rgba()."""
+    if role in ALPHA_ROLES:
+        return "rgba(%d, %d, %d, %s)" % (*_rgb(hexv), STROKE_ALPHA)
+    return hexv
+
+
+def color_qml(role, hexv):
+    """The same colour as QML reads it: #AARRGGBB."""
+    if role in ALPHA_ROLES:
+        return "#%02x%s" % (round(STROKE_ALPHA * 255), hexv.lstrip("#"))
+    return hexv
+
+
+def _alpha_str(a):
+    return ("%.2f" % a).rstrip("0").rstrip(".") or "0"
+
+
 def gen_json(t):
+    lg = legacy(t)
+    # legacy() hands every look the SAME dict, so convert each object once
+    for look in {id(l): l for l in lg.values()}.values():
+        look["color"] = {k: color_qml(LEGACY_COLOR[k], v) for k, v in look["color"].items()}
     return json.dumps({
         "version": 2,
         "input": t["input"],
-        "color": t["color"], "shape": t["shape"], "size": t["size"],
+        "color": {k: color_qml(k, v) for k, v in t["color"].items()},
+        "shape": t["shape"], "size": t["size"],
         "grey": t["grey"], "brand": t["brand"],
-        "themes": legacy(t),
+        "themes": lg,
     }, indent=2) + "\n"
 
 
 def css_vars(t):
     v = {}
     for k, val in t["color"].items():
-        v["--" + k] = val
+        v["--" + k] = color_css(k, val)
     for k, val in t["shape"].items():
         v["--" + k] = "%dpx" % val
     for k, val in t["size"].items():
@@ -475,9 +578,14 @@ def css_vars(t):
         t["color"]["shadow-key"], t["color"]["shadow-ambient"])
     v["--elevation"] = "0 8px 16px %s, 0 0 2px %s" % (
         t["color"]["shadow-key"], t["color"]["shadow-ambient"])
+    # the bar and dock's own ground: bg-3 at the user's opacity. Everything
+    # else stays opaque — the spec's "the shell paints its own ground".
+    a = t["input"]["bar_opacity"] / 100.0
+    v["--bar-alpha"] = _alpha_str(a)
+    v["--bg-3-bar"] = "rgba(%d, %d, %d, %s)" % (*_rgb(t["color"]["bg-3"]), _alpha_str(a))
     # legacy aliases — see LEGACY_COLOR
     for k, src in LEGACY_COLOR.items():
-        v["--" + k] = t["color"][src]
+        v["--" + k] = color_css(src, t["color"][src])
     for k, src in LEGACY_SHAPE.items():
         v["--" + k] = "%dpx" % t["shape"][src]
     v["--shadow-offset"] = "0px"
@@ -486,7 +594,7 @@ def css_vars(t):
     v["--label-weight"] = "600"
     v["--btn-hover-bg"] = t["color"]["brand-bg-hover"]
     v["--btn-hover-fg"] = t["color"]["fg-on-brand"]
-    v["--input-border-width"] = "%dpx" % t["shape"]["stroke-width"]
+    v["--input-border-width"] = "%dpx" % t["shape"]["outline-width"]
     return v
 
 
@@ -589,24 +697,24 @@ SPECIMEN = """<!doctype html>
 <title>Ewe Theme Specimen</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Ubuntu:wght@400;500;600;700&family=Ubuntu+Mono&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
 <style>
 __TOKENS__
 * { box-sizing: border-box; }
-body { margin:0; font-family: Ubuntu, "Noto Sans Georgian", system-ui, sans-serif;
+body { margin:0; font-family: Inter, "Noto Sans Georgian", Cantarell, system-ui, sans-serif;
        background: var(--bg-3); color: var(--fg-1); font-size: var(--fs-body); }
 .wrap { max-width: 1060px; margin: 0 auto; padding: 24px 22px 72px; }
 h1 { font-size: var(--fs-600); line-height: var(--lh-600); margin: 0 0 2px; font-weight: 600; }
 .sub { color: var(--fg-3); font-size: var(--fs-200); margin-bottom: 20px; }
 h2 { font-size: var(--fs-200); color: var(--fg-3); margin: 28px 0 9px; font-weight: 600; }
-.card { background: var(--bg-1); border: var(--stroke-width) solid var(--stroke-2);
+.card { background: var(--bg-1); border: var(--outline-width) solid var(--stroke-2);
         border-radius: var(--radius-card); box-shadow: var(--elevation-sm); padding: var(--pad); }
 .row { display:flex; flex-wrap:wrap; gap: var(--gap); align-items:center; }
 /* controls */
 .btn { display:inline-flex; align-items:center; justify-content:center; gap:6px;
        min-height: var(--control); padding-inline: var(--pad); font: inherit;
-       font-weight: 600; cursor:pointer; border-radius: var(--radius-control);
-       border: var(--stroke-width) solid transparent; transition: background .1s, border-color .1s; }
+       font-weight: 600; cursor:pointer; border-radius: var(--radius-pill);
+       border: var(--outline-width) solid transparent; transition: background .1s, border-color .1s; }
 .btn-primary { background: var(--brand-bg); color: var(--fg-on-brand); border-color: var(--brand-bg); }
 .btn-primary:hover { background: var(--brand-bg-hover); border-color: var(--brand-bg-hover); }
 .btn-primary:active { background: var(--brand-bg-pressed); border-color: var(--brand-bg-pressed); }
@@ -618,10 +726,10 @@ h2 { font-size: var(--fs-200); color: var(--fg-3); margin: 28px 0 9px; font-weig
 .btn[disabled] { background: var(--bg-disabled); color: var(--fg-disabled);
                  border-color: var(--stroke-disabled); pointer-events:none; }
 input.f { width:100%; min-height: var(--control); padding-inline: var(--pad); font: inherit;
-          background: var(--bg-1); color: var(--fg-1); border-radius: var(--radius-control);
-          border: var(--stroke-width) solid var(--stroke-1); outline: none; }
+          background: var(--bg-1); color: var(--fg-1); border-radius: var(--radius-card);
+          border: var(--outline-width) solid var(--stroke-1); outline: none; }
 input.f:hover { border-color: var(--stroke-1-hover); }
-input.f:focus { border-color: var(--compound-brand-stroke); box-shadow: 0 0 0 1px var(--compound-brand-stroke); }
+input.f:focus { box-shadow: inset 0 0 0 var(--stroke-width-thick) var(--compound-brand-stroke); }
 input.f::placeholder { color: var(--fg-3); }
 /* THE case ewe had no word for: a row with no fill of its own. Inset by the
    stroke width so a hovered row can never paint over its container's rule. */
@@ -634,31 +742,31 @@ input.f::placeholder { color: var(--fg-3); }
 .list .item:active { background: var(--subtle-pressed); }
 .list .item.sel { background: var(--subtle-selected); }
 .list .item + .item { border-top: var(--stroke-width) solid var(--stroke-3); }
-.sw { width:40px; height:20px; border-radius: var(--radius-pill); position:relative; cursor:pointer;
-      border: var(--stroke-width) solid var(--stroke-accessible); background: var(--subtle); }
-.sw.on { background: var(--compound-brand-bg); border-color: var(--compound-brand-bg); }
-.sw.on:hover { background: var(--compound-brand-bg-hover); border-color: var(--compound-brand-bg-hover); }
-.sw i { position:absolute; top:3px; left:4px; width:12px; height:12px; border-radius:50%;
-        background: var(--fg-3); transition:left .1s; }
-.sw.on i { left:22px; background: var(--fg-on-brand); }
+.sw { width:38px; height:22px; border-radius: var(--radius-pill); position:relative; cursor:pointer;
+      border: var(--outline-width) solid var(--stroke-accessible); background: var(--bg-2); }
+.sw.on { background: var(--brand-bg); border-color: var(--brand-bg); }
+.sw.on:hover { background: var(--brand-bg-hover); border-color: var(--brand-bg-hover); }
+.sw i { position:absolute; top:2px; left:2px; width:18px; height:18px; border-radius:50%;
+        background: var(--fg-3); transition:left .15s; }
+.sw.on i { left:18px; background: var(--fg-on-brand); }
 .chip { display:inline-flex; align-items:center; padding:2px 9px; font-size: var(--fs-200);
-        border-radius: var(--radius-pill); border: var(--stroke-width) solid currentColor; }
+        border-radius: var(--radius-pill); border: var(--outline-width) solid currentColor; }
 /* ramps */
 .ramp { display:flex; border-radius: var(--radius-card); overflow:hidden;
-        border: var(--stroke-width) solid var(--stroke-2); }
+        border: var(--outline-width) solid var(--stroke-2); }
 .ramp span { flex:1; height:44px; position:relative; }
 .ramp span b { position:absolute; inset:auto 0 2px 0; text-align:center; font-size:8px;
-               font-family:"Ubuntu Mono",monospace; font-weight:400; color:#8888; }
+               font-family:ui-monospace,Menlo,Consolas,monospace; font-weight:400; color:#8888; }
 .grid { display:grid; grid-template-columns: repeat(auto-fill,minmax(150px,1fr)); gap:8px; }
-.grid > div { border:var(--stroke-width) solid var(--stroke-3); border-radius:var(--radius-control);
-              padding:7px; font-size:10px; font-family:"Ubuntu Mono",monospace; color:var(--fg-3); }
+.grid > div { background:var(--bg-2); border-radius:var(--radius-control);
+              padding:7px; font-size:10px; font-family:ui-monospace,Menlo,Consolas,monospace; color:var(--fg-3); }
 .grid > div s { display:block; height:26px; border-radius:calc(var(--radius-control) - 1px);
                 margin-bottom:5px; text-decoration:none; border:1px solid var(--stroke-3); }
 .states { display:grid; grid-template-columns:repeat(4,1fr); gap:0; border-radius:var(--radius-card);
-          overflow:hidden; border:var(--stroke-width) solid var(--stroke-2); }
-.states div { padding:12px 10px; font-size:10px; font-family:"Ubuntu Mono",monospace; color:var(--fg-3); }
+          overflow:hidden; border:var(--outline-width) solid var(--stroke-2); }
+.states div { padding:12px 10px; font-size:10px; font-family:ui-monospace,Menlo,Consolas,monospace; color:var(--fg-3); }
 .dens { display:grid; grid-template-columns:repeat(auto-fill,minmax(104px,1fr)); gap:7px;
-        font-family:"Ubuntu Mono",monospace; font-size:10px; color:var(--fg-3); }
+        font-family:ui-monospace,Menlo,Consolas,monospace; font-size:10px; color:var(--fg-3); }
 .dens b { display:block; color:var(--fg-1); font-size:12px; }
 </style>
 <body><div class="wrap">
@@ -709,7 +817,7 @@ const T = __TOKENS_JSON__;
 document.getElementById("sub").textContent =
   "accent " + T.input.accent + "  \\u00b7  corner " + T.input.corner +
   "  \\u00b7  density " + T.input.density + "  \\u00b7  stroke " + T.input.stroke +
-  "  \\u00b7  neutral_tint " + T.input.neutral_tint;
+  "  \\u00b7  neutral_tint " + T.input.neutral_tint + "  \\u00b7  bar_opacity " + T.input.bar_opacity;
 const bar = (o) => Object.entries(o).map(([k,v]) =>
   `<span style="background:${v}"><b>${k}</b></span>`).join("");
 document.getElementById("brand").innerHTML = bar(T.brand);

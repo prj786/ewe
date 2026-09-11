@@ -120,7 +120,10 @@ registered in `qmldir`. Two singletons tie everything together:
   `accentColor`, `version`, pinned lists, the live `NotificationServer`, …).
   In-shell toggles flip a `Globals` bool directly (no IPC round-trip).
 - **`Theme.qml`** — the palette/metrics; `accent` binds to `Globals.accentColor`
-  so changing the accent recolours the whole shell live.
+  so changing the accent recolours the whole shell live. Values come from
+  `bin/ewe-theme` (one accent in `ewe.conf` → every token); the designer's
+  reference sheet is `design/spec/ewe-design-system.html` and
+  `design/check-spec.sh` holds the generated `design/tokens.css` to it.
 - **`BtAgent.qml`** — the bluez pairing agent (`scripts/bt-agent.py`, default
   `org.bluez.Agent1`, NDJSON over stdio like `KdeConnect.qml`); `BtPairing.qml`
   is its dialog. Device state still comes from `Quickshell.Bluetooth`; pairing
