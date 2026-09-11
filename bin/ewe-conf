@@ -263,6 +263,10 @@ THEME_MAP = [  # ewe.conf key ↔ user-theme.json key (with defaults)
     ("desktop.theme.tint_borders", "tintBorders", True),
     ("desktop.theme.window_transparency", "windowTransparency", False),
     ("desktop.theme.avatar_shape", "avatarShape", "circle"),
+    # the surface knobs — Settings writes them through `set`, but they are
+    # listed so `ewe-conf import/absorb` and a synced ewe.conf carry them too
+    ("desktop.theme.bar_opacity", "barOpacity", 100),
+    ("desktop.theme.app_blur", "appBlur", False),
     ("desktop.dock.enabled", "dockEnabled", True),
     ("desktop.dock.autohide", "dockAutohide", False),
     ("desktop.dock.icon_size", "dockIconSize", "medium"),
@@ -765,9 +769,14 @@ def _hex6(c):
 # the wallpaper, not the windows the bar covers — cheaper and steadier.
 # ignore_alpha: the bar's transparent margins (shadow strip) stay unblurred.
 BAR_BLUR_MIN = 10
-BAR_BLUR_LUA = """\
+APP_OPACITY = 0.85
+BLUR_ON_LUA = """\
 if os.getenv("EWE_NO_BLUR") ~= "1" then
     hl.config({ decoration = { blur = { enabled = true, size = 6, passes = 3, xray = true, ignore_opacity = true, new_optimizations = true, noise = 0.012 } } })
+end
+"""
+BAR_BLUR_RULE_LUA = """\
+if os.getenv("EWE_NO_BLUR") ~= "1" then
     hl.layer_rule({ name = "ewe-bar-blur", match = { namespace = "^quickshell:(bar|dock)$" }, blur = true, ignore_alpha = 0.05 })
 end
 """
@@ -795,16 +804,27 @@ def gen_user_lua(doc):
     if mode == "scrolling":
         s += ("hl.config({ scrolling = { column_width = %s, follow_focus = true, "
               "fullscreen_on_one_column = true } })\n") % _lua_num(lay.get("column_width", 0.5))
-    s += ("hl.config({ decoration = { active_opacity = 1.0, inactive_opacity = %s } })\n"
-          % ("0.97" if gv("desktop.theme.window_transparency", False) else "1.0"))
+    # app_blur (desktop.theme): every window at APP_OPACITY with blur behind
+    # it, fullscreen opaque — one material for terminal, browser and the ewe
+    # apps alike. Otherwise the old hair of unfocused translucency, if asked.
+    app_blur = str(gv("desktop.theme.app_blur", False)).lower() in ("1", "true", "yes", "on")
+    if app_blur:
+        s += ("hl.config({ decoration = { active_opacity = %s, inactive_opacity = %s, fullscreen_opacity = 1.0 } })\n"
+              % (APP_OPACITY, APP_OPACITY))
+    else:
+        s += ("hl.config({ decoration = { active_opacity = 1.0, inactive_opacity = %s } })\n"
+              % ("0.97" if gv("desktop.theme.window_transparency", False) else "1.0"))
     try:
         op = max(0, min(100, int(gv("desktop.theme.bar_opacity", 100))))
     except (TypeError, ValueError):
         op = 100
     if op == 100 and gv("desktop.theme.surface", "solid") == "glass":
         op = 72                              # 0.12.8's one-release knob
-    if BAR_BLUR_MIN <= op < 100:
-        s += BAR_BLUR_LUA
+    bar_blur = BAR_BLUR_MIN <= op < 100
+    if bar_blur or app_blur:
+        s += BLUR_ON_LUA
+    if bar_blur:
+        s += BAR_BLUR_RULE_LUA
     speed = gv("desktop.animations.speed", 1)
     if abs(speed - 1) >= 0.001:
         s += "\n".join(_anim_lua_lines(speed)) + "\n"

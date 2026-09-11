@@ -65,6 +65,11 @@ Scope {
         Component.onCompleted: Globals.server = server
         onNotification: function (n) {
             n.tracked = true                 // keep in trackedNotifications (history)
+            // The sender may close it itself — KDE Connect does at the end of a
+            // call, a download bar does when it finishes. Without this the
+            // toast outlived the notification and sat there until its own
+            // timer, or forever when it was replaced in place every second.
+            n.closed.connect(function () { root.removePopup(n) })
             if (!Globals.dnd) Globals.playSound("message-new-instant")
             if (!Globals.dnd) root.pushPopup(n)
         }

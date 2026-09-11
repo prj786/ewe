@@ -169,7 +169,9 @@ through to apps behind it.
 `Theme.barAlpha` (`barTop`, `dockFill`); between 10 and 99 `ewe-conf` writes
 the compositor blur + a `quickshell:(bar|dock)` layer rule into
 `generated/user.lua`; `EWE_NO_BLUR=1` (VMs, NVIDIA — `start-hyprland.sh`)
-skips the blur. Every other panel (`Theme.panel`) stays opaque. Prefs the
+skips the blur. `desktop.theme.app_blur` draws every WINDOW at 85 % with blur
+behind it (`decoration.active/inactive_opacity`, fullscreen opaque) — fixed, not
+the slider. Every other panel (`Theme.panel`) stays opaque. Prefs the
 Settings app writes MUST be in `ewe-conf`'s `THEME_MAP`, or `absorb` drops
 them on the next write (that was the 0.12.7 "Top bar settings do nothing").
 

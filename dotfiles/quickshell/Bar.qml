@@ -279,20 +279,14 @@ Scope {
                     duration: Theme.durSlow; easing.type: Theme.ease
                 }
                 layer.enabled: true
-                // shallower than the floating panels — the bar is anchored, not floating
-                layer.effect: Elevation { shadowOpacity: 0.38; shadowVerticalOffset: 3 }
+                // shallower than the floating panels — the bar is anchored, not
+                // floating; this shadow IS the bar's edge (no hairline since 0.12.10)
+                layer.effect: Elevation { shadowOpacity: 0.45; shadowVerticalOffset: 3 }
                 // barTop == barBottom today, so this renders flat; a future
                 // look can reintroduce a real gradient via those two tokens.
                 gradient: Gradient {
                     GradientStop { position: 0.0; color: Theme.barTop }
                     GradientStop { position: 1.0; color: Theme.barBottom }
-                }
-                Rectangle {
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.bottom: parent.bottom
-                    height: 1
-                    color: Theme.barBorder
                 }
 
                 // ── LEFT: workspace chip, then the focused app's icon + name —

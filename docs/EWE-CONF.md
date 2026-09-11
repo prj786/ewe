@@ -151,6 +151,9 @@ the theme's icon size) · `show` (table of indicator → bool: `sound mic wifi
 bluetooth battery power keyboard tray screenshot clipboard tiling`; a missing
 key means shown). `[desktop.theme].bar_opacity` (0–100) sets how solid the
 bar and dock are; below 100 the compositor blurs behind them.
+`[desktop.theme].app_blur` (bool) draws every window at 85 % with blur
+behind it (fullscreen stays opaque) — one material for terminal, browser,
+file manager and the ewe apps; a fixed level on purpose.
 
 ### `[desktop.animations]`
 
