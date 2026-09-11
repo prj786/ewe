@@ -2,35 +2,55 @@
  * ---------------------------------------------------------------------------
  * CANONICAL SOURCE, like design/tokens.css beside it: authored here and copied
  * verbatim into each Tauri app as src/components.css. design/check-tokens.sh
- * fails if a copy drifts.
+ * fails if a copy drifts. Requires tokens.css to be imported first.
  *
- * Nothing here names a colour. Every rule reads a token, so a control changes
- * CHARACTER with the theme rather than just hue: in flock a button is a square
- * block with a 3px ink border, uppercase, inverting on hover; in blacksheep
- * the same markup is a soft 6px pill with a hairline that brightens.
- * Requires tokens.css to be imported first.
+ * Nothing here names a colour. Every rule asks for a ROLE — --bg-1,
+ * --stroke-2, --fg-on-brand — and the generated token layer decides the value,
+ * so the same markup follows the accent, the corner preset, the density and
+ * the stroke setting in ewe.conf with no class changes.
+ *
+ * The rules (design/spec/ewe-design-system.html, "Working rules"):
+ *   1. Ask for a role, never a value.
+ *   2. State comes from the next role in the set (bg-1 → bg-1-hover), never
+ *      from opacity or a filter.
+ *   3. Nothing is OUTLINED. A control sits on a different background role
+ *      than what is behind it, and that layer step is the separation. Edges
+ *      below are drawn at --outline-width, which is 0 unless the user asks
+ *      for `stroke = thin` in ewe.conf. Hairlines INSIDE a surface (dividers,
+ *      the rail's rule) use --stroke-width, which never drops below 1.
+ *   4. Three edges earn a stroke regardless: the keyboard focus ring, the 2px
+ *      accent border on an open control-centre tile, the 1px window ring.
+ *   5. Transitions are 120–150 ms and colour-only. Nothing animates layout.
+ *   6. Corners are continuous where the engine can draw them:
+ *      corner-shape: squircle, plain radius everywhere else.
  * ------------------------------------------------------------------------- */
 
-/* ── ewe surface + rail — ONE look for Komble, ewe-settings and ewe-sync ────
-   Solid, never translucent: Hyprland's decoration.blur is disabled by design
-   in ewe, so an alpha window would show the wallpaper through it unblurred.
-   Everything below is token-driven, so the SHAPE changes with the theme and
-   not just the colour: `corner`, `density` and `stroke` in ewe.conf drive
-   the radius, spacing and rule weight every utility below reads, so the same
-   markup renders square-and-bold or soft-and-quiet with no class changes.
+/* ── ewe frame + rail + pane — ONE layout for Komble, ewe-settings, ewe-sync
+   .surface is the window: the frame the rail sits on, at the topmost
+   background step. .pane is the content area recessed into it on --bg-3,
+   rounded on the side that meets the rail, so the two read as one panel with
+   a well cut into it rather than two boxes side by side. Solid, never
+   translucent — the shell paints its own ground at every layer.
    ------------------------------------------------------------------------ */
 .surface {
-  background: var(--bg-1);
-  box-shadow: inset 0 0 0 var(--stroke-width) var(--stroke-2);
+  background: var(--bg-6);
+  box-shadow: inset 0 0 0 var(--outline-width) var(--stroke-2);
   border-radius: var(--radius-panel);
+}
+.pane {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  background: var(--bg-3);
+  border-radius: var(--radius-panel) 0 0 var(--radius-panel);
 }
 .rail {
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
   width: 3.5rem;
-  background: var(--bg-3);
-  border-right: var(--stroke-width) solid var(--stroke-2);
+  background: transparent;
   border-radius: var(--radius-panel) 0 0 var(--radius-panel);
 }
 .rail-brand {
@@ -44,7 +64,7 @@
   display: none;
   font-size: 1.125rem;
   font-weight: var(--label-weight);
-  letter-spacing: var(--label-tracking);
+  letter-spacing: -0.01em;
   text-transform: var(--label-transform);
   color: var(--fg-1);
 }
@@ -63,7 +83,7 @@
   align-items: center;
   justify-content: center;
   gap: 0.625rem;
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-control);
   min-height: var(--control);
   padding-inline: calc(var(--pad) * 0.75);
   font-size: var(--fs-body);
@@ -111,32 +131,31 @@
   .rail-nav { padding: 0 0.625rem; }
   .rail-item { justify-content: flex-start; }
 }
-/* ── end ewe surface + rail ──────────────────────────────────────────────── */
+/* ── end frame + rail + pane ─────────────────────────────────────────────── */
 
 /* ── controls ───────────────────────────────────────────────────────────────
-   Every rule below is token-driven, so a control changes CHARACTER with the
-   theme, not just hue: in flock a button is a square block with a 3px ink
-   border, uppercase, and it inverts on hover; in blacksheep the same markup
-   is a soft 6px pill with a hairline that brightens. No component needs to
-   know which look is active. ------------------------------------------- */
+   A button is a filled shape on --radius-control with no edge of its own;
+   the layer step does the separating. Chips and segmented choices are the
+   two capsule shapes. Every edge below is --outline-width wide, so the
+   `stroke` knob can bring outlines back without touching a component.
+   ------------------------------------------------------------------------ */
 @utility btn {
   @apply inline-flex select-none items-center justify-center gap-1.5 whitespace-nowrap transition-colors disabled:pointer-events-none disabled:opacity-50;
-  /* Density comes from [<theme>.size], not from a hard-coded padding step, so
-     a look can breathe more without every component being re-tuned. */
   min-height: var(--control);
   padding-inline: var(--pad);
   font-size: var(--fs-body);
-  border-radius: var(--radius-pill);
-  border: var(--stroke-width) solid transparent;
+  border-radius: var(--radius-control);
+  border: var(--outline-width) solid transparent;
   font-weight: var(--label-weight);
   letter-spacing: var(--label-tracking);
   text-transform: var(--label-transform);
+  transition: background-color 130ms ease, color 130ms ease, border-color 130ms ease;
 }
 @utility btn-primary {
   @apply btn;
   /* brand-bg, NOT --accent. --accent is the user's raw pick and is the value
      for a MARK — a light one is unreadable under text. brand-bg is the step
-     of the same ramp that is dark enough to fill, and --fg-on-brand is
+     of the same ramp that is deep enough to fill, and --fg-on-brand is
      measured against it (ink on a yellow accent, white on a blue one). */
   background: var(--brand-bg);
   color: var(--fg-on-brand);
@@ -152,11 +171,15 @@
 }
 @utility btn-ghost {
   @apply btn;
-  background: var(--bg-1);
+  /* one step below the pane it sits on: recessed, not outlined */
+  background: var(--bg-2);
   color: var(--fg-1);
   border-color: var(--stroke-1);
   &:hover {
-    background: var(--bg-1-hover);
+    background: var(--bg-2-hover);
+  }
+  &:active {
+    background: var(--bg-2-pressed);
   }
 }
 @utility btn-danger {
@@ -172,6 +195,49 @@
     color: var(--danger);
   }
 }
+/* A filter chip: a small capsule, transparent until chosen. */
+@utility chip {
+  @apply inline-flex select-none items-center justify-center whitespace-nowrap transition-colors;
+  min-height: calc(var(--control) - 4px);
+  padding-inline: var(--pad);
+  font-size: var(--fs-body);
+  font-weight: var(--label-weight);
+  border-radius: var(--radius-pill);
+  background: var(--subtle);
+  color: var(--fg-3);
+  transition: background-color 130ms ease, color 130ms ease;
+  &:hover {
+    background: var(--subtle-hover);
+    color: var(--fg-1);
+  }
+  &.is-active,
+  &[aria-pressed="true"],
+  &[data-state="active"] {
+    background: var(--brand-bg);
+    color: var(--fg-on-brand);
+  }
+}
+/* A segmented choice (corner / density / stroke): capsules in a row, the
+   idle ones recessed two steps below the card they sit in. */
+@utility seg {
+  @apply inline-flex flex-1 select-none items-center justify-center whitespace-nowrap transition-colors;
+  min-height: calc(var(--control) + 4px);
+  padding-inline: var(--pad);
+  font-size: var(--fs-body);
+  font-weight: var(--label-weight);
+  border-radius: var(--radius-pill);
+  background: var(--bg-4);
+  color: var(--fg-1);
+  transition: background-color 130ms ease, color 130ms ease;
+  &:hover {
+    background: var(--bg-4-hover);
+  }
+  &.is-active,
+  &[aria-pressed="true"] {
+    background: var(--brand-bg);
+    color: var(--fg-on-brand);
+  }
+}
 @utility input {
   @apply w-full outline-none;
   min-height: var(--control);
@@ -179,15 +245,17 @@
   font-size: var(--fs-body);
   background: var(--bg-1);
   color: var(--fg-1);
-  border-radius: var(--radius-card);
-  border-style: solid;
-  border-color: var(--stroke-1);
-  border-width: var(--stroke-width);
+  border-radius: var(--radius-control);
+  border: var(--outline-width) solid var(--stroke-1);
+  transition: box-shadow 130ms ease, background-color 130ms ease;
   &::placeholder {
     color: var(--fg-3);
   }
-  &:focus {
-    border-color: var(--compound-brand-stroke);
+  /* Focus is a 2px INSET ring in the accent itself, not a glow: it shares
+     the field's rounding exactly and cannot shift the layout. */
+  &:focus,
+  &:focus-visible {
+    box-shadow: inset 0 0 0 var(--stroke-width-thick) var(--compound-brand-stroke);
   }
 }
 @utility card {
@@ -195,8 +263,8 @@
      the same thing and is left to resolve here, so a shadcn Card and a .card
      are the same surface instead of two shades apart. */
   background: var(--card);
-  border: var(--stroke-width) solid var(--stroke-2);
-  border-radius: var(--radius-panel);
+  border: var(--outline-width) solid var(--stroke-2);
+  border-radius: var(--radius-card);
 }
 @utility section-title {
   @apply mb-2 mt-6 first:mt-0;
@@ -206,10 +274,81 @@
   letter-spacing: var(--label-tracking);
   text-transform: var(--label-transform);
 }
+/* A list of rows with no fill until pointed at, sitting in a shallow well.
+   Selection is colour and weight only — no fill — so a long list stays quiet. */
+@utility list-well {
+  padding: 5px;
+  border-radius: 18px;
+  background: var(--bg-3);
+}
+@utility list-row {
+  @apply flex w-full items-center gap-2 select-none;
+  min-height: 28px;
+  padding-inline: 8px;
+  border-radius: var(--radius-control);
+  font-size: var(--fs-small);
+  color: var(--fg-1);
+  background: var(--subtle);
+  transition: background-color 120ms ease;
+  &:hover {
+    background: var(--subtle-hover);
+  }
+  &:active {
+    background: var(--subtle-pressed);
+  }
+  &.is-selected {
+    color: var(--accent);
+    font-weight: var(--label-weight);
+  }
+  & > .icon {
+    width: 24px;
+    flex-shrink: 0;
+    font-size: 13px;
+    color: var(--fg-3);
+  }
+  &.is-selected > .icon {
+    color: var(--accent);
+  }
+}
+/* A meter: the fill is the accent until severity says otherwise. */
+@utility meter {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--bg-2);
+  overflow: hidden;
+}
+@utility meter-fill {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--accent);
+  transition: width 150ms ease;
+  &.is-warning { background: var(--warning); }
+  &.is-danger { background: var(--danger); }
+}
+/* A count badge and a "something changed" dot. */
+@utility badge {
+  @apply inline-flex items-center justify-center;
+  height: 14px;
+  min-width: 14px;
+  padding-inline: 5px;
+  border-radius: 7px;
+  background: var(--brand-bg);
+  color: var(--fg-on-brand);
+  font-size: 9px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+@utility badge-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--accent);
+}
 /* Semantic text/fill utilities. Components name a ROLE ("this is dim", "this
    is destructive") and the theme decides the colour — no component carries a
-   palette literal. ewe is dark-only, so the old `text-zinc-500
-   dark:text-zinc-400` pairs collapse to one token. */
+   palette literal. ewe is dark-only, so one token each. */
 @utility text-fg {
   color: var(--fg-1);
 }
@@ -258,7 +397,17 @@
   padding-inline: var(--pad);
   font-size: var(--fs-small);
   color: var(--warning);
-  background: color-mix(in srgb, var(--warning) 12%, transparent);
-  border: var(--stroke-width) solid var(--warning);
+  background: var(--warning-bg);
+  border: var(--outline-width) solid var(--warning-border);
   border-radius: var(--radius-card);
+}
+
+/* Continuous corners where the engine draws them; the plain radius holds
+   everywhere else. Not on .surface or .pane: a frame that clips a composited
+   child disagrees with the child's layer at the corner and paints a wedge. */
+@supports (corner-shape: squircle) {
+  .card, .btn, .btn-primary, .btn-ghost, .btn-danger, .chip, .seg,
+  .input, .list-well, .note, .rail-item {
+    corner-shape: squircle;
+  }
 }
