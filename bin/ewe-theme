@@ -56,7 +56,13 @@ OUT_JSON = os.path.join(CFG_DIR, "quickshell", "theme-tokens.json")
 OUT_CSS = os.path.join(HERE, "design", "tokens.css")
 
 DEFAULTS = {"accent": "#0a84ff", "corner": "medium", "density": "comfortable",
-            "stroke": "thin", "neutral_tint": 8, "bar_opacity": 100}
+            "stroke": "thin", "neutral_tint": 8, "bar_opacity": 100, "app_blur": False}
+# app_blur: every window is drawn at 85% with the compositor blurring what is
+# behind it — terminal, browser, file manager, the ewe apps alike, so the
+# desktop reads as one material. A fixed level, not the bar's slider: apps
+# at 60% are unreadable, and one look everywhere is the point. Fullscreen
+# windows stay opaque (video). Blur itself is skipped under EWE_NO_BLUR.
+APP_OPACITY = 0.85
 # bar_opacity: how solid the TOP BAR and DOCK are, 0 (see-through) … 100
 # (opaque, the default). Below 100 the compositor blurs what is behind them
 # (ewe-conf writes the blur + layer rule into generated/user.lua) — except
@@ -354,6 +360,7 @@ def read_conf(path=None):
         cfg["bar_opacity"] = max(0, min(100, int(cfg["bar_opacity"])))
     except (TypeError, ValueError):
         cfg["bar_opacity"] = DEFAULTS["bar_opacity"]
+    cfg["app_blur"] = str(cfg.get("app_blur", False)).lower() in ("1", "true", "yes", "on")
     # 0.12.8's one-release `surface = "glass"` reads as its old tint
     if str(cfg.pop("surface", "solid")) == "glass" and cfg["bar_opacity"] == 100:
         cfg["bar_opacity"] = 72
@@ -401,7 +408,8 @@ def tokens(cfg):
     size["fs-large"] = FONT_RAMP[base + 100][0]
     size["fs-title"] = FONT_RAMP[600][0]
     op = cfg["bar_opacity"]
-    surface = {"bar_alpha": op / 100.0, "blur": BAR_BLUR_MIN <= op < 100}
+    surface = {"bar_alpha": op / 100.0, "blur": BAR_BLUR_MIN <= op < 100,
+               "app_blur": cfg["app_blur"], "app_alpha": APP_OPACITY if cfg["app_blur"] else 1.0}
     return {"input": cfg, "color": color, "shape": shape, "size": size,
             "grey": grey, "brand": brand, "surface": surface}
 
