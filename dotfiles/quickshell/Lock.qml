@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Effects
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
@@ -111,9 +112,34 @@ Scope {
         WlSessionLockSurface {
             id: surf
 
+            // 2026-09-13 remaster: the desktop RECEDES rather than a curtain
+            // dropping — this output's wallpaper, blurred and dimmed (the
+            // Overview's recipe), with one glass card on it. A video wallpaper
+            // (which Image cannot draw) falls back to the flat ground.
             Rectangle {
                 anchors.fill: parent
-                color: Theme.bg3
+                color: Theme.bg4                    // opaque ground, always (the protocol wants one)
+
+                readonly property string wall: surf.screen ? Wallpaper.pathFor(surf.screen.name) : ""
+                Image {
+                    id: wallImg
+                    anchors.fill: parent
+                    source: parent.wall ? "file://" + parent.wall : ""
+                    fillMode: Image.PreserveAspectCrop
+                    asynchronous: true
+                    cache: true
+                    sourceSize: Qt.size(surf.width, surf.height)
+                    visible: false
+                }
+                MultiEffect {
+                    anchors.fill: parent
+                    source: wallImg
+                    visible: wallImg.status === Image.Ready
+                    blurEnabled: true
+                    blurMax: 48
+                    blur: 0.75
+                }
+                Rectangle { anchors.fill: parent; color: Qt.rgba(0, 0, 0, 0.42) }   // dim, not black
 
                 // keyboard capture — multi-monitor safe (no TextInput focus juggling)
                 Item {
@@ -131,14 +157,30 @@ Scope {
                     }
                 }
 
+                // the card: clock, date, who, and the field — one glass surface
+                // at the bar/dock alpha (rule 09: no outline; the Elevation
+                // and the Sheen are what separate it from the picture)
+                Rectangle {
+                    id: card
+                    anchors.centerIn: parent
+                    width: 400
+                    height: col.implicitHeight + 72
+                    radius: Theme.radius
+                    color: Theme.dockFill
+                    border.width: 0
+                    layer.enabled: true
+                    layer.effect: Elevation {}
+                    Sheen { radius: parent.radius }
+                }
                 Column {
+                    id: col
                     anchors.centerIn: parent
                     spacing: 16
 
                     Text {
                         anchors.horizontalCenter: parent.horizontalCenter
                         text: root.clock
-                        color: Theme.fg1; font.family: Theme.fontDisplay; font.pixelSize: 76; font.weight: Font.Bold
+                        color: Theme.fg1; font.family: Theme.fontDisplay; font.pixelSize: 64; font.weight: Font.Bold
                     }
                     Text {
                         anchors.horizontalCenter: parent.horizontalCenter
@@ -159,14 +201,14 @@ Scope {
                         color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: 16; font.weight: Font.DemiBold
                     }
 
-                    // password field — same look as the rest of the shell's inputs
+                    // password field — a revamp control: a filled well, no outline;
+                    // the danger fill only when there is something to say
                     Rectangle {
                         anchors.horizontalCenter: parent.horizontalCenter
-                        width: 300; height: 46; radius: Theme.radiusInner
-                        color: Theme.card
-                        border.color: root.err !== "" ? Theme.danger : Theme.accent
-                        border.width: Theme.border
-                        Behavior on border.color { ColorAnimation { duration: 120 } }
+                        width: 300; height: 46; radius: Theme.radiusControl
+                        color: root.err !== "" ? Theme.dangerBg : Theme.bg2
+                        border.width: 0
+                        Behavior on color { ColorAnimation { duration: Theme.durFast } }
 
                         // entered-password dots
                         Row {
