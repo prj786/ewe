@@ -4,41 +4,66 @@ import QtQuick
 // Theme — single source of truth for colour, type, metrics and icons.
 // Imported as `Theme.*`; components must never define their own.
 //
-// ONE look, built on FLUENT 2. Since 2026-09-04 there is no flock/blacksheep
-// split and no theme file: every value here is DERIVED from the single accent
-// in ewe.conf, by `ewe-theme`, which writes
-// ~/.config/quickshell/theme-tokens.json. What you can change lives in
-// ewe.conf next to everything else that describes your machine:
+// ONE look, built on FLUENT 2 roles, revamped 2026-09 to the designer's spec
+// (design/spec/ewe-design-system.html). There is no theme file: every value
+// here is DERIVED from the single accent in ewe.conf by `ewe-theme`, which
+// writes ~/.config/quickshell/theme-tokens.json. What you can change:
 //
 //   [desktop.theme]
 //   accent       = "#ffcc00"      # THE seed — the brand ramp comes from this
-//   corner       = "medium"       # none | small | medium | large
+//   corner       = "round"        # none | small | medium | large | round
 //   density      = "comfortable"  # compact | comfortable | roomy
-//   stroke       = "thin"         # thin | thick
+//   stroke       = "none"         # none | thin | thick   (component outlines)
 //   neutral_tint = 8              # how far the greys follow the accent
+//   bar_opacity  = 100            # 0-100, the bar and the dock only
+//   app_blur     = false          # blur behind every window (Hyprland side)
 //
-// WHY FLUENT. ewe had ONE `hover` and ONE `stroke`, so there was no way to say
-// "hover on a card" apart from "hover on a bare row", or "divider" apart from
-// "focus ring". Every border and hover bug came out of that missing vocabulary.
-// Fluent names them, and the names below are its roles.
+// THE TEN WORKING RULES (the spec's, restated for QML):
+//
+//   01  Ask for a ROLE, never a value. A component that needs a colour
+//       not in this file means this file is wrong — add the role here.
+//   02  The accent is the user's pick at runtime and beats everything:
+//       `accent` follows Globals.accentColor; brand-fg-1 is the fallback.
+//   03  State comes from the NEXT role in the set, never from opacity or
+//       a lighter()/darker() call:  bg1 → bg1Hover → bg1Pressed → bg1Selected.
+//   04  Dark only, on purpose. No light set, no mode switch; every layer
+//       paints its own ground.
+//   05  Chrome isn't text — labels on shell surfaces are never selectable.
+//   06  Transitions are 120–170 ms and colour-only. Rail items 120, fills
+//       130–150, a chevron turn 170. Nothing animates layout.
+//   07  The apps map their framework onto these roles, not the other way
+//       round — one palette for a QML surface and a Svelte pane.
+//   08  Icons are a font (Lucide, fontIcons): size and tint go through
+//       pixelSize and color, never a per-icon asset.
+//   09  NOTHING IS OUTLINED. Buttons, inputs, cards, tiles, the dock, the
+//       panels all carry `outline` (0 by default): each already sits on a
+//       different background role than what is behind it, and a 1 px edge
+//       on top of that step is a second, redundant signal. Three exceptions
+//       earn a stroke: the keyboard focus ring (focusWidth), the 2 px accent
+//       border on an OPEN control-centre tile, and the window ring Hyprland
+//       draws. Dividers and hairlines are `hairline` (stroke-width, 1).
+//   10  Corners are pitched by ROLE, not size: radiusControl 12 (button,
+//       row, input), radiusInner 20 (card), radius 26 (panel), radiusPill
+//       999 (a true capsule — Qt clamps it to half the height).
 //
 // PICKING A TOKEN. Ask what the thing IS, not what colour you want:
 //
 //   a surface at rest        bg-1 (panel) · bg-2 (a well) · bg-3 (the base)
 //   a raised, FILLED thing   card / cardHover / cardPressed / cardSelected
 //   no fill until you point  subtle / subtleHover / subtlePressed
-//   an interactive border    stroke1        a card outline   stroke2
-//   a divider between rows   stroke3        a border that MUST be seen
-//                                           strokeAccessible
-//   a filled brand control   accentFill + accentOn (never `accent` + white)
+//   a divider between rows   stroke3 at `hairline`
+//   a border that MUST show  focus ring: strokeFocus1/2 at `focusWidth`
+//   a filled brand control   brandBg + fgOnBrand (never `accent` + white)
 //   the accent AS a mark     accent (text, icon, dot, indicator)
 //
 // Hover a FILLED thing with its own level's hover; hover a bare row with
 // subtleHover. Getting that pair the wrong way round is what made a hovered
-// tile jump colour and square off over its own border.
+// tile jump colour.
 //
 // Every literal below is a FALLBACK for a machine whose token file is missing
-// or unreadable; the file is authoritative whenever it is there.
+// or unreadable; the file is authoritative whenever it is there. The
+// literals are `ewe-theme build`'s output for the default accent
+// (design/tokens.css) — regenerate, don't hand-tune.
 //
 // ewe is dark-only (decision 2026-09-01). Fonts are never themed.
 QtObject {
@@ -63,9 +88,12 @@ QtObject {
     readonly property var _fc: Globals.tokColor
     readonly property var _fs: Globals.tokShape
     readonly property var _fz: Globals.tokSize
+    // what ewe.conf [desktop.theme] said — bar_opacity lives here
+    readonly property var _fi: Globals.tokInput
     function _f(k, fb) { return (_fc && _fc[k]) || fb }
     function _s(k, fb) { return (_fs && _fs[k] !== undefined) ? _fs[k] : fb }
     function _z(k, fb) { return (_fz && _fz[k] !== undefined) ? _fz[k] : fb }
+    function _i(k, fb) { return (_fi && _fi[k] !== undefined) ? _fi[k] : fb }
 
     // ══ FLUENT ROLES ══════════════════════════════════════════════════════
     // The vocabulary ewe was missing. Everything below comes straight off the
@@ -81,37 +109,37 @@ QtObject {
     //   bg-3  desktop / app base      bg-1  panel or popup on it
     //   bg-2  a well inside a panel   bg-6  a card or row raised on a panel
     //   bg-4/5  deeper than the base — scrims, the black end
-    readonly property color bg1:         _f("bg-1", "#28292c")
-    readonly property color bg1Hover:    _f("bg-1-hover", "#3c3d41")
-    readonly property color bg1Pressed:  _f("bg-1-pressed", "#1e1f22")
-    readonly property color bg1Selected: _f("bg-1-selected", "#37383c")
-    readonly property color bg2:         _f("bg-2", "#1e1f22")
-    readonly property color bg2Hover:    _f("bg-2-hover", "#323337")
-    readonly property color bg2Pressed:  _f("bg-2-pressed", "#131417")
-    readonly property color bg2Selected: _f("bg-2-selected", "#2d2e32")
-    readonly property color bg3:         _f("bg-3", "#131417")
-    readonly property color bg3Hover:    _f("bg-3-hover", "#28292c")
-    readonly property color bg3Pressed:  _f("bg-3-pressed", "#090a0e")
-    readonly property color bg3Selected: _f("bg-3-selected", "#232427")
-    readonly property color bg4:         _f("bg-4", "#090a0e")
-    readonly property color bg4Hover:    _f("bg-4-hover", "#1e1f22")
+    readonly property color bg1:         _f("bg-1", "#131417")
+    readonly property color bg1Hover:    _f("bg-1-hover", "#1e1f22")
+    readonly property color bg1Pressed:  _f("bg-1-pressed", "#0e0f12")
+    readonly property color bg1Selected: _f("bg-1-selected", "#1b1c1f")
+    readonly property color bg2:         _f("bg-2", "#0e0f12")
+    readonly property color bg2Hover:    _f("bg-2-hover", "#191a1d")
+    readonly property color bg2Pressed:  _f("bg-2-pressed", "#090a0e")
+    readonly property color bg2Selected: _f("bg-2-selected", "#16171a")
+    readonly property color bg3:         _f("bg-3", "#090a0e")
+    readonly property color bg3Hover:    _f("bg-3-hover", "#131417")
+    readonly property color bg3Pressed:  _f("bg-3-pressed", "#040509")
+    readonly property color bg3Selected: _f("bg-3-selected", "#111215")
+    readonly property color bg4:         _f("bg-4", "#040509")
+    readonly property color bg4Hover:    _f("bg-4-hover", "#0e0f12")
     readonly property color bg4Pressed:  _f("bg-4-pressed", "#000000")
-    readonly property color bg4Selected: _f("bg-4-selected", "#191a1d")
+    readonly property color bg4Selected: _f("bg-4-selected", "#0c0d10")
     readonly property color bg5:         _f("bg-5", "#000000")
-    readonly property color bg5Hover:    _f("bg-5-hover", "#131417")
-    readonly property color bg5Pressed:  _f("bg-5-pressed", "#040509")
-    readonly property color bg5Selected: _f("bg-5-selected", "#0e0f12")
-    readonly property color bg6:         _f("bg-6", "#323337")
-    readonly property color bgDisabled:  _f("bg-disabled", "#131417")
+    readonly property color bg5Hover:    _f("bg-5-hover", "#090a0e")
+    readonly property color bg5Pressed:  _f("bg-5-pressed", "#020307")
+    readonly property color bg5Selected: _f("bg-5-selected", "#07080c")
+    readonly property color bg6:         _f("bg-6", "#191a1d")
+    readonly property color bgDisabled:  _f("bg-disabled", "#090a0e")
 
     // ── Card: a raised, FILLED surface that reacts to the pointer ─────────
     // A tile, a card, a filled row on a panel. Use THIS ladder, not `subtle`:
     // subtle is for something with no fill of its own, and reaching for it to
     // hover a filled thing is what made tiles jump to an unrelated colour.
-    readonly property color card:         _f("card", "#323337")
-    readonly property color cardHover:    _f("card-hover", "#46474b")
-    readonly property color cardPressed:  _f("card-pressed", "#28292c")
-    readonly property color cardSelected: _f("card-selected", "#414246")
+    readonly property color card:         _f("card", "#191a1d")
+    readonly property color cardHover:    _f("card-hover", "#232427")
+    readonly property color cardPressed:  _f("card-pressed", "#131417")
+    readonly property color cardSelected: _f("card-selected", "#202124")
 
     // ── Subtle: a thing with NO fill of its own until you point at it ─────
     // List rows, menu items, toolbar buttons, bar items. `subtle` really is
@@ -119,9 +147,9 @@ QtObject {
     // hover paints. THIS is the token every "hover a bare row" bug wanted.
     // Inset such a row by `hoverInset` so its hover can never cover a rule.
     readonly property color subtle:         _f("subtle", "transparent")
-    readonly property color subtleHover:    _f("subtle-hover", "#37383c")
-    readonly property color subtlePressed:  _f("subtle-pressed", "#2d2e32")
-    readonly property color subtleSelected: _f("subtle-selected", "#323337")
+    readonly property color subtleHover:    _f("subtle-hover", "#1b1c1f")
+    readonly property color subtlePressed:  _f("subtle-pressed", "#16171a")
+    readonly property color subtleSelected: _f("subtle-selected", "#191a1d")
 
     // ── Strokes: three weights, not one ───────────────────────────────────
     //   stroke-1  a real UI border — input, button, anything you interact with
@@ -130,14 +158,17 @@ QtObject {
     //   stroke-accessible  a border that MUST be seen (unchecked checkbox)
     //   stroke-focus-1/2   the two halves of a focus ring: dark inside,
     //                      light outside, so it lands on any background
-    readonly property color stroke1:          _f("stroke-1", "#656668")
-    readonly property color stroke1Hover:     _f("stroke-1-hover", "#757577")
-    readonly property color stroke1Pressed:   _f("stroke-1-pressed", "#6a6b6d")
-    readonly property color stroke1Selected:  _f("stroke-1-selected", "#707072")
-    readonly property color stroke2:          _f("stroke-2", "#515255")
-    readonly property color stroke3:          _f("stroke-3", "#3c3d41")
-    readonly property color strokeAccessible: _f("stroke-accessible", "#adadad")
-    readonly property color strokeDisabled:   _f("stroke-disabled", "#414246")
+    // Since the 2026-09 revamp every stroke carries alpha 0.5 (the JSON
+    // emits #AARRGGBB), and nothing is OUTLINED by default (see `outline`):
+    // these colours are for hairline dividers and the odd status ring.
+    readonly property color stroke1:          _f("stroke-1", "#80656668")
+    readonly property color stroke1Hover:     _f("stroke-1-hover", "#80757577")
+    readonly property color stroke1Pressed:   _f("stroke-1-pressed", "#806a6b6d")
+    readonly property color stroke1Selected:  _f("stroke-1-selected", "#80707072")
+    readonly property color stroke2:          _f("stroke-2", "#80515255")
+    readonly property color stroke3:          _f("stroke-3", "#803c3d41")
+    readonly property color strokeAccessible: _f("stroke-accessible", "#80adadad")
+    readonly property color strokeDisabled:   _f("stroke-disabled", "#80414246")
     readonly property color strokeFocus1:     _f("stroke-focus-1", "#000000")
     readonly property color strokeFocus2:     _f("stroke-focus-2", "#ffffff")
 
@@ -162,16 +193,16 @@ QtObject {
     //   compound-*       a control whose fill and stroke move together
     //                    (checkbox, radio, switch) — the one place Fluent
     //                    BRIGHTENS on hover so the control reads as live
-    readonly property color brandBg:                _f("brand-bg", "#0a73db")
-    readonly property color brandBgHover:           _f("brand-bg-hover", "#0a84ff")
-    readonly property color brandBgPressed:         _f("brand-bg-pressed", "#1c467c")
-    readonly property color brandBgSelected:        _f("brand-bg-selected", "#2065bb")
+    readonly property color brandBg:                _f("brand-bg", "#1b559c")
+    readonly property color brandBgHover:           _f("brand-bg-hover", "#2065bb")
+    readonly property color brandBgPressed:         _f("brand-bg-pressed", "#1a4277")
+    readonly property color brandBgSelected:        _f("brand-bg-selected", "#1c4d8c")
     readonly property color brandFg1:               _f("brand-fg-1", "#82aeff")
     readonly property color brandFg2:               _f("brand-fg-2", "#93b8ff")
     readonly property color brandFgLink:            _f("brand-fg-link", "#82aeff")
     readonly property color brandFgLinkHover:       _f("brand-fg-link-hover", "#93b8ff")
     readonly property color brandStroke1:           _f("brand-stroke-1", "#82aeff")
-    readonly property color brandStroke2:           _f("brand-stroke-2", "#1b559c")
+    readonly property color brandStroke2:           _f("brand-stroke-2", "#1c467c")
     readonly property color compoundBrandBg:        _f("compound-brand-bg", "#82aeff")
     readonly property color compoundBrandBgHover:   _f("compound-brand-bg-hover", "#93b8ff")
     readonly property color compoundBrandBgPressed: _f("compound-brand-bg-pressed", "#5c9aff")
@@ -212,6 +243,8 @@ QtObject {
     readonly property color barBorder:   withAlpha(stroke2, barAlpha)
     readonly property color dockFill:    withAlpha(bg1, barAlpha)
     readonly property color dockStroke:  withAlpha(stroke2, barAlpha)
+    // kept for source compatibility with the revamp's call sites
+    readonly property color barFill:     barTop
     // A bar item has no fill of its own until you point at it — `subtle` is
     // exactly that case, and the reason the two are the same token now.
     readonly property color barHover:    subtleHover
@@ -274,15 +307,16 @@ QtObject {
     readonly property color danger:      _f("danger", "#f1707b")  // critical / destructive
     // interactive: `link` reads on the ground, `linkSolid` is a fill
     readonly property color link:        _f("brand-fg-link", "#82aeff")
-    readonly property color linkSolid:   _f("brand-bg", "#0a73db")
+    readonly property color linkSolid:   _f("brand-bg", "#1b559c")
 
     // ── Type ──────────────────────────────────────────────────────────────
-    // Ubuntu for body AND titles — one humanist face that reads equally well
-    // in Latin and (via the fontconfig fallback to Noto Sans Georgian, see
-    // dotfiles/fontconfig/) Georgian. SF Pro was never installed, so text
-    // actually rendered through whatever fc-match picked.
-    readonly property string fontText:    "Ubuntu"
-    readonly property string fontDisplay: "Ubuntu"
+    // Inter for body AND titles (the spec's --font-sans). Georgian falls
+    // back to Noto Sans Georgian through dotfiles/fontconfig/, so it sets in
+    // the same optical weight rather than through whatever fc-match picked.
+    // Weights in use: 400 body, 500 rail items, 600 labels, 700 the
+    // control-centre date and slider values.
+    readonly property string fontText:    "Inter"
+    readonly property string fontDisplay: "Inter"
     // real monospace TEXT (clipboard entries, kb hints) — ttf-jetbrains-mono-nerd
     readonly property string fontMono:    "JetBrainsMono Nerd Font"
     // icon glyphs — Lucide (vendored in fonts/, ISC). Icons are ALWAYS
@@ -299,20 +333,28 @@ QtObject {
     readonly property int fsTitle:  _z("fs-title", 24)
 
     // ── Metrics & shape ───────────────────────────────────────────────────
-    // Radius is a THEME decision, not a per-component one. Bauhaus is square:
-    // "no border-radius or minimal" — zero everywhere, no exceptions, because
-    // a single rounded corner in a square system reads as a mistake.
-    // Alexandria rounds softly (its own scale: 0.375rem / 0.5rem / 0.75rem).
-    readonly property int radius:       _s("radius-panel", 8)   // panels / launcher
-    readonly property int radiusInner:  _s("radius-card", 6)   // rows, input field
-    readonly property int radiusPill:   _s("radius-pill", 4)
+    // Radius is pitched by ROLE (rule 10), and it is a THEME decision: the
+    // `corner` preset in ewe.conf moves the whole ramp (none zeroes it).
+    //   radiusControl  a button, a list row, an input, a rail item
+    //   radiusInner    a card, a tile, a well
+    //   radius         a panel, the dock, a popover
+    //   radiusPill     a capsule — Qt clamps it to half the shorter side
+    readonly property int radius:        _s("radius-panel", 26)
+    readonly property int radiusInner:   _s("radius-card", 20)
+    readonly property int radiusControl: _s("radius-control", 12)
+    readonly property int radiusPill:    _s("radius-pill", 999)
 
-    // Border WIDTH travels with the border colour: Alexandria hairlines at
-    // 1px, Bauhaus rules at 2-3px. Components use `Theme.border` rather than
-    // a literal, so the same card is outlined in one look and drawn in the
-    // other. borderThin is for dense rows where 3px would fill the row.
-    readonly property int border:       _s("stroke-width", 1)
-    readonly property int borderThin:   _s("stroke-width", 1)
+    // A component's OWN edge (rule 09). `outline-width` is 0 unless the user
+    // sets stroke = thin | thick in ewe.conf, so every card / input / button
+    // / tile / panel in the tree has no border by default. `border` and
+    // `borderThin` are the legacy names for the same value — kept so an
+    // unmigrated site degrades to "no outline" rather than to a stale 1 px.
+    readonly property int outline:      _s("outline-width", 0)
+    readonly property int border:       _s("outline-width", 0)
+    readonly property int borderThin:   _s("outline-width", 0)
+    // A hairline that is NOT an outline: a divider between rows, the seam
+    // in a split tile, a status banner's ring. Stays 1 under every preset.
+    readonly property int hairline:     _s("stroke-width", 1)
 
     // Depth. Bauhaus forbids soft shadows — depth is a solid block offset
     // down-right ("offset shadows: 4-6px"). Zero here means "use the blurred
@@ -350,9 +392,10 @@ QtObject {
     //       radius: Theme.rIn(Theme.radiusInner)
     //   }
     //
-    // hoverInset defaults to the border width, which is the value that makes
-    // the rule survive by definition.
-    readonly property int hoverInset: _s("stroke-width", border)
+    // hoverInset is the hairline width — the value that makes a rule
+    // survive under an overlay by definition (it does NOT follow `outline`,
+    // which is 0: an inset of 0 would let a hover fill kiss a divider).
+    readonly property int hoverInset: _s("stroke-width", 1)
     // The radius an overlay needs to stay concentric with a container of
     // radius n once it has been inset. Concentric, not equal: an inset shape
     // that keeps the outer radius bulges at the corners.
@@ -364,17 +407,14 @@ QtObject {
     }
 
     // ── How a surface announces itself ────────────────────────────────────
-    // Two honest answers, and the looks give different ones. Bauhaus DRAWS a
-    // card — a visible rule around every block. Alexandria stacks tonal steps
-    // and lets the lightness ladder separate them. Using the tonal answer in
-    // flock is what made it look unfinished: `elevated` on `panel` is a 4%
-    // step, which simply does not read on ink. Components ask for cardStroke /
-    // cardBorder and get whichever answer the look gives.
-    // A card's outline. Fluent gives a card the SUBTLE stroke — stroke-2, not
-    // the interactive stroke-1 an input or button gets. One name so every
-    // container in the shell agrees, instead of each picking its own weight.
+    // By its LAYER: a card is `card` on a `bg1` panel on the `bg3` base, and
+    // the lightness step is the whole signal. Components ask for cardStroke /
+    // cardBorder so a user who turns outlines on gets one consistent answer.
+    // A card's outline — stroke-2 at `outline`, i.e. NOT drawn by default
+    // (rule 09). One name so every container in the shell agrees when a user
+    // does turn outlines on.
     readonly property color cardStroke: stroke2
-    readonly property int cardBorder:   borderThin
+    readonly property int cardBorder:   outline
 
     // Focus ring width — one value, so every focusable control rings alike.
     readonly property int focusWidth: _s("focus-width", 2)
@@ -382,7 +422,7 @@ QtObject {
     readonly property int pad:          _z("pad", 12)
     readonly property int gap:          _z("gap", 8)
     readonly property int rowHeight:    _z("row", 36)      // list row / menu item
-    readonly property int controlHeight: _z("control", 30) // button / input / chip
+    readonly property int controlHeight: _z("control", 32) // button / input / chip
     readonly property int barHeight:    _z("bar-height", 30)
 
     // ── Motion (ms) — follows the Animations pane (animations.json, written

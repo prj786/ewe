@@ -2,8 +2,8 @@
 -- and the square-while-grouped window corners.
 --
 -- Its own module for ONE reason: this is the only part of the Hyprland chrome
--- that has to be re-applied when the user changes accent or flips
--- flock/blacksheep, and re-applying it must not mean restating the palette in a
+-- that has to be re-applied when the user changes accent or the theme tokens
+-- are rebuilt, and re-applying it must not mean restating the palette in a
 -- second language. `colorscheme.sh` (the single theming source) re-runs this
 -- file live with:
 --
@@ -11,7 +11,7 @@
 --                   package.loaded["group-theme"]=nil
 --                   require("group-theme")'
 --
--- which re-reads user-theme.json through colors.lua and re-applies everything
+-- which re-reads user-theme.json + theme-tokens.json through colors.lua and re-applies everything
 -- below — no config reload, no duplicated hex. hyprland.lua require()s it once
 -- at startup; both paths run exactly this code. Re-running it is safe: the
 -- event subscriptions at the bottom tear down their previous selves first.
@@ -24,8 +24,8 @@
 -- stacked on each other. Ungrouped windows are untouched and keep the radius
 -- from Settings → Layout.
 --
--- THE COLOUR is still the live look: accent for the active tab, the
--- flock/blacksheep elevated surface with a 10% breath of accent for idle ones,
+-- THE COLOUR is still the live look: accent for the active tab, the token
+-- file's card surface with a 10% breath of accent for idle ones,
 -- so the strip belongs to the same family as the rest of the shell.
 
 package.loaded["colors"] = nil          -- always re-read the live accent/style
@@ -49,9 +49,9 @@ hl.config({
             enabled          = true,
             height           = 22,
             indicator_height = 0,         -- the filled tab IS the indicator
-            font_family      = "Ubuntu",  -- Theme.fontText — the DE face
+            font_family      = "Inter",   -- Theme.fontText — the DE face
             font_size        = 12,
-            -- Ubuntu's regular is thin at this size against a saturated accent
+            -- Inter's regular is thin at this size against a saturated accent
             -- fill, so the strip gets a weight step instead of relying on
             -- colour alone: the active tab is the only bold thing on screen.
             -- NOTE: `hyprctl getoption` reports these as "invalid type

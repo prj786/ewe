@@ -156,10 +156,12 @@ noto-fonts
 noto-fonts-emoji
 ttf-jetbrains-mono-nerd
 ttf-nerd-fonts-symbols-mono
-inter-font
+inter-font              # THE DE face (Theme.fontText/Display, GTK font, groupbar, Zed,
+                        # mpv OSD); Georgian falls back to Noto Sans Georgian via
+                        # dotfiles/fontconfig
 sound-theme-freedesktop  # event chimes (notifications, volume, shutter) — Globals.playSound
-ttf-ubuntu-font-family  # THE DE face (Theme.fontText/Display + GTK font); Georgian
-                        # falls back to Noto Sans Georgian via dotfiles/fontconfig
+ttf-ubuntu-font-family  # the pre-2026-09 DE face; kept installed for now so documents
+                        # and configs that still name Ubuntu keep rendering
 
 # ── version control (always) ─────────────────────────────────────────────────
 # The front-end dev toolchain (git-delta, lazygit, github-cli, mise + the Node/LSP

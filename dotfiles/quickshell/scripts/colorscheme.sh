@@ -54,22 +54,27 @@ GTK_THEME="adw-gtk3-dark"; PREFER_DARK=1; CS="prefer-dark"; ICONS="Reversal-${RC
 
 CFG="${XDG_CONFIG_HOME:-$HOME/.config}"
 
-# Shell style — read from user-theme.json (the single source both the shell
-# and ewe-settings write) so every caller stays two-arg. "blacksheep" remaps
-# the GTK neutrals below to the DE's absolute-black surface tokens.
-STYLE="$(sed -n 's/.*"themeName": *"\([a-z]*\)".*/\1/p' "$CFG/quickshell/user-theme.json" 2>/dev/null | head -n1)"
-
-# the style's neutral surface tokens (mirrors Theme.qml flock/pitchBlack) —
-# consumed by kitty + Zed below so the terminal/editor follow the shell style
-if [ "$STYLE" = "blacksheep" ]; then
-    S_BG="020202"; S_PANEL="0a0a0c"; S_ELEV="101012"; S_STROKE="222225"
-else
-    S_BG="1c1c1e"; S_PANEL="1d1d1f"; S_ELEV="2c2c2e"; S_STROKE="38383a"
-fi
+# The neutral surfaces come from the token file ewe-theme builds from
+# ewe.conf — the same ramp the shell and the apps paint with — so GTK, Qt,
+# kitty, Zed, zathura and mpv sit on the desktop's own greys instead of a
+# second palette. Fallbacks are the engine's defaults (design/tokens.css).
+# A token may carry alpha (#AARRGGBB); the toolkits below want opaque hex,
+# so the alpha byte is dropped — the layer step, not the alpha, is the look.
+TOK="$CFG/quickshell/theme-tokens.json"
+tok() {  # tok <role> <fallback-6hex> → 6 hex chars, no '#'
+    local v
+    v="$(sed -n "s/.*\"$1\": *\"#\([0-9a-fA-F]*\)\".*/\1/p" "$TOK" 2>/dev/null | head -n1)"
+    case "${#v}" in 8) v="${v:2}";; 6) ;; *) v="$2";; esac
+    printf '%s' "$v"
+}
+S_BG="$(tok bg-3 090a0e)"; S_PANEL="$(tok bg-1 131417)"; S_ELEV="$(tok card 191a1d)"
+S_STROKE="$(tok stroke-2 515255)"; S_HOVER="$(tok subtle-hover 1c1c1e)"; S_FRAME="$(tok bg-6 191a1d)"
+S_FG="$(tok fg-1 ffffff)"; S_FG_DIM="$(tok fg-3 adadad)"; S_FG_INV="$(tok fg-inverted 232427)"
 S_BG_R=$((16#${S_BG:0:2}));    S_BG_G=$((16#${S_BG:2:2}));    S_BG_B=$((16#${S_BG:4:2}))
 S_PN_R=$((16#${S_PANEL:0:2})); S_PN_G=$((16#${S_PANEL:2:2})); S_PN_B=$((16#${S_PANEL:4:2}))
 S_EL_R=$((16#${S_ELEV:0:2}));  S_EL_G=$((16#${S_ELEV:2:2}));  S_EL_B=$((16#${S_ELEV:4:2}))
 S_ST_R=$((16#${S_STROKE:0:2}));S_ST_G=$((16#${S_STROKE:2:2}));S_ST_B=$((16#${S_STROKE:4:2}))
+S_HV_R=$((16#${S_HOVER:0:2})); S_HV_G=$((16#${S_HOVER:2:2})); S_HV_B=$((16#${S_HOVER:4:2}))
 
 # ── universal cursor: ~/.icons/default is the fallback every toolkit reads ──
 mkdir -p "$HOME/.icons/default"
@@ -87,7 +92,7 @@ for v in 3.0 4.0; do
 [Settings]
 gtk-theme-name=$GTK_THEME
 gtk-icon-theme-name=$ICONS
-gtk-font-name=Ubuntu 11
+gtk-font-name=Inter 11
 gtk-application-prefer-dark-theme=$PREFER_DARK
 gtk-cursor-theme-name=$CURSOR
 gtk-cursor-theme-size=$CURSOR_SIZE
@@ -101,26 +106,25 @@ done
 # accent_fg follows luminance like the shell's Theme.accentText — white text
 # on a yellow selection is unreadable. Threshold 140 (~0.55), matching the
 # shell: mid-luminance accents (system green) already need ink, not white.
-if [ $(( (AR * 299 + AG * 587 + AB * 114) / 1000 )) -gt 140 ]; then ACC_FG="1c1c1e"; else ACC_FG="ffffff"; fi
-# Black Sheep — absolute-black surfaces (mirrors the shell's Theme.pitchBlack).
-# libadwaita and adw-gtk3 both read these named colors; flock leaves them stock.
-BS_CSS=""
-if [ "$STYLE" = "blacksheep" ]; then
-    BS_CSS='
-/* Black Sheep surfaces */
-@define-color window_bg_color #020202;
-@define-color headerbar_bg_color #020202;
-@define-color headerbar_backdrop_color #020202;
-@define-color view_bg_color #0a0a0c;
-@define-color sidebar_bg_color #060607;
-@define-color sidebar_backdrop_color #040405;
-@define-color secondary_sidebar_bg_color #040405;
-@define-color secondary_sidebar_backdrop_color #030304;
-@define-color card_bg_color rgba(255, 255, 255, 0.04);
-@define-color dialog_bg_color #101012;
-@define-color popover_bg_color #101012;
-@define-color thumbnail_bg_color #101012;'
-fi
+if [ $(( (AR * 299 + AG * 587 + AB * 114) / 1000 )) -gt 140 ]; then ACC_FG="$S_FG_INV"; else ACC_FG="ffffff"; fi
+# GTK surfaces on the derived ramp: the window is the app ground (bg-3), the
+# sidebar the frame step (bg-6), views one step up (bg-1), cards the card
+# role, popovers and dialogs the panel level — the same layering the shell
+# and the Tauri apps use, so a GTK window beside them reads as one system.
+BS_CSS="
+/* ewe surfaces — the derived ramp, managed by colorscheme.sh */
+@define-color window_bg_color #${S_BG};
+@define-color headerbar_bg_color #${S_BG};
+@define-color headerbar_backdrop_color #${S_BG};
+@define-color view_bg_color #${S_PANEL};
+@define-color sidebar_bg_color #${S_FRAME};
+@define-color sidebar_backdrop_color #${S_FRAME};
+@define-color secondary_sidebar_bg_color #${S_FRAME};
+@define-color secondary_sidebar_backdrop_color #${S_FRAME};
+@define-color card_bg_color #${S_ELEV};
+@define-color dialog_bg_color #${S_PANEL};
+@define-color popover_bg_color #${S_PANEL};
+@define-color thumbnail_bg_color #${S_ELEV};"
 for v in 3.0 4.0; do
     cat > "$CFG/gtk-$v/gtk.css" <<EOF
 /* ewe accent — managed by colorscheme.sh; edits here are overwritten */
@@ -158,31 +162,31 @@ mkdir -p "$CFG/zathura"
 cat > "$CFG/zathura/flock-colors" <<EOF
 # GENERATED by colorscheme.sh — style palette (edits are overwritten)
 set default-bg              "#${S_BG}"
-set default-fg              "#f2f2f7"
+set default-fg              "#${S_FG}"
 set statusbar-bg            "#${S_PANEL}"
 set statusbar-fg            "#aeaeb2"
 set inputbar-bg             "#${S_PANEL}"
-set inputbar-fg             "#f2f2f7"
+set inputbar-fg             "#${S_FG}"
 set completion-bg           "#${S_ELEV}"
-set completion-fg           "#f2f2f7"
+set completion-fg           "#${S_FG}"
 set completion-group-bg     "#${S_PANEL}"
-set completion-group-fg     "#8e8e93"
+set completion-group-fg     "#${S_FG_DIM}"
 set completion-highlight-bg "#${ACC}"
 set completion-highlight-fg "#${ACC_FG}"
 set index-bg                "#${S_BG}"
-set index-fg                "#f2f2f7"
+set index-fg                "#${S_FG}"
 set index-active-bg         "#${ACC}"
 set index-active-fg         "#${ACC_FG}"
 set highlight-color         "rgba(${AR},${AG},${AB},0.35)"
 set highlight-active-color  "rgba(${AR},${AG},${AB},0.55)"
 set notification-bg         "#${S_PANEL}"
-set notification-fg         "#f2f2f7"
+set notification-fg         "#${S_FG}"
 set notification-error-bg   "#${S_PANEL}"
 set notification-error-fg   "#ff453a"
 set notification-warning-bg "#${S_PANEL}"
 set notification-warning-fg "#ff9f0a"
 set recolor-lightcolor      "#${S_BG}"
-set recolor-darkcolor       "#f2f2f7"
+set recolor-darkcolor       "#${S_FG}"
 EOF
 
 # ── Zed (the editor) — generated theme following style + accent.
@@ -205,10 +209,10 @@ cat > "$CFG/zed/themes/ewe.json" <<EOF
         "surface.background": "#${S_PANEL}",
         "elevated_surface.background": "#${S_ELEV}",
         "editor.background": "#${S_BG}",
-        "editor.foreground": "#f2f2f7",
+        "editor.foreground": "#${S_FG}",
         "editor.gutter.background": "#${S_BG}",
         "editor.line_number": "#636366",
-        "editor.active_line_number": "#f2f2f7",
+        "editor.active_line_number": "#${S_FG}",
         "editor.active_line.background": "#${S_ELEV}",
         "border": "#${S_STROKE}",
         "border.variant": "#${S_STROKE}",
@@ -225,39 +229,39 @@ cat > "$CFG/zed/themes/ewe.json" <<EOF
         "ghost_element.hover": "#${S_ELEV}",
         "ghost_element.selected": "#${ACC}40",
         "drop_target.background": "#${ACC}30",
-        "text": "#f2f2f7",
-        "text.muted": "#8e8e93",
+        "text": "#${S_FG}",
+        "text.muted": "#${S_FG_DIM}",
         "text.placeholder": "#636366",
         "text.accent": "#${ACC}",
         "icon.accent": "#${ACC}",
         "link_text.hover": "#${ACC}",
-        "scrollbar.thumb.background": "#8e8e9340",
+        "scrollbar.thumb.background": "#${S_FG_DIM}40",
         "scrollbar.track.background": "#${S_BG}",
         "terminal.background": "#${S_BG}",
-        "terminal.foreground": "#f2f2f7",
+        "terminal.foreground": "#${S_FG}",
         "error": "#fb4934",
         "warning": "#fabd2f",
         "info": "#83a598",
-        "hint": "#8e8e93",
+        "hint": "#${S_FG_DIM}",
         "players": [
           { "cursor": "#${ACC}", "selection": "#${ACC}59", "background": "#${ACC}" }
         ],
         "syntax": {
           "keyword":     { "color": "#fb4934" },
           "string":      { "color": "#b8bb26" },
-          "comment":     { "color": "#8e8e93" },
-          "comment.doc": { "color": "#8e8e93" },
+          "comment":     { "color": "#${S_FG_DIM}" },
+          "comment.doc": { "color": "#${S_FG_DIM}" },
           "function":    { "color": "#83a598" },
           "type":        { "color": "#fabd2f" },
           "number":      { "color": "#d3869b" },
           "constant":    { "color": "#fe8019" },
           "boolean":     { "color": "#fe8019" },
           "operator":    { "color": "#d5c4a1" },
-          "variable":    { "color": "#f2f2f7" },
+          "variable":    { "color": "#${S_FG}" },
           "property":    { "color": "#8ec07c" },
           "tag":         { "color": "#fb4934" },
           "attribute":   { "color": "#fabd2f" },
-          "punctuation": { "color": "#8e8e93" }
+          "punctuation": { "color": "#${S_FG_DIM}" }
         }
       }
     }
@@ -287,7 +291,7 @@ if [ -d "$ASYAR_DIR" ]; then
   "platforms": ["linux"]
 }
 EOF
-    if [ "$STYLE" = "blacksheep" ]; then A_SEL="26, 26, 28"; else A_SEL="58, 58, 60"; fi
+    A_SEL="${S_HV_R}, ${S_HV_G}, ${S_HV_B}"
     cat > "$AEXT/theme.json" <<EOF
 {
   "variables": {
@@ -298,9 +302,9 @@ EOF
     "--bg-selected": "rgba($A_SEL, 0.9)",
     "--bg-popup": "rgba($S_PN_R, $S_PN_G, $S_PN_B, 0.97)",
     "--bg-secondary-full-opacity": "#${S_ELEV}",
-    "--text-primary": "#f2f2f7",
+    "--text-primary": "#${S_FG}",
     "--text-secondary": "#aeaeb2",
-    "--text-tertiary": "#8e8e93",
+    "--text-tertiary": "#${S_FG_DIM}",
     "--border-color": "#${S_STROKE}",
     "--separator": "#${S_STROKE}",
     "--accent-primary": "#${ACC}",
@@ -322,7 +326,7 @@ EOF
     "--radius-lg": "12px",
     "--radius-xl": "16px",
     "--radius-full": "9999px",
-    "--font-ui": "\"Ubuntu\", \"system-ui\", sans-serif",
+    "--font-ui": "\"Inter\", \"Noto Sans Georgian\", \"system-ui\", sans-serif",
     "--font-mono": "\"JetBrainsMono Nerd Font\", \"ui-monospace\", monospace",
     "--asyar-brand": "#${ACC}",
     "--asyar-brand-hover": "#${ACC}",
@@ -341,8 +345,8 @@ if command -v gsettings >/dev/null 2>&1; then
     gsettings set org.gnome.desktop.interface icon-theme   "$ICONS"     2>/dev/null || true
     gsettings set org.gnome.desktop.interface cursor-theme "$CURSOR"    2>/dev/null || true
     gsettings set org.gnome.desktop.interface cursor-size  "$CURSOR_SIZE" 2>/dev/null || true
-    gsettings set org.gnome.desktop.interface font-name    "Ubuntu 11"  2>/dev/null || true
-    gsettings set org.gnome.desktop.interface document-font-name "Ubuntu 11" 2>/dev/null || true
+    gsettings set org.gnome.desktop.interface font-name    "Inter 11"  2>/dev/null || true
+    gsettings set org.gnome.desktop.interface document-font-name "Inter 11" 2>/dev/null || true
     # no close/min/max buttons in headerbars — Hyprland has no titlebars and
     # windows close via Super+Q; GTK3 reads gtk-decoration-layout from
     # settings.ini, GTK4/libadwaita follows this key
@@ -445,8 +449,8 @@ mkdir -p "$MPVDIR/script-opts"
 } > "$MPVDIR/theme.conf"
 { echo "# Generated by ewe (colorscheme.sh) — do not edit; theme via Settings."
   # uosc 5.x: one comma-joined color option
-  echo "color=foreground=${ACC},foreground_text=${ACC_FG},background=${S_BG},background_text=f2f2f7"
-  echo "font=Ubuntu"
+  echo "color=foreground=${ACC},foreground_text=${ACC_FG},background=${S_BG},background_text=${S_FG}"
+  echo "font=Inter"
 } > "$MPVDIR/script-opts/uosc.conf"
 
 # ── Helium (the DE browser): chrome surface + vertical tabs ──────────────────

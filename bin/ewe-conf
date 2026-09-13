@@ -256,9 +256,9 @@ THEME_MAP = [  # ewe.conf key ↔ user-theme.json key (with defaults)
     # The shape/density knobs. These are the WHOLE user-facing surface of the
     # theme engine — everything else (the grey ramp, the brand ramp, all 60-odd
     # alias tokens) is derived from `accent` by ewe-theme, in the repo.
-    ("desktop.theme.corner", "themeCorner", "medium"),
+    ("desktop.theme.corner", "themeCorner", "round"),
     ("desktop.theme.density", "themeDensity", "comfortable"),
-    ("desktop.theme.stroke", "themeStroke", "thin"),
+    ("desktop.theme.stroke", "themeStroke", "none"),
     ("desktop.theme.neutral_tint", "neutralTint", 8),
     ("desktop.theme.tint_borders", "tintBorders", True),
     ("desktop.theme.window_transparency", "windowTransparency", False),

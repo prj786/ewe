@@ -179,8 +179,9 @@ Scope {
             height: win.dockH
             width: row.implicitWidth + 16
             radius: Theme.radius
+            // dockFill = bg-1 at the bar/dock opacity; no stroke (rule 09)
             color: Theme.dockFill
-            border.color: Theme.dockStroke; border.width: Theme.borderThin
+            border.width: 0
             HoverHandler { id: dockHov }
             layer.enabled: true
             layer.effect: Elevation {}
@@ -193,11 +194,9 @@ Scope {
                 property string glyph: ""
                 property bool activeState: false
                 signal go()
-                width: win.cell; height: win.cell; radius: Theme.r(Math.round(13 * win.k))
+                width: win.cell; height: win.cell; radius: Theme.radiusControl
                 color: activeState ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.16)
                      : dbMa.containsMouse ? Theme.subtleHover : Theme.subtle
-                border.color: activeState ? Theme.accent : "transparent"
-                border.width: activeState ? 1 : 0
                 Behavior on color { ColorAnimation { duration: Theme.durFast } }
                 scale: dbMa.pressed ? 0.9 : (dbMa.containsMouse ? 1.08 : 1.0)
                 Behavior on scale { NumberAnimation { duration: Theme.durFast; easing.type: Easing.OutBack; easing.overshoot: 2 } }
@@ -235,7 +234,7 @@ Scope {
                     id: penBox
                     visible: root.penWins.length > 0 || win.penOpen
                     anchors.verticalCenter: parent.verticalCenter
-                    height: win.cell; radius: Theme.r(Math.round(13 * win.k))
+                    height: win.cell; radius: Theme.radiusControl
                     width: Math.max(win.cell, penRow.implicitWidth + 16)
                     color: win.penOpen ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.16)
                          : penMa.containsMouse ? Theme.subtleHover : Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.07)
@@ -296,7 +295,7 @@ Scope {
                         required property var modelData
                         readonly property bool focused: Hyprland.focusedWorkspace && Hyprland.focusedWorkspace.id === modelData.id
                         anchors.verticalCenter: parent.verticalCenter
-                        height: win.cell; radius: Theme.r(Math.round(13 * win.k))
+                        height: win.cell; radius: Theme.radiusControl
                         width: Math.max(win.cell, wsRow.implicitWidth + 16)
                         color: focused ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.16)
                              : wsMa.containsMouse ? Theme.cardHover : Theme.card

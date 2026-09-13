@@ -1241,7 +1241,7 @@ Scope {
                 radius: Theme.radiusInner; color: Theme.card
                 Column { id: inner; anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 12; spacing: 8 }
             }
-            component SectionTitle: Text { color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold; bottomPadding: 2 }
+            // SectionTitle, Slider and Toggle are the shared qmldir components.
             component KV: Item {
                 property string k: ""; property string v: ""; property string dot: ""
                 property bool action: false; property string actionLabel: ""
@@ -1257,49 +1257,10 @@ Scope {
                     Dot { anchors.verticalCenter: parent.verticalCenter; visible: dot !== ""; state: dot }
                 }
             }
-            // Slider — the one slider, int or float (step/decimals). The label
-            // previews live while dragging, but `moved` only fires per-move when
-            // `live` is set — handlers that spawn processes (hyprctl + config
-            // writes) get exactly one call, on release.
-            component Slider: Item {
-                id: sld
-                property string label: ""; property real value: 0; property real from: 0; property real to: 30
-                property real step: 1; property int decimals: 0; property bool live: false
-                signal moved(real v)
-                property real dragVal: 0
-                property bool dragging: false
-                readonly property real shown: dragging ? dragVal : value
-                height: 40; width: parent ? parent.width : 0
-                Text { anchors.left: parent.left; anchors.top: parent.top; text: sld.label; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
-                Text { anchors.right: parent.right; anchors.top: parent.top; text: Number(sld.shown).toFixed(sld.decimals); color: Theme.accent; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold }
-                Rectangle {
-                    id: strk; anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; anchors.bottomMargin: 4; height: 8; radius: 4; color: Theme.bg2
-                    Rectangle { height: parent.height; radius: Theme.r(4); color: Theme.accent; width: parent.width * (sld.shown - sld.from) / Math.max(0.0001, sld.to - sld.from) }
-                    Rectangle { width: 14; height: 14; radius: 7; color: Theme.accentOn; anchors.verticalCenter: parent.verticalCenter; x: Math.max(0, Math.min(strk.width - width, strk.width * (sld.shown - sld.from) / Math.max(0.0001, sld.to - sld.from) - width / 2)) }
-                    MouseArea {
-                        anchors.fill: parent; anchors.topMargin: -8; anchors.bottomMargin: -8
-                        function pick(mx) { var f = Math.max(0, Math.min(1, mx / strk.width)); var v = sld.from + f * (sld.to - sld.from); return Math.round(v / sld.step) * sld.step }
-                        onPressed: function (m) { sld.dragging = true; sld.dragVal = pick(m.x); if (sld.live) sld.moved(sld.dragVal) }
-                        onPositionChanged: function (m) { if (!pressed) return; sld.dragVal = pick(m.x); if (sld.live) sld.moved(sld.dragVal) }
-                        onReleased: { sld.dragging = false; sld.moved(sld.dragVal) }
-                    }
-                }
-            }
-            component Toggle: Rectangle {
-                property bool on: false
-                signal toggled()
-                width: 40; height: 24; radius: 12; color: on ? Theme.accentFill : Theme.bg2; Behavior on color { ColorAnimation { duration: 150 } }
-                activeFocusOnTab: true
-                border.color: activeFocus ? Theme.fg1 : "transparent"; border.width: activeFocus ? 1 : 0
-                Keys.onSpacePressed: toggled()
-                Keys.onReturnPressed: toggled()
-                Rectangle { width: 18; height: 18; radius: 9; color: parent.on ? Theme.accentOn : Theme.fg2; anchors.verticalCenter: parent.verticalCenter; x: parent.on ? parent.width - width - 3 : 3; Behavior on x { NumberAnimation { duration: 150 } } }
-                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: toggled() }
-            }
             component Pill: Rectangle {
                 property string label: ""; property bool primary: false
                 signal go()
-                width: pl.implicitWidth + 22; height: 28; radius: Theme.r(8)
+                width: pl.implicitWidth + 22; height: 28; radius: Theme.radiusControl
                 color: (plMa.containsMouse || primary) ? Theme.accentFill : Theme.card
                 Behavior on color { ColorAnimation { duration: 120 } }
                 activeFocusOnTab: true
@@ -2070,12 +2031,12 @@ Scope {
                         // second file that `ewe-conf pull` would overwrite.
                         Repeater {
                             model: [
-                                { k: "corner",  t: "Corners", d: "medium",
-                                  o: [["none","Square"],["small","Slight"],["medium","Rounded"],["large","Soft"]] },
+                                { k: "corner",  t: "Corners", d: "round",
+                                  o: [["none","Square"],["small","Slight"],["medium","Rounded"],["large","Soft"],["round","Round"]] },
                                 { k: "density", t: "Density", d: "comfortable",
                                   o: [["compact","Compact"],["comfortable","Comfortable"],["roomy","Roomy"]] },
-                                { k: "stroke",  t: "Rules",   d: "thin",
-                                  o: [["thin","Hairline"],["thick","Bold"]] }
+                                { k: "stroke",  t: "Outlines", d: "none",
+                                  o: [["none","None"],["thin","Hairline"],["thick","Bold"]] }
                             ]
                             delegate: Column {
                                 id: grp
@@ -2095,10 +2056,9 @@ Scope {
                                                 (Globals.tokInput[grp.modelData.k] || grp.modelData.d) === opt.modelData[0]
                                             width: (grpRow.width - (grp.modelData.o.length - 1) * grpRow.spacing)
                                                    / grp.modelData.o.length
-                                            height: 32; radius: Theme.radiusInner
-                                            color: opt.sel ? Theme.accentFill : Theme.bg1
-                                            border.color: opt.sel ? Theme.accentFill : Theme.stroke1
-                                            border.width: Theme.borderThin
+                                            height: 36; radius: Theme.radiusPill
+                                            color: opt.sel ? Theme.accentFill : Theme.bg4
+                                            border.width: 0
                                             Text { anchors.centerIn: parent; text: opt.modelData[1]
                                                    color: opt.sel ? Theme.accentOn : Theme.fg1
                                                    font.family: Theme.fontText; font.pixelSize: Theme.fsSmall

@@ -764,7 +764,7 @@ Scope {
                 property color glyph: Theme.fg1
                 property bool dot: false               // tiny badge (pending notifications)
                 signal go()
-                width: 34; height: 34; radius: Theme.r(10)
+                width: 34; height: 34; radius: Theme.radiusControl
                 color: current ? Theme.accentFill : (rbMa.containsMouse ? Theme.subtleHover : Theme.subtle)
                 Behavior on color { ColorAnimation { duration: 130 } }
                 Text { anchors.centerIn: parent; text: rb.ic; font.family: Theme.fontIcons; font.pixelSize: 15; color: rb.current ? Theme.accentOn : rb.glyph }
@@ -899,7 +899,7 @@ Scope {
                             }
                             Text { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; text: Math.round(root.volumeVal * 100) + "%"; color: Theme.accent; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.Bold }
                         }
-                        Slider { width: parent.width; value: root.volumeVal; onMoved: function (v) { root.setVolume(v) } }
+                        Slider { width: parent.width; live: true; value: root.volumeVal; onMoved: function (v) { root.setVolume(v) } }
                     }
                     Column {
                         width: (sldRow.width - 14) / 2; spacing: 5
@@ -912,7 +912,7 @@ Scope {
                             }
                             Text { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; text: Math.round(root.brightnessVal * 100) + "%"; color: Theme.accent; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.Bold }
                         }
-                        Slider { width: parent.width; value: root.brightnessVal; onMoved: function (v) { root.setBrightness(v) } }
+                        Slider { width: parent.width; live: true; value: root.brightnessVal; onMoved: function (v) { root.setBrightness(v) } }
                     }
                 }
             }
@@ -961,111 +961,7 @@ Scope {
             // opening the network list. The caret is HIDDEN at rest (clean
             // tiles), fades in on hover, and turns from › to ⌄ while open —
             // no permanent chevron clutter.
-            component Tile: Rectangle {
-                id: tile
-                property string ic: ""
-                property string label: ""
-                property string sub: ""
-                property bool active: false
-                property bool opened: false
-                property bool hasMenu: false
-                property bool busy: false            // section is loading (scan in flight)
-                signal clicked()                     // body
-                signal menu()                        // detail zone
-                width: (inner.width - 10) / 2
-                height: 62
-                radius: Theme.radiusInner
-                // opened = BORDER ONLY — the fill never changes for opening a
-                // list, so accent fill stays unambiguous: "the service is on"
-                // An ACTIVE tile is a filled brand control with text on it, so
-                // it takes brand-bg and the measured on-colour — not the light
-                // accent, which is the value for a MARK and leaves white text
-                // sitting on pale blue. Hover has its own brand token; the
-                // Qt.lighter() call it replaces guessed at one.
-                color: tile.active
-                    ? (bodyMa.containsMouse ? Theme.brandBgHover : Theme.accentFill)
-                    : (bodyMa.containsMouse ? Theme.cardHover : Theme.card)
-                border.color: opened ? (active ? Theme.accentOn : Theme.accent) : Theme.cardStroke
-                border.width: opened ? 2 : Theme.cardBorder
-                Behavior on color { ColorAnimation { duration: 150 } }
-                Column {
-                    anchors.fill: parent; anchors.margins: 11; spacing: 5
-                    Text { text: tile.ic; font.family: Theme.fontIcons; font.pixelSize: 17; color: tile.active ? Theme.accentOn : Theme.fg1 }
-                    Text { width: parent.width; text: tile.label; color: tile.active ? Theme.accentOn : Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold; elide: Text.ElideRight }
-                }
-                Text { anchors.right: parent.right; anchors.rightMargin: tile.hasMenu ? 30 : 11; anchors.bottom: parent.bottom; anchors.bottomMargin: 11; text: tile.sub; color: tile.active ? Theme.accentOn : Theme.fg3; font.family: Theme.fontText; font.pixelSize: 10; elide: Text.ElideRight }
-                MouseArea { id: bodyMa; anchors.fill: parent; anchors.rightMargin: tile.hasMenu ? 28 : 0; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: tile.clicked() }
-                // detail zone — its own hover, its own hit area.
-                // It touches three of the tile's edges, so it may only round
-                // the two corners it actually shares: a full radius here
-                // rounded the SEAM side too, which read as a floating pill
-                // inside the tile. Inset by the tile's own rule so hovering
-                // never paints over the opened border.
-                Rectangle {
-                    visible: tile.hasMenu
-                    readonly property int inset: Math.max(Theme.hoverInset, tile.border.width)
-                    anchors.right: parent.right; anchors.top: parent.top; anchors.bottom: parent.bottom
-                    anchors.margins: inset
-                    width: 28 - inset
-                    radius: 0
-                    topRightRadius: Theme.rIn(Theme.radiusInner)
-                    bottomRightRadius: Theme.rIn(Theme.radiusInner)
-                    color: chevMa.containsMouse ? (tile.active ? Theme.brandBgHover : Theme.subtleHover) : Theme.subtle
-                    Behavior on color { ColorAnimation { duration: 120 } }
-                    // hairline seam between body and detail zone, shown only
-                    // while the affordance itself shows
-                    Rectangle {
-                        width: 1; height: parent.height - 24
-                        anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter
-                        color: tile.active ? Theme.brandBgSelected : Theme.subtleHover
-                        opacity: caret.opacity
-                    }
-                    Spinner {
-                        visible: tile.busy
-                        anchors.centerIn: parent
-                        font.pixelSize: 12
-                        // white, not accent: the default accent glyph vanishes
-                        // on an accent-filled tile (Wi-Fi on = blue on blue)
-                        color: tile.active ? Theme.accentOn : Theme.fg1
-                    }
-                    Text {
-                        id: caret
-                        visible: !tile.busy
-                        anchors.centerIn: parent
-                        text: Theme.icChevronRight
-                        rotation: tile.opened ? 90 : 0
-                        Behavior on rotation { NumberAnimation { duration: 170; easing.type: Easing.OutCubic } }
-                        opacity: tile.opened || chevMa.containsMouse || bodyMa.containsMouse ? 1 : 0
-                        Behavior on opacity { NumberAnimation { duration: 140 } }
-                        font.family: Theme.fontIcons; font.pixelSize: 12
-                        color: tile.opened ? (tile.active ? Theme.accentOn : Theme.accent)
-                             : tile.active ? Theme.accentOn : Theme.fg3
-                    }
-                    MouseArea { id: chevMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: tile.menu() }
-                }
-            }
-
-            // ── slider ──
-            component Slider: Item {
-                id: sld
-                property string icon: ""
-                property real value: 0
-                signal moved(real v)
-                height: 26
-                Text { id: sIco; anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; width: sld.icon === "" ? 0 : 20; visible: sld.icon !== ""; text: sld.icon; font.family: Theme.fontIcons; font.pixelSize: 14; color: Theme.fg3 }
-                Rectangle {
-                    id: trk
-                    anchors.left: sIco.right; anchors.leftMargin: sld.icon === "" ? 0 : 8; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
-                    height: 8; radius: 4; color: Theme.bg2
-                    Rectangle { height: parent.height; radius: Theme.r(4); width: parent.width * Math.max(0, Math.min(1, sld.value)); color: Theme.accent }
-                    Rectangle { width: 14; height: 14; radius: 7; color: Theme.accentOn; anchors.verticalCenter: parent.verticalCenter; x: Math.max(0, Math.min(trk.width - width, trk.width * sld.value - width / 2)) }
-                    MouseArea {
-                        anchors.fill: parent; anchors.topMargin: -8; anchors.bottomMargin: -8
-                        onPressed: function (m) { sld.moved(Math.max(0, Math.min(1, m.x / trk.width))) }
-                        onPositionChanged: function (m) { if (pressed) sld.moved(Math.max(0, Math.min(1, m.x / trk.width))) }
-                    }
-                }
-            }
+            // Tile and Slider are the shared Tile.qml / Slider.qml (qmldir).
 
             Flickable {
                 id: flick
@@ -1142,7 +1038,7 @@ Scope {
                             Rectangle {
                                 width: parent.width
                                 height: outCol.implicitHeight + 10
-                                radius: Theme.r(7); color: Theme.bg3; border.color: Theme.stroke2; border.width: Theme.borderThin
+                                radius: Theme.r(18); color: Theme.bg3; border.width: 0
                                 Column {
                                     id: outCol
                                     anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 5
@@ -1152,7 +1048,7 @@ Scope {
                                             required property var modelData
                                             readonly property bool isDefault: Pipewire.defaultAudioSink && Pipewire.defaultAudioSink.id === modelData.id
                                             width: outCol.width; height: 28
-                                            Rectangle { anchors.fill: parent; radius: Theme.r(6); color: outMa.containsMouse ? Theme.subtleHover : Theme.subtle }
+                                            Rectangle { anchors.fill: parent; radius: Theme.radiusControl; color: outMa.containsMouse ? Theme.subtleHover : Theme.subtle }
                                             Text { anchors.left: parent.left; anchors.leftMargin: 8; anchors.right: parent.right; anchors.rightMargin: 26; anchors.verticalCenter: parent.verticalCenter; text: root.audioLabel(modelData); color: isDefault ? Theme.accent : Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: isDefault ? Font.DemiBold : Font.Normal; elide: Text.ElideRight }
                                             Text { anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter; visible: isDefault; text: Theme.icCheck; font.family: Theme.fontIcons; font.pixelSize: 11; color: Theme.accent }
                                             MouseArea { id: outMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: { Pipewire.preferredDefaultAudioSink = modelData; volumeProc.running = true } }
@@ -1165,7 +1061,7 @@ Scope {
                             Rectangle {
                                 width: parent.width
                                 height: inCol.implicitHeight + 10
-                                radius: Theme.r(7); color: Theme.bg3; border.color: Theme.stroke2; border.width: Theme.borderThin
+                                radius: Theme.r(18); color: Theme.bg3; border.width: 0
                                 Column {
                                     id: inCol
                                     anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 5
@@ -1175,7 +1071,7 @@ Scope {
                                             required property var modelData
                                             readonly property bool isDefault: Pipewire.defaultAudioSource && Pipewire.defaultAudioSource.id === modelData.id
                                             width: inCol.width; height: 28
-                                            Rectangle { anchors.fill: parent; radius: Theme.r(6); color: inMa.containsMouse ? Theme.subtleHover : Theme.subtle }
+                                            Rectangle { anchors.fill: parent; radius: Theme.radiusControl; color: inMa.containsMouse ? Theme.subtleHover : Theme.subtle }
                                             Text { anchors.left: parent.left; anchors.leftMargin: 8; anchors.right: parent.right; anchors.rightMargin: 26; anchors.verticalCenter: parent.verticalCenter; text: root.audioLabel(modelData); color: isDefault ? Theme.accent : Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: isDefault ? Font.DemiBold : Font.Normal; elide: Text.ElideRight }
                                             Text { anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter; visible: isDefault; text: Theme.icCheck; font.family: Theme.fontIcons; font.pixelSize: 11; color: Theme.accent }
                                             MouseArea { id: inMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: Pipewire.preferredDefaultAudioSource = modelData }
@@ -1266,7 +1162,7 @@ Scope {
                                     width: parent.width
                                     visible: root.wifiOn && root.wifiList.length > 0
                                     height: visible ? wifiOptCol.implicitHeight + 10 : 0
-                                    radius: Theme.r(7); color: Theme.bg3; border.color: Theme.stroke2; border.width: Theme.borderThin
+                                    radius: Theme.r(18); color: Theme.bg3; border.width: 0
                                     Column {
                                         id: wifiOptCol
                                         anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 5
@@ -1277,7 +1173,7 @@ Scope {
                                         width: wifiOptCol.width
                                         Item {
                                             width: parent.width; height: 28
-                                            Rectangle { anchors.fill: parent; radius: Theme.r(6); color: wMa.containsMouse ? Theme.subtleHover : Theme.subtle }
+                                            Rectangle { anchors.fill: parent; radius: Theme.radiusControl; color: wMa.containsMouse ? Theme.subtleHover : Theme.subtle }
                                             Text { anchors.left: parent.left; anchors.leftMargin: 8; anchors.verticalCenter: parent.verticalCenter; text: modelData.signal >= 66 ? Theme.icWifi : (modelData.signal >= 33 ? Theme.icWifiMed : Theme.icWifiLow); font.family: Theme.fontIcons; font.pixelSize: 13; color: modelData.active ? Theme.accent : Theme.fg3 }
                                             Text { anchors.left: parent.left; anchors.leftMargin: 32; anchors.right: parent.right; anchors.rightMargin: 40; anchors.verticalCenter: parent.verticalCenter; text: modelData.ssid; color: modelData.active ? Theme.accent : Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: modelData.active ? Font.DemiBold : Font.Normal; elide: Text.ElideRight }
                                             Text { anchors.right: parent.right; anchors.rightMargin: modelData.active ? 26 : 8; anchors.verticalCenter: parent.verticalCenter; visible: modelData.sec !== ""; text: Theme.icLock; font.family: Theme.fontIcons; font.pixelSize: 10; color: Theme.fg3 }
@@ -1332,7 +1228,7 @@ Scope {
                                     width: parent.width
                                     visible: btOptCol.shown > 0
                                     height: visible ? btOptCol.implicitHeight + 10 : 0
-                                    radius: Theme.r(7); color: Theme.bg3; border.color: Theme.stroke2; border.width: Theme.borderThin
+                                    radius: Theme.r(18); color: Theme.bg3; border.width: 0
                                     Column {
                                         id: btOptCol
                                         property int shown: { var c = 0, d = Bluetooth.devices ? Bluetooth.devices.values : []; for (var i = 0; i < d.length; i++) if (d[i].paired || d[i].connected || (Bluetooth.defaultAdapter && Bluetooth.defaultAdapter.discovering)) c++; return c }
@@ -1347,7 +1243,7 @@ Scope {
                                                 readonly property bool working: modelData.pairing || BtAgent.pairingAddress === modelData.address || BtAgent.busyAddress === modelData.address
                                                 readonly property string status: working ? (modelData.paired ? "Connecting…" : "Pairing…")
                                                                                : (modelData.connected && modelData.batteryAvailable ? Math.round(modelData.battery <= 1 ? modelData.battery * 100 : modelData.battery) + "%" : "")
-                                                Rectangle { anchors.fill: parent; radius: Theme.r(6); color: bMa.containsMouse ? Theme.subtleHover : Theme.subtle }
+                                                Rectangle { anchors.fill: parent; radius: Theme.radiusControl; color: bMa.containsMouse ? Theme.subtleHover : Theme.subtle }
                                                 // device-kind glyph (bluez's Icon → headphones / keyboard / phone / …)
                                                 Text { anchors.left: parent.left; anchors.leftMargin: 8; anchors.verticalCenter: parent.verticalCenter; text: BtAgent.glyph(modelData.icon, modelData.connected); font.family: Theme.fontIcons; font.pixelSize: 12; color: modelData.connected ? Theme.accent : Theme.fg3 }
                                                 Text { anchors.left: parent.left; anchors.leftMargin: 30; anchors.right: bRight.left; anchors.rightMargin: 6; anchors.verticalCenter: parent.verticalCenter; text: (modelData.name || modelData.deviceName || modelData.address) + (modelData.connected ? "" : (modelData.paired ? "" : "  ·  new")); color: modelData.connected ? Theme.accent : Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: modelData.connected ? Font.DemiBold : Font.Normal; elide: Text.ElideRight }
@@ -1460,7 +1356,7 @@ Scope {
                                     width: parent.width
                                     visible: root.vpnList.length > 0
                                     height: visible ? vpnOptCol.implicitHeight + 10 : 0
-                                    radius: Theme.r(7); color: Theme.bg3; border.color: Theme.stroke2; border.width: Theme.borderThin
+                                    radius: Theme.r(18); color: Theme.bg3; border.width: 0
                                     Column {
                                         id: vpnOptCol
                                         anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 5
@@ -1471,7 +1367,7 @@ Scope {
                                                 width: vpnOptCol.width
                                                 Item {
                                                     width: parent.width; height: 28
-                                                    Rectangle { anchors.fill: parent; radius: Theme.r(6); color: vMa.containsMouse ? Theme.subtleHover : Theme.subtle }
+                                                    Rectangle { anchors.fill: parent; radius: Theme.radiusControl; color: vMa.containsMouse ? Theme.subtleHover : Theme.subtle }
                                                     Text { anchors.left: parent.left; anchors.leftMargin: 8; anchors.verticalCenter: parent.verticalCenter; text: Theme.icVpn; font.family: Theme.fontIcons; font.pixelSize: 12; color: modelData.active ? Theme.accent : Theme.fg3 }
                                                     Text { anchors.left: parent.left; anchors.leftMargin: 30; anchors.right: parent.right; anchors.rightMargin: 26; anchors.verticalCenter: parent.verticalCenter; text: modelData.name; color: modelData.active ? Theme.accent : Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: modelData.active ? Font.DemiBold : Font.Normal; elide: Text.ElideRight }
                                                     Text { anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter; visible: modelData.active && root.vpnBusyName !== modelData.name; text: Theme.icCheck; font.family: Theme.fontIcons; font.pixelSize: 11; color: Theme.accent }
@@ -1497,7 +1393,7 @@ Scope {
                                                         }
                                                     }
                                                     Rectangle {
-                                                        width: parent.width; height: 30; radius: Theme.r(7); color: Theme.bg3; border.color: Theme.stroke2; border.width: Theme.borderThin
+                                                        width: parent.width; height: 30; radius: Theme.r(18); color: Theme.bg3; border.width: 0
                                                         TextInput {
                                                             id: vPass
                                                             anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 40; verticalAlignment: TextInput.AlignVCenter
@@ -1513,7 +1409,7 @@ Scope {
                                                     }
                                                     Rectangle {
                                                         visible: root.vpnCredNeedsPsk
-                                                        width: parent.width; height: visible ? 30 : 0; radius: Theme.r(7); color: Theme.bg3; border.color: Theme.stroke2; border.width: Theme.borderThin
+                                                        width: parent.width; height: visible ? 30 : 0; radius: Theme.r(18); color: Theme.bg3; border.width: 0
                                                         TextInput {
                                                             id: vPsk
                                                             anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10; verticalAlignment: TextInput.AlignVCenter
@@ -1555,7 +1451,7 @@ Scope {
                                     width: parent.width
                                     visible: root.sshList.length > 0
                                     height: visible ? sshOptCol.implicitHeight + 10 : 0
-                                    radius: Theme.r(7); color: Theme.bg3; border.color: Theme.stroke2; border.width: Theme.borderThin
+                                    radius: Theme.r(18); color: Theme.bg3; border.width: 0
                                     Column {
                                         id: sshOptCol
                                         anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 5
@@ -1567,7 +1463,7 @@ Scope {
                                         width: sshOptCol.width
                                         Item {
                                             width: parent.width; height: 28
-                                            Rectangle { anchors.fill: parent; radius: Theme.r(6); color: sMa.containsMouse ? Theme.subtleHover : Theme.subtle }
+                                            Rectangle { anchors.fill: parent; radius: Theme.radiusControl; color: sMa.containsMouse ? Theme.subtleHover : Theme.subtle }
                                             Text { anchors.left: parent.left; anchors.leftMargin: 4; anchors.verticalCenter: parent.verticalCenter; text: Theme.icSsh; font.family: Theme.fontIcons; font.pixelSize: 12; color: sshRow.modelData.tunnel ? Theme.accent : Theme.fg3 }
                                             Text {
                                                 anchors.left: parent.left; anchors.leftMargin: 26; anchors.right: btns.left; anchors.rightMargin: 6; anchors.verticalCenter: parent.verticalCenter
@@ -1848,7 +1744,7 @@ Scope {
                                         width: parent.width
                                         visible: KdeConnect.devices.length > 0
                                         height: visible ? kdcPickCol.implicitHeight + 10 : 0
-                                        radius: Theme.r(7); color: Theme.bg3; border.color: Theme.stroke2; border.width: Theme.borderThin
+                                        radius: Theme.r(18); color: Theme.bg3; border.width: 0
                                         Column {
                                             id: kdcPickCol
                                             anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 5
@@ -1857,7 +1753,7 @@ Scope {
                                                 delegate: Item {
                                                     required property var modelData
                                                     width: kdcPickCol.width; height: 28
-                                                    Rectangle { anchors.fill: parent; radius: Theme.r(6); color: kpMa.containsMouse ? Theme.subtleHover : Theme.subtle }
+                                                    Rectangle { anchors.fill: parent; radius: Theme.radiusControl; color: kpMa.containsMouse ? Theme.subtleHover : Theme.subtle }
                                                     Text { anchors.left: parent.left; anchors.leftMargin: 8; anchors.verticalCenter: parent.verticalCenter; text: Theme.icPhone; font.family: Theme.fontIcons; font.pixelSize: 12; color: modelData.isReachable ? Theme.fg1 : Theme.fg3 }
                                                     Text {
                                                         anchors.left: parent.left; anchors.leftMargin: 30; anchors.right: parent.right; anchors.rightMargin: 60; anchors.verticalCenter: parent.verticalCenter
@@ -1928,7 +1824,7 @@ Scope {
                                             width: parent.width
                                             visible: KdeConnect.notifs.length > 0
                                             height: visible ? Math.min(kdcNotifCol.implicitHeight + 10, 260) : 0
-                                            radius: Theme.r(7); color: Theme.bg3; border.color: Theme.stroke2; border.width: Theme.borderThin
+                                            radius: Theme.r(18); color: Theme.bg3; border.width: 0
                                             Flickable {
                                                 anchors.fill: parent; anchors.margins: 5; clip: true
                                                 contentHeight: kdcNotifCol.implicitHeight
@@ -1945,7 +1841,7 @@ Scope {
                                                             Item {
                                                                 width: parent.width
                                                                 height: knBody.implicitHeight + 12
-                                                                Rectangle { anchors.fill: parent; radius: Theme.r(6); color: knMa.containsMouse ? Theme.subtleHover : Theme.subtle }
+                                                                Rectangle { anchors.fill: parent; radius: Theme.radiusControl; color: knMa.containsMouse ? Theme.subtleHover : Theme.subtle }
                                                                 Image {
                                                                     id: knIcon
                                                                     anchors.left: parent.left; anchors.leftMargin: 6; anchors.top: parent.top; anchors.topMargin: 8
@@ -2049,7 +1945,7 @@ Scope {
                                                 width: parent.width
                                                 visible: KdeConnect.conversations.length > 0
                                                 height: visible ? Math.min(kdcConvCol.implicitHeight + 10, 280) : 0
-                                                radius: Theme.r(7); color: Theme.bg3; border.color: Theme.stroke2; border.width: Theme.borderThin
+                                                radius: Theme.r(18); color: Theme.bg3; border.width: 0
                                                 Flickable {
                                                     anchors.fill: parent; anchors.margins: 5; clip: true
                                                     contentHeight: kdcConvCol.implicitHeight
@@ -2063,7 +1959,7 @@ Scope {
                                                                 id: kcRow
                                                                 required property var modelData
                                                                 width: kdcConvCol.width; height: 40
-                                                                Rectangle { anchors.fill: parent; radius: Theme.r(6); color: kcMa.containsMouse ? Theme.subtleHover : Theme.subtle }
+                                                                Rectangle { anchors.fill: parent; radius: Theme.radiusControl; color: kcMa.containsMouse ? Theme.subtleHover : Theme.subtle }
                                                                 Rectangle {
                                                                     visible: kcRow.modelData.unread
                                                                     anchors.left: parent.left; anchors.leftMargin: 4; anchors.verticalCenter: parent.verticalCenter
@@ -2122,7 +2018,7 @@ Scope {
                                             }
                                             Rectangle {
                                                 width: parent.width; height: 260
-                                                radius: Theme.r(7); color: Theme.bg3; border.color: Theme.stroke2; border.width: Theme.borderThin
+                                                radius: Theme.r(18); color: Theme.bg3; border.width: 0
                                                 Flickable {
                                                     id: kdcThreadFlick
                                                     anchors.fill: parent; anchors.margins: 8; clip: true
@@ -2262,7 +2158,7 @@ Scope {
                                     width: parent.width
                                     visible: Mail.available && Mail.list.length > 0
                                     height: visible ? mailCol.implicitHeight + 10 : 0
-                                    radius: Theme.r(7); color: Theme.bg3; border.color: Theme.stroke2; border.width: Theme.borderThin
+                                    radius: Theme.r(18); color: Theme.bg3; border.width: 0
                                     Column {
                                         id: mailCol
                                         anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 5
@@ -2272,7 +2168,7 @@ Scope {
                                                 id: mRow
                                                 required property var modelData
                                                 width: mailCol.width; height: 34
-                                                Rectangle { anchors.fill: parent; radius: Theme.r(6); color: mmMa.containsMouse ? Theme.subtleHover : Theme.subtle }
+                                                Rectangle { anchors.fill: parent; radius: Theme.radiusControl; color: mmMa.containsMouse ? Theme.subtleHover : Theme.subtle }
                                                 Rectangle {
                                                     visible: mRow.modelData.unread
                                                     anchors.left: parent.left; anchors.leftMargin: 4; anchors.verticalCenter: parent.verticalCenter
@@ -2394,7 +2290,7 @@ Scope {
                             width: parent.width
                             visible: castCard.castOpen && !Globals.casting && Globals.castSinks.length > 0
                             height: visible ? castOptCol.implicitHeight + 10 : 0
-                            radius: Theme.r(7); color: Theme.bg3; border.color: Theme.stroke2; border.width: Theme.borderThin
+                            radius: Theme.r(18); color: Theme.bg3; border.width: 0
                             Column {
                                 id: castOptCol
                                 anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 5
@@ -2403,7 +2299,7 @@ Scope {
                                     delegate: Item {
                                         required property var modelData
                                         width: castOptCol.width; height: 28
-                                        Rectangle { anchors.fill: parent; radius: Theme.r(6); color: cMa.containsMouse ? Theme.subtleHover : Theme.subtle }
+                                        Rectangle { anchors.fill: parent; radius: Theme.radiusControl; color: cMa.containsMouse ? Theme.subtleHover : Theme.subtle }
                                         Text { anchors.left: parent.left; anchors.leftMargin: 8; anchors.verticalCenter: parent.verticalCenter
                                             text: Theme.icCast; font.family: Theme.fontIcons; font.pixelSize: 13; color: Theme.fg3 }
                                         Text { anchors.left: parent.left; anchors.leftMargin: 32; anchors.right: parent.right; anchors.rightMargin: 70; anchors.verticalCenter: parent.verticalCenter
@@ -2432,22 +2328,7 @@ Scope {
                         Column {
                             id: sysCol
                             anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 12; spacing: 10
-                            // a labelled meter row
-                            component Meter: Column {
-                                property string label: ""; property real value: 0; property string glyph: ""
-                                width: parent.width; spacing: 4
-                                Item {
-                                    width: parent.width; height: 16
-                                    Row { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; spacing: 7
-                                        Text { anchors.verticalCenter: parent.verticalCenter; text: glyph; font.family: Theme.fontIcons; font.pixelSize: 13; color: Theme.fg3 }
-                                        Text { anchors.verticalCenter: parent.verticalCenter; text: label; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold }
-                                    }
-                                    Text { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; text: Math.round(value * 100) + "%"; color: Theme.fg2; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
-                                }
-                                Rectangle { width: parent.width; height: 6; radius: 3; color: Theme.bg2
-                                    Rectangle { height: parent.height; radius: Theme.r(3); width: parent.width * Math.max(0, Math.min(1, value)); color: value > 0.85 ? Theme.danger : (value > 0.6 ? Theme.warning : Theme.accent); Behavior on width { NumberAnimation { duration: 400 } } }
-                                }
-                            }
+                            // Meter is the shared Meter.qml (qmldir)
                             Meter { label: "CPU"; glyph: Theme.icCpu; value: Globals.cpuUsage }
                             Meter { label: "Memory"; glyph: Theme.icMemory; value: Globals.memUsage }
                         }

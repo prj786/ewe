@@ -21,6 +21,14 @@ BarIcon 1.0 BarIcon.qml
 Sheen 1.0 Sheen.qml
 FileDropTarget 1.0 FileDropTarget.qml
 DropRow 1.0 DropRow.qml
+Toggle 1.0 Toggle.qml
+Slider 1.0 Slider.qml
+Tile 1.0 Tile.qml
+Meter 1.0 Meter.qml
+ListWell 1.0 ListWell.qml
+ListRow 1.0 ListRow.qml
+SectionTitle 1.0 SectionTitle.qml
+Badge 1.0 Badge.qml
 Avatar 1.0 Avatar.qml
 Screensaver 1.0 Screensaver.qml
 Launcher 1.0 Launcher.qml

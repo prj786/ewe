@@ -288,6 +288,7 @@ Scope {
                     GradientStop { position: 0.0; color: Theme.barTop }
                     GradientStop { position: 1.0; color: Theme.barBottom }
                 }
+                // edge to edge, no bottom rule (rule 09)
 
                 // ── LEFT: workspace chip, then the focused app's icon + name —
                 //    just identity, no window actions (those live on the window
