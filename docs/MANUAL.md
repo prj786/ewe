@@ -309,6 +309,18 @@ ewe's **Cast** tile to mirror the whole desktop, then play the video normally �
 picture and sound both go over Miracast. (A real Chromecast/Google TV *does*
 answer Stremio's cast, and also shows up under ewe's Chromecast path.)
 
+## Plugins
+
+Third-party bar widgets, panels and services for the shell — the Omarchy
+model: `ewe-plugin add <git-url> --enable`, and the code runs inside the shell
+process, unsandboxed, the moment it is on. Installing never executes anything;
+`list` shows what is on; a shell that restarts three times in a minute boots
+with plugins off and says which were enabled. Plugins are code, not settings:
+they live in `~/.config/ewe/plugins/`, only the on/off list and the sources
+travel in `ewe.conf`. The manifest, the kinds, the bar-widget contract and the
+public API are in [docs/PLUGINS.md](PLUGINS.md); start from
+[ewe-plugin-example](https://github.com/prj786/ewe-plugin-example).
+
 ## Repo layout
 
 ```
@@ -318,6 +330,7 @@ lib/      log.sh detect.sh pkg.sh deploy.sh
 packages/ common.list  aur.list  gaming.list  dev.list
 phases/   00…90
 dotfiles/ hypr/  quickshell/      ← the actual configs, symlinked into ~/.config
+bin/      ewe-conf ewe-theme ewe-plugin … ← the CLI tools (also /usr/bin via the package)
 systemd/  hyprland-session.target ← the portal-activation fix
 system/   greetd/ branding/ …     ← installed to /etc (+ the ewe logos)
 templates/hyprland-de.desktop.in  ← rendered into the wayland-sessions dir

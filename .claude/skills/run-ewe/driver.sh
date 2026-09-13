@@ -30,6 +30,9 @@ STATE="$WORK/state"
 OUTDIR="${HS_OUT:-$WORK}"
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 export AQ_DRM_DEVICES="${AQ_DRM_DEVICES:-/dev/dri/renderD128}"
+# the nested shell tests THIS checkout's ewe-plugin, not the installed one
+# (PluginHost.qml honours the override); reads real ~/.config/ewe/plugins
+export EWE_PLUGIN_TOOL="${EWE_PLUGIN_TOOL:-$REPO/bin/ewe-plugin}"
 mkdir -p "$WORK"
 
 die()  { echo "driver: $*" >&2; exit 1; }

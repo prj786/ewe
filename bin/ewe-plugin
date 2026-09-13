@@ -1,0 +1,660 @@
+#!/usr/bin/env python3
+"""ewe-plugin — third-party shell plugins: a git URL in, files on disk, one config bit.
+
+A plugin is a git repository whose root holds a manifest.json:
+
+    {
+      "schemaVersion": 1,
+      "id": "acme.weather",              <namespace>.<name>, lowercase; "ewe." is reserved
+      "name": "Weather",
+      "version": "0.1.0",
+      "apiVersion": 1,                   the shell's plugin API (PluginHost.apiVersion)
+      "kinds": ["panel", "service"],
+      "entryPoints": { "panel": "Panel.qml", "service": "Service.qml" },
+      "description": "…", "homepage": "…", "author": "…"      (optional)
+    }
+
+Installed plugins live in ~/.config/ewe/plugins/<id>/ — OUTSIDE the ewe payload,
+so upgrades never touch them. At startup the shell (PluginHost.qml) asks this
+tool what is there (`list --json`) and instantiates every enabled entry point
+by absolute path; the plugin's QML imports the shell's modules like any
+first-party file (`import qs` → Theme, Globals). Which ids are enabled and
+where each came from is the [plugins] table of ewe.conf, written only through
+ewe-conf (RFC-001) — so it syncs with the rest of the machine, and `list`
+points out a plugin that is enabled here but not installed yet.
+
+Trust model (Omarchy's, copied on purpose): installing NEVER runs plugin code —
+no hooks, no privileges. It clones, validates the manifest, and flips a config
+bit. The code runs unsandboxed inside your shell process the moment it is
+enabled, so read it first. Enabling and disabling restart the shell
+(ewe.service); there is no QML hot-reload.
+
+    add <git-url> [--enable] [--yes]   clone, validate, record the source
+    list [--json]                      every plugin: enabled, version, kinds
+    info <id> [--json]                 one plugin's manifest + state
+    enable <id> [--no-restart]         add to [plugins].enabled, restart the shell
+    disable <id> [--no-restart]
+    update [id] [--yes]                fast-forward git-managed plugins — the diff is
+                                       shown first, and a manifest that stops
+                                       validating is rolled back
+    remove <id> [--yes]                delete a git clone; a hand-made directory is
+                                       moved to <id>.bak.<stamp> instead
+    validate <path>                    check a manifest + its entry points (exit 1 on problems)
+    path                               print the plugins directory
+    boot-ok                            (the shell calls this) a start survived a minute
+
+`add` also takes a plain local directory — your own plugin in progress — and
+copies it in as a hand-made plugin (no git, so `update` has nothing to pull;
+`remove` parks it as a backup rather than deleting it).
+
+The crash guard: ewe.service relaunches the shell a second after any crash,
+so a plugin that compiles and then crashes is a login loop with no desktop.
+Every shell start calls `list --json --boot`; the third start inside a minute
+answers "safe mode" — the host loads nothing, tells the user which plugins
+were on, and the budget resets so the next deliberate restart tries again.
+A start that survives a minute reports `boot-ok`. Deliberate restarts (this
+tool's own enable/disable/remove) do not count.
+
+Kinds: service (headless), panel, overlay, menu — the host instantiates all of
+them the same way and the plugin owns its windows and IPC. bar-widget is an
+Item the bar packs like a built-in indicator; "barWidget": {"defaultSection":
+"left" | "center" | "right"} picks the section (right when absent), and the
+Settings → Top bar map hides it under the key plugin:<id>.
+
+Python stdlib only, like every other ewe tool. Machine-facing verbs print one
+JSON object; the rest talk to a person.
+"""
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import time
+import tomllib
+
+API_VERSION = 1
+SCHEMA = 1
+KINDS = ("service", "panel", "overlay", "menu", "bar-widget")
+RESERVED_PREFIX = "ewe."
+ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,31}(\.[a-z0-9][a-z0-9_-]{0,31})+$")
+SOURCE_RE = re.compile(r"^(https?://|git://|ssh://|git@|file://)")
+
+CFG_DIR = (os.environ.get("XDG_CONFIG_HOME")
+           or os.path.join(os.path.expanduser("~"), ".config"))
+EWE_DIR = os.path.join(CFG_DIR, "ewe")
+CONF = os.path.join(EWE_DIR, "ewe.conf")
+PLUGINS_DIR = os.path.join(EWE_DIR, "plugins")
+SHELL_UNIT = "ewe.service"
+STATE_DIR = os.path.join(os.environ.get("XDG_STATE_HOME")
+                         or os.path.join(os.path.expanduser("~"), ".local", "state"), "ewe")
+BOOTS = os.path.join(STATE_DIR, "plugin-boots.json")
+CRASH_WINDOW = 60     # seconds
+CRASH_LIMIT = 3       # shell starts inside the window → safe mode
+
+
+def die(msg, code=1):
+    print("ewe-plugin: " + msg, file=sys.stderr)
+    sys.exit(code)
+
+
+def say(msg=""):
+    print(msg, flush=True)   # keep order with stderr when piped
+
+
+# ── the ONE file: read directly (tomllib), write only through ewe-conf ────────
+
+def ewe_conf_exe():
+    # The sibling first, PATH second — the same rule ewe-conf itself uses to
+    # find ewe-theme: the tool beside this one is the one that matches it.
+    sib = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ewe-conf")
+    return sib if os.path.exists(sib) else shutil.which("ewe-conf")
+
+
+def conf_state():
+    try:
+        with open(CONF, "rb") as f:
+            doc = tomllib.load(f)
+    except (FileNotFoundError, tomllib.TOMLDecodeError):
+        doc = {}
+    p = doc.get("plugins") or {}
+    enabled = [x for x in (p.get("enabled") or []) if isinstance(x, str)]
+    sources = {k: v for k, v in (p.get("sources") or {}).items() if isinstance(v, str)}
+    return enabled, sources
+
+
+def conf_set(key, value):
+    exe = ewe_conf_exe()
+    if not exe:
+        die("ewe-conf not found — it ships beside this tool; is the ewe payload deployed?")
+    # --no-hooks: nothing the shell reads live changes here, and the shell is
+    # about to be restarted anyway
+    r = subprocess.run([exe, "set", "--no-hooks", key, json.dumps(value)],
+                       capture_output=True, text=True)
+    if r.returncode != 0:
+        die("ewe-conf set %s failed: %s" % (key, (r.stderr or r.stdout).strip()))
+
+
+def set_enabled(ids):
+    conf_set("plugins.enabled", sorted(set(ids)))
+
+
+def set_sources(sources):
+    conf_set("plugins.sources", dict(sorted(sources.items())))
+
+
+# ── manifests ─────────────────────────────────────────────────────────────────
+
+def read_manifest(d):
+    path = os.path.join(d, "manifest.json")
+    try:
+        with open(path) as f:
+            m = json.load(f)
+    except FileNotFoundError:
+        return None, ["no manifest.json"]
+    except json.JSONDecodeError as e:
+        return None, ["manifest.json is not valid JSON: %s" % e]
+    if not isinstance(m, dict):
+        return None, ["manifest.json must be a JSON object"]
+    return m, []
+
+
+def validate_manifest(d, m, expect_dirname=None):
+    """Every problem, not just the first — a plugin author fixes them in one pass."""
+    p = []
+    if m.get("schemaVersion") != SCHEMA:
+        p.append("schemaVersion must be %d" % SCHEMA)
+    pid = m.get("id")
+    if not isinstance(pid, str) or not ID_RE.match(pid):
+        p.append("id must be <namespace>.<name> in lowercase [a-z0-9_-] (e.g. \"acme.weather\")")
+    elif pid.startswith(RESERVED_PREFIX):
+        p.append("the \"%s\" namespace is reserved for ewe's own components" % RESERVED_PREFIX)
+    elif expect_dirname is not None and pid != expect_dirname:
+        p.append("id \"%s\" does not match the directory name \"%s\"" % (pid, expect_dirname))
+    if not isinstance(m.get("name"), str) or not m["name"].strip():
+        p.append("name must be a non-empty string")
+    if not isinstance(m.get("version"), str) or not m["version"].strip():
+        p.append("version must be a string (e.g. \"0.1.0\")")
+    api = m.get("apiVersion", API_VERSION)
+    if not isinstance(api, int) or isinstance(api, bool):
+        p.append("apiVersion must be an integer")
+    elif api != API_VERSION:
+        p.append("apiVersion %d is not supported by this shell (wants %d)" % (api, API_VERSION))
+    kinds = m.get("kinds")
+    if not isinstance(kinds, list) or not kinds:
+        p.append("kinds must be a non-empty list")
+        kinds = []
+    else:
+        for k in kinds:
+            if k not in KINDS:
+                p.append("unknown kind \"%s\" (one of: %s)" % (k, ", ".join(KINDS)))
+        if len(set(kinds)) != len(kinds):
+            p.append("kinds lists the same kind twice")
+    eps = m.get("entryPoints")
+    if not isinstance(eps, dict):
+        p.append("entryPoints must be an object mapping each kind to a .qml file")
+        eps = {}
+    for k in kinds:
+        if k in KINDS and k not in eps:
+            p.append("kind \"%s\" has no entry point" % k)
+    real_dir = os.path.realpath(d)
+    for k, rel in eps.items():
+        if k not in kinds:
+            p.append("entryPoints.%s is not listed in kinds" % k)
+        if not isinstance(rel, str) or not rel.endswith(".qml"):
+            p.append("entryPoints.%s must be a .qml path" % k)
+            continue
+        if rel.startswith("/") or ".." in rel.split("/"):
+            p.append("entryPoints.%s must be relative and inside the plugin (no / or ..)" % k)
+            continue
+        full = os.path.join(d, rel)
+        if not os.path.isfile(full):
+            p.append("entryPoints.%s: %s does not exist" % (k, rel))
+        elif not os.path.realpath(full).startswith(real_dir + os.sep):
+            # a symlink pointing out of the tree would load code the user
+            # never saw in the clone
+            p.append("entryPoints.%s: %s resolves outside the plugin directory" % (k, rel))
+    bw = m.get("barWidget")
+    if bw is not None and not isinstance(bw, dict):
+        p.append("barWidget must be an object")
+    elif isinstance(bw, dict) and "defaultSection" in bw and bw["defaultSection"] not in ("left", "center", "right"):
+        p.append("barWidget.defaultSection must be left, center or right")
+    return p
+
+
+def describe(d, dirname=None, enabled=(), sources=None):
+    """One plugin as the shell and `list --json` see it."""
+    dirname = dirname or os.path.basename(d.rstrip("/"))
+    m, problems = read_manifest(d)
+    if m is not None:
+        problems = validate_manifest(d, m, expect_dirname=dirname)
+    else:
+        m = {}
+    pid = m.get("id") if isinstance(m.get("id"), str) else dirname
+    return {
+        "id": pid,
+        "dir": os.path.abspath(d),
+        "dirname": dirname,
+        "installed": True,
+        "git": os.path.isdir(os.path.join(d, ".git")),
+        "source": (sources or {}).get(pid),
+        "name": m.get("name"),
+        "version": m.get("version"),
+        "description": m.get("description"),
+        "homepage": m.get("homepage"),
+        "author": m.get("author"),
+        "apiVersion": m.get("apiVersion", API_VERSION),
+        "kinds": m.get("kinds") if isinstance(m.get("kinds"), list) else [],
+        "entryPoints": m.get("entryPoints") if isinstance(m.get("entryPoints"), dict) else {},
+        "barWidget": m.get("barWidget") if isinstance(m.get("barWidget"), dict) else None,
+        "enabled": pid in enabled,
+        "valid": not problems,
+        "problems": problems,
+    }
+
+
+def scan():
+    enabled, sources = conf_state()
+    out = []
+    seen = set()
+    if os.path.isdir(PLUGINS_DIR):
+        for name in sorted(os.listdir(PLUGINS_DIR)):
+            d = os.path.join(PLUGINS_DIR, name)
+            # .tmp-* clones in flight, *.bak.* from remove, dotfiles
+            if name.startswith(".") or ".bak." in name or not os.path.isdir(d):
+                continue
+            e = describe(d, name, enabled, sources)
+            out.append(e)
+            seen.add(e["id"])
+    # enabled on a synced ewe.conf but not (yet) installed here
+    for pid in enabled:
+        if pid not in seen:
+            out.append({"id": pid, "dir": None, "dirname": None, "installed": False,
+                        "git": False, "source": sources.get(pid), "name": None,
+                        "version": None, "description": None, "homepage": None,
+                        "author": None, "apiVersion": None, "kinds": [],
+                        "entryPoints": {}, "barWidget": None, "enabled": True,
+                        "valid": False, "problems": ["enabled but not installed"]})
+    return out
+
+
+def find(pid):
+    for e in scan():
+        if e["id"] == pid:
+            return e
+    die("no plugin \"%s\" (see `ewe-plugin list`)" % pid)
+
+
+# ── helpers ───────────────────────────────────────────────────────────────────
+
+def git(args, cwd=None):
+    env = dict(os.environ, GIT_TERMINAL_PROMPT="0")   # never hang on a password prompt
+    return subprocess.run(["git", *args], cwd=cwd, env=env, capture_output=True, text=True)
+
+
+def confirm(prompt, yes):
+    if yes:
+        return True
+    if not sys.stdin.isatty():
+        die("this needs a confirmation; re-run with --yes from a script", 2)
+    try:
+        ans = input(prompt + " [y/N] ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        say()
+        return False
+    return ans in ("y", "yes")
+
+
+def restart_shell(wanted=True):
+    if not wanted:
+        say("(shell not restarted — the change applies at the next login or `systemctl --user restart %s`)" % SHELL_UNIT)
+        return False
+    if not shutil.which("systemctl"):
+        return False
+    r = subprocess.run(["systemctl", "--user", "is-active", "--quiet", SHELL_UNIT])
+    if r.returncode != 0:
+        say("shell not running — the change applies at the next login")
+        return False
+    clear_boots(forget_safe=False)   # a deliberate restart must not count as a crash
+    r = subprocess.run(["systemctl", "--user", "restart", SHELL_UNIT], capture_output=True, text=True)
+    if r.returncode != 0:
+        say("could not restart the shell: %s" % (r.stderr or r.stdout).strip())
+        return False
+    say("shell restarted")
+    return True
+
+
+def stamp():
+    return time.strftime("%Y%m%d-%H%M%S")
+
+
+def problems_block(e):
+    return "".join("    ! %s\n" % x for x in e["problems"])
+
+
+# ── the crash guard ───────────────────────────────────────────────────────────
+
+def _boots_read():
+    try:
+        with open(BOOTS) as f:
+            j = json.load(f)
+        if isinstance(j, dict):
+            return {"boots": [t for t in j.get("boots", []) if isinstance(t, (int, float))],
+                    "safe": j.get("safe") if isinstance(j.get("safe"), dict) else None}
+    except (FileNotFoundError, json.JSONDecodeError):
+        pass
+    return {"boots": [], "safe": None}
+
+
+def _boots_write(st):
+    os.makedirs(STATE_DIR, exist_ok=True)
+    tmp = BOOTS + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(st, f)
+    os.replace(tmp, BOOTS)
+
+
+def record_boot(plugins):
+    """One shell start. Returns the safe-mode record when this start is the
+    CRASH_LIMIT-th inside CRASH_WINDOW seconds and there is a plugin to blame;
+    the budget resets at the same time, so a fixed plugin gets a clean run."""
+    st = _boots_read()
+    now = int(time.time())
+    st["boots"] = [t for t in st["boots"] if now - t < CRASH_WINDOW] + [now]
+    suspects = [p["id"] for p in plugins if p["enabled"] and p["installed"] and p["valid"]]
+    if len(st["boots"]) >= CRASH_LIMIT and suspects:
+        st = {"boots": [], "safe": {"at": now, "suspects": suspects}}
+        _boots_write(st)
+        return st["safe"]
+    _boots_write(st)
+    return None
+
+
+def clear_boots(forget_safe):
+    st = _boots_read()
+    st["boots"] = []
+    if forget_safe:
+        st["safe"] = None
+    _boots_write(st)
+
+
+# ── verbs ─────────────────────────────────────────────────────────────────────
+
+def cmd_add(args):
+    yes = "--yes" in args
+    enable = "--enable" in args
+    rest = [a for a in args if not a.startswith("--")]
+    if len(rest) != 1:
+        die("usage: ewe-plugin add <git-url> [--enable] [--yes]", 2)
+    src = rest[0]
+    if not (SOURCE_RE.match(src) or os.path.isdir(src)):
+        die("\"%s\" is not a git URL (https://, ssh://, git@…) or a local repository" % src)
+    if os.path.isdir(src):
+        src = os.path.abspath(src)
+    if not shutil.which("git"):
+        die("git is not installed")
+    _, known = conf_state()
+    for pid, url in known.items():
+        if url == src and os.path.isdir(os.path.join(PLUGINS_DIR, pid)):
+            die("that source is already installed as \"%s\" — `ewe-plugin update %s` pulls a newer version" % (pid, pid))
+    say("Plugins run as unsandboxed code inside your shell process — the same rights as the desktop itself.")
+    say("Source: %s" % src)
+    say("Nothing is executed by installing; read the code before you enable it.")
+    if not confirm("Clone it?", yes):
+        die("cancelled", 1)
+
+    os.makedirs(PLUGINS_DIR, exist_ok=True)
+    tmp = os.path.join(PLUGINS_DIR, ".tmp-%d" % os.getpid())
+    shutil.rmtree(tmp, ignore_errors=True)
+    if os.path.isdir(src) and not os.path.isdir(os.path.join(src, ".git")):
+        # a plain directory — someone's plugin in progress — becomes a
+        # hand-made install: copied, never pulled, parked (not deleted) on remove
+        shutil.copytree(src, tmp, symlinks=False)
+    else:
+        r = git(["clone", "--quiet", "--", src, tmp])
+        if r.returncode != 0:
+            shutil.rmtree(tmp, ignore_errors=True)
+            die("git clone failed:\n%s" % r.stderr.strip())
+    m, problems = read_manifest(tmp)
+    if m is not None:
+        problems = validate_manifest(tmp, m)
+    if problems:
+        shutil.rmtree(tmp, ignore_errors=True)
+        die("not a valid ewe plugin:\n" + "".join("  ! %s\n" % x for x in problems).rstrip())
+    pid = m["id"]
+    dest = os.path.join(PLUGINS_DIR, pid)
+    if os.path.exists(dest):
+        shutil.rmtree(tmp, ignore_errors=True)
+        die("\"%s\" is already installed — `ewe-plugin update %s` pulls a newer version" % (pid, pid))
+    os.rename(tmp, dest)
+
+    enabled, sources = conf_state()
+    sources[pid] = src
+    set_sources(sources)
+    kinds = ", ".join(m.get("kinds") or [])
+    say("installed %s %s (%s) → %s" % (pid, m.get("version", ""), kinds, dest))
+    if enable:
+        cmd_enable([pid])
+    else:
+        say("enable it with: ewe-plugin enable %s" % pid)
+
+
+def cmd_list(args):
+    plugins = scan()
+    if "--json" in args:
+        safe = record_boot(plugins) if "--boot" in args else None
+        print(json.dumps({"ok": True, "apiVersion": API_VERSION, "dir": PLUGINS_DIR,
+                          "plugins": plugins, "safeMode": bool(safe),
+                          "suspects": safe["suspects"] if safe else []}))
+        return
+    safe = _boots_read()["safe"]
+    if safe:
+        say("! safe mode: the shell restarted %d times within a minute (%s) and loaded no plugins that session."
+            % (CRASH_LIMIT, time.strftime("%Y-%m-%d %H:%M", time.localtime(safe.get("at", 0)))))
+        say("  enabled at the time: %s — `ewe-plugin disable <id>` the culprit; a start that stays up a minute clears this."
+            % ", ".join(safe.get("suspects", [])))
+        say()
+    if not plugins:
+        say("no plugins installed (%s)" % PLUGINS_DIR)
+        say("add one with: ewe-plugin add <git-url> --enable")
+        return
+    rows = []
+    for e in plugins:
+        state = "on" if e["enabled"] else "off"
+        if not e["installed"]:
+            rows.append((e["id"], state, "—", "—", "not installed" + (" — ewe-plugin add %s" % e["source"] if e["source"] else "")))
+        elif not e["valid"]:
+            rows.append((e["id"], state, e["version"] or "—", ",".join(e["kinds"]) or "—", "INVALID: " + e["problems"][0]))
+        else:
+            rows.append((e["id"], state, e["version"], ",".join(e["kinds"]), e["name"] or ""))
+    w = [max(len(r[i]) for r in rows + [("ID", "ON", "VERSION", "KINDS", "NAME")]) for i in range(4)]
+    fmt = "%%-%ds  %%-%ds  %%-%ds  %%-%ds  %%s" % tuple(w)
+    say(fmt % ("ID", "ON", "VERSION", "KINDS", "NAME"))
+    for r in rows:
+        say(fmt % r)
+
+
+def cmd_info(args):
+    rest = [a for a in args if not a.startswith("--")]
+    if len(rest) != 1:
+        die("usage: ewe-plugin info <id> [--json]", 2)
+    e = find(rest[0])
+    if "--json" in args:
+        print(json.dumps({"ok": True, "plugin": e}))
+        return
+    say("%s — %s %s" % (e["id"], e["name"] or "(no name)", e["version"] or ""))
+    if e["description"]:
+        say("  %s" % e["description"])
+    say("  state:    %s%s" % ("enabled" if e["enabled"] else "disabled",
+                              "" if e["installed"] else " (not installed)"))
+    if e["installed"]:
+        say("  dir:      %s%s" % (e["dir"], " (git)" if e["git"] else " (hand-made)"))
+    if e["source"]:
+        say("  source:   %s" % e["source"])
+    if e["homepage"]:
+        say("  homepage: %s" % e["homepage"])
+    if e["author"]:
+        say("  author:   %s" % e["author"])
+    for k in e["kinds"]:
+        say("  %-9s %s" % (k + ":", e["entryPoints"].get(k, "?")))
+    if e["problems"]:
+        say("  problems:")
+        sys.stdout.write(problems_block(e))
+
+
+def cmd_enable(args):
+    rest = [a for a in args if not a.startswith("--")]
+    if len(rest) != 1:
+        die("usage: ewe-plugin enable <id> [--no-restart]", 2)
+    e = find(rest[0])
+    if not e["installed"]:
+        die("\"%s\" is not installed here%s" % (e["id"], (" — ewe-plugin add %s" % e["source"]) if e["source"] else ""))
+    if not e["valid"]:
+        die("\"%s\" does not validate:\n%s" % (e["id"], problems_block(e).rstrip()))
+    enabled, _ = conf_state()
+    if e["id"] in enabled:
+        say("%s is already enabled" % e["id"])
+        return
+    set_enabled(enabled + [e["id"]])
+    say("enabled %s" % e["id"])
+    restart_shell("--no-restart" not in args)
+
+
+def cmd_disable(args):
+    rest = [a for a in args if not a.startswith("--")]
+    if len(rest) != 1:
+        die("usage: ewe-plugin disable <id> [--no-restart]", 2)
+    pid = rest[0]
+    enabled, _ = conf_state()
+    if pid not in enabled:
+        say("%s is not enabled" % pid)
+        return
+    set_enabled([x for x in enabled if x != pid])
+    say("disabled %s" % pid)
+    restart_shell("--no-restart" not in args)
+
+
+def cmd_update(args):
+    yes = "--yes" in args
+    rest = [a for a in args if not a.startswith("--")]
+    if len(rest) > 1:
+        die("usage: ewe-plugin update [id] [--yes]", 2)
+    targets = [find(rest[0])] if rest else [e for e in scan() if e["installed"]]
+    need_restart = False
+    for e in targets:
+        pid, d = e["id"], e["dir"]
+        if not e["installed"]:
+            say("%s: not installed" % pid)
+            continue
+        if not e["git"]:
+            say("%s: hand-made (no .git) — nothing to pull" % pid)
+            continue
+        if git(["fetch", "--quiet"], cwd=d).returncode != 0:
+            say("%s: fetch failed (offline? remote gone?)" % pid)
+            continue
+        old = git(["rev-parse", "HEAD"], cwd=d).stdout.strip()
+        up = git(["rev-parse", "@{u}"], cwd=d)
+        if up.returncode != 0:
+            say("%s: no upstream branch — nothing to pull" % pid)
+            continue
+        new = up.stdout.strip()
+        if old == new:
+            say("%s: up to date (%s)" % (pid, old[:7]))
+            continue
+        say("%s: %s → %s" % (pid, old[:7], new[:7]))
+        for line in git(["log", "--oneline", "HEAD..@{u}"], cwd=d).stdout.splitlines():
+            say("    " + line)
+        for line in git(["diff", "--stat", "HEAD..@{u}"], cwd=d).stdout.splitlines():
+            say("    " + line)
+        if not confirm("Apply?", yes):
+            say("%s: skipped" % pid)
+            continue
+        r = git(["merge", "--ff-only", "--quiet", "@{u}"], cwd=d)
+        if r.returncode != 0:
+            say("%s: local changes block a fast-forward — resolve them in %s" % (pid, d))
+            continue
+        m, problems = read_manifest(d)
+        if m is not None:
+            problems = validate_manifest(d, m, expect_dirname=e["dirname"])
+        if problems:
+            git(["reset", "--hard", "--quiet", old], cwd=d)
+            say("%s: the update does not validate — rolled back to %s" % (pid, old[:7]))
+            sys.stdout.write("".join("    ! %s\n" % x for x in problems))
+            continue
+        say("%s: updated to %s (%s)" % (pid, m.get("version", "?"), new[:7]))
+        need_restart = need_restart or e["enabled"]
+    if need_restart:
+        restart_shell()
+
+
+def cmd_remove(args):
+    yes = "--yes" in args
+    rest = [a for a in args if not a.startswith("--")]
+    if len(rest) != 1:
+        die("usage: ewe-plugin remove <id> [--yes]", 2)
+    e = find(rest[0])
+    pid = e["id"]
+    enabled, sources = conf_state()
+    if e["installed"]:
+        if e["git"]:
+            if not confirm("Delete %s (a git clone; re-add it later from %s)?" % (e["dir"], e["source"] or "its source"), yes):
+                die("cancelled", 1)
+            shutil.rmtree(e["dir"])
+            say("removed %s" % e["dir"])
+        else:
+            # hand-made: someone's work, never deleted — parked like install.sh's backups
+            bak = e["dir"] + ".bak." + stamp()
+            os.rename(e["dir"], bak)
+            say("moved %s → %s (hand-made directory, kept as a backup)" % (e["dir"], bak))
+    if pid in enabled:
+        set_enabled([x for x in enabled if x != pid])
+    if pid in sources:
+        del sources[pid]
+        set_sources(sources)
+    say("forgot %s" % pid)
+    if e["enabled"]:
+        restart_shell()
+
+
+def cmd_validate(args):
+    rest = [a for a in args if not a.startswith("--")]
+    if len(rest) != 1:
+        die("usage: ewe-plugin validate <path>", 2)
+    d = rest[0]
+    if not os.path.isdir(d):
+        die("%s is not a directory" % d)
+    m, problems = read_manifest(d)
+    if m is not None:
+        problems = validate_manifest(d, m)
+    if "--json" in args:
+        print(json.dumps({"ok": not problems, "problems": problems, "manifest": m}))
+    elif problems:
+        say("%s: %d problem%s" % (d, len(problems), "" if len(problems) == 1 else "s"))
+        sys.stdout.write("".join("  ! %s\n" % x for x in problems))
+    else:
+        say("%s: ok — %s %s (%s)" % (d, m["id"], m["version"], ", ".join(m["kinds"])))
+    sys.exit(1 if problems else 0)
+
+
+def main(argv):
+    if not argv or argv[0] in ("-h", "--help", "help"):
+        print(__doc__.strip())
+        return 0 if argv else 2
+    verb, args = argv[0], argv[1:]
+    verbs = {"add": cmd_add, "list": cmd_list, "info": cmd_info, "enable": cmd_enable,
+             "disable": cmd_disable, "update": cmd_update, "remove": cmd_remove,
+             "validate": cmd_validate}
+    if verb == "path":
+        print(PLUGINS_DIR)
+        return 0
+    if verb == "boot-ok":
+        clear_boots(forget_safe=True)
+        return 0
+    if verb not in verbs:
+        die("unknown verb \"%s\" — try `ewe-plugin help`" % verb, 2)
+    verbs[verb](args)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

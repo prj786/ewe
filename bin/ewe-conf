@@ -98,6 +98,8 @@ SECTION_NOTES = {
     "network": "connection DEFINITIONS only — keys and passwords never sync",
     "network.ssh": "~/.ssh/config host aliases (the ewe-managed block)",
     "network.vpn": "NM VPN profile definitions; secrets re-prompt after restore",
+    "plugins": "third-party shell plugins (ewe-plugin): which ids are on, and where each came from",
+    "plugins.sources": "id → git URL, so a fresh machine can `ewe-plugin add` what this one has",
 }
 
 _INLINE_MAX = 96
@@ -147,7 +149,7 @@ def _emit_table(out, path, table):
         _emit_table(out, path + [k], v)
 
 
-_TOP_ORDER = ["schema", "desktop", "apps", "system", "sync"]
+_TOP_ORDER = ["schema", "desktop", "apps", "plugins", "system", "sync"]
 
 
 def emit(doc):
@@ -1824,6 +1826,8 @@ def _domain(dotted):
         return "apps"
     if parts[0] == "network":
         return "network"
+    if parts[0] == "plugins":
+        return "plugins"
     return None
 
 
