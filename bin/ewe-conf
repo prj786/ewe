@@ -81,7 +81,7 @@ def _scalar(v):
 # Section comments — regenerated on every write, so the file explains itself.
 SECTION_NOTES = {
     "desktop": "everything the Settings surfaces manage",
-    "desktop.theme": "accent + shape/density; every colour is derived from accent by ewe-theme",
+    "desktop.theme": "accent + shape/density + bar_opacity; every colour is derived from accent by ewe-theme",
     "desktop.dock": "the bottom dock (autohide = intelligent hide)",
     "desktop.animations": "speed multiplies every duration; detail = per-leaf tuning",
     "desktop.displays": "per-monitor-set profiles (Settings → Displays owns this)",
@@ -260,17 +260,21 @@ THEME_MAP = [  # ewe.conf key ↔ user-theme.json key (with defaults)
     ("desktop.theme.density", "themeDensity", "comfortable"),
     ("desktop.theme.stroke", "themeStroke", "none"),
     ("desktop.theme.neutral_tint", "neutralTint", 8),
-    # The bar and dock's opacity (0-100) and the fixed-level window blur that
-    # ewe-settings 0.12.8 exposes; ewe-theme emits --bar-alpha from the first
-    # and the shell reads both from the token file's `input`.
-    ("desktop.theme.bar_opacity", "barOpacity", 100),
-    ("desktop.theme.app_blur", "appBlur", False),
     ("desktop.theme.tint_borders", "tintBorders", True),
     ("desktop.theme.window_transparency", "windowTransparency", False),
     ("desktop.theme.avatar_shape", "avatarShape", "circle"),
+    # the surface knobs — Settings writes them through `set`, but they are
+    # listed so `ewe-conf import/absorb` and a synced ewe.conf carry them too
+    ("desktop.theme.bar_opacity", "barOpacity", 100),
+    ("desktop.theme.app_blur", "appBlur", False),
     ("desktop.dock.enabled", "dockEnabled", True),
     ("desktop.dock.autohide", "dockAutohide", False),
     ("desktop.dock.icon_size", "dockIconSize", "medium"),
+    # the top bar (Settings → Layout → Top bar). `show` is a map of
+    # indicator → bool; a missing key means shown, so {} is "everything"
+    ("desktop.bar.enabled", "barEnabled", True),
+    ("desktop.bar.icon_size", "barIconSize", "normal"),
+    ("desktop.bar.show", "barShow", {}),
     ("desktop.animations.speed", "animationSpeed", 1),
     ("desktop.tiling.enabled", "tilingEnabled", True),
     ("desktop.sound.event_sounds", "eventSounds", True),
@@ -758,6 +762,26 @@ def _hex6(c):
     return s[2:] if len(s) == 8 else s
 
 
+# desktop.theme.bar_opacity < 100: the top bar and dock are translucent and the
+# compositor blurs what is behind them. Skipped where blur is a known cost or
+# glitch — start-hyprland.sh exports EWE_NO_BLUR=1 in VMs and on NVIDIA — and
+# under BAR_BLUR_MIN, where the bar is nearly see-through anyway. xray: blur
+# the wallpaper, not the windows the bar covers — cheaper and steadier.
+# ignore_alpha: the bar's transparent margins (shadow strip) stay unblurred.
+BAR_BLUR_MIN = 10
+APP_OPACITY = 0.85
+BLUR_ON_LUA = """\
+if os.getenv("EWE_NO_BLUR") ~= "1" then
+    hl.config({ decoration = { blur = { enabled = true, size = 6, passes = 3, xray = true, ignore_opacity = true, new_optimizations = true, noise = 0.012 } } })
+end
+"""
+BAR_BLUR_RULE_LUA = """\
+if os.getenv("EWE_NO_BLUR") ~= "1" then
+    hl.layer_rule({ name = "ewe-bar-blur", match = { namespace = "^quickshell:(bar|dock)$" }, blur = true, ignore_alpha = 0.05 })
+end
+"""
+
+
 def gen_user_lua(doc):
     def gv(key, dflt):
         node, last = dig(doc, key)
@@ -780,8 +804,27 @@ def gen_user_lua(doc):
     if mode == "scrolling":
         s += ("hl.config({ scrolling = { column_width = %s, follow_focus = true, "
               "fullscreen_on_one_column = true } })\n") % _lua_num(lay.get("column_width", 0.5))
-    s += ("hl.config({ decoration = { active_opacity = 1.0, inactive_opacity = %s } })\n"
-          % ("0.97" if gv("desktop.theme.window_transparency", False) else "1.0"))
+    # app_blur (desktop.theme): every window at APP_OPACITY with blur behind
+    # it, fullscreen opaque — one material for terminal, browser and the ewe
+    # apps alike. Otherwise the old hair of unfocused translucency, if asked.
+    app_blur = str(gv("desktop.theme.app_blur", False)).lower() in ("1", "true", "yes", "on")
+    if app_blur:
+        s += ("hl.config({ decoration = { active_opacity = %s, inactive_opacity = %s, fullscreen_opacity = 1.0 } })\n"
+              % (APP_OPACITY, APP_OPACITY))
+    else:
+        s += ("hl.config({ decoration = { active_opacity = 1.0, inactive_opacity = %s } })\n"
+              % ("0.97" if gv("desktop.theme.window_transparency", False) else "1.0"))
+    try:
+        op = max(0, min(100, int(gv("desktop.theme.bar_opacity", 100))))
+    except (TypeError, ValueError):
+        op = 100
+    if op == 100 and gv("desktop.theme.surface", "solid") == "glass":
+        op = 72                              # 0.12.8's one-release knob
+    bar_blur = BAR_BLUR_MIN <= op < 100
+    if bar_blur or app_blur:
+        s += BLUR_ON_LUA
+    if bar_blur:
+        s += BAR_BLUR_RULE_LUA
     speed = gv("desktop.animations.speed", 1)
     if abs(speed - 1) >= 0.001:
         s += "\n".join(_anim_lua_lines(speed)) + "\n"
@@ -1771,7 +1814,7 @@ def _domain(dotted):
     # first meaningful routing segment: desktop.<domain>… or apps.* / system.*
     parts = dotted.split(".")
     if parts[0] == "desktop" and len(parts) > 1:
-        return {"theme": "theme", "dock": "theme", "tiling": "theme",
+        return {"theme": "theme", "dock": "theme", "bar": "theme", "tiling": "theme",
                 "power": "theme", "animations": "animations",
                 "displays": "displays", "window_rules": "window_rules",
                 "wallpapers": "wallpapers", "input": "input",

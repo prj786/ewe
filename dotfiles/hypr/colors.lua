@@ -144,7 +144,5 @@ M.stroke3 = M.rgba(M.s_stroke3, M.s_stroke3_alpha)
 M.radius = math.floor(tok_number("radius-control", 12))
 
 -- The two [desktop.theme] knobs the compositor acts on (see hyprland.lua).
-M.bar_opacity = math.floor(tok_number("bar_opacity", 100))  -- 0-100, bar + dock
-M.app_blur    = tok_bool("app_blur", false)                  -- blur behind every window
 
 return M

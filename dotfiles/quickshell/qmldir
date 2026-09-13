@@ -14,6 +14,7 @@ singleton Agenda 1.0 Agenda.qml
 singleton Mail 1.0 Mail.qml
 singleton KdeConnect 1.0 KdeConnect.qml
 singleton BtAgent 1.0 BtAgent.qml
+singleton AudioState 1.0 AudioState.qml
 Elevation 1.0 Elevation.qml
 Spinner 1.0 Spinner.qml
 BarIcon 1.0 BarIcon.qml

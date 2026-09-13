@@ -179,8 +179,8 @@ Scope {
             height: win.dockH
             width: row.implicitWidth + 16
             radius: Theme.radius
-            // bg-1 at the user's bar/dock opacity; no stroke (rule 09)
-            color: Qt.rgba(Theme.bg1.r, Theme.bg1.g, Theme.bg1.b, Theme.barAlpha)
+            // dockFill = bg-1 at the bar/dock opacity; no stroke (rule 09)
+            color: Theme.dockFill
             border.width: 0
             HoverHandler { id: dockHov }
             layer.enabled: true

@@ -80,10 +80,14 @@ QtObject {
         }
         bt.send({ cmd: "pair", address: address })
     }
+    // true when the bridge took the request; false = caller should fall back
+    // to Quickshell's own connect() (no error text, but it still connects)
     function connectDevice(address) {
         bt.lastError = ""; bt.lastErrorAddress = ""
+        if (!bt.bridgeUp) return false
         bt.busyAddress = address
         bt.send({ cmd: "connect", address: address })
+        return true
     }
     function cancelPairing(address) {
         bt.send({ cmd: "cancel", address: address })
@@ -152,6 +156,7 @@ QtObject {
         case "pair":
             if (bt.pairingAddress === e.address) bt.pairingAddress = ""
             if (!e.ok) { bt.lastError = e.error || "Pairing failed"; bt.lastErrorAddress = e.address; Log.warn("bt-agent", "pair", e.address, "failed:", e.raw || e.error) }
+            else bt.busyAddress = e.address          // the bridge connects next; the row keeps its spinner
             break
         case "connect":
             if (bt.busyAddress === e.address) bt.busyAddress = ""

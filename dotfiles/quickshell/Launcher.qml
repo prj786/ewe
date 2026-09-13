@@ -215,7 +215,7 @@ Scope {
                 width: parent.width
                 height: content.implicitHeight
                 radius: Theme.radius
-                color: Theme.bg1
+                color: Theme.panel
                 border.color: Theme.stroke2
                 border.width: Theme.borderThin
                 layer.enabled: true

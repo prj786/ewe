@@ -142,7 +142,7 @@ Scope {
             width: Math.min(900, parent.width - 80)
             height: Math.min(body.implicitHeight + 48, parent.height - 80)
             radius: Theme.radius
-            color: Theme.bg1
+            color: Theme.panel
             border.color: Theme.stroke2
             border.width: Theme.borderThin
             MouseArea { anchors.fill: parent }       // eat clicks so they don't cancel

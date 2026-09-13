@@ -160,6 +160,16 @@ against kdeconnect 26.04 (conversations arrive as single message events;
 the conversation list is "latest message per thread"; sends are echoed
 optimistically and reconciled on the real signal).
 
+## Top bar (Settings → Layout → Top bar)
+
+Three keys in `user-theme.json`, read by `Globals` like the dock's:
+`barEnabled` (false hides the bar at login; Super+Shift+B still toggles it
+live), `barIconSize` (`small` | `normal` | `large` — the theme's icon size
+−4 / +0 / +2, so density still scales it) and `barShow`, an object of booleans
+keyed `tray screenshot clipboard tiling keyboard sound mic wifi bluetooth
+power battery`; a missing key means shown. Identity (workspace, window title)
+and Komble's update state are not optional.
+
 ## Bluetooth — the shell's pairing agent + `ewe-bt`
 
 Pairing is a conversation: bluez asks "does 123456 match?", "type the PIN",

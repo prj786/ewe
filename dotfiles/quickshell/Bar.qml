@@ -279,8 +279,9 @@ Scope {
                     duration: Theme.durSlow; easing.type: Theme.ease
                 }
                 layer.enabled: true
-                // shallower than the floating panels — the bar is anchored, not floating
-                layer.effect: Elevation { shadowOpacity: 0.38; shadowVerticalOffset: 3 }
+                // shallower than the floating panels — the bar is anchored, not
+                // floating; this shadow IS the bar's edge (no hairline since 0.12.10)
+                layer.effect: Elevation { shadowOpacity: 0.45; shadowVerticalOffset: 3 }
                 // barTop == barBottom today, so this renders flat; a future
                 // look can reintroduce a real gradient via those two tokens.
                 gradient: Gradient {
@@ -358,6 +359,7 @@ Scope {
 
                     // system tray
                     Row {
+                        visible: Globals.barShows("tray")
                         anchors.verticalCenter: parent.verticalCenter
                         spacing: 9
                         Repeater {
@@ -411,13 +413,14 @@ Scope {
 
                     // thin separator between the tray and the action buttons
                     Rectangle {
-                        visible: SystemTray.items.values.length > 0
+                        visible: Globals.barShows("tray") && SystemTray.items.values.length > 0
                         anchors.verticalCenter: parent.verticalCenter
                         width: 1; height: 13; color: Theme.fg2; opacity: 0.25
                     }
 
                     // screenshot (camera) — Left: region · Right: whole screen · Middle: a window
                     StatusItem {
+                        visible: Globals.barShows("screenshot")
                         glyph: Theme.icCamera        // camera
                         onActivated: Quickshell.execDetached(["sh", "-c", "\"$HOME/.config/hypr/scripts/screenshot.sh\" region"])
                         onSecondary: Quickshell.execDetached(["sh", "-c", "\"$HOME/.config/hypr/scripts/screenshot.sh\" full"])
@@ -427,6 +430,7 @@ Scope {
                     // clipboard history + emoji picker (scissors) — opens its popup
                     StatusItem {
                         id: scissorsItem
+                        visible: Globals.barShows("clipboard")
                         glyph: Theme.icClipboard        // scissors
                         fg: Globals.clipboardOpen ? Theme.fg1 : Theme.fg2
                         active: Globals.clipboardOpen
@@ -440,12 +444,14 @@ Scope {
                     // Assigning Globals.tilingEnabled here instead only worked
                     // while the Settings panel happened to be loaded.
                     StatusItem {
+                        visible: Globals.barShows("tiling")
                         glyph: Globals.tilingEnabled ? Theme.icTiling : Theme.icFloating
                         onActivated: Globals.setTiling(!Globals.tilingEnabled)
                     }
 
                     // keyboard layout — plain text (US / GE); click cycles the layout
                     Item {
+                        visible: Globals.barShows("keyboard")
                         anchors.verticalCenter: parent.verticalCenter
                         width: kbLbl.implicitWidth + 16
                         height: parent.height
@@ -516,8 +522,12 @@ Scope {
                         }
                     }
 
-                    // thin separator between the action buttons and the control centre
-                    Rectangle { anchors.verticalCenter: parent.verticalCenter; width: 1; height: 13; color: Theme.fg2; opacity: 0.25 }
+                    // thin separator between the action buttons and the control centre —
+                    // only while at least one of them is shown
+                    Rectangle {
+                        visible: Globals.barShows("screenshot") || Globals.barShows("clipboard") || Globals.barShows("tiling") || Globals.barShows("keyboard")
+                        anchors.verticalCenter: parent.verticalCenter; width: 1; height: 13; color: Theme.fg2; opacity: 0.25
+                    }
 
                     // ── ONE wide Control-Centre button: active services + battery.
                     // Hovering highlights the whole group; click opens the sidebar.
@@ -539,7 +549,7 @@ Scope {
                             //   spinner (transient) → TOGGLER STATES the user
                             //   switched on (insomnia · cast · ssh · vpn) → COMMS
                             //   (notifications · mail · calendar · phone) →
-                            //   RADIOS (wired/wifi · bluetooth) → SYSTEM (power
+                            //   RADIOS (wired/wifi · SOUND · bluetooth) → SYSTEM (power
                             //   profile · battery) → clock.
                             // Metrics are uniform on purpose: every glyph is
                             //   Theme.barIconPx, every count/label 11 px, 4 px
@@ -678,7 +688,7 @@ Scope {
                                 text: Theme.icEthernet
                                 font.family: Theme.fontIcons; font.pixelSize: Theme.barIconPx
                                 color: Theme.fg2
-                                visible: bar.wiredUp && !bar.wifiUp
+                                visible: bar.wiredUp && !bar.wifiUp && Globals.barShows("wifi")
                             }
                             // Wi-Fi (only when connected)
                             Text {
@@ -686,7 +696,29 @@ Scope {
                                 text: Theme.icWifi
                                 font.family: Theme.fontIcons; font.pixelSize: Theme.barIconPx
                                 color: Theme.fg2
-                                visible: bar.wifiUp
+                                visible: bar.wifiUp && Globals.barShows("wifi")
+                            }
+                            // Sound — always there, between the radios: the level as
+                            // volume waves on the built-in speakers, and the DEVICE when
+                            // output is somewhere else (headset · headphones · a speaker
+                            // box). AudioState reads the sink's own PipeWire properties;
+                            // nothing polls.
+                            Text {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: AudioState.outputGlyph
+                                font.family: Theme.fontIcons; font.pixelSize: Theme.barIconPx
+                                color: AudioState.muted && AudioState.outputKind === "internal" ? Theme.fg3 : Theme.fg2
+                                visible: AudioState.sink !== null && Globals.barShows("sound")
+                            }
+                            // Microphone open — an app has it (a link from the default
+                            // source to a stream), in the accent so it reads as "live",
+                            // the way a camera light does.
+                            Text {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: Theme.icMic
+                                font.family: Theme.fontIcons; font.pixelSize: Theme.barIconPx
+                                color: Theme.accent
+                                visible: AudioState.micInUse && Globals.barShows("mic")
                             }
                             // Bluetooth (only when adapter on); filled glyph when a device is connected
                             Text {
@@ -701,10 +733,11 @@ Scope {
                                 text: conn > 0 ? Theme.icBluetoothOn : Theme.icBluetooth
                                 font.family: Theme.fontIcons; font.pixelSize: Theme.barIconPx
                                 color: Theme.fg2
-                                visible: adapter && adapter.enabled
+                                visible: adapter && adapter.enabled && Globals.barShows("bluetooth")
                             }
                             // Power profile (leaf · balance · speedometer) — reflects tuned profile
                             Text {
+                                visible: Globals.barShows("power")
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: PowerProfiles.profile === PowerProfile.PowerSaver ? Theme.icLeaf
                                     : PowerProfiles.profile === PowerProfile.Performance ? Theme.icSpeed
@@ -719,7 +752,7 @@ Scope {
                                 property var dev: UPower.displayDevice
                                 property real pct: dev ? (dev.percentage <= 1 ? dev.percentage * 100 : dev.percentage) : 0
                                 property bool charging: dev && (dev.state === UPowerDeviceState.Charging || dev.state === UPowerDeviceState.FullyCharged)
-                                visible: dev && dev.isLaptopBattery
+                                visible: dev && dev.isLaptopBattery && Globals.barShows("battery")
                                 Text {
                                     anchors.verticalCenter: parent.verticalCenter
                                     text: parent.charging ? Theme.icBolt

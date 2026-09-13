@@ -314,12 +314,21 @@ class Agent(dbus.service.Object):
 
         def done():
             # bluez accepts ONE connection from an untrusted device and refuses
-            # the reconnect that follows — trust is what makes a pairing stick
+            # the reconnect that follows — trust is what makes a pairing stick.
+            # Then connect: bluez does not on pair, and the tap that started
+            # this was the intent (the same three steps ewe-bt runs for the
+            # Settings app, so both entry points behave alike)
             self.set_trusted(path)
             emit({"event": "pair", "address": address, "ok": True})
+            self.cmd_connect(address)
 
         def failed(e):
             text, raw = friendly(e)
+            if raw == "org.bluez.Error.AlreadyExists":       # paired after all — just connect
+                self.set_trusted(path)
+                emit({"event": "pair", "address": address, "ok": True})
+                self.cmd_connect(address)
+                return
             emit({"event": "pair", "address": address, "ok": False, "error": text, "raw": raw})
 
         dev.Pair(reply_handler=done, error_handler=failed, timeout=180)
@@ -330,6 +339,7 @@ class Agent(dbus.service.Object):
             emit({"event": "connect", "address": address, "ok": False, "error": "The device is gone — search again"})
             return
         dev = dbus.Interface(self.bus.get_object(BLUEZ, path), DEV_IFACE)
+        self.set_trusted(path)
 
         def done():
             emit({"event": "connect", "address": address, "ok": True})

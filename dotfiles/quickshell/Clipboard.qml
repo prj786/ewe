@@ -126,7 +126,7 @@ Scope {
                 topRightRadius: 0
                 bottomLeftRadius: Theme.radius
                 bottomRightRadius: Theme.radius
-                color: Theme.bg1
+                color: Theme.panel
                 border.width: 0
                 layer.enabled: true
                 layer.effect: Elevation {}

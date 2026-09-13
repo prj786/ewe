@@ -127,7 +127,7 @@ Scope {
             x: Math.max(12, Math.min(parent.width - width - 12, Globals.placesAnchorX - width / 2))
             y: parent.height - height - 90
             width: 400; height: 470
-            radius: Theme.radius; color: Theme.bg1
+            radius: Theme.radius; color: Theme.panel
             border.color: Theme.stroke2; border.width: Theme.borderThin
             Sheen { radius: parent.radius }
             opacity: Globals.placesOpen ? 1 : 0

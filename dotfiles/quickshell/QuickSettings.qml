@@ -283,7 +283,8 @@ Scope {
         if (d.connected) { d.disconnect(); return }
         if (BtAgent.pairingAddress === d.address) { BtAgent.cancelPairing(d.address); return }
         d.trusted = true
-        if (d.paired) BtAgent.connectDevice(d.address); else BtAgent.pair(d.address)
+        if (!d.paired) { BtAgent.pair(d.address); return }
+        if (!BtAgent.connectDevice(d.address)) d.connect()   // no bridge: Quickshell connects, silently
     }
 
     function connectWifi(ssid, sec) {
@@ -731,7 +732,7 @@ Scope {
             height: Math.min(parent.height - 20, Math.max(wantH, railNeed, 430))
             Behavior on height { NumberAnimation { duration: Theme.durBase; easing.type: Theme.ease } }
             radius: Theme.radius
-            color: Theme.bg1
+            color: Theme.panel
             border.color: Theme.stroke2
             border.width: Theme.borderThin
             clip: true

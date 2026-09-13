@@ -130,6 +130,14 @@ registered in `qmldir`. Two singletons tie everything together:
   and connecting go through `BtAgent.pair()/connectDevice()` so failures have a
   reason. `bin/ewe-bt` is the same for the Settings app (see
   `docs/SETTINGS-BACKEND.md`).
+- **`AudioState.qml`** — where sound goes (headset / headphones / external /
+  built-in, from the default sink's PipeWire properties), the level, whether an
+  app has the mic open (a link from the default source to a stream — Quickshell
+  0.3.1 never reports link STATE, so "open" is the signal), and the
+  follow-the-device policy: a headset that appears becomes the output (and
+  input), and output returns to where it was when the headset leaves.
+  WirePlumber will not do this once a user ever picked a default. The bar's
+  sound and mic glyphs read it.
 - **`HyprMon.qml`** — display manager: per-monitor-set profiles
   (`display-profiles.json` → `hypr/generated/monitors.lua`), live apply via
   `hyprctl eval 'hl.monitor{…}'`, re-assert on hotplug/AC events. The Settings
@@ -158,6 +166,17 @@ box-only `mask: Region { item: box }` so clicks/drags outside the panel pass
 through to apps behind it.
 
 ### Theming (single source: `scripts/colorscheme.sh`)
+
+**Bar & dock opacity:** `desktop.theme.bar_opacity = 0..100` in ewe.conf
+(Settings → Appearance slider). The bar and dock are painted at
+`Theme.barAlpha` (`barTop`, `dockFill`); between 10 and 99 `ewe-conf` writes
+the compositor blur + a `quickshell:(bar|dock)` layer rule into
+`generated/user.lua`; `EWE_NO_BLUR=1` (VMs, NVIDIA — `start-hyprland.sh`)
+skips the blur. `desktop.theme.app_blur` draws every WINDOW at 85 % with blur
+behind it (`decoration.active/inactive_opacity`, fullscreen opaque) — fixed, not
+the slider. Every other panel (`Theme.panel`) stays opaque. Prefs the
+Settings app writes MUST be in `ewe-conf`'s `THEME_MAP`, or `absorb` drops
+them on the next write (that was the 0.12.7 "Top bar settings do nothing").
 
 `colorscheme.sh <mode> [accent-hex]` writes *every* toolkit's config in one
 pass — ewe is **dark-only by decision (2026-09-01)**; the mode argument is

@@ -90,7 +90,7 @@ Scope {
             anchors.bottomMargin: 40
             width: 320; height: 56
             radius: Theme.radius
-            color: Theme.bg1
+            color: Theme.panel
             border.color: Theme.stroke2; border.width: Theme.borderThin
             layer.enabled: true
             layer.effect: Elevation {}

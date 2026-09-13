@@ -30,7 +30,7 @@ QtObject {
     // Project version — the shell's runtime copy. Keep in sync with the repo-root
     // VERSION file (the canonical source used for git tags / releases). Semver, with
     // an -alpha/-beta pre-release suffix until the first stable cut.
-    readonly property string version: "0.12.6-beta"
+    readonly property string version: "0.12.10-beta"
 
     // ── event sounds (GNOME-style; the freedesktop sound theme, one toggle) ──
     // playSound("message-new-instant") etc — names are theme event ids from
@@ -339,6 +339,10 @@ QtObject {
     property bool dockEnabled: true
     property bool dockAutohide: false       // intelligent hide: slide away, reveal on bottom-edge hover
     property string dockIconSize: "normal"  // dock icon size: "small" | "normal" | "large"
+    // ── top bar (Settings → Layout → Top bar; user-theme.json) ──
+    property string barIconSize: "normal"   // status glyph size: "small" | "normal" | "large" (relative to the theme's icon size)
+    property var barShow: ({})              // { tray, screenshot, clipboard, tiling, keyboard, sound, mic, wifi, bluetooth, power, battery } — absent = shown
+    function barShows(key) { return !(barShow && barShow[key] === false) }
 
     // ── Screensaver (persisted in user-theme.json; hypridle owns the timing via
     // the generated hypridle.conf — see Settings.writeIdleConf) ────────────────
@@ -536,6 +540,11 @@ QtObject {
     // stroke, neutral_tint. The Settings pane shows the live value from here
     // rather than keeping a second copy that can disagree with the file.
     property var tokInput: ({})
+    property var tokSurface: ({})           // {kind: solid|glass, alpha, blur} — Theme.glass reads it
+    // start-hyprland.sh exports EWE_NO_BLUR=1 in VMs and on NVIDIA, where the
+    // compositor's blur is a known cost or glitch; the shell paints solid there
+    // whatever the theme says (alpha without blur is just a see-through panel)
+    readonly property bool noBlur: Quickshell.env("EWE_NO_BLUR") === "1"
     property Process _tokenLoad: Process {
         running: true
         command: ["sh", "-c", "cat \"$HOME/.config/quickshell/theme-tokens.json\" 2>/dev/null"]
@@ -547,6 +556,7 @@ QtObject {
                     if (j && j.shape && typeof j.shape === "object") g.tokShape = j.shape
                     if (j && j.size  && typeof j.size  === "object") g.tokSize  = j.size
                     if (j && j.input && typeof j.input === "object") g.tokInput = j.input
+                    g.tokSurface = (j && j.surface && typeof j.surface === "object") ? j.surface : {}
                 } catch (e) {}
             }
         }
@@ -571,6 +581,9 @@ QtObject {
                     if (j && j.dockEnabled !== undefined) g.dockEnabled = j.dockEnabled
                     if (j && j.dockAutohide !== undefined) g.dockAutohide = j.dockAutohide
                     if (j && j.dockIconSize) g.dockIconSize = j.dockIconSize
+                    if (j && j.barEnabled !== undefined) g.barVisible = j.barEnabled !== false
+                    if (j && j.barIconSize) g.barIconSize = j.barIconSize
+                    if (j && j.barShow && typeof j.barShow === "object") g.barShow = j.barShow
                     if (j && j.animationSpeed !== undefined) g.animationSpeed = j.animationSpeed
                     // dark-only by decision (2026-09-01): a persisted "light" is ignored
                     if (j && j.avatarShape) g.avatarShape = j.avatarShape
