@@ -3,7 +3,7 @@
 // shell's style (flock/blacksheep) and accent. Zed tolerates comments here.
 {
   "theme": "ewe",
-  "ui_font_family": "Ubuntu",
+  "ui_font_family": "Inter",
   "buffer_font_family": "JetBrainsMono Nerd Font",
   "buffer_font_size": 14,
   "telemetry": {

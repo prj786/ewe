@@ -7,7 +7,7 @@
 -- ║                                                                            ║
 -- ║  Reload:        Super + Ctrl + R   (Hyprland also auto-reloads on save)    ║
 -- ║  All shortcuts: ~/.config/hypr/SHORTCUTS.md                                ║
--- ║  Colours:       ~/.config/hypr/colors.lua  (Gruvbox, single source)        ║
+-- ║  Colours:       ~/.config/hypr/colors.lua  (reads the theme tokens)       ║
 -- ╚══════════════════════════════════════════════════════════════════════════╝
 
 local c        = require("colors")
@@ -57,21 +57,37 @@ hl.monitor({ output = "", mode = "preferred", position = "auto", scale = "auto" 
 -- ╭───────────────────────────────────────────────────────────────╮
 -- │ LOOK & FEEL — https://wiki.hypr.land/Configuring/Basics/        │
 -- ╰───────────────────────────────────────────────────────────────╯
+-- ── Blur policy ─────────────────────────────────────────────────────────────
+-- Two [desktop.theme] knobs ask for compositor blur, both read off the token
+-- file through colors.lua:
+--   bar_opacity 1-90  -> the bar and dock are translucent, so blur what shows
+--                        through them (a layer rule below; the shell paints its
+--                        own alpha ground).
+--   app_blur          -> every window sits at a fixed 85 % with blur behind it;
+--                        fullscreen stays solid (window rules below).
+-- Neither asks -> decoration.blur stays off: it is a constant multi-pass GPU
+-- cost on the whole desktop. And on VMs / NVIDIA it is off by policy whatever
+-- the knobs say — start-hyprland.sh exports EWE_NO_BLUR=1 there (virtio /
+-- llvmpipe and the NVIDIA Wayland path both render blur as flicker).
+local noBlur   = os.getenv("EWE_NO_BLUR") == "1"
+local barBlur  = not noBlur and c.bar_opacity >= 1 and c.bar_opacity <= 90
+local appBlur  = not noBlur and c.app_blur
+local wantBlur = barBlur or appBlur
+
 hl.config({
     general = {
         gaps_in     = 6,
         gaps_out    = 14,
-        border_size = 1,           -- no chunky borders; the shadow carries the depth
+        border_size = 1,           -- the ring is a 1px stroke; the shadow carries the depth
 
-        -- Active border: the user's accent (colors.lua reads user-theme.json,
-        -- so this tracks the shell live on every reload). Inactive: the
-        -- flock/blacksheep hairline so unfocused windows recede. Both used
-        -- to be Gruvbox leftovers (yellow→orange gradient, warm grey) — the
-        -- "border is a different colour than the accent" of the first metal
-        -- install whenever generated/user.lua had not been written yet.
+        -- The window ring. Active: the user's accent when tint_borders is on
+        -- (colors.lua reads user-theme.json, so this tracks the shell live on
+        -- every reload), otherwise the stroke-2 hairline. Inactive: stroke-3,
+        -- the quieter hairline, so unfocused windows recede. Both strokes
+        -- carry the token file's own alpha (0.5) — no second alpha here.
         col = {
-            active_border   = c.rgba(c.accent, 0xee),
-            inactive_border = c.rgba(c.s_stroke, 0xaa),
+            active_border   = c.tint_borders and c.rgba(c.accent, 0xee) or c.stroke2,
+            inactive_border = c.stroke3,
         },
 
         resize_on_border = true,
@@ -80,7 +96,10 @@ hl.config({
     },
 
     decoration = {
-        rounding       = 12,   -- Big Sur / Sequoia corner radius
+        -- The corner radius is the token file's radius-control (12 under the
+        -- default `round` preset). Settings → Layout still wins: its
+        -- generated/user.lua sets decoration.rounding again, loaded last.
+        rounding       = c.radius,
         rounding_power = 2,
 
         active_opacity   = 1.0,
@@ -95,11 +114,17 @@ hl.config({
             color        = 0x40000000,  -- 0xAARRGGBB: ~25% black, soft
         },
 
-        -- Blur is OFF everywhere: every shell surface is solid, and the frosted
-        -- scrims (Overview/Settings) read fine as plain translucent dims. Blur
-        -- was also a constant multi-pass GPU cost on the whole desktop.
+        -- Off unless bar_opacity / app_blur ask for it (policy above). When
+        -- on: a wide, calm blur — few passes, a touch of noise so flat colour
+        -- behind glass does not band. ignore_opacity lets the 85 % windows
+        -- blur what is behind them instead of only their own alpha.
         blur = {
-            enabled = false,
+            enabled           = wantBlur,
+            size              = 6,
+            passes            = 3,
+            noise             = 0.012,
+            ignore_opacity    = true,
+            new_optimizations = true,
         },
     },
 
@@ -606,9 +631,35 @@ hl.window_rule({
 -- ╭───────────────────────────────────────────────────────────────╮
 -- │ LAYER RULES                                                     │
 -- ╰───────────────────────────────────────────────────────────────╯
--- No blur rules: decoration.blur is disabled (see above). Every Quickshell
--- surface is solid (colours from Theme.qml); the Overview/Settings scrims are
--- plain translucent dims with nothing frosted behind them.
+-- Blur behind the bar and dock only when they are translucent (bar_opacity
+-- 1-90, see the blur policy at the top). Every other Quickshell surface is
+-- solid; the Overview/Settings scrims are plain translucent dims with nothing
+-- frosted behind them. ignore_alpha 0 = `ignorezero`: the fully transparent
+-- parts of the layer (the gaps around the pills) are not blurred.
+if barBlur then
+    hl.layer_rule({
+        name         = "ewe-bar-blur",
+        match        = { namespace = "^quickshell:(bar|dock)$" },
+        blur         = true,
+        ignore_alpha = 0,
+    })
+end
+
+-- app_blur: every window at a fixed 85 %, blur behind it; fullscreen stays
+-- solid (video, games). `override` so the rule beats the per-window
+-- active/inactive opacity the decoration block and generated/user.lua set.
+if appBlur then
+    hl.window_rule({
+        name    = "ewe-app-blur",
+        match   = { fullscreen = false },
+        opacity = "0.85 override 0.85 override",
+    })
+    hl.window_rule({
+        name    = "ewe-app-blur-fullscreen",
+        match   = { fullscreen = true },
+        opacity = "1.0 override 1.0 override",
+    })
+end
 
 -- Quickshell surfaces that animate their own open/close in QML (zoom/fade over
 -- Theme.dur*) stay mapped through the close animation — `visible` only drops

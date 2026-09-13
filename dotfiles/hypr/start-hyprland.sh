@@ -115,6 +115,11 @@ fi
 # WebKitGTK remedy: disable that renderer there; other bare metal is untouched.
 if systemd-detect-virt --vm --quiet 2>/dev/null || [ -d /sys/module/nvidia ]; then
     export WEBKIT_DISABLE_DMABUF_RENDERER=1
+    # …and no compositor blur there either, whatever ewe.conf's bar_opacity /
+    # app_blur ask for: virtio/llvmpipe and the NVIDIA Wayland path both render
+    # Hyprland's blur as flicker. hyprland.lua reads this and keeps
+    # decoration.blur off (the bar and dock then paint their alpha unblurred).
+    export EWE_NO_BLUR=1
 fi
 
 exec Hyprland

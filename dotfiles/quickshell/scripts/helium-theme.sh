@@ -82,7 +82,7 @@ cat > "$STATE/ntp/ntp.html" <<EOF
 <!doctype html><html><head><meta charset="utf-8"><title>New Tab</title><style>
   html, body { margin: 0; height: 100%; background: #$BG; }
   body { display: flex; align-items: center; justify-content: center;
-         font-family: Ubuntu, sans-serif; }
+         font-family: Inter, sans-serif; }
   .wrap { display: flex; flex-direction: column; align-items: center; gap: 34px;
           transform: translateY(-6vh); }
   img { width: 190px; height: 190px; object-fit: contain; opacity: .92;
