@@ -22,7 +22,7 @@ import Quickshell.Io
 //
 // Kinds: service | panel | overlay | menu are instantiated identically — the
 // plugin owns its windows and IpcHandlers. bar-widget is not instantiated
-// here; the bar's plugin slots (Bar.qml, ewe 0.14) read `barWidgets`.
+// here: Bar.qml's BarPluginSlots read `barWidgets` and Loader one per bar.
 QtObject {
     id: host
 
@@ -42,8 +42,8 @@ QtObject {
     property var plugins: []
     // id -> { kind -> instance } for what actually got instantiated.
     property var instances: ({})
-    // bar-widget entries of enabled, valid plugins, for Bar.qml's slots:
-    // [{ id, name, entry (absolute path), barWidget }]
+    // bar-widget entries of enabled, valid plugins, for BarPluginSlots:
+    // [{ id, name, entry (absolute path), barWidget: { defaultSection } }]
     property var barWidgets: []
     property bool scanned: false
     signal loaded()
@@ -135,8 +135,15 @@ QtObject {
     // What the `plugins` IPC target reports: the ids and kinds that are live —
     // which can be fewer than ewe-plugin enabled (a compile error is skipped).
     function summary() {
+        var kinds = {}
+        for (var id in host.instances) kinds[id] = Object.keys(host.instances[id])
+        for (var i = 0; i < host.barWidgets.length; i++) {
+            var w = host.barWidgets[i]
+            if (!kinds[w.id]) kinds[w.id] = []
+            kinds[w.id].push("bar-widget")
+        }
         var out = []
-        for (var id in host.instances) out.push({ id: id, kinds: Object.keys(host.instances[id]) })
+        for (var k in kinds) out.push({ id: k, kinds: kinds[k] })
         return out
     }
 }

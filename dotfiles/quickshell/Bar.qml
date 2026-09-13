@@ -294,6 +294,7 @@ Scope {
                 //    just identity, no window actions (those live on the window
                 //    itself / keybinds now). ──
                 Row {
+                    id: leftRow
                     anchors.left: parent.left
                     anchors.leftMargin: 10
                     anchors.verticalCenter: parent.verticalCenter
@@ -346,16 +347,33 @@ Scope {
                             font.family: Theme.fontText; font.pixelSize: 13; font.weight: Font.Bold
                         }
                     }
+
+                    // third-party bar widgets whose manifest says defaultSection = left
+                    BarPluginSlots { section: "left"; anchors.verticalCenter: parent.verticalCenter }
                 }
 
-                // (Workspace switching moved to the bottom dock — no centre module here.)
+                // ── CENTRE: no first-party module (workspace switching moved to the
+                //    bottom dock) — only plugin widgets that ask for the middle. ──
+                BarPluginSlots {
+                    id: centerSlots
+                    section: "center"
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    anchors.verticalCenter: parent.verticalCenter
+                    // yield on a narrow output instead of overlapping the clusters
+                    fits: x >= leftRow.x + leftRow.width + 12
+                       && x + width <= rightRow.x - 12
+                }
 
                 // ── RIGHT: status cluster ──
                 Row {
+                    id: rightRow
                     anchors.right: parent.right
                     anchors.rightMargin: 8
                     anchors.verticalCenter: parent.verticalCenter
                     spacing: Theme.barItemSpacing
+
+                    // third-party bar widgets (defaultSection = right, the default)
+                    BarPluginSlots { section: "right"; anchors.verticalCenter: parent.verticalCenter }
 
                     // system tray
                     Row {

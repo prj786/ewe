@@ -43,8 +43,10 @@ enabled, so read it first. Enabling and disabling restart the shell
     path                               print the plugins directory
 
 Kinds: service (headless), panel, overlay, menu — the host instantiates all of
-them the same way and the plugin owns its windows and IPC. bar-widget is
-reserved for the bar slots (ewe 0.14) and is ignored by the host until then.
+them the same way and the plugin owns its windows and IPC. bar-widget is an
+Item the bar packs like a built-in indicator; "barWidget": {"defaultSection":
+"left" | "center" | "right"} picks the section (right when absent), and the
+Settings → Top bar map hides it under the key plugin:<id>.
 
 Python stdlib only, like every other ewe tool. Machine-facing verbs print one
 JSON object; the rest talk to a person.
@@ -61,7 +63,6 @@ import tomllib
 API_VERSION = 1
 SCHEMA = 1
 KINDS = ("service", "panel", "overlay", "menu", "bar-widget")
-DEFERRED_KINDS = ("bar-widget",)      # accepted in a manifest, not loaded yet
 RESERVED_PREFIX = "ewe."
 ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,31}(\.[a-z0-9][a-z0-9_-]{0,31})+$")
 SOURCE_RE = re.compile(r"^(https?://|git://|ssh://|git@|file://)")
@@ -198,6 +199,8 @@ def validate_manifest(d, m, expect_dirname=None):
     bw = m.get("barWidget")
     if bw is not None and not isinstance(bw, dict):
         p.append("barWidget must be an object")
+    elif isinstance(bw, dict) and "defaultSection" in bw and bw["defaultSection"] not in ("left", "center", "right"):
+        p.append("barWidget.defaultSection must be left, center or right")
     return p
 
 
@@ -360,9 +363,6 @@ def cmd_add(args):
     set_sources(sources)
     kinds = ", ".join(m.get("kinds") or [])
     say("installed %s %s (%s) → %s" % (pid, m.get("version", ""), kinds, dest))
-    deferred = [k for k in (m.get("kinds") or []) if k in DEFERRED_KINDS]
-    if deferred:
-        say("note: %s is not loaded by this shell yet (bar slots land in ewe 0.14)" % ", ".join(deferred))
     if enable:
         cmd_enable([pid])
     else:
