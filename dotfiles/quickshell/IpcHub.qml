@@ -64,6 +64,7 @@ Scope {
         target: "plugins"
         function list(): string { return JSON.stringify(PluginHost.summary()) }
         function apiVersion(): int { return PluginHost.apiVersion }
+        function safeMode(): bool { return PluginHost.safeMode }
     }
 
     IpcHandler {

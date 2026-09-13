@@ -96,6 +96,7 @@ Then reboot, pick **Ewe** at the greeter, and you're in —
 - **Curated GTK app set** — Nemo, Engrampa, imv, Zathura, mpv, kitty, Zed:
   borderless under Hyprland, defaults managed in one `mimeapps.list`.
 - **Komble + ewe-settings** — first-party software manager and settings app.
+- **Plugins** — `ewe-plugin add <git-url>` drops third-party bar widgets, panels and services into the shell ([docs/PLUGINS.md](docs/PLUGINS.md)).
 - **Optional Google account** — calendar, Gmail unread + notifications, settings
   sync to Drive, and your Drive mounted as a folder. One consent screen for every
   ewe app, native OAuth, no GNOME Online Accounts ([RFC-002](docs/RFC-002-broker-and-sync.md)).
@@ -114,6 +115,7 @@ click, you can script — and debug by running the same command yourself.
 | | |
 |---|---|
 | [`ewe-conf`](bin/ewe-conf) | the one file: `get` · `set` · `dump` · `import` · `apply` · `push` · `pull` |
+| [`ewe-plugin`](bin/ewe-plugin) | shell plugins: `add <git-url>` · `list` · `enable` · `disable` · `update` · `remove` · `validate` |
 | [`ewe-auth`](bin/ewe-auth) | one Google identity for every ewe app: `status` · `login` · `token` · `logout` |
 | [`ewe-drive`](bin/ewe-drive) | your Drive as a folder: `setup` · `mount` · `unmount` · `status` |
 | `ewe-setup` | per-user deployment of the installed payload |
@@ -144,6 +146,7 @@ token lives only in the keyring — `ewe-auth` is the single thing that touches 
 | [RFC-001](docs/RFC-001-one-config.md) | one file: `ewe.conf` |
 | [RFC-002](docs/RFC-002-broker-and-sync.md) | the auth broker and the sync of that file |
 | [Settings backend](docs/SETTINGS-BACKEND.md) | how Settings writes Hyprland config |
+| [Plugins](docs/PLUGINS.md) | `ewe-plugin`: the manifest, the kinds, the bar-widget contract, the public API, safe mode |
 | [Troubleshooting](docs/TROUBLESHOOTING.md) | post-freeze playbook and friends |
 
 ## Feedback

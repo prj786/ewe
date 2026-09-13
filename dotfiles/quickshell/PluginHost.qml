@@ -16,9 +16,12 @@ import Quickshell.Io
 // The host does nothing else on purpose: no sandbox (impossible inside one
 // QML engine), no API object to inject, no hot reload (ewe-plugin restarts
 // ewe.service). A plugin that fails to compile is logged and skipped; one
-// that compiles and then crashes takes the shell down with it — the crash
-// guard (a plugins-off boot after repeated respawns) is what makes that
-// survivable.
+// that compiles and then crashes takes the shell down with it, and
+// ewe.service relaunches it a second later — a login loop with no desktop.
+// The crash guard lives in ewe-plugin: `list --json --boot` counts starts,
+// and the third inside a minute answers safeMode, on which this host loads
+// nothing and says so with a notification. A start that survives a minute
+// reports `boot-ok` (the budget resets).
 //
 // Kinds: service | panel | overlay | menu are instantiated identically — the
 // plugin owns its windows and IpcHandlers. bar-widget is not instantiated
@@ -46,6 +49,9 @@ QtObject {
     // [{ id, name, entry (absolute path), barWidget: { defaultSection } }]
     property var barWidgets: []
     property bool scanned: false
+    // true when this start was the third inside a minute: nothing loaded
+    property bool safeMode: false
+    property var suspects: []
     signal loaded()
 
     function start() {
@@ -54,7 +60,7 @@ QtObject {
     }
 
     property Process _scan: Process {
-        command: [host.tool, "list", "--json"]
+        command: [host.tool, "list", "--json", "--boot"]
         stdout: StdioCollector { onStreamFinished: host._onList(this.text) }
         stderr: StdioCollector {
             onStreamFinished: { if (this.text.trim()) Log.warn("plugins", "ewe-plugin:", this.text.trim()) }
@@ -73,6 +79,17 @@ QtObject {
             return
         }
         host.plugins = j.plugins
+        if (j.safeMode) {
+            host.safeMode = true
+            host.suspects = j.suspects || []
+            Log.warn("plugins", "SAFE MODE: the shell restarted repeatedly — no plugins loaded; enabled:", host.suspects.join(", "))
+            Quickshell.execDetached(["notify-send", "-a", "ewe", "-u", "normal",
+                "Plugins disabled for this session",
+                "The shell restarted three times within a minute. Enabled plugins: "
+                + host.suspects.join(", ") + ". Disable the culprit with ewe-plugin disable <id>."])
+            host.loaded()
+            return
+        }
         var inst = {}, widgets = [], n = 0
         for (var i = 0; i < j.plugins.length; i++) {
             var p = j.plugins[i]
@@ -105,7 +122,14 @@ QtObject {
         host.instances = inst
         host.barWidgets = widgets
         Log.info("plugins", n + " entry point(s) loaded from " + Object.keys(inst).length + " plugin(s)")
+        host._settle.start()
         host.loaded()
+    }
+
+    // a start that stays up this long was not a crash loop: reset the budget
+    property Timer _settle: Timer {
+        interval: 60000
+        onTriggered: Quickshell.execDetached([host.tool, "boot-ok"])
     }
 
     // Instances hang off a Scope rather than this QtObject: PanelWindows and

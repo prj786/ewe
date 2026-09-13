@@ -41,6 +41,19 @@ enabled, so read it first. Enabling and disabling restart the shell
                                        moved to <id>.bak.<stamp> instead
     validate <path>                    check a manifest + its entry points (exit 1 on problems)
     path                               print the plugins directory
+    boot-ok                            (the shell calls this) a start survived a minute
+
+`add` also takes a plain local directory — your own plugin in progress — and
+copies it in as a hand-made plugin (no git, so `update` has nothing to pull;
+`remove` parks it as a backup rather than deleting it).
+
+The crash guard: ewe.service relaunches the shell a second after any crash,
+so a plugin that compiles and then crashes is a login loop with no desktop.
+Every shell start calls `list --json --boot`; the third start inside a minute
+answers "safe mode" — the host loads nothing, tells the user which plugins
+were on, and the budget resets so the next deliberate restart tries again.
+A start that survives a minute reports `boot-ok`. Deliberate restarts (this
+tool's own enable/disable/remove) do not count.
 
 Kinds: service (headless), panel, overlay, menu — the host instantiates all of
 them the same way and the plugin owns its windows and IPC. bar-widget is an
@@ -73,6 +86,11 @@ EWE_DIR = os.path.join(CFG_DIR, "ewe")
 CONF = os.path.join(EWE_DIR, "ewe.conf")
 PLUGINS_DIR = os.path.join(EWE_DIR, "plugins")
 SHELL_UNIT = "ewe.service"
+STATE_DIR = os.path.join(os.environ.get("XDG_STATE_HOME")
+                         or os.path.join(os.path.expanduser("~"), ".local", "state"), "ewe")
+BOOTS = os.path.join(STATE_DIR, "plugin-boots.json")
+CRASH_WINDOW = 60     # seconds
+CRASH_LIMIT = 3       # shell starts inside the window → safe mode
 
 
 def die(msg, code=1):
@@ -297,6 +315,7 @@ def restart_shell(wanted=True):
     if r.returncode != 0:
         say("shell not running — the change applies at the next login")
         return False
+    clear_boots(forget_safe=False)   # a deliberate restart must not count as a crash
     r = subprocess.run(["systemctl", "--user", "restart", SHELL_UNIT], capture_output=True, text=True)
     if r.returncode != 0:
         say("could not restart the shell: %s" % (r.stderr or r.stdout).strip())
@@ -311,6 +330,52 @@ def stamp():
 
 def problems_block(e):
     return "".join("    ! %s\n" % x for x in e["problems"])
+
+
+# ── the crash guard ───────────────────────────────────────────────────────────
+
+def _boots_read():
+    try:
+        with open(BOOTS) as f:
+            j = json.load(f)
+        if isinstance(j, dict):
+            return {"boots": [t for t in j.get("boots", []) if isinstance(t, (int, float))],
+                    "safe": j.get("safe") if isinstance(j.get("safe"), dict) else None}
+    except (FileNotFoundError, json.JSONDecodeError):
+        pass
+    return {"boots": [], "safe": None}
+
+
+def _boots_write(st):
+    os.makedirs(STATE_DIR, exist_ok=True)
+    tmp = BOOTS + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(st, f)
+    os.replace(tmp, BOOTS)
+
+
+def record_boot(plugins):
+    """One shell start. Returns the safe-mode record when this start is the
+    CRASH_LIMIT-th inside CRASH_WINDOW seconds and there is a plugin to blame;
+    the budget resets at the same time, so a fixed plugin gets a clean run."""
+    st = _boots_read()
+    now = int(time.time())
+    st["boots"] = [t for t in st["boots"] if now - t < CRASH_WINDOW] + [now]
+    suspects = [p["id"] for p in plugins if p["enabled"] and p["installed"] and p["valid"]]
+    if len(st["boots"]) >= CRASH_LIMIT and suspects:
+        st = {"boots": [], "safe": {"at": now, "suspects": suspects}}
+        _boots_write(st)
+        return st["safe"]
+    _boots_write(st)
+    return None
+
+
+def clear_boots(forget_safe):
+    st = _boots_read()
+    st["boots"] = []
+    if forget_safe:
+        st["safe"] = None
+    _boots_write(st)
 
 
 # ── verbs ─────────────────────────────────────────────────────────────────────
@@ -341,10 +406,15 @@ def cmd_add(args):
     os.makedirs(PLUGINS_DIR, exist_ok=True)
     tmp = os.path.join(PLUGINS_DIR, ".tmp-%d" % os.getpid())
     shutil.rmtree(tmp, ignore_errors=True)
-    r = git(["clone", "--quiet", "--", src, tmp])
-    if r.returncode != 0:
-        shutil.rmtree(tmp, ignore_errors=True)
-        die("git clone failed:\n%s" % r.stderr.strip())
+    if os.path.isdir(src) and not os.path.isdir(os.path.join(src, ".git")):
+        # a plain directory — someone's plugin in progress — becomes a
+        # hand-made install: copied, never pulled, parked (not deleted) on remove
+        shutil.copytree(src, tmp, symlinks=False)
+    else:
+        r = git(["clone", "--quiet", "--", src, tmp])
+        if r.returncode != 0:
+            shutil.rmtree(tmp, ignore_errors=True)
+            die("git clone failed:\n%s" % r.stderr.strip())
     m, problems = read_manifest(tmp)
     if m is not None:
         problems = validate_manifest(tmp, m)
@@ -372,9 +442,18 @@ def cmd_add(args):
 def cmd_list(args):
     plugins = scan()
     if "--json" in args:
+        safe = record_boot(plugins) if "--boot" in args else None
         print(json.dumps({"ok": True, "apiVersion": API_VERSION, "dir": PLUGINS_DIR,
-                          "plugins": plugins}))
+                          "plugins": plugins, "safeMode": bool(safe),
+                          "suspects": safe["suspects"] if safe else []}))
         return
+    safe = _boots_read()["safe"]
+    if safe:
+        say("! safe mode: the shell restarted %d times within a minute (%s) and loaded no plugins that session."
+            % (CRASH_LIMIT, time.strftime("%Y-%m-%d %H:%M", time.localtime(safe.get("at", 0)))))
+        say("  enabled at the time: %s — `ewe-plugin disable <id>` the culprit; a start that stays up a minute clears this."
+            % ", ".join(safe.get("suspects", [])))
+        say()
     if not plugins:
         say("no plugins installed (%s)" % PLUGINS_DIR)
         say("add one with: ewe-plugin add <git-url> --enable")
@@ -567,6 +646,9 @@ def main(argv):
              "validate": cmd_validate}
     if verb == "path":
         print(PLUGINS_DIR)
+        return 0
+    if verb == "boot-ok":
+        clear_boots(forget_safe=True)
         return 0
     if verb not in verbs:
         die("unknown verb \"%s\" — try `ewe-plugin help`" % verb, 2)
