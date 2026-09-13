@@ -187,16 +187,17 @@ Scope {
             layer.effect: Elevation {}
             Sheen { radius: parent.radius }
 
-            // a square dock button — icon glyph, same quiet-hover treatment
-            // as the bar's StatusItems so bar and dock read as one system
+            // a square dock button — icon glyph, the same quiet hover as the
+            // bar's StatusItems (no hover box: the glyph brightens and grows,
+            // nothing is painted behind it) so bar and dock read as one system.
+            // Only the ACTIVE app carries a fill, the accent tint.
             component DockBtn: Rectangle {
                 id: db
                 property string glyph: ""
                 property bool activeState: false
                 signal go()
                 width: win.cell; height: win.cell; radius: Theme.radiusControl
-                color: activeState ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.16)
-                     : dbMa.containsMouse ? Theme.subtleHover : Theme.subtle
+                color: activeState ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.16) : "transparent"
                 Behavior on color { ColorAnimation { duration: Theme.durFast } }
                 scale: dbMa.pressed ? 0.9 : (dbMa.containsMouse ? 1.08 : 1.0)
                 Behavior on scale { NumberAnimation { duration: Theme.durFast; easing.type: Easing.OutBack; easing.overshoot: 2 } }
@@ -236,8 +237,9 @@ Scope {
                     anchors.verticalCenter: parent.verticalCenter
                     height: win.cell; radius: Theme.radiusControl
                     width: Math.max(win.cell, penRow.implicitWidth + 16)
+                    // no hover fill (same rule as DockBtn); open = the accent tint
                     color: win.penOpen ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.16)
-                         : penMa.containsMouse ? Theme.subtleHover : Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.07)
+                         : Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.07)
                     border.color: win.penOpen ? Theme.accent : Theme.stroke1; border.width: Theme.borderThin
                     Behavior on color { ColorAnimation { duration: 150 } }
                     MouseArea { id: penMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
