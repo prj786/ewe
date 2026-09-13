@@ -98,4 +98,6 @@ package() {
     install -Dm755 bin/ewe-auth "$pkgdir/usr/bin/ewe-auth"
     install -Dm755 bin/ewe-drive "$pkgdir/usr/bin/ewe-drive"
     install -Dm755 bin/ewe-bt "$pkgdir/usr/bin/ewe-bt"
+    # third-party shell plugins: a git URL in, one config bit (docs/PLUGINS.md)
+    install -Dm755 bin/ewe-plugin "$pkgdir/usr/bin/ewe-plugin"
 }

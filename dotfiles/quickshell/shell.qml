@@ -18,7 +18,9 @@ ShellRoot {
     // the singleton, and a lid event nobody is listening for does nothing.
     // BtAgent is the bluez pairing agent: it must be registered from login,
     // or the first "confirm 123456?" from a phone has nobody to answer it.
-    Scope { Component.onCompleted: { HyprMon.start(); Logind.start(); Resume.start(); Lid.start(); Wallpaper.start(); BtAgent.start() } }
+    // PluginHost goes last: third-party entry points are instantiated once
+    // every first-party singleton they may touch is already armed.
+    Scope { Component.onCompleted: { HyprMon.start(); Logind.start(); Resume.start(); Lid.start(); Wallpaper.start(); BtAgent.start(); PluginHost.start() } }
 
     Notifications {}
     IpcHub {}

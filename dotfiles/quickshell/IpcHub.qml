@@ -56,6 +56,16 @@ Scope {
         function version(): string { return Globals.version }
     }
 
+    // Third-party plugins (bin/ewe-plugin). `list` is what the host actually
+    // instantiated as JSON — fewer than ewe-plugin enabled when an entry point
+    // failed to compile (logged, skipped). Public API: ewe-plugin's future
+    // `status` verb and a Settings pane will read it.
+    IpcHandler {
+        target: "plugins"
+        function list(): string { return JSON.stringify(PluginHost.summary()) }
+        function apiVersion(): int { return PluginHost.apiVersion }
+    }
+
     IpcHandler {
         target: "store"
         function toggle(): void {

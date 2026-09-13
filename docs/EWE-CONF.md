@@ -229,6 +229,24 @@ and AppImage Komble manages on this machine. This is the restore loop: a
 fresh install that pulls your synced `ewe.conf` can offer to reinstall all
 of it. Komble maintains this section; nothing else touches it.
 
+### `[plugins]` — third-party shell plugins
+
+```toml
+[plugins]
+enabled = ["acme.weather"]
+
+[plugins.sources]
+"acme.weather" = "https://github.com/acme/ewe-weather.git"
+```
+
+Written by `ewe-plugin` (through `ewe-conf`, like everything else). `enabled`
+is the list of plugin ids the shell instantiates at startup; `sources` remembers
+where each installed plugin was cloned from, so on a fresh machine
+`ewe-plugin list` can point at what is enabled here but not installed yet. The
+plugins themselves live in `~/.config/ewe/plugins/<id>/`, outside the payload —
+they are code, not configuration, and never sync. Toggling a plugin restarts
+the shell; nothing else is regenerated.
+
 ### `[system]` — what this machine is
 
 Read by the installer and ewe-os tooling only; the desktop never reads it.
