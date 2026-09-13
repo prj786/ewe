@@ -182,8 +182,10 @@ Scope {
             width: 600
             height: body.implicitHeight + 40
             radius: Theme.radius
-            color: Theme.bg1
-            border.color: Theme.stroke2; border.width: Theme.borderThin
+            // the panels' surface (rule 09: no outline — the Elevation and the
+            // Sheen separate it from the desktop behind, which stays live)
+            color: Theme.panel
+            border.width: 0
             layer.enabled: true
             layer.effect: Elevation {}
             Sheen { radius: parent.radius }
@@ -314,7 +316,7 @@ Scope {
                     Rectangle {
                         visible: root.updTail.length > 0
                         width: parent.width; height: updLog.implicitHeight + 16
-                        radius: Theme.radiusInner; color: Theme.card; border.color: root.updState === "failed" ? Theme.danger : Theme.stroke1; border.width: Theme.borderThin
+                        radius: Theme.radiusInner; color: root.updState === "failed" ? Theme.dangerBg : Theme.card; border.width: 0
                         Text {
                             id: updLog
                             anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 8
@@ -368,7 +370,8 @@ Scope {
                     Rectangle {
                         visible: !Cloud.signedIn && Cloud.busy !== "signin"
                         width: parent.width; height: 40; radius: Theme.r(10)
-                        color: Theme.bg3; border.color: srvField.activeFocus ? Theme.accent : Theme.stroke1; border.width: Theme.borderThin
+                        // a filled well; the focus stroke is the one outline that means something
+                        color: Theme.bg3; border.color: Theme.strokeFocus1; border.width: srvField.activeFocus ? Theme.focusWidth : 0
                         TextInput {
                             id: srvField
                             anchors.fill: parent; anchors.leftMargin: 12; anchors.rightMargin: 12
@@ -453,9 +456,9 @@ Scope {
                     Title { text: "The sixty-second tour" }
                     // what the restore left for Komble
                     Rectangle {
-                        visible: Cloud.restoreApps > 0
+                        visible: Cloud.restoreApps > 0 || Cloud.restorePlugins > 0
                         width: parent.width; height: appsRow.implicitHeight + 20
-                        radius: Theme.radiusInner; color: Theme.card; border.color: Theme.accent; border.width: Theme.borderThin
+                        radius: Theme.radiusInner; color: Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.12); border.width: 0
                         Row {
                             id: appsRow
                             anchors.left: parent.left; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; anchors.margins: 12; spacing: 12
@@ -464,7 +467,7 @@ Scope {
                                 anchors.verticalCenter: parent.verticalCenter
                                 width: parent.width - 24 - 12 - openKomble.width - 12
                                 wrapMode: Text.Wrap
-                                text: Cloud.restoreApps + (Cloud.restoreApps === 1 ? " app is" : " apps are") + " waiting in Komble → For you: repository apps install in one go, AUR apps go through the PKGBUILD review first. Never automatic."
+                                text: Cloud.restorePhrase() + " → For you and Plugins: repository apps install in one go, AUR apps go through the PKGBUILD review first, plugins are cloned from their git URLs. Never automatic."
                                 color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
                             }
                             Btn { id: openKomble; anchors.verticalCenter: parent.verticalCenter; label: "Open Komble"; onGo: Globals.openStore() }
@@ -475,7 +478,7 @@ Scope {
                     Rectangle {
                         visible: Cloud.signedIn && Cloud.lastSync === ""
                         width: parent.width; height: bkRow.implicitHeight + 20
-                        radius: Theme.radiusInner; color: Theme.card; border.color: Theme.stroke2; border.width: Theme.borderThin
+                        radius: Theme.radiusInner; color: Theme.card; border.width: 0
                         Row {
                             id: bkRow
                             anchors.left: parent.left; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; anchors.margins: 12; spacing: 12
