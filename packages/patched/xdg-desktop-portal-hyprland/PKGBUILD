@@ -6,15 +6,19 @@
 #   #424 fix permanent freeze after running out of buffers   ← the Cast-to-TV "static image"
 #   #425 don't destroy the frame callback installed while renegotiating
 # Built + installed by phase 20 (install_patched_pkgs) only while the repo
-# still ships 1.4.1; drop this directory once 1.4.2 lands. pkgrel 1.1 so the
-# real 1.4.1-2 / 1.4.2 from the repos replaces it on the next -Syu.
+# still ships 1.4.1; drop this directory once 1.4.2 lands. pkgrel 2.1: Arch
+# rebuilt 1.4.1 as -2 WITHOUT these patches, and that -2 replaced our -1.1
+# on every -Syu (2026-09-13: the freeze came back on the dev box), so the
+# patched build must sit above Arch's rebuild — and is also served from the
+# [ewe] repo (ewe-repo/pkgbuilds/) so a plain -Syu keeps it. Only a newer
+# pkgver (1.4.2, the upstream fix) retires it — see install_patched_pkgs.
 #
 # Upstream maintainer: Caleb Maclennan <caleb@alerque.com>
 
 pkgname=xdg-desktop-portal-hyprland
 pkgver=1.4.1
 _protocolver=1cb6db5fd6bb8aee419f4457402fa18293ace917   # ewe: Arch pins 4d29e48, which predates hyprland-input-capture-v1 (1.4.1 needs it; Arch builds with the system package instead)
-pkgrel=1.1
+pkgrel=2.1
 pkgdesc='xdg-desktop-portal backend for hyprland'
 url="https://github.com/hyprwm/$pkgname"
 arch=(x86_64)
