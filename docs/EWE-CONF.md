@@ -240,9 +240,10 @@ enabled = ["acme.weather"]
 ```
 
 Written by `ewe-plugin` (through `ewe-conf`, like everything else). `enabled`
-is the list of plugin ids the shell instantiates at startup; `sources` remembers
-where each installed plugin was cloned from, so on a fresh machine
-`ewe-plugin list` can point at what is enabled here but not installed yet. The
+is the list of plugin ids the shell instantiates at startup; `sources` is the
+installed set — every plugin `ewe-plugin add` fetched, on or off, until
+`remove` forgets it — so on a fresh machine `ewe-plugin restore` can clone
+them back (`"local"` marks one that came from a plain directory and cannot be). The
 plugins themselves live in `~/.config/ewe/plugins/<id>/`, outside the payload —
 they are code, not configuration, and never sync. Toggling a plugin restarts
 the shell; nothing else is regenerated.

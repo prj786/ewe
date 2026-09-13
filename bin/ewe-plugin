@@ -40,12 +40,19 @@ enabled, so read it first. Enabling and disabling restart the shell
     remove <id> [--yes]                delete a git clone; a hand-made directory is
                                        moved to <id>.bak.<stamp> instead
     validate <path>                    check a manifest + its entry points (exit 1 on problems)
+    restore [--yes]                    clone every plugin ewe.conf knows that is not here
     path                               print the plugins directory
     boot-ok                            (the shell calls this) a start survived a minute
 
+[plugins.sources] IS the installed set: `add` records a plugin there whether or
+not it is enabled, `remove` forgets it, and the file syncs — so on another
+machine `list` shows every plugin this one had, on, off or "not installed",
+and `restore` fetches the missing ones from their git URLs (never automatic).
+
 `add` also takes a plain local directory — your own plugin in progress — and
 copies it in as a hand-made plugin (no git, so `update` has nothing to pull;
-`remove` parks it as a backup rather than deleting it).
+`remove` parks it as a backup rather than deleting it). Its source is recorded
+as "local": there is nothing another machine could fetch, and restore says so.
 
 The crash guard: ewe.service relaunches the shell a second after any crash,
 so a plugin that compiles and then crashes is a login loop with no desktop.
@@ -266,16 +273,25 @@ def scan():
             e = describe(d, name, enabled, sources)
             out.append(e)
             seen.add(e["id"])
-    # enabled on a synced ewe.conf but not (yet) installed here
-    for pid in enabled:
+    # known to ewe.conf (installed on the machine that wrote it, on or off)
+    # but not (yet) here — the synced-file case
+    for pid in sorted(set(enabled) | set(sources)):
         if pid not in seen:
+            src = sources.get(pid)
+            why = ("not installed — a local directory on another machine, nothing to fetch"
+                   if src == "local" else "not installed")
             out.append({"id": pid, "dir": None, "dirname": None, "installed": False,
-                        "git": False, "source": sources.get(pid), "name": None,
+                        "git": False, "source": src, "name": None,
                         "version": None, "description": None, "homepage": None,
                         "author": None, "apiVersion": None, "kinds": [],
-                        "entryPoints": {}, "barWidget": None, "enabled": True,
-                        "valid": False, "problems": ["enabled but not installed"]})
+                        "entryPoints": {}, "barWidget": None, "enabled": pid in enabled,
+                        "valid": False, "problems": [why]})
     return out
+
+
+def missing_ids(plugins):
+    """What `restore` would fetch: known, absent, and fetchable."""
+    return [p["id"] for p in plugins if not p["installed"] and p["source"] and p["source"] != "local"]
 
 
 def find(pid):
@@ -403,6 +419,23 @@ def cmd_add(args):
     if not confirm("Clone it?", yes):
         die("cancelled", 1)
 
+    m, dest = fetch(src)
+    pid = m["id"]
+    enabled, sources = conf_state()
+    local = os.path.isdir(src) and not os.path.isdir(os.path.join(src, ".git"))
+    sources[pid] = "local" if local else src
+    set_sources(sources)
+    kinds = ", ".join(m.get("kinds") or [])
+    say("installed %s %s (%s) → %s" % (pid, m.get("version", ""), kinds, dest))
+    if enable:
+        cmd_enable([pid])
+    else:
+        say("enable it with: ewe-plugin enable %s" % pid)
+
+
+def fetch(src, expect_id=None):
+    """Clone (or copy) `src` into the plugins dir, validated. Returns
+    (manifest, dest). Dies — with the temp dir gone — on any failure."""
     os.makedirs(PLUGINS_DIR, exist_ok=True)
     tmp = os.path.join(PLUGINS_DIR, ".tmp-%d" % os.getpid())
     shutil.rmtree(tmp, ignore_errors=True)
@@ -422,21 +455,44 @@ def cmd_add(args):
         shutil.rmtree(tmp, ignore_errors=True)
         die("not a valid ewe plugin:\n" + "".join("  ! %s\n" % x for x in problems).rstrip())
     pid = m["id"]
+    if expect_id and pid != expect_id:
+        shutil.rmtree(tmp, ignore_errors=True)
+        die("%s serves \"%s\", but ewe.conf expected \"%s\"" % (src, pid, expect_id))
     dest = os.path.join(PLUGINS_DIR, pid)
     if os.path.exists(dest):
         shutil.rmtree(tmp, ignore_errors=True)
         die("\"%s\" is already installed — `ewe-plugin update %s` pulls a newer version" % (pid, pid))
     os.rename(tmp, dest)
+    return m, dest
 
-    enabled, sources = conf_state()
-    sources[pid] = src
-    set_sources(sources)
-    kinds = ", ".join(m.get("kinds") or [])
-    say("installed %s %s (%s) → %s" % (pid, m.get("version", ""), kinds, dest))
-    if enable:
-        cmd_enable([pid])
-    else:
-        say("enable it with: ewe-plugin enable %s" % pid)
+
+def cmd_restore(args):
+    yes = "--yes" in args
+    plugins = scan()
+    todo = missing_ids(plugins)
+    local = [p["id"] for p in plugins if not p["installed"] and p["source"] == "local"]
+    if not todo:
+        say("nothing to restore" + (" — %s came from a local directory elsewhere; nothing to fetch" % ", ".join(local) if local else ""))
+        return
+    _, sources = conf_state()
+    say("ewe.conf knows %d plugin%s that %s not installed here:" % (len(todo), "" if len(todo) == 1 else "s", "is" if len(todo) == 1 else "are"))
+    for pid in todo:
+        say("  %-24s %s" % (pid, sources[pid]))
+    say("Plugins run as unsandboxed code inside your shell process; nothing is executed by installing.")
+    if not confirm("Clone them all?", yes):
+        die("cancelled", 1)
+    if not shutil.which("git"):
+        die("git is not installed")
+    enabled, _ = conf_state()
+    got = 0
+    for pid in todo:
+        m, dest = fetch(sources[pid], expect_id=pid)
+        say("restored %s %s → %s%s" % (pid, m.get("version", ""), dest, "  (on)" if pid in enabled else "  (off)"))
+        got += 1
+    if local:
+        say("skipped %s: a local directory on another machine — add it from its files if you have them" % ", ".join(local))
+    if any(pid in enabled for pid in todo):
+        restart_shell()
 
 
 def cmd_list(args):
@@ -444,7 +500,8 @@ def cmd_list(args):
     if "--json" in args:
         safe = record_boot(plugins) if "--boot" in args else None
         print(json.dumps({"ok": True, "apiVersion": API_VERSION, "dir": PLUGINS_DIR,
-                          "plugins": plugins, "safeMode": bool(safe),
+                          "plugins": plugins, "missing": missing_ids(plugins),
+                          "safeMode": bool(safe),
                           "suspects": safe["suspects"] if safe else []}))
         return
     safe = _boots_read()["safe"]
@@ -462,7 +519,8 @@ def cmd_list(args):
     for e in plugins:
         state = "on" if e["enabled"] else "off"
         if not e["installed"]:
-            rows.append((e["id"], state, "—", "—", "not installed" + (" — ewe-plugin add %s" % e["source"] if e["source"] else "")))
+            hint = " — ewe-plugin restore" if e["source"] and e["source"] != "local" else ""
+            rows.append((e["id"], state, "—", "—", e["problems"][0] + hint))
         elif not e["valid"]:
             rows.append((e["id"], state, e["version"] or "—", ",".join(e["kinds"]) or "—", "INVALID: " + e["problems"][0]))
         else:
@@ -643,7 +701,7 @@ def main(argv):
     verb, args = argv[0], argv[1:]
     verbs = {"add": cmd_add, "list": cmd_list, "info": cmd_info, "enable": cmd_enable,
              "disable": cmd_disable, "update": cmd_update, "remove": cmd_remove,
-             "validate": cmd_validate}
+             "validate": cmd_validate, "restore": cmd_restore}
     if verb == "path":
         print(PLUGINS_DIR)
         return 0

@@ -33,7 +33,8 @@ inside one engine, and the tool says so instead of pretending.
 | `info <id> [--json]` | one plugin's manifest and state |
 | `enable <id>` / `disable <id>` | flip `[plugins].enabled` in `ewe.conf`, restart the shell (`--no-restart` to defer) |
 | `update [id] [--yes]` | fast-forward git-managed plugins; the diff is shown first, a manifest that stops validating is rolled back |
-| `remove <id> [--yes]` | delete a git clone; a hand-made directory is moved to `<id>.bak.<stamp>` |
+| `remove <id> [--yes]` | delete a git clone; a hand-made directory is moved to `<id>.bak.<stamp>`; forgets the plugin in `ewe.conf` |
+| `restore [--yes]` | clone every plugin `ewe.conf` knows that is not installed here — the plugin half of Komble's "For you" |
 | `validate <dir>` | check a manifest and its entry points; exit 1 lists every problem |
 | `path` | the plugins directory |
 
@@ -51,9 +52,15 @@ touched by the restart (`KillMode=process`).
 ~/.local/state/ewe/plugin-boots.json   the crash guard's counter
 ```
 
-Because the enabled list is part of `ewe.conf`, it syncs with the rest of
-the machine; on a fresh machine `ewe-plugin list` shows what is enabled but
-not installed yet, with the `add` command to run.
+`[plugins.sources]` **is the installed set**: `add` records a plugin there
+whether or not it is enabled, `remove` forgets it, and the file syncs with
+the rest of the machine. So on a fresh machine `ewe-plugin list` shows every
+plugin your other machine had — on, off or not installed — and
+`ewe-plugin restore` clones the missing ones from their git URLs (never
+automatic: it asks, or takes `--yes`). A plugin added from a plain directory
+is recorded as `"local"`: there is nothing another machine could fetch, and
+`restore` says so. Komble's Plugins section and the Welcome flow's restore
+step offer the same thing with a button.
 
 ## Manifest
 

@@ -304,6 +304,15 @@ QtObject {
     property var cloudInfo: null         // { device, updatedAt } of the copy in the account
     property string localSyncedAt: ""    // ewe-conf's own record: when THIS machine last synced
     property int restoreApps: 0          // apps the last restore left waiting in Komble
+    property int restorePlugins: 0       // plugins the pulled file knows that are not installed here
+    // "3 apps and 2 plugins are waiting" — one phrase for the toast and the Welcome card
+    function restorePhrase() {
+        var a = cl.restoreApps, p = cl.restorePlugins, parts = []
+        if (a > 0) parts.push(a + (a === 1 ? " app" : " apps"))
+        if (p > 0) parts.push(p + (p === 1 ? " plugin" : " plugins"))
+        return parts.join(" and ") + (a + p === 1 ? " is" : " are") + " waiting in Komble"
+    }
+    readonly property string ewePlugin: Quickshell.env("EWE_PLUGIN_TOOL") || (Quickshell.env("HOME") + "/.config/quickshell/../../bin/ewe-plugin")
     property var pendingRestore: null    // marker awaiting explicit confirmation
     readonly property string syncMetaPath: Quickshell.env("HOME") + "/.config/quickshell/cloud-sync.json"
 
@@ -528,6 +537,7 @@ QtObject {
                 cl.restoreSummary = "Restored the machine file" + (j.machine ? " saved by “" + j.machine + "”" : "") + " from your account"
                     + (j.backup ? " (previous kept as " + String(j.backup).split("/").pop() + ")" : "") + "."
                 cl._manifestProc.running = false; cl._manifestProc.running = true
+                cl._pluginsProc.running = false; cl._pluginsProc.running = true
                 cl.checkCloud()
             }
         }
@@ -547,15 +557,27 @@ QtObject {
                     }
                 } catch (e) {}
                 cl.restoreApps = n
-                if (n === 0) { Log.info("cloud", "restore: the backup carries no app manifest — nothing for Komble"); return }
+                if (n === 0 && cl.restorePlugins === 0) { Log.info("cloud", "restore: the backup carries no app manifest — nothing for Komble"); return }
                 cl._appsNotify.running = false; cl._appsNotify.running = true
+            }
+        }
+    }
+    // the same question for plugins: [plugins.sources] is the installed set of
+    // the machine that wrote the file; `missing` is what restore would fetch
+    property Process _pluginsProc: Process {
+        command: [cl.ewePlugin, "list", "--json"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                var n = 0
+                try { var j = JSON.parse(this.text); if (j && Array.isArray(j.missing)) n = j.missing.length } catch (e) {}
+                cl.restorePlugins = n
             }
         }
     }
     property Process _appsNotify: Process {
         command: ["notify-send", "-a", "Komble", "-i", "system-software-install", "-A", "open=Open Komble",
-                  cl.restoreApps + (cl.restoreApps === 1 ? " app is" : " apps are") + " waiting in Komble",
-                  "Your backup lists them under For you — reinstalling is one click, never automatic."]
+                  cl.restorePhrase(),
+                  "Your backup lists them under For you and Plugins — reinstalling is one click, never automatic."]
         stdout: StdioCollector { onStreamFinished: if (this.text.trim() === "open") Globals.openStore() }
     }
 
