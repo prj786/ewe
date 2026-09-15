@@ -99,8 +99,10 @@ class OnePassword:
     def _run(self, args, timeout=OP_TIMEOUT):
         r = subprocess.run(["op", *args, "--format", "json"], capture_output=True, text=True, timeout=timeout)
         if r.returncode != 0:
-            err = (r.stderr or r.stdout).strip().splitlines()
-            msg = err[-1] if err else "op failed"
+            # op's stderr is prose (several lines of advice); the first
+            # non-empty line is the actual error, minus its "[ERROR] <time>" stamp
+            err = [l.strip() for l in (r.stderr or r.stdout).splitlines() if l.strip()]
+            msg = re.sub(r"^\[ERROR\]\s*[\d/]+\s+[\d:]+\s*", "", err[0]) if err else "op failed"
             hint = ""
             low = msg.lower()
             if "not signed in" in low or "no accounts" in low or "account" in low and "not found" in low \
@@ -432,7 +434,8 @@ def cmd_match(argv):
     try:
         items = cached_items(p, refresh="--refresh" in argv)
     except ProviderError as e:
-        fail(e.error, e.hint)
+        ok, err, hint = p.ready()      # a clearer reason than the raw CLI error, if there is one
+        fail(err if not ok and err else e.error, hint if not ok and hint else e.hint)
     except subprocess.TimeoutExpired:
         fail("the password manager did not answer", "Unlock it and try again")
     res = score_items(items, wclass, title, arg(argv, "--query", ""), load_pins())

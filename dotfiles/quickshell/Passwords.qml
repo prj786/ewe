@@ -230,7 +230,7 @@ Scope {
                 ListView {
                     id: list
                     width: parent.width
-                    height: Math.min(Math.max(root.results.length, 1), 7) * 48
+                    height: root.results.length > 0 ? Math.min(root.results.length, 7) * 48 : 96
                     clip: true
                     spacing: 4
                     model: root.results
@@ -285,12 +285,14 @@ Scope {
                                     : (root.items.length === 0 ? "No logins in " + (root.providerLabel || "your password manager") + "."
                                                                : "Nothing matches “" + root.query + "”.")
                                 color: root.error ? Theme.danger : Theme.fg3; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
+                                maximumLineCount: 2; elide: Text.ElideRight
                             }
                             Text {
                                 width: parent.width; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.Wrap
                                 visible: root.hint !== ""
                                 text: root.hint
                                 color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11
+                                maximumLineCount: 3; elide: Text.ElideRight
                             }
                         }
                     }
