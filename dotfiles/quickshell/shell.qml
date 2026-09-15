@@ -18,9 +18,11 @@ ShellRoot {
     // the singleton, and a lid event nobody is listening for does nothing.
     // BtAgent is the bluez pairing agent: it must be registered from login,
     // or the first "confirm 123456?" from a phone has nobody to answer it.
+    // GlobalShortcuts binds apps' portal shortcuts (1Password Quick Access…)
+    // that Hyprland otherwise never fires; armed from login like the rest.
     // PluginHost goes last: third-party entry points are instantiated once
     // every first-party singleton they may touch is already armed.
-    Scope { Component.onCompleted: { HyprMon.start(); Logind.start(); Resume.start(); Lid.start(); Wallpaper.start(); BtAgent.start(); PluginHost.start() } }
+    Scope { Component.onCompleted: { HyprMon.start(); Logind.start(); Resume.start(); Lid.start(); Wallpaper.start(); BtAgent.start(); GlobalShortcuts.start(); PluginHost.start() } }
 
     Notifications {}
     IpcHub {}
@@ -76,6 +78,7 @@ ShellRoot {
     Auth {}
     BtPairing {}
     Clipboard {}
+    Passwords {}
     ScreenshotPreview {}
     Lock {}
     Caffeine {}

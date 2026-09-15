@@ -367,6 +367,9 @@ hl.bind(mainMod .. " + C",      hl.dsp.exec_cmd(scripts .. "/calendar.sh"))
 hl.bind(mainMod .. " + N",      hl.dsp.exec_cmd("qs ipc call quicksettings toggle"))  -- Quick Settings
 hl.bind(mainMod .. " + comma",  hl.dsp.exec_cmd("qs ipc call settings toggle")) -- Super+, Settings
 hl.bind(mainMod .. " + SHIFT + C", hl.dsp.exec_cmd("qs ipc call cast toggle"))  -- Cast to TV (same as the Quick Settings tile)
+-- Fill a login from the password manager into the focused window (Passwords.qml
+-- + bin/ewe-pass): the manager cannot type into native Wayland apps, the shell can.
+hl.bind(mainMod .. " + P",      hl.dsp.exec_cmd("qs ipc call passwords toggle"))
 -- Blind display recovery: works with a BLACK screen — forces every output's
 -- dpms on and re-asserts the saved display profile. If a plug/unplug or the
 -- xe driver ever blanks everything, press this instead of the power button.
@@ -689,6 +692,9 @@ pcall(dofile, home .. "/.config/hypr/generated/animations.lua")
 -- user keybinds from ewe.conf's [[desktop.keybinds]] (ewe-conf generates;
 -- exec binds only — they sync with the machine file like everything else)
 pcall(dofile, home .. "/.config/hypr/generated/keybinds.lua")
+-- apps' portal global shortcuts (1Password Quick Access, Discord…) bound to the
+-- `global` dispatcher — ewe-globalshortcuts writes it, the shell keeps it current
+pcall(dofile, home .. "/.config/hypr/generated/globalshortcuts.lua")
 
 -- Window-group chrome LAST: group-theme.lua shares the window corner radius, so
 -- it must read decoration.rounding AFTER the generated files above have had

@@ -1,0 +1,291 @@
+#!/usr/bin/env python3
+"""ewe-globalshortcuts — make apps' portal global shortcuts actually fire.
+
+Apps register global shortcuts through the xdg-desktop-portal GlobalShortcuts
+portal (1Password's Quick Access, Discord push-to-talk, Slack, OBS…). Under
+Hyprland the portal only REGISTERS them: nothing fires until the config binds
+the key to the `global` dispatcher, and Hyprland ignores the app's preferred
+trigger. Electron apps embed the trigger in the shortcut's name —
+    com.onepassword.OnePassword:<32 hex>-Ctrl+Shift+Space
+— so this tool reads `hyprctl globalshortcuts -j`, turns every such name into
+a bind, writes ~/.config/hypr/generated/globalshortcuts.lua (sourced by
+hyprland.lua, so binds survive a reload / relogin) and applies the NEW binds
+live with `hyprctl eval` so they work right now, without a config reload.
+
+  sync            register everything new (the shell runs this periodically
+                  and on every new window; autostart runs it once at login)
+  list [--json]   what is registered, what is bound, what was skipped and why
+  reset           drop the generated file and the live-state record
+
+Prints ONE JSON object and exits 0; problems are {"ok": false, "error": ...}.
+
+Skips: a combo ewe or the user already binds (never steals a key), a name
+without an Electron-style trigger (nothing to bind it to), a trigger with a key
+this tool cannot name. `list` shows each skip with its reason.
+
+Live state: ~/.local/state/ewe/globalshortcuts.json remembers which combos
+were bound live in THIS Hyprland instance (a repeated hl.bind stacks a second
+bind and the shortcut would fire twice). A bind that disappears from
+`hyprctl binds` (config reload) is forgotten so it can be re-applied.
+"""
+
+import json
+import os
+import re
+import subprocess
+import sys
+
+HOME = os.path.expanduser("~")
+GEN_LUA = os.path.join(HOME, ".config", "hypr", "generated", "globalshortcuts.lua")
+STATE = os.path.join(HOME, ".local", "state", "ewe", "globalshortcuts.json")
+
+# xkb modmask bits as `hyprctl binds -j` reports them
+MOD_BITS = {"SHIFT": 1, "CTRL": 4, "ALT": 8, "SUPER": 64}
+
+# Electron / Chromium accelerator words → Hyprland modifier names
+MODIFIERS = {
+    "ctrl": "CTRL", "control": "CTRL", "commandorcontrol": "CTRL", "cmdorctrl": "CTRL",
+    "shift": "SHIFT",
+    "alt": "ALT", "option": "ALT",
+    "super": "SUPER", "meta": "SUPER", "cmd": "SUPER", "command": "SUPER",
+    "win": "SUPER", "search": "SUPER",
+}
+
+# Electron / Chromium key words → xkb keysym names Hyprland accepts
+KEYS = {
+    "space": "Space", "tab": "Tab", "enter": "Return", "return": "Return",
+    "esc": "Escape", "escape": "Escape", "backspace": "BackSpace",
+    "del": "Delete", "delete": "Delete", "ins": "Insert", "insert": "Insert",
+    "home": "Home", "end": "End", "pgup": "Prior", "pageup": "Prior",
+    "pgdn": "Next", "pagedown": "Next",
+    "up": "Up", "down": "Down", "left": "Left", "right": "Right",
+    "up arrow": "Up", "down arrow": "Down", "left arrow": "Left", "right arrow": "Right",
+    "plus": "plus", "minus": "minus", "comma": "comma", "period": "period",
+    ",": "comma", ".": "period", "/": "slash", "\\": "backslash", ";": "semicolon",
+    "'": "apostrophe", "[": "bracketleft", "]": "bracketright", "-": "minus",
+    "=": "equal", "`": "grave", "+": "plus",
+    "printscreen": "Print", "scrolllock": "Scroll_Lock", "pause": "Pause",
+    "capslock": "Caps_Lock", "numlock": "Num_Lock",
+    "mediaplaypause": "XF86AudioPlay", "medianexttrack": "XF86AudioNext",
+    "mediaprevioustrack": "XF86AudioPrev", "mediastop": "XF86AudioStop",
+    "volumeup": "XF86AudioRaiseVolume", "volumedown": "XF86AudioLowerVolume",
+    "volumemute": "XF86AudioMute",
+}
+
+NAME_RE = re.compile(r"^(?P<app>[^:]+):(?P<id>[0-9A-Fa-f]{16,64})-(?P<accel>.+)$")
+
+
+def out(obj):
+    print(json.dumps(obj))
+
+
+def hyprctl_json(*args):
+    r = subprocess.run(["hyprctl", *args, "-j"], capture_output=True, text=True)
+    if r.returncode != 0:
+        raise RuntimeError("hyprctl %s: %s" % (" ".join(args), (r.stderr or r.stdout).strip()))
+    return json.loads(r.stdout or "[]")
+
+
+def parse_accel(accel):
+    """'Ctrl+Shift+Space' → ('CTRL + SHIFT + Space', modmask, 'Space') or None"""
+    parts = [p.strip() for p in accel.split("+")]
+    # 'Ctrl++' (the plus key) splits into an empty tail — put the key back
+    if accel.endswith("+") and parts and parts[-1] == "":
+        parts = [p for p in parts if p] + ["+"]
+    if len(parts) < 2:
+        return None
+    mods, key = parts[:-1], parts[-1]
+    names = []
+    for m in mods:
+        n = MODIFIERS.get(m.lower())
+        if not n:
+            return None
+        if n not in names:
+            names.append(n)
+    k = key.lower()
+    if k in KEYS:
+        sym = KEYS[k]
+    elif re.fullmatch(r"[a-z]", k):
+        sym = k.upper()
+    elif re.fullmatch(r"[0-9]", k):
+        sym = k
+    elif re.fullmatch(r"f([1-9]|1[0-9]|2[0-4])", k):
+        sym = "F" + k[1:]
+    else:
+        return None
+    mask = sum(MOD_BITS[n] for n in names)
+    order = ["SUPER", "CTRL", "ALT", "SHIFT"]
+    combo = " + ".join(sorted(names, key=order.index) + [sym])
+    return combo, mask, sym
+
+
+def lua_esc(s):
+    return s.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def load_state():
+    try:
+        with open(STATE) as f:
+            st = json.load(f)
+        if isinstance(st, dict):
+            return st
+    except (OSError, ValueError):
+        pass
+    return {"instance": "", "applied": {}}
+
+
+def save_state(st):
+    os.makedirs(os.path.dirname(STATE), exist_ok=True)
+    tmp = STATE + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(st, f, indent=2)
+    os.replace(tmp, STATE)
+
+
+def write_lua(binds):
+    os.makedirs(os.path.dirname(GEN_LUA), exist_ok=True)
+    s = ("-- AUTO-GENERATED by ewe-globalshortcuts from `hyprctl globalshortcuts`. Do not edit by hand.\n"
+         "-- Apps' portal global shortcuts (1Password Quick Access, Discord, Slack, OBS…)\n"
+         "-- bound to Hyprland's `global` dispatcher so they fire. Regenerated by the\n"
+         "-- shell whenever an app registers a new one; `ewe-globalshortcuts reset` clears it.\n")
+    for combo, name in binds:
+        s += 'hl.bind("%s", hl.dsp.global("%s"))\n' % (lua_esc(combo), lua_esc(name))
+    tmp = GEN_LUA + ".tmp"
+    with open(tmp, "w") as f:
+        f.write(s + "\n")
+    os.replace(tmp, GEN_LUA)
+
+
+def collect():
+    """registered shortcuts → {bound: [(combo, name, app)], skipped: [{name, reason}]}"""
+    shortcuts = hyprctl_json("globalshortcuts")
+    binds = hyprctl_json("binds")
+    st = load_state()
+    ours = set(st.get("applied", {}).keys())
+    taken = {}
+    for b in binds:
+        taken.setdefault((int(b.get("modmask", 0)), str(b.get("key", "")).lower()), []).append(b)
+
+    bound, skipped, seen_combo = [], [], {}
+    for sc in shortcuts:
+        name = sc.get("name", "")
+        m = NAME_RE.match(name)
+        if not m:
+            why = ("no key assigned in the app's own shortcut settings" if name.endswith("-")
+                   else "no trigger in the name (not an Electron-style shortcut)")
+            skipped.append({"name": name, "reason": why})
+            continue
+        parsed = parse_accel(m.group("accel"))
+        if not parsed:
+            skipped.append({"name": name, "reason": "cannot translate trigger '%s'" % m.group("accel")})
+            continue
+        combo, mask, sym = parsed
+        if combo in seen_combo:
+            skipped.append({"name": name, "reason": "combo %s already used by %s" % (combo, seen_combo[combo])})
+            continue
+        if (mask, sym.lower()) in taken and combo not in ours:
+            skipped.append({"name": name, "reason": "%s is already bound in ewe" % combo})
+            continue
+        seen_combo[combo] = name
+        bound.append((combo, name, m.group("app")))
+    return bound, skipped, binds, st
+
+
+def cmd_sync():
+    bound, skipped, binds, st = collect()
+    write_lua([(c, n) for c, n, _ in bound])
+
+    sig = os.environ.get("HYPRLAND_INSTANCE_SIGNATURE", "")
+    applied = st.get("applied", {}) if st.get("instance") == sig else {}
+    if st.get("instance") != sig:
+        # a fresh compositor already sourced the file we wrote LAST time — those
+        # combos are live even though this instance never saw an eval
+        prev = {}
+        try:
+            with open(GEN_LUA) as f:
+                for m in re.finditer(r'hl\.bind\("((?:[^"\\]|\\.)*)", hl\.dsp\.global\("((?:[^"\\]|\\.)*)"\)\)', f.read()):
+                    prev[m.group(1).replace('\\"', '"').replace("\\\\", "\\")] = m.group(2)
+        except OSError:
+            pass
+        applied = prev
+    # forget live binds a config reload dropped, so they can come back
+    present = {(int(b.get("modmask", 0)), str(b.get("key", "")).lower()) for b in binds}
+    for combo in list(applied.keys()):
+        p = parse_accel_combo(combo)
+        if p and p not in present:
+            del applied[combo]
+
+    added, failed = [], []
+    for combo, name, _app in bound:
+        if applied.get(combo) == name:
+            continue
+        expr = 'hl.bind("%s", hl.dsp.global("%s"))' % (lua_esc(combo), lua_esc(name))
+        r = subprocess.run(["hyprctl", "eval", expr], capture_output=True, text=True)
+        if r.returncode == 0 and (r.stdout or "").strip().startswith("ok"):
+            applied[combo] = name
+            added.append({"combo": combo, "name": name})
+        else:
+            failed.append({"combo": combo, "name": name, "error": (r.stderr or r.stdout).strip()})
+    save_state({"instance": sig, "applied": applied})
+    out({"ok": not failed, "bound": len(bound), "added": added, "skipped": skipped, "failed": failed})
+
+
+def parse_accel_combo(combo):
+    """'CTRL + SHIFT + Space' (our own output) → (modmask, 'space')"""
+    parts = [p.strip() for p in combo.split("+")]
+    if len(parts) < 2:
+        return None
+    mask = 0
+    for m in parts[:-1]:
+        if m not in MOD_BITS:
+            return None
+        mask |= MOD_BITS[m]
+    return mask, parts[-1].lower()
+
+
+def cmd_list(as_json):
+    bound, skipped, _binds, st = collect()
+    live = st.get("applied", {}) if st.get("instance") == os.environ.get("HYPRLAND_INSTANCE_SIGNATURE", "") else {}
+    rows = [{"app": a, "combo": c, "name": n, "live": live.get(c) == n} for c, n, a in bound]
+    if as_json:
+        out({"ok": True, "bound": rows, "skipped": skipped})
+        return
+    if not rows and not skipped:
+        print("no portal global shortcuts registered")
+    for r in rows:
+        print("%-22s %-8s %s   (%s)" % (r["combo"], "live" if r["live"] else "on-reload", r["app"], r["name"]))
+    for s in skipped:
+        print("skipped  %s\n         %s" % (s["name"], s["reason"]))
+
+
+def cmd_reset():
+    for p in (GEN_LUA, STATE):
+        try:
+            os.remove(p)
+        except FileNotFoundError:
+            pass
+    out({"ok": True, "note": "live binds stay until the next config reload (Super+Ctrl+R)"})
+
+
+def main(argv):
+    if not argv or argv[0] in ("-h", "--help"):
+        print(__doc__.strip())
+        return 0
+    try:
+        if argv[0] == "sync":
+            cmd_sync()
+        elif argv[0] == "list":
+            cmd_list("--json" in argv)
+        elif argv[0] == "reset":
+            cmd_reset()
+        else:
+            out({"ok": False, "error": "unknown verb %r" % argv[0]})
+            return 2
+    except Exception as e:  # one JSON line, never a traceback, for the shell
+        out({"ok": False, "error": str(e)})
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

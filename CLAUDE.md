@@ -130,6 +130,17 @@ registered in `qmldir`. Two singletons tie everything together:
   and connecting go through `BtAgent.pair()/connectDevice()` so failures have a
   reason. `bin/ewe-bt` is the same for the Settings app (see
   `docs/SETTINGS-BACKEND.md`).
+- **`Passwords.qml`** + **`bin/ewe-pass`** — the fill picker (Super+P, IPC
+  target `passwords`). No Linux manager fills into native Wayland apps, so the
+  shell types: ewe-pass reads the manager's CLI (`op` / `rbw` / `pass`),
+  matches items to the focused window (URL host vs. class/title, `app:<class>`
+  tag, pins in `~/.config/ewe/passwords-apps.json`) and types through `wtype`
+  after the picker has closed and focus is back on the original pid. Secrets
+  never pass through QML or argv. `GlobalShortcuts.qml` + `bin/ewe-globalshortcuts`
+  bind apps' portal global shortcuts (1Password Quick Access…) into
+  `generated/globalshortcuts.lua` + live `hyprctl eval`; `scripts/clip-store.sh`
+  keeps copied passwords out of cliphist. Tests: `tests/ewe-pass-test.sh`,
+  `tests/ewe-globalshortcuts-test.sh` (fake CLIs, no vault, no compositor).
 - **`AudioState.qml`** — where sound goes (headset / headphones / external /
   built-in, from the default sink's PipeWire properties), the level, whether an
   app has the mic open (a link from the default source to a stream — Quickshell
@@ -156,7 +167,7 @@ writes the same generated files as the in-shell panel (see
 
 External control (keybinds, scripts) uses **`qs ipc call <target> <fn>`** against an
 `IpcHandler { target: "<name>" }` in a component — targets: `bar cast picker clipboard quicksettings
-launcher lock osd overview places player preview settings applauncher store updates`. Most expose
+launcher lock osd overview places player preview settings applauncher store updates passwords`. Most expose
 `toggle`/`show`/`hide`. Gotcha: `qs ipc call <t> show` collides with the `qs ipc
 show` subcommand and no-ops — bind to **`toggle`**.
 

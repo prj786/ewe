@@ -30,7 +30,7 @@ QtObject {
     // Project version — the shell's runtime copy. Keep in sync with the repo-root
     // VERSION file (the canonical source used for git tags / releases). Semver, with
     // an -alpha/-beta pre-release suffix until the first stable cut.
-    readonly property string version: "0.15.0-beta"
+    readonly property string version: "0.16.0-beta"
 
     // ── event sounds (GNOME-style; the freedesktop sound theme, one toggle) ──
     // playSound("message-new-instant") etc — names are theme event ids from
@@ -62,6 +62,7 @@ QtObject {
     readonly property bool casting: castLegacy || (castState !== "idle" && castState !== "error")
     property bool overviewOpen: false      // GNOME-style window overview (Super tapped alone)
     property bool clipboardOpen: false     // the clipboard-history / emoji popup (scissors icon)
+    property bool passwordsOpen: false     // the fill-from-password-manager picker (Super+P, Passwords.qml)
     property bool settingsOpen: false      // the Quickshell Settings window (Super+, or the CC gear)
     // the first-run Welcome overlay is up — Google.qml holds every auto-push
     // while it is (a fresh machine must never upload over the backup it is

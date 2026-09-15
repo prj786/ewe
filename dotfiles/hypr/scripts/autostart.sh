@@ -71,9 +71,13 @@ fi
 
 # ── Clipboard history recorder (feeds the scissors-icon popup) ────────────────
 # Two watchers (text + images); guarded separately so both always come up.
+# Text goes through clip-store.sh, which drops PASSWORDS: copies marked
+# x-kde-passwordManagerHint, copies made while a password manager's window is
+# focused (1Password marks nothing), and the fill picker's own copy action.
 if command -v cliphist >/dev/null 2>&1 && command -v wl-paste >/dev/null 2>&1; then
-    pgrep -f "wl-paste --type text --watch cliphist"  >/dev/null 2>&1 || \
-        wl-paste --type text  --watch cliphist store >/dev/null 2>&1 &
+    pkill -f "wl-paste --type text --watch cliphist store" >/dev/null 2>&1 || true   # pre-0.16 unguarded watcher
+    pgrep -f "wl-paste --type text --watch $HOME/.config/hypr/scripts/clip-store.sh" >/dev/null 2>&1 || \
+        wl-paste --type text  --watch "$HOME/.config/hypr/scripts/clip-store.sh" >/dev/null 2>&1 &
     pgrep -f "wl-paste --type image --watch cliphist" >/dev/null 2>&1 || \
         wl-paste --type image --watch cliphist store >/dev/null 2>&1 &
 fi

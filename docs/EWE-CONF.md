@@ -218,6 +218,16 @@ Your own launch bindings: one `{combo, exec}` record each, e.g.
 binds only — a bind that launches something is data and syncs; rebinding
 the DE's own dispatchers stays in Lua territory.
 
+### `[passwords]`
+
+The fill picker (`Super+P`, see the manual's **Passwords** section).
+`provider` — `auto` (default: the first installed of 1Password's `op`, `rbw`,
+`pass`), `1password`, `bitwarden` or `pass`. `press_enter` — press Enter
+after typing the password (default `false`; desktop apps vary).
+`type_delay_ms` — pause between typed keys (default 8; raise it for an app
+that drops characters). Per-app pins live in `passwords-apps.json` next to
+`ewe.conf`, not in it.
+
 ### `[apps]`
 
 `pinned` — the dock's pinned launcher list, in order.

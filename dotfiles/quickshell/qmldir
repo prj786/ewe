@@ -16,6 +16,7 @@ singleton KdeConnect 1.0 KdeConnect.qml
 singleton BtAgent 1.0 BtAgent.qml
 singleton PluginHost 1.0 PluginHost.qml
 singleton AudioState 1.0 AudioState.qml
+singleton GlobalShortcuts 1.0 GlobalShortcuts.qml
 Elevation 1.0 Elevation.qml
 Spinner 1.0 Spinner.qml
 BarIcon 1.0 BarIcon.qml
@@ -40,6 +41,7 @@ QuickSettings 1.0 QuickSettings.qml
 Auth 1.0 Auth.qml
 BtPairing 1.0 BtPairing.qml
 Clipboard 1.0 Clipboard.qml
+Passwords 1.0 Passwords.qml
 ScreenshotPreview 1.0 ScreenshotPreview.qml
 InvertedCorner 1.0 InvertedCorner.qml
 Lock 1.0 Lock.qml
