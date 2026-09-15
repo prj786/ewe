@@ -89,6 +89,7 @@ SECTION_NOTES = {
     "desktop.input": "keyboard layouts + mouse/touchpad; devices = per-device overrides",
     "desktop.layout": "gaps/border/corner radius — user.lua is generated from these + theme",
     "desktop.keybinds": "your own launch bindings: {combo, exec} records",
+    "passwords": "the fill picker (Super+P): provider = auto | 1password | bitwarden | pass; press_enter; type_delay_ms",
     "desktop.wallpapers": "per-output wallpaper map (image/GIF/video)",
     "desktop.power": "lid/idle/screensaver behaviour",
     "apps": "pins, startup entries, places, and Komble's installed manifest",

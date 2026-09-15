@@ -80,7 +80,7 @@ them. Details in the [manual](docs/MANUAL.md).
 </details>
 
 Then reboot, pick **Ewe** at the greeter, and you're in —
-`Super+Return` terminal · `Super+D` apps · `Super+,` Settings
+`Super+Return` terminal · `Super+D` apps · `Super+P` fill a login · `Super+,` Settings
 (full keymap: `dotfiles/hypr/SHORTCUTS.md`).
 
 ## What you get

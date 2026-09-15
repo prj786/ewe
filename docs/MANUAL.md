@@ -309,6 +309,47 @@ ewe's **Cast** tile to mirror the whole desktop, then play the video normally �
 picture and sound both go over Miracast. (A real Chromecast/Google TV *does*
 answer Stremio's cast, and also shows up under ewe's Chromecast path.)
 
+## Passwords — filling logins into any app
+
+Linux has no password-autofill standard, and no password manager fills into
+native Wayland apps: 1Password and Bitwarden can only copy on Linux,
+KeePassXC and Proton Pass need a RemoteDesktop portal Hyprland does not
+have, and Google Password Manager exists only inside Chrome. So ewe does it.
+
+**`Super+P`** in any window opens the fill picker. It lists the logins that
+match the focused app (the login's website against the app's name and
+window title, an `app:<class>` tag on the item, anything you pinned) with the
+rest below, searchable. **Enter** types username, Tab, password into the
+field you were in; **Ctrl+Enter** types the password only; **Ctrl+C** /
+**Ctrl+Shift+C** copy the username / password; **Ctrl+P** pins the login to
+this app so it sorts first next time. The picker closes before typing and
+refuses to type if focus went to another window meanwhile. Nothing is typed
+into the picker's own search box, and secrets never touch the clipboard
+history.
+
+Which manager: `[passwords] provider` in `ewe.conf` (`auto` picks the first
+installed). Providers and their one-time setup:
+
+| provider | needs | setup |
+|---|---|---|
+| 1Password | `1password-cli` (Komble) | in the 1Password app: Settings → Developer → **Integrate with 1Password CLI**, and Settings → Security → **Unlock using system authentication**. Unlock prompts are the app's own; the vault password never enters ewe. |
+| Bitwarden | `rbw` | `rbw login`, then `rbw unlock` |
+| pass | `pass` | an existing `~/.password-store`; `login:`/`username:` line = username |
+
+`ewe-pass status` tells you what the picker will do and why not. The typing
+goes through `wtype` (a Wayland virtual keyboard): it works in every window,
+XWayland included, but an app that drops characters wants a slower
+`type_delay_ms`. `press_enter = true` submits after the password (off by
+default — desktop apps vary).
+
+**1Password Quick Access (`Ctrl+Shift+Space`) and other apps' global
+shortcuts** also work under ewe: apps register them through the desktop
+portal, and Hyprland only fires a registered shortcut once something binds
+it. The shell does that for you — a new app's shortcut is live within a few
+seconds of it starting (`ewe-globalshortcuts list` shows what is bound, and
+what was skipped because ewe already uses the key). Discord push-to-talk,
+Slack and OBS hotkeys fall out of the same mechanism.
+
 ## Plugins
 
 Third-party bar widgets, panels and services for the shell — the Omarchy
