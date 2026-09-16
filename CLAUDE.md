@@ -130,17 +130,27 @@ registered in `qmldir`. Two singletons tie everything together:
   and connecting go through `BtAgent.pair()/connectDevice()` so failures have a
   reason. `bin/ewe-bt` is the same for the Settings app (see
   `docs/SETTINGS-BACKEND.md`).
-- **`Passwords.qml`** + **`bin/ewe-pass`** — the fill picker (Super+P, IPC
-  target `passwords`). No Linux manager fills into native Wayland apps, so the
-  shell types: ewe-pass reads the manager's CLI (`op` / `rbw` / `pass`),
-  matches items to the focused window (URL host vs. class/title, `app:<class>`
-  tag, pins in `~/.config/ewe/passwords-apps.json`) and types through `wtype`
-  after the picker has closed and focus is back on the original pid. Secrets
-  never pass through QML or argv. `GlobalShortcuts.qml` + `bin/ewe-globalshortcuts`
-  bind apps' portal global shortcuts (1Password Quick Access…) into
-  `generated/globalshortcuts.lua` + live `hyprctl eval`; `scripts/clip-store.sh`
-  keeps copied passwords out of cliphist. Tests: `tests/ewe-pass-test.sh`,
-  `tests/ewe-globalshortcuts-test.sh` (fake CLIs, no vault, no compositor).
+- **First-party plugins (2026-09-16, `plugins/`)** — the clipboard history
+  (`ewe.clipboard`: scissors bar widget + popup + the `wl-paste --watch`
+  service that used to live in autostart.sh), screenshots (`ewe.screenshot`:
+  camera widget, preview stack, Print keybinds) and the password fill picker
+  (`ewe.passwords`: Super+P, its own `ewe-pass` honouring `EWE_PASS_PROVIDER`/
+  `EWE_PASS_ENTER` from the plugin's settings) are **plugins, not shell
+  components**. Their repos are `prj786/ewe-plugin-{clipboard,screenshot,
+  passwords}`; `scripts/vendor-plugins.sh` copies them into `plugins/<id>/`
+  (vendored copies — `git archive` ships them; a submodule would arrive
+  empty). `ewe-setup` runs `ewe-plugin seed <payload>/plugins`: each bundled
+  plugin is copied into `~/.config/ewe/plugins/<id>/` with source `bundled`
+  and enabled, refreshed when its version changes; `ewe-plugin remove` puts
+  the id in `[plugins].removed` so a later seed leaves it alone
+  (`seed --restore <id>` undoes that). Manifest `keybinds` become
+  `generated/plugin-keybinds.lua` (written by every state-changing verb,
+  sourced by hyprland.lua) — the Print keys and Super+P are no longer in
+  hyprland.lua. Reserved `ewe.` ids validate only in the payload or with
+  `--first-party`. `GlobalShortcuts.qml` + `bin/ewe-globalshortcuts` (portal
+  global shortcuts, 1Password Quick Access…) stay in the shell. Tests:
+  `tests/ewe-plugin-test.sh` (seed/remove/keybinds), the passwords plugin's
+  own `test.sh`, `tests/ewe-globalshortcuts-test.sh`.
 - **Plugin kit (2026-09-16):** `ewe-plugin create|dev|place|set|get`;
   manifest v1 gains kind `desktop-widget`, `desktopWidget` defaults and a
   typed `settings` schema (5 types, validated). User side in ewe.conf
@@ -178,12 +188,13 @@ writes the same generated files as the in-shell panel (see
 `docs/SETTINGS-BACKEND.md`) and pokes `qs ipc call settings reload`.
 
 External control (keybinds, scripts) uses **`qs ipc call <target> <fn>`** against an
-`IpcHandler { target: "<name>" }` in a component — targets: `bar cast picker clipboard quicksettings
-launcher lock osd overview places player preview settings applauncher store updates passwords`. Most expose
+`IpcHandler { target: "<name>" }` in a component — targets: `bar cast picker quicksettings
+launcher lock osd overview places player preview settings applauncher store updates plugins widgets`
+(plus each plugin's own, `ewe.clipboard ewe.screenshot ewe.passwords`…). Most expose
 `toggle`/`show`/`hide`. Gotcha: `qs ipc call <t> show` collides with the `qs ipc
 show` subcommand and no-ops — bind to **`toggle`**.
 
-Drag-out idiom (used by Places/ScreenshotPreview): an invisible proxy `Item` with
+Drag-out idiom (used by Places and the screenshot plugin's preview): an invisible proxy `Item` with
 `Drag.active` + `Drag.mimeData: ({"text/uri-list": "file://"+path+"\r\n"})`, plus a
 box-only `mask: Region { item: box }` so clicks/drags outside the panel pass
 through to apps behind it.

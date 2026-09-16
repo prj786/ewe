@@ -77,10 +77,7 @@ ShellRoot {
     QuickSettings {}
     Auth {}
     BtPairing {}
-    Clipboard {}
-    Passwords {}
     DesktopWidgets {}
-    ScreenshotPreview {}
     Lock {}
     Caffeine {}
     Cast {}

@@ -3,14 +3,19 @@ import Quickshell
 import Quickshell.Wayland
 import Quickshell.Io
 import Quickshell.Hyprland
+import qs
 
-// Clipboard — a Win+V-style popup opened by the bar's scissors icon. Two tabs:
-//   • Clipboard: history (via cliphist); click an entry to copy it.
-//   • Emoji: a grid of emoji; click to copy.
-// Anything you copy gets recorded by the `wl-paste --watch cliphist store`
-// daemon (autostart), so new copies appear here.
+// ewe.clipboard — Panel: a Win+V-style popup the bar's scissors widget opens.
+// Two tabs: clipboard history (cliphist) and an emoji grid; click to copy.
+// Service.qml records copies (wl-paste → clip-store.sh, which drops
+// passwords); Widget.qml is the scissors in the bar. The three talk over
+// this plugin's IPC target only — no shell state is touched.
+//     qs ipc call ewe.clipboard toggle          qs ipc call ewe.clipboard toggleAt 812
 Scope {
     id: root
+    property bool open: false
+    property real anchorX: 40           // screen-local x of the scissors (the widget says)
+    property var settings: ({})         // {emoji: bool}
 
     // all colours come from Theme.qml (single source of truth)
     function g(c) { return String.fromCodePoint(c) }
@@ -36,18 +41,19 @@ Scope {
         "🚗","✈️","🚀","🏠","🌍","🌙","☀️","☁️","🌧️","❄️","🌈","💡","🔑","🔒","📌","📎"
     ]
 
-    function refresh() { if (Globals.clipboardOpen) clipList.running = true }
-    function copyClip(id) { Quickshell.execDetached(["sh", "-c", "cliphist decode " + id + " | wl-copy"]); Globals.clipboardOpen = false }
-    function copyEmoji(e) { Quickshell.execDetached(["wl-copy", "--", e]); Globals.clipboardOpen = false }
+    function refresh() { if (root.open) clipList.running = true }
+    function copyClip(id) { Quickshell.execDetached(["sh", "-c", "cliphist decode " + id + " | wl-copy"]); root.open = false }
+    function copyEmoji(e) { Quickshell.execDetached(["wl-copy", "--", e]); root.open = false }
     function clearClips() { Quickshell.execDetached(["cliphist", "wipe"]); root.clips = []; }
 
-    Connections { target: Globals; function onClipboardOpenChanged() { if (Globals.clipboardOpen) { root.filter = ""; root.refresh() } } }
+    onOpenChanged: { if (root.open) { root.filter = ""; root.refresh() } }
 
     IpcHandler {
-        target: "clipboard"
-        function toggle(): void { Globals.clipboardOpen = !Globals.clipboardOpen }
-        function show(): void { Globals.clipboardOpen = true }
-        function hide(): void { Globals.clipboardOpen = false }
+        target: "ewe.clipboard"
+        function toggle(): void { root.open = !root.open }
+        function toggleAt(x: int): void { root.anchorX = x; root.open = !root.open }
+        function hide(): void { root.open = false }
+        function isOpen(): bool { return root.open }
     }
 
     Process {
@@ -71,7 +77,7 @@ Scope {
 
     PanelWindow {
         id: win
-        visible: Globals.clipboardOpen || win.held
+        visible: root.open || win.held
         screen: {
             var s = Quickshell.screens, fm = Hyprland.focusedMonitor
             if (fm) for (var i = 0; i < s.length; i++) if (s[i].name === fm.name) return s[i]
@@ -82,12 +88,12 @@ Scope {
         // bar, so a click on the topbar also hits the click-outside MouseArea and
         // closes the popup. exclusiveZone:0 would force "Normal" mode → top at y=30.
         exclusionMode: ExclusionMode.Ignore
-        WlrLayershell.namespace: "quickshell:clipboard"
+        WlrLayershell.namespace: "quickshell:ewe.clipboard"
         WlrLayershell.layer: WlrLayer.Overlay
         // Exclusive (not OnDemand): the popup is opened by a click on the *bar*,
         // so OnDemand never actually grants this surface keyboard focus and the
         // search field drops focus on the first pointer move. Exclusive keeps it.
-        WlrLayershell.keyboardFocus: Globals.clipboardOpen ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+        WlrLayershell.keyboardFocus: root.open ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
         anchors { top: true; bottom: true; left: true; right: true }
 
         // `held` keeps the window mapped through the close animation; set on
@@ -95,14 +101,14 @@ Scope {
         property bool held: false
         Timer { id: closeTimer; interval: Math.max(1, Theme.durSlow + 60); onTriggered: win.held = false }
         Connections {
-            target: Globals
-            function onClipboardOpenChanged() {
-                if (Globals.clipboardOpen) { closeTimer.stop(); win.held = true; searchField.forceActiveFocus() }
+            target: root
+            function onOpenChanged() {
+                if (root.open) { closeTimer.stop(); win.held = true; searchField.forceActiveFocus() }
                 else closeTimer.restart()
             }
         }
 
-        MouseArea { anchors.fill: parent; onClicked: Globals.clipboardOpen = false }
+        MouseArea { anchors.fill: parent; onClicked: root.open = false }
 
         // Clip box pinned to the bar's bottom edge, positioned under the scissors
         // icon; the panel slides DOWN out of it (reads as part of the topbar).
@@ -110,7 +116,7 @@ Scope {
             id: clipBox
             anchors.top: parent.top
             anchors.topMargin: Theme.barHeight   // window spans the full output → offset by the bar
-            x: Math.max(8, Math.min(Globals.clipAnchorX - width / 2, win.width - width - 8))
+            x: Math.max(8, Math.min(root.anchorX - width / 2, win.width - width - 8))
             width: 380
             height: 480
             clip: true
@@ -119,7 +125,7 @@ Scope {
                 id: panel
                 width: parent.width
                 height: parent.height
-                y: Globals.clipboardOpen ? 0 : -height
+                y: root.open ? 0 : -height
                 Behavior on y { NumberAnimation { duration: Theme.durSlow; easing.type: Theme.ease } }
                 // square top (flush with the bar), rounded bottom — drops out of the bar
                 topLeftRadius: 0
@@ -142,11 +148,11 @@ Scope {
                     width: parent.width
                     spacing: 8
                     Repeater {
-                        model: [{ ic: 0xE086, label: "Clipboard" }, { ic: 0xE164, label: "Emoji" }]
+                        model: root.settings.emoji === false ? [{ ic: 0xE086, label: "Clipboard" }] : [{ ic: 0xE086, label: "Clipboard" }, { ic: 0xE164, label: "Emoji" }]
                         delegate: Rectangle {
                             required property var modelData
                             required property int index
-                            width: (parent.width - 8) / 2
+                            width: root.settings.emoji === false ? parent.width : (parent.width - 8) / 2
                             height: 34
                             radius: Theme.radiusInner
                             color: root.tab === index ? Theme.accentFill : Theme.card
@@ -173,7 +179,7 @@ Scope {
                             anchors.fill: parent; anchors.leftMargin: 30; anchors.rightMargin: 10; verticalAlignment: TextInput.AlignVCenter
                             color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
                             onTextChanged: root.filter = text
-                            Keys.onEscapePressed: Globals.clipboardOpen = false
+                            Keys.onEscapePressed: root.open = false
                             Text { anchors.verticalCenter: parent.verticalCenter; visible: searchField.text.length === 0; text: "Search clipboard…"; color: Theme.fg3; font: searchField.font }
                         }
                     }

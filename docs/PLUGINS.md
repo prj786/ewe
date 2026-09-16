@@ -42,6 +42,24 @@ Ship it by pushing the repo; anyone installs with `ewe-plugin add <url>
 --enable` or from Komble → Plugins. `ewe-plugin remove` on a linked
 working copy only unlinks it.
 
+## The plugins ewe ships
+
+Three of the desktop's own features are plugins — the clipboard history
+(`ewe.clipboard`), screenshots (`ewe.screenshot`) and the password fill
+picker (`ewe.passwords`). They live in their own repositories
+(`prj786/ewe-plugin-clipboard`, `-screenshot`, `-passwords`), are vendored
+into the ewe package, and `ewe-setup` seeds them into
+`~/.config/ewe/plugins/` with source `bundled`, enabled. From there they are
+ordinary plugins: `ewe-plugin list` shows them, `set` changes their settings,
+`disable` hides one, `remove` deletes it and remembers that in
+`[plugins].removed` so the next ewe update leaves it out — `ewe-plugin seed
+--restore <id>` brings it back. A newer ewe refreshes a bundled copy when its
+version changes (never one you linked with `dev`).
+
+They are also the worked examples: a bar widget that opens a panel under
+itself (`toggleAt`), a headless service with a `pgrep` guard, manifest
+`keybinds`, `choice` and `bool` settings read through `pluginSettings`.
+
 ## Trust
 
 Installing **never runs plugin code** — there are no install hooks and
@@ -62,7 +80,8 @@ inside one engine, and the tool says so instead of pretending.
 | `update [id] [--yes]` | fast-forward git-managed plugins; the diff is shown first, a manifest that stops validating is rolled back |
 | `remove <id> [--yes]` | delete a git clone; a hand-made directory is moved to `<id>.bak.<stamp>`; forgets the plugin in `ewe.conf` |
 | `restore [--yes]` | clone every plugin `ewe.conf` knows that is not installed here — the plugin half of Komble's "For you" |
-| `validate <dir>` | check a manifest and its entry points; exit 1 lists every problem |
+| `validate <dir> [--first-party]` | check a manifest and its entry points; exit 1 lists every problem (`--first-party` allows a reserved `ewe.` id) |
+| `seed <payload-plugins-dir> [--restore <id>] [--no-restart]` | copy the package's bundled plugins in (run by `ewe-setup`); skips removed and linked ones, refreshes on a version change |
 | `path` | the plugins directory |
 | `create <ns.name> [--name T] [--kinds a,b] [--section right] [--dir P]` | **a new plugin repo**: manifest, one working QML per kind, README, MIT licence, `git init` + first commit — push it and it is installable |
 | `dev [dir]` | link a working copy into the plugins dir (edits are live after a restart), enable it, restart the shell, follow its log lines |
@@ -116,7 +135,7 @@ A plugin is a git repository with `manifest.json` at its root:
 | field | rule |
 |---|---|
 | `schemaVersion` | `1` |
-| `id` | `<namespace>.<name>`, lowercase `[a-z0-9_-]`, at least one dot. `ewe.` is reserved. The install directory is named after it. |
+| `id` | `<namespace>.<name>`, lowercase `[a-z0-9_-]`, at least one dot. `ewe.` is reserved for the plugins ewe ships. The install directory is named after it. |
 | `name`, `version` | non-empty strings; `version` is what `list` shows |
 | `apiVersion` | the shell's plugin API this plugin was written against (`1`); a mismatch is refused at install, not at login |
 | `kinds` | one or more of `service`, `panel`, `overlay`, `menu`, `bar-widget`, `desktop-widget` |
@@ -124,6 +143,7 @@ A plugin is a git repository with `manifest.json` at its root:
 | `settings` | optional: `[{ "key", "type", "default", "label", "choices"?, "min"?, "max"? }]` with `type` one of `bool`, `int`, `string`, `choice`, `color`. The values reach every entry point as `settings` and render as a form in Komble |
 | `entryPoints` | one `.qml` file per kind, relative, inside the plugin (symlinks that resolve outside it are rejected) |
 | `barWidget.defaultSection` | `left`, `center` or `right` (default `right`) — where the widget is packed |
+| `keybinds` | optional: `[{ "combo": "SUPER + P", "ipc": "acme.weather toggle" }]` — Hyprland binds the shell generates for the plugin while it is enabled (`generated/plugin-keybinds.lua`). `combo` is Hyprland's modifier syntax; `ipc` is the `<target> <verb> [args]` of `qs ipc call` — the plugin's own IPC target, nothing else |
 | `description`, `homepage`, `author` | optional, shown by `info` |
 
 ## Kinds

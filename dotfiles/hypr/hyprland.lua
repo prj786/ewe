@@ -377,9 +377,7 @@ hl.bind(mainMod .. " + C",      hl.dsp.exec_cmd(scripts .. "/calendar.sh"))
 hl.bind(mainMod .. " + N",      hl.dsp.exec_cmd("qs ipc call quicksettings toggle"))  -- Quick Settings
 hl.bind(mainMod .. " + comma",  hl.dsp.exec_cmd("qs ipc call settings toggle")) -- Super+, Settings
 hl.bind(mainMod .. " + SHIFT + C", hl.dsp.exec_cmd("qs ipc call cast toggle"))  -- Cast to TV (same as the Quick Settings tile)
--- Fill a login from the password manager into the focused window (Passwords.qml
--- + bin/ewe-pass): the manager cannot type into native Wayland apps, the shell can.
-hl.bind(mainMod .. " + P",      hl.dsp.exec_cmd("qs ipc call passwords toggle"))
+-- Super+P (fill a login) is the ewe.passwords plugin's keybind since 0.21.
 -- Desktop widgets (plugins of kind desktop-widget): arrange mode — drag them,
 -- make one sticky (above windows) or hide it; Esc or the same key ends it.
 hl.bind(mainMod .. " + SHIFT + W", hl.dsp.exec_cmd("qs ipc call widgets arrange"))
@@ -551,10 +549,8 @@ hl.bind("XF86AudioPause", hl.dsp.exec_cmd("playerctl play-pause"), { locked = tr
 hl.bind("XF86AudioNext",  hl.dsp.exec_cmd("playerctl next"),       { locked = true })
 hl.bind("XF86AudioPrev",  hl.dsp.exec_cmd("playerctl previous"),   { locked = true })
 
--- Screenshots → ~/Pictures/Screenshots + clipboard (grim/slurp/wl-copy) ------
-hl.bind("Print",           hl.dsp.exec_cmd(scripts .. "/screenshot.sh full"))
-hl.bind("SHIFT + Print",   hl.dsp.exec_cmd(scripts .. "/screenshot.sh region"))
-hl.bind(mainMod .. " + Print", hl.dsp.exec_cmd(scripts .. "/screenshot.sh activewindow"))  -- focused window
+-- Screenshots (Print / Shift+Print / Super+Print) are the ewe.screenshot
+-- plugin's keybinds since 0.21 — generated/plugin-keybinds.lua, sourced below.
 
 
 -- ╭───────────────────────────────────────────────────────────────╮
@@ -708,6 +704,8 @@ pcall(dofile, home .. "/.config/hypr/generated/keybinds.lua")
 -- apps' portal global shortcuts (1Password Quick Access, Discord…) bound to the
 -- `global` dispatcher — ewe-globalshortcuts writes it, the shell keeps it current
 pcall(dofile, home .. "/.config/hypr/generated/globalshortcuts.lua")
+-- keybinds that enabled plugins declared in their manifest (ewe-plugin writes it)
+pcall(dofile, home .. "/.config/hypr/generated/plugin-keybinds.lua")
 
 -- Window-group chrome LAST: group-theme.lua shares the window corner radius, so
 -- it must read decoration.rounding AFTER the generated files above have had

@@ -30,7 +30,7 @@ QtObject {
     // Project version — the shell's runtime copy. Keep in sync with the repo-root
     // VERSION file (the canonical source used for git tags / releases). Semver, with
     // an -alpha/-beta pre-release suffix until the first stable cut.
-    readonly property string version: "0.20.2-beta"
+    readonly property string version: "0.21.0-beta"
 
     // ── event sounds (GNOME-style; the freedesktop sound theme, one toggle) ──
     // playSound("message-new-instant") etc — names are theme event ids from
@@ -62,8 +62,6 @@ QtObject {
     // derived: anything that makes the bar glyph and the tile light up
     readonly property bool casting: castLegacy || (castState !== "idle" && castState !== "error")
     property bool overviewOpen: false      // GNOME-style window overview (Super tapped alone)
-    property bool clipboardOpen: false     // the clipboard-history / emoji popup (scissors icon)
-    property bool passwordsOpen: false     // the fill-from-password-manager picker (Super+P, Passwords.qml)
     property bool widgetsArrange: false    // desktop widgets in arrange mode (Super+Shift+W): drag to move, frames with sticky/hide
     property bool settingsOpen: false      // the Quickshell Settings window (Super+, or the CC gear)
     // the first-run Welcome overlay is up — Google.qml holds every auto-push
@@ -74,7 +72,6 @@ QtObject {
     // wallpaper pane + file chooser; the panel consumes and resets to -1
     property int settingsPaneRequest: -1
     property string openDd: ""             // ddId of the one open DropRow, shell-wide ("" = none)
-    property real clipAnchorX: 40           // screen-local x of the scissors icon (clipboard opens under it)
 
     // ── Standalone first-party apps ───────────────────────────────────────────
     // Komble (the software manager) and ewe-settings (the Settings app) are

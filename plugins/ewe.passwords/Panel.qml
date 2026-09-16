@@ -3,8 +3,10 @@ import Quickshell
 import Quickshell.Wayland
 import Quickshell.Io
 import Quickshell.Hyprland
+import qs
 
-// Passwords — "fill from my password manager" for ANY window (Super+P).
+// ewe.passwords — "fill from my password manager" for ANY window (Super+P,
+// a keybind this plugin's manifest declares; ewe generates the bind).
 // Nothing on Linux fills into native apps: 1Password/Bitwarden only copy,
 // KeePassXC/Proton Pass need a RemoteDesktop portal Hyprland lacks. So the
 // shell does it: this picker asks bin/ewe-pass for the logins that match the
@@ -18,6 +20,15 @@ import Quickshell.Hyprland
 //   Ctrl+C copy username    Ctrl+Shift+C copy password    Ctrl+P pin to app
 Scope {
     id: root
+    property bool open: false
+    // {provider: auto|1password|bitwarden|pass, press_enter: bool} — handed
+    // to ewe-pass as environment, which beats ewe.conf [passwords]
+    property var settings: ({})
+    readonly property string tool: Qt.resolvedUrl("ewe-pass").toString().replace(/^file:\/\//, "")
+    readonly property var env: [
+        "EWE_PASS_PROVIDER=" + (root.settings.provider || "auto"),
+        "EWE_PASS_ENTER=" + (root.settings.press_enter ? "1" : "0")
+    ]
 
     property var target: ({ pid: 0, cls: "", title: "" })   // the window we opened on
     property var items: []             // [{id, title, username, host, score, reason}]
@@ -42,54 +53,54 @@ Scope {
     }
     onResultsChanged: if (selected >= results.length) selected = Math.max(0, results.length - 1)
 
-    function toggle() { Globals.passwordsOpen = !Globals.passwordsOpen }
+    function toggle() { root.open = !root.open }
 
-    function open() {
+    function openPicker() {
         // the window under the user's cursor NOW — before our layer takes focus
         var t = Hyprland.activeToplevel, o = t ? t.lastIpcObject : null
         target = { pid: o && o.pid ? o.pid : 0, cls: o && o.class ? o.class : "", title: o && o.title ? o.title : (t && t.title ? t.title : "") }
         items = []; error = ""; hint = ""; toast = ""; query = ""; selected = 0; matched = 0
         input.text = ""
         busy = true
-        matchProc.command = ["ewe-pass", "match", "--class", target.cls, "--title", target.title, "--limit", "60"]
+        matchProc.command = [root.tool, "match", "--class", target.cls, "--title", target.title, "--limit", "60"]
         matchProc.running = true
     }
 
     function fill(what, enter) {
         var it = results[selected]
         if (!it) return
-        var cmd = ["ewe-pass", "fill", it.id, "--pid", String(target.pid), "--what", what]
+        var cmd = [root.tool, "fill", it.id, "--pid", String(target.pid), "--what", what]
         if (enter) cmd.push("--enter")
-        Globals.passwordsOpen = false        // give the app its focus back first
+        root.open = false        // give the app its focus back first
         fillProc.command = cmd
         fillProc.running = true
     }
     function copy(what) {
         var it = results[selected]
         if (!it) return
-        Globals.passwordsOpen = false
-        copyProc.command = ["ewe-pass", "copy", it.id, "--what", what]
+        root.open = false
+        copyProc.command = [root.tool, "copy", it.id, "--what", what]
         copyProc.running = true
     }
     function pin() {
         var it = results[selected]
         if (!it || !target.cls) return
-        Quickshell.execDetached(["ewe-pass", "remember", it.id, "--class", target.cls])
+        Quickshell.execDetached([root.tool, "remember", it.id, "--class", target.cls])
         toast = "Pinned " + it.title + " to " + target.cls
     }
     function notify(title, body) { Quickshell.execDetached(["notify-send", "-a", "ewe", "-i", "dialog-password", title, body || ""]) }
 
-    Connections { target: Globals; function onPasswordsOpenChanged() { if (Globals.passwordsOpen) root.open() } }
+    onOpenChanged: if (root.open) root.openPicker()
 
     IpcHandler {
-        target: "passwords"
+        target: "ewe.passwords"
         function toggle(): void { root.toggle() }
-        function show(): void { Globals.passwordsOpen = true }
-        function hide(): void { Globals.passwordsOpen = false }
+        function hide(): void { root.open = false }
     }
 
     Process {
         id: matchProc
+        environment: root.env
         stdout: StdioCollector {
             onStreamFinished: {
                 root.busy = false
@@ -106,6 +117,7 @@ Scope {
     }
     Process {
         id: fillProc
+        environment: root.env
         stdout: StdioCollector {
             onStreamFinished: {
                 var d = null
@@ -116,6 +128,7 @@ Scope {
     }
     Process {
         id: copyProc
+        environment: root.env
         stdout: StdioCollector {
             onStreamFinished: {
                 var d = null
@@ -128,7 +141,7 @@ Scope {
 
     PanelWindow {
         id: win
-        visible: Globals.passwordsOpen || win.held
+        visible: root.open || win.held
         screen: {
             var s = Quickshell.screens, fm = Hyprland.focusedMonitor
             if (fm) for (var i = 0; i < s.length; i++) if (s[i].name === fm.name) return s[i]
@@ -136,24 +149,24 @@ Scope {
         }
         color: "transparent"
         exclusionMode: ExclusionMode.Ignore
-        WlrLayershell.namespace: "quickshell:passwords"
+        WlrLayershell.namespace: "quickshell:ewe.passwords"
         WlrLayershell.layer: WlrLayer.Overlay
         // Exclusive while open so the search field types; None the instant we
         // close so focus returns to the app BEFORE ewe-pass starts typing.
-        WlrLayershell.keyboardFocus: Globals.passwordsOpen ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
+        WlrLayershell.keyboardFocus: root.open ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
         anchors { top: true; bottom: true; left: true; right: true }
 
         property bool held: false
         Timer { id: closeTimer; interval: Math.max(1, Theme.durSlow + 60); onTriggered: win.held = false }
         Connections {
-            target: Globals
-            function onPasswordsOpenChanged() {
-                if (Globals.passwordsOpen) { closeTimer.stop(); win.held = true; input.forceActiveFocus() }
+            target: root
+            function onOpenChanged() {
+                if (root.open) { closeTimer.stop(); win.held = true; input.forceActiveFocus() }
                 else closeTimer.restart()
             }
         }
 
-        MouseArea { anchors.fill: parent; onClicked: Globals.passwordsOpen = false }
+        MouseArea { anchors.fill: parent; onClicked: root.open = false }
 
         Rectangle {
             id: panel
@@ -163,8 +176,8 @@ Scope {
             y: Math.round(parent.height * 0.24)
             radius: Theme.radius
             color: Theme.panel
-            opacity: Globals.passwordsOpen ? 1 : 0
-            scale: Globals.passwordsOpen ? 1 : 0.97
+            opacity: root.open ? 1 : 0
+            scale: root.open ? 1 : 0.97
             Behavior on opacity { NumberAnimation { duration: Theme.durSlow; easing.type: Theme.ease } }
             Behavior on scale   { NumberAnimation { duration: Theme.durSlow; easing.type: Theme.ease } }
             layer.enabled: true
@@ -216,7 +229,7 @@ Scope {
                         Text { visible: input.text.length === 0; anchors.verticalCenter: parent.verticalCenter; text: "Search logins…"; color: Theme.fg3; font: input.font }
                         Keys.onPressed: function (ev) {
                             var ctrl = ev.modifiers & Qt.ControlModifier, shift = ev.modifiers & Qt.ShiftModifier
-                            if (ev.key === Qt.Key_Escape) { Globals.passwordsOpen = false; ev.accepted = true }
+                            if (ev.key === Qt.Key_Escape) { root.open = false; ev.accepted = true }
                             else if (ev.key === Qt.Key_Down) { root.selected = Math.min(root.selected + 1, root.results.length - 1); ev.accepted = true }
                             else if (ev.key === Qt.Key_Up)   { root.selected = Math.max(root.selected - 1, 0); ev.accepted = true }
                             else if (ev.key === Qt.Key_Return || ev.key === Qt.Key_Enter) { root.fill(ctrl ? "password" : "login", false); ev.accepted = true }

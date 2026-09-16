@@ -88,7 +88,7 @@ on save). Ported from the old Qtile bindings so most muscle memory carries over.
 | `XF86AudioPlay` / `Next` / `Prev` | Media control (`playerctl`) |
 | `XF86MonBrightnessUp` / `Down` | Brightness ±5% (`brightnessctl`) |
 
-## Screenshots (saved to `~/Pictures/Screenshots` **and** clipboard)
+## Screenshots (saved to `~/Pictures/Screenshots` **and** clipboard — the `ewe.screenshot` plugin's binds)
 
 | Shortcut | Action |
 |---|---|
