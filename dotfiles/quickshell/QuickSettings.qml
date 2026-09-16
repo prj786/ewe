@@ -291,19 +291,30 @@ Scope {
         // already on this network → nothing to do (clicking the active row
         // used to pop a password box, which read as "why is it asking AGAIN")
         if (root.curSsid() === ssid && root.pwTarget !== ssid) return
-        // a saved profile joins without a prompt — NetworkManager has the key
-        var known = root.wifiSaved[ssid] === true
-        if (sec && sec !== "" && !known && root.pwText === "") {
+        // a saved profile joins without a prompt — NetworkManager has the key.
+        // Only a network with NO profile, or a profile whose key lives in a
+        // secret agent ewe does not have, needs the password box.
+        var saved = root.wifiSaved[ssid] || null
+        var needsKey = sec && sec !== "" && (!saved || saved.psk === "agent")
+        if (needsKey && root.pwText === "") {
             root.pwTarget = (root.pwTarget === ssid) ? "" : ssid   // toggle the password field
             return
         }
-        var cmd = (known && root.pwText === "")
-            ? ["nmcli", "connection", "up", "id", ssid]
-            : ["nmcli", "device", "wifi", "connect", ssid]
-        if (root.pwText !== "") cmd = cmd.concat(["password", root.pwText])
+        var cmd
+        if (saved && root.pwText === "")
+            cmd = ["nmcli", "connection", "up", "id", saved.name]
+        else if (saved)
+            // a fresh key for an existing profile goes INTO that profile — the
+            // old `device wifi connect` path minted a duplicate "SSID 1" each time
+            cmd = ["sh", "-c", 'nmcli connection modify "$1" 802-11-wireless-security.psk "$2" 802-11-wireless-security.psk-flags 0 && exec nmcli connection up id "$1"', "_", saved.name, root.pwText]
+        else {
+            cmd = ["nmcli", "device", "wifi", "connect", ssid]
+            if (root.pwText !== "") cmd = cmd.concat(["password", root.pwText])
+        }
         // through a tracked Process, not execDetached: joining can take seconds
         // and used to look like nothing was happening until the list refreshed
         root.wifiPending = ssid
+        root.wifiConfirm = ""
         Globals.netBusy = "wifi"
         wifiConnProc.command = cmd
         wifiConnProc.running = true
@@ -472,18 +483,24 @@ Scope {
         function tab(name: string): void { Globals.quickSettingsOpen = true; root.setTab(name) }
     }
 
-    // saved Wi-Fi profiles — joining one of these never needs a password
+    // saved Wi-Fi profiles — joining one of these never needs a password.
+    // Keyed by the profile's SSID, not its name (scripts/wifi-profiles.sh):
+    // a profile need not be named after its network, and names with spaces
+    // or colons were easy to mangle. {ssid: {name, psk}} where psk is
+    // "stored" (the key is in the profile), "agent" (NetworkManager would
+    // ask a secret agent ewe does not have — so we ask the user once and
+    // store it) or "none" (open).
     property var wifiSaved: ({})
+    readonly property string wifiProfilesScript: Qt.resolvedUrl("scripts/wifi-profiles.sh").toString().replace(/^file:\/\//, "")
     Process {
         id: wifiSavedScan
-        command: ["nmcli", "-t", "-f", "NAME,TYPE", "connection", "show"]
+        command: ["bash", root.wifiProfilesScript]
         stdout: StdioCollector {
             onStreamFinished: {
                 var m = {}, ls = this.text.split("\n")
                 for (var i = 0; i < ls.length; i++) {
-                    var f = ls[i].split(":")
-                    if (f.length >= 2 && f[f.length - 1] === "802-11-wireless")
-                        m[f.slice(0, f.length - 1).join(":")] = true
+                    var f = ls[i].split("\t")
+                    if (f.length >= 3 && f[0] !== "") m[f[0]] = { name: f[1], psk: f[2] }
                 }
                 root.wifiSaved = m
             }
@@ -505,11 +522,32 @@ Scope {
                 }
                 arr.sort(function (a, b) { return (b.active - a.active) || (b.signal - a.signal) })
                 root.wifiList = arr
+                if (root.wifiConfirm !== "" && root.curSsid() === root.wifiConfirm) {
+                    root.wifiConfirm = ""; root.wifiPending = ""; wifiConfirmTimer.stop()
+                }
             }
         }
     }
     Process { id: wifiState; command: ["nmcli", "-t", "-f", "WIFI", "radio"]; stdout: StdioCollector { onStreamFinished: root.wifiOn = this.text.trim() === "enabled" } }
-    Process { id: wiredState; command: ["sh", "-c", "nmcli -t -f TYPE,STATE device 2>/dev/null | awk -F: '$1==\"ethernet\" && $2==\"connected\"{print \"yes\"; exit}'"]; stdout: StdioCollector { onStreamFinished: root.wiredUp = this.text.trim() === "yes" } }
+    // the (first) ethernet port: its device name and NetworkManager state —
+    // connected / connecting / disconnected (cable in, link turned off here) /
+    // unavailable (no cable). wiredUp is the old boolean, kept for the tile.
+    property string wiredDev: ""
+    property string wiredStateStr: ""
+    readonly property bool wiredPresent: wiredDev !== ""
+    property bool wiredBusy: false
+    Process { id: wiredState; command: ["sh", "-c", "nmcli -t -f DEVICE,TYPE,STATE device 2>/dev/null | awk -F: '$2==\"ethernet\"{print $1\":\"$3; exit}'"]; stdout: StdioCollector { onStreamFinished: { var p = this.text.trim().split(":"); root.wiredDev = p[0] || ""; root.wiredStateStr = p[1] || ""; root.wiredUp = root.wiredStateStr === "connected"; if (!wiredSetProc.running) root.wiredBusy = false } } }
+    // the wired switch: `device disconnect` drops the link and stops
+    // autoconnect until `device connect` (or a re-plug) — the way to be on
+    // Wi-Fi with the cable still in
+    Process { id: wiredSetProc; onExited: { wiredState.running = true; wiredRescan.restart() } }
+    Timer { id: wiredRescan; interval: 1500; onTriggered: wiredState.running = true }
+    function setWired(on) {
+        if (!root.wiredPresent || root.wiredStateStr === "unavailable") return
+        root.wiredBusy = true
+        wiredSetProc.command = ["nmcli", "device", on ? "connect" : "disconnect", root.wiredDev]
+        wiredSetProc.running = true
+    }
     Process {
         id: vpnScan
         command: ["sh", "-c", "nmcli -t -f NAME,TYPE,ACTIVE connection show 2>/dev/null"]
@@ -531,6 +569,20 @@ Scope {
     Process { id: brightnessProc; command: ["sh", "-c", "brightnessctl -m 2>/dev/null | cut -d, -f4 | tr -d '%'"]; stdout: StdioCollector { onStreamFinished: { var n = parseInt(this.text.trim()); if (!isNaN(n)) root.brightnessVal = n / 100 } } }
     Process { id: volumeProc; command: ["sh", "-c", "wpctl get-volume @DEFAULT_AUDIO_SINK@ 2>/dev/null | grep -oE '[0-9]+\\.[0-9]+'"]; stdout: StdioCollector { onStreamFinished: { var f = parseFloat(this.text.trim()); if (!isNaN(f)) root.volumeVal = Math.min(1, f) } } }
     Timer { id: rescanTimer; interval: 2500; onTriggered: { wifiState.running = true; wifiScan.running = true } }
+    // the network we just joined, until a list read shows it IN-USE
+    property string wifiConfirm: ""
+    Timer { id: wifiConfirmTimer; interval: 4000; onTriggered: { root.wifiConfirm = ""; root.wifiPending = "" } }
+    // NetworkManager events (the bar's `nmcli monitor`) — re-read while the
+    // panel is open instead of waiting for the 6 s poll; this is what makes a
+    // cable plug, a Wi-Fi join or a VPN coming up show at once
+    Connections {
+        target: Globals
+        function onNetEpochChanged() {
+            if (!Globals.quickSettingsOpen) return
+            wifiState.running = true; wiredState.running = true
+            if (root.expanded === "wifi") wifiScan.running = true
+        }
+    }
     Timer { id: vpnRescan; interval: 2000; onTriggered: vpnScan.running = true }
     Timer { id: sshRescan; interval: 1500; onTriggered: sshScan.running = true }
 
@@ -684,8 +736,19 @@ Scope {
         stderr: StdioCollector { id: wifiConnErr }
         onExited: function (exitCode, exitStatus) {
             var failed = root.wifiPending
-            root.wifiPending = ""
             Globals.netBusy = ""
+            if (exitCode === 0) {
+                // nmcli has returned, but the row must not flip from spinner
+                // to check until the list SAYS we are on the network — read it
+                // now (the old 2.5 s one-shot left a dead gap), and stop
+                // waiting after 4 s whatever it says
+                root.wifiConfirm = failed
+                wifiScan.running = true; wifiSavedScan.running = true; wiredState.running = true
+                wifiConfirmTimer.restart()
+                rescanTimer.restart()
+                return
+            }
+            root.wifiPending = ""
             rescanTimer.restart()
             if (exitCode !== 0) {
                 var msg = (wifiConnErr.text || "").trim()
@@ -1092,12 +1155,17 @@ Scope {
                             // when a cable is the active connection and Wi-Fi isn't (e.g. VMs).
                             readonly property bool onWired: root.wiredUp && root.curSsid() === ""
                             ic: onWired ? Theme.icEthernet : Theme.icWifi   // mdi-ethernet : wifi
-                            label: onWired ? "Network" : "Wi-Fi"
+                            label: root.wiredUp ? "Network" : "Wi-Fi"
                             active: root.wifiOn || onWired               // accent = the radio/link is ON
                             opened: root.expanded === "wifi"
                             hasMenu: true
-                            busy: root.expanded === "wifi" && wifiScan.running
-                            sub: root.curSsid() !== "" ? root.curSsid() : (onWired ? "Wired" : (root.wifiOn ? "On" : "Off"))
+                            busy: (root.expanded === "wifi" && wifiScan.running) || root.wifiPending !== ""
+                            // joining: say so, and where to. Both links up: say both —
+                            // the cable used to vanish behind the SSID, which is how
+                            // "am I on the wire?" became a Settings trip
+                            sub: root.wifiPending !== "" ? "Joining " + root.wifiPending + "…"
+                               : root.curSsid() !== "" ? (root.wiredUp ? root.curSsid() + " · Wired" : root.curSsid())
+                               : (onWired ? "Wired" : (root.wifiOn ? "On" : "Off"))
                             // body = the switch (no list needed to turn Wi-Fi off);
                             // chevron = the network list
                             onClicked: { Quickshell.execDetached(["nmcli", "radio", "wifi", root.wifiOn ? "off" : "on"]); rescanTimer.restart() }
@@ -1131,6 +1199,34 @@ Scope {
                             // WIFI
                             Column {
                                 width: parent.width; spacing: 2; visible: root.expanded === "wifi"
+                                // WIRED — only when the machine has a port. The switch is
+                                // the "I'm on Wi-Fi, ignore the cable" control that did not
+                                // exist anywhere; unplugged, it just says so.
+                                Item {
+                                    width: parent.width; height: visible ? 26 : 0; visible: root.wiredPresent
+                                    Row {
+                                        anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; spacing: 8
+                                        Text { anchors.verticalCenter: parent.verticalCenter; text: Theme.icEthernet; font.family: Theme.fontIcons; font.pixelSize: 13; color: root.wiredUp ? Theme.accent : Theme.fg3; Behavior on color { ColorAnimation { duration: 200 } } }
+                                        Text {
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            text: "Wired" + (root.wiredStateStr === "unavailable" ? " · no cable"
+                                                 : root.wiredStateStr === "connecting" || root.wiredBusy ? " · connecting…"
+                                                 : root.wiredUp ? " · connected" : " · off")
+                                            color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold
+                                        }
+                                        Spinner { visible: root.wiredBusy || root.wiredStateStr === "connecting"; anchors.verticalCenter: parent.verticalCenter; font.pixelSize: 11 }
+                                    }
+                                    Rectangle {
+                                        anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
+                                        width: 38; height: 22; radius: 11
+                                        readonly property bool on: root.wiredUp || root.wiredStateStr === "connecting"
+                                        opacity: root.wiredStateStr === "unavailable" ? 0.4 : 1
+                                        color: on ? Theme.accentFill : Theme.bg2
+                                        Behavior on color { ColorAnimation { duration: 150 } }
+                                        Rectangle { width: 18; height: 18; radius: 9; color: Theme.accentOn; anchors.verticalCenter: parent.verticalCenter; x: parent.on ? parent.width-width-2 : 2; Behavior on x { NumberAnimation { duration: 150 } } }
+                                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.setWired(!parent.on) }
+                                    }
+                                }
                                 Item {
                                     width: parent.width; height: 26
                                     Row {
@@ -1173,9 +1269,9 @@ Scope {
                                         width: wifiOptCol.width
                                         Item {
                                             width: parent.width; height: 28
-                                            Rectangle { anchors.fill: parent; radius: Theme.radiusControl; color: wMa.containsMouse ? Theme.subtleHover : Theme.subtle }
-                                            Text { anchors.left: parent.left; anchors.leftMargin: 8; anchors.verticalCenter: parent.verticalCenter; text: modelData.signal >= 66 ? Theme.icWifi : (modelData.signal >= 33 ? Theme.icWifiMed : Theme.icWifiLow); font.family: Theme.fontIcons; font.pixelSize: 13; color: modelData.active ? Theme.accent : Theme.fg3 }
-                                            Text { anchors.left: parent.left; anchors.leftMargin: 32; anchors.right: parent.right; anchors.rightMargin: 40; anchors.verticalCenter: parent.verticalCenter; text: modelData.ssid; color: modelData.active ? Theme.accent : Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: modelData.active ? Font.DemiBold : Font.Normal; elide: Text.ElideRight }
+                                            Rectangle { anchors.fill: parent; radius: Theme.radiusControl; color: wMa.containsMouse ? Theme.subtleHover : Theme.subtle; Behavior on color { ColorAnimation { duration: 130 } } }
+                                            Text { anchors.left: parent.left; anchors.leftMargin: 8; anchors.verticalCenter: parent.verticalCenter; text: modelData.signal >= 66 ? Theme.icWifi : (modelData.signal >= 33 ? Theme.icWifiMed : Theme.icWifiLow); font.family: Theme.fontIcons; font.pixelSize: 13; color: modelData.active ? Theme.accent : Theme.fg3; Behavior on color { ColorAnimation { duration: 200 } } }
+                                            Text { anchors.left: parent.left; anchors.leftMargin: 32; anchors.right: parent.right; anchors.rightMargin: 40; anchors.verticalCenter: parent.verticalCenter; text: modelData.ssid; color: modelData.active ? Theme.accent : Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: modelData.active ? Font.DemiBold : Font.Normal; elide: Text.ElideRight; Behavior on color { ColorAnimation { duration: 200 } } }
                                             Text { anchors.right: parent.right; anchors.rightMargin: modelData.active ? 26 : 8; anchors.verticalCenter: parent.verticalCenter; visible: modelData.sec !== ""; text: Theme.icLock; font.family: Theme.fontIcons; font.pixelSize: 10; color: Theme.fg3 }
                                             Text { anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter; visible: modelData.active && root.wifiPending !== modelData.ssid; text: Theme.icCheck; font.family: Theme.fontIcons; font.pixelSize: 11; color: Theme.accent }
                                             Spinner { anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter; visible: root.wifiPending === modelData.ssid; font.pixelSize: 12 }
@@ -1243,10 +1339,10 @@ Scope {
                                                 readonly property bool working: modelData.pairing || BtAgent.pairingAddress === modelData.address || BtAgent.busyAddress === modelData.address
                                                 readonly property string status: working ? (modelData.paired ? "Connecting…" : "Pairing…")
                                                                                : (modelData.connected && modelData.batteryAvailable ? Math.round(modelData.battery <= 1 ? modelData.battery * 100 : modelData.battery) + "%" : "")
-                                                Rectangle { anchors.fill: parent; radius: Theme.radiusControl; color: bMa.containsMouse ? Theme.subtleHover : Theme.subtle }
+                                                Rectangle { anchors.fill: parent; radius: Theme.radiusControl; color: bMa.containsMouse ? Theme.subtleHover : Theme.subtle; Behavior on color { ColorAnimation { duration: 130 } } }
                                                 // device-kind glyph (bluez's Icon → headphones / keyboard / phone / …)
-                                                Text { anchors.left: parent.left; anchors.leftMargin: 8; anchors.verticalCenter: parent.verticalCenter; text: BtAgent.glyph(modelData.icon, modelData.connected); font.family: Theme.fontIcons; font.pixelSize: 12; color: modelData.connected ? Theme.accent : Theme.fg3 }
-                                                Text { anchors.left: parent.left; anchors.leftMargin: 30; anchors.right: bRight.left; anchors.rightMargin: 6; anchors.verticalCenter: parent.verticalCenter; text: (modelData.name || modelData.deviceName || modelData.address) + (modelData.connected ? "" : (modelData.paired ? "" : "  ·  new")); color: modelData.connected ? Theme.accent : Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: modelData.connected ? Font.DemiBold : Font.Normal; elide: Text.ElideRight }
+                                                Text { anchors.left: parent.left; anchors.leftMargin: 8; anchors.verticalCenter: parent.verticalCenter; text: BtAgent.glyph(modelData.icon, modelData.connected); font.family: Theme.fontIcons; font.pixelSize: 12; color: modelData.connected ? Theme.accent : Theme.fg3; Behavior on color { ColorAnimation { duration: 200 } } }
+                                                Text { anchors.left: parent.left; anchors.leftMargin: 30; anchors.right: bRight.left; anchors.rightMargin: 6; anchors.verticalCenter: parent.verticalCenter; text: (modelData.name || modelData.deviceName || modelData.address) + (modelData.connected ? "" : (modelData.paired ? "" : "  ·  new")); color: modelData.connected ? Theme.accent : Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: modelData.connected ? Font.DemiBold : Font.Normal; elide: Text.ElideRight; Behavior on color { ColorAnimation { duration: 200 } } }
                                                 // right edge: spinner while pairing/connecting · battery + check when
                                                 // connected · a trash glyph on hover for anything paired (forget)
                                                 Row {
@@ -1368,8 +1464,8 @@ Scope {
                                                 Item {
                                                     width: parent.width; height: 28
                                                     Rectangle { anchors.fill: parent; radius: Theme.radiusControl; color: vMa.containsMouse ? Theme.subtleHover : Theme.subtle }
-                                                    Text { anchors.left: parent.left; anchors.leftMargin: 8; anchors.verticalCenter: parent.verticalCenter; text: Theme.icVpn; font.family: Theme.fontIcons; font.pixelSize: 12; color: modelData.active ? Theme.accent : Theme.fg3 }
-                                                    Text { anchors.left: parent.left; anchors.leftMargin: 30; anchors.right: parent.right; anchors.rightMargin: 26; anchors.verticalCenter: parent.verticalCenter; text: modelData.name; color: modelData.active ? Theme.accent : Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: modelData.active ? Font.DemiBold : Font.Normal; elide: Text.ElideRight }
+                                                    Text { anchors.left: parent.left; anchors.leftMargin: 8; anchors.verticalCenter: parent.verticalCenter; text: Theme.icVpn; font.family: Theme.fontIcons; font.pixelSize: 12; color: modelData.active ? Theme.accent : Theme.fg3; Behavior on color { ColorAnimation { duration: 200 } } }
+                                                    Text { anchors.left: parent.left; anchors.leftMargin: 30; anchors.right: parent.right; anchors.rightMargin: 26; anchors.verticalCenter: parent.verticalCenter; text: modelData.name; color: modelData.active ? Theme.accent : Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: modelData.active ? Font.DemiBold : Font.Normal; elide: Text.ElideRight; Behavior on color { ColorAnimation { duration: 200 } } }
                                                     Text { anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter; visible: modelData.active && root.vpnBusyName !== modelData.name; text: Theme.icCheck; font.family: Theme.fontIcons; font.pixelSize: 11; color: Theme.accent }
                                                     Spinner { anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter; visible: root.vpnBusyName === modelData.name; font.pixelSize: 12 }
                                                     MouseArea { id: vMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: (root.vpnCredTarget === modelData.name) ? root.vpnCloseCredentials() : root.toggleVpn(modelData.name, !modelData.active) }

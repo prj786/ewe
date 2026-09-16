@@ -30,7 +30,7 @@ QtObject {
     // Project version — the shell's runtime copy. Keep in sync with the repo-root
     // VERSION file (the canonical source used for git tags / releases). Semver, with
     // an -alpha/-beta pre-release suffix until the first stable cut.
-    readonly property string version: "0.16.0-beta"
+    readonly property string version: "0.17.0-beta"
 
     // ── event sounds (GNOME-style; the freedesktop sound theme, one toggle) ──
     // playSound("message-new-instant") etc — names are theme event ids from
@@ -48,6 +48,7 @@ QtObject {
     property var server: null              // set by Notifications.qml (the live NotificationServer)
     property bool vpnActive: false         // any VPN connection up (bar shows a VPN glyph)
     property string netBusy: ""            // "wifi" | "vpn" while a connection attempt runs (bar spinner)
+    property int netEpoch: 0               // bumped by the bar on every NetworkManager event (nmcli monitor) — panels re-read on change
     property bool sshTunnelUp: false       // any background ssh -f -N tunnel from Quick Settings is up (bar shows a console glyph)
     property bool caffeine: false          // keep-awake: holds a wayland idle inhibitor (no lock/blank/sleep)
     // ── Cast to TV (RFC-004: ewe-castd owns the protocols, Cast.qml owns the
