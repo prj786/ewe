@@ -547,6 +547,7 @@ QtObject {
     readonly property string icStack:        ic(0xE529)  // layers — dock overview
     readonly property string icPen:          ic(0xE129)  // package — dock: stashed windows
     readonly property string icDownload:     ic(0xE0B2)  // download — dock downloads
+    readonly property string icStore:        ic(0xE3E4)  // store — dock: Komble, the software manager
     readonly property string icKeyboard:     ic(0xE284)  // keyboard
     // Bluetooth device kinds (bluez Icon strings → BtAgent.glyph)
     readonly property string icHeadphones:   ic(0xE0F1)  // headphones

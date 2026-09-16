@@ -430,13 +430,6 @@ Scope {
                         }
                     }
 
-                    // thin separator between the tray and the action buttons
-                    Rectangle {
-                        visible: Globals.barShows("tray") && SystemTray.items.values.length > 0
-                        anchors.verticalCenter: parent.verticalCenter
-                        width: 1; height: 13; color: Theme.fg2; opacity: 0.25
-                    }
-
                     // screenshot (camera) — Left: region · Right: whole screen · Middle: a window
                     StatusItem {
                         visible: Globals.barShows("screenshot")
@@ -466,28 +459,6 @@ Scope {
                         visible: Globals.barShows("tiling")
                         glyph: Globals.tilingEnabled ? Theme.icTiling : Theme.icFloating
                         onActivated: Globals.setTiling(!Globals.tilingEnabled)
-                    }
-
-                    // keyboard layout — plain text (US / GE); click cycles the layout
-                    Item {
-                        visible: Globals.barShows("keyboard")
-                        anchors.verticalCenter: parent.verticalCenter
-                        width: kbLbl.implicitWidth + 16
-                        height: parent.height
-                        Text {
-                            id: kbLbl
-                            anchors.centerIn: parent
-                            text: bar.kbLayout
-                            color: Theme.fg2
-                            font.family: Theme.fontText
-                            font.pixelSize: 12
-                            font.weight: Font.DemiBold
-                        }
-                        MouseArea {
-                            anchors.fill: parent
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: Quickshell.execDetached(["hyprctl", "switchxkblayout", bar.kbDevice || "current", "next"])
-                        }
                     }
 
                     // ── Komble — ALWAYS present, whether or not the app has ever
@@ -538,6 +509,28 @@ Scope {
                                 if (Globals.kombleInstalled) Quickshell.execDetached(["komble", "--updates"])
                                 else Globals.openStore()
                             }
+                        }
+                    }
+
+                    // keyboard layout — plain text (US / GE); click cycles the layout
+                    Item {
+                        visible: Globals.barShows("keyboard")
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: kbLbl.implicitWidth + 16
+                        height: parent.height
+                        Text {
+                            id: kbLbl
+                            anchors.centerIn: parent
+                            text: bar.kbLayout
+                            color: Theme.fg2
+                            font.family: Theme.fontText
+                            font.pixelSize: 12
+                            font.weight: Font.DemiBold
+                        }
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: Quickshell.execDetached(["hyprctl", "switchxkblayout", bar.kbDevice || "current", "next"])
                         }
                     }
 
