@@ -550,7 +550,7 @@ QtObject {
     readonly property bool noBlur: Quickshell.env("EWE_NO_BLUR") === "1"
     property Process _tokenLoad: Process {
         running: true
-        command: ["sh", "-c", "cat \"$HOME/.config/quickshell/theme-tokens.json\" 2>/dev/null"]
+        command: ["sh", "-c", "cat \"${XDG_CONFIG_HOME:-$HOME/.config}/quickshell/theme-tokens.json\" 2>/dev/null"]
         stdout: StdioCollector {
             onStreamFinished: {
                 try {

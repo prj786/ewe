@@ -161,7 +161,13 @@ every other bar item.
 ### The bar-widget contract
 
 The entry point's root is an `Item` with an implicit size. The bar's `Row`
-packs it; give it the bar's conventions and it will not look foreign:
+packs it; give it the bar's conventions and it will not look foreign.
+A widget in the **right** section lands right after the system tray, in the
+tray's rhythm (`Theme.trayItemSpacing` apart) — a single-glyph widget looks
+right at the tray's size, a 16 px glyph in an 18 px cell
+(`implicitWidth: Theme.trayIconPx + 2`, `font.pixelSize: Theme.trayIconPx`),
+which is what the bundled scissors and camera do. A widget with text uses the
+item conventions below:
 
 ```qml
 import QtQuick

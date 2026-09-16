@@ -9,7 +9,8 @@ import qs
 Item {
     id: root
     property var settings: ({})
-    implicitWidth: Theme.barItemHeight + 4
+    // the tray's cell: 16 px glyph in an 18 px slot, like every app icon beside it
+    implicitWidth: Theme.trayIconPx + 2
     implicitHeight: Theme.barItemHeight
     readonly property string script: Qt.resolvedUrl("screenshot.sh").toString().replace(/^file:\/\//, "")
     function shoot(mode) {
@@ -17,14 +18,14 @@ Item {
     }
 
     Rectangle {
-        anchors.fill: parent; radius: Theme.radiusControl
+        anchors.centerIn: parent; width: parent.width + 6; height: parent.width + 6; radius: Theme.radiusControl
         color: ma.containsMouse ? Theme.subtleHover : "transparent"
         Behavior on color { ColorAnimation { duration: 130 } }
     }
     Text {
         anchors.centerIn: parent
         text: Theme.icCamera
-        font.family: Theme.fontIcons; font.pixelSize: Theme.barIconPx
+        font.family: Theme.fontIcons; font.pixelSize: Theme.trayIconPx
         color: ma.containsMouse ? Theme.fg1 : Theme.fg2
     }
     MouseArea {
