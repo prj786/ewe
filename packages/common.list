@@ -133,6 +133,7 @@ grim
 slurp
 satty
 cliphist
+imagemagick             # `ewe-theme scheme from-wallpaper` reads the wallpaper's colours through magick
 wtype                   # virtual-keyboard typing — the fill picker (ewe-pass) types logins into the focused window
 wl-clipboard
 hyprpicker

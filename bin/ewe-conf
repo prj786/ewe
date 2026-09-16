@@ -252,6 +252,11 @@ THEME_MAP = [  # ewe.conf key ↔ user-theme.json key (with defaults)
     # because Komble reads user-theme.json's colorScheme to follow the DE
     ("desktop.theme.color_scheme", "colorScheme", "dark"),
     ("desktop.theme.accent", "accent", "#0a84ff"),
+    # "accent" (derive everything from the accent) or the slug of a palette in
+    # [[desktop.theme.schemes]] — ewe-theme's SCHEMES section. The list itself
+    # is not mirrored: user-theme.json carries the choice, the shell reads the
+    # palette from theme-tokens.json.
+    ("desktop.theme.scheme", "scheme", "accent"),
     # theme_name is vestigial: ewe has ONE look since the Fluent 2 move, and
     # ewe-theme resolves either legacy name to it. The key stays so a synced
     # ewe.conf from an older machine still round-trips.
@@ -452,6 +457,25 @@ def build_theme_tokens():
         pass
 
 
+def effective_accent(doc):
+    """desktop.theme.accent — unless a scheme is active, in which case the
+    scheme's accent as ewe-theme resolved it (theme-tokens.json input.accent).
+    Both the window border and colorscheme.sh must follow the palette."""
+    node, last = dig(doc, "desktop.theme.accent")
+    acc = ((node or {}).get(last, "#0a84ff") if node else "#0a84ff")
+    node, last = dig(doc, "desktop.theme.scheme")
+    scheme = ((node or {}).get(last, "accent") if node else "accent")
+    if scheme and scheme != "accent":
+        try:
+            with open(os.path.join(QS, "theme-tokens.json")) as f:
+                inp = (json.load(f).get("input") or {})
+            if inp.get("scheme") == scheme and isinstance(inp.get("accent"), str):
+                return inp["accent"]
+        except (OSError, ValueError):
+            pass
+    return acc
+
+
 def do_apply(doc, only=None, hooks=True):
     def want(domain):
         return only is None or only == domain
@@ -536,8 +560,7 @@ def do_apply(doc, only=None, hooks=True):
             cs = os.path.join(QS, "scripts", "colorscheme.sh")
             node, last = dig(doc, "desktop.theme.color_scheme")
             scheme = (node or {}).get(last, "dark") if node else "dark"
-            node, last = dig(doc, "desktop.theme.accent")
-            accent = ((node or {}).get(last, "#0a84ff") if node else "#0a84ff").lstrip("#")
+            accent = effective_accent(doc).lstrip("#")
             if os.path.exists(cs):
                 subprocess.run(["sh", cs, scheme, accent],
                                capture_output=True, timeout=120)
@@ -795,7 +818,7 @@ def gen_user_lua(doc):
     gen = "hl.config({ general = { gaps_in = %s, gaps_out = %s, border_size = %s" % (
         _lua_num(lay["gaps_in"]), _lua_num(lay["gaps_out"]), _lua_num(lay["border_size"]))
     if gv("desktop.theme.tint_borders", True):
-        gen += ', col = { active_border = "rgba(%sff)" }' % _hex6(gv("desktop.theme.accent", "#0a84ff"))
+        gen += ', col = { active_border = "rgba(%sff)" }' % _hex6(effective_accent(doc))
     s += gen + " } })\n"
     s += "hl.config({ decoration = { rounding = %s } })\n" % _lua_num(lay["rounding"])
     # window layout (0.8): dwindle is hyprland.lua's default and emits nothing;

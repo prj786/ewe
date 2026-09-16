@@ -178,6 +178,23 @@ through to apps behind it.
 
 ### Theming (single source: `scripts/colorscheme.sh`)
 
+**Schemes (2026-09-16):** `bin/ewe-theme` has a second way to build its two
+ramps. `desktop.theme.scheme = accent` is the accent engine, byte-identical
+to before (`tests/ewe-theme-test.sh` pins `design/tokens.css`); any other
+value is the slug of a `[[desktop.theme.schemes]]` record (Base24 palette +
+optional accent + variant dark|light), and `scheme_ramp()` pins bg-3/bg-1/
+card/strokes/fg on base00/01/02/03/04/05/07 with LCH interpolation between —
+the role table `alias()` is untouched, so the 150 names never change. A
+light scheme is the same anchors running the other way. `ewe-theme scheme
+list|show|apply|import|remove|export|set|from-wallpaper` is the CLI (imports:
+base16/24 YAML via a mini parser, Omarchy TOML, Catppuccin JSON, Gogh;
+wallpaper via ImageMagick histogram, Pillow fallback). `colorscheme.sh`
+reads `input.variant` and `scheme.palette` from theme-tokens.json (GTK
+light switch, Qt/KDE palettes from tokens, kitty ANSI); `ewe-conf
+effective_accent()` gives the border and the colorscheme hook the scheme's
+accent; `Globals.schemeActive` stops the in-shell accent pick from
+overriding a scheme. `wallpaper.sh` re-derives when scheme = "wallpaper".
+
 **Bar & dock opacity:** `desktop.theme.bar_opacity = 0..100` in ewe.conf
 (Settings → Appearance slider). The bar and dock are painted at
 `Theme.barAlpha` (`barTop`, `dockFill`); between 10 and 99 `ewe-conf` writes

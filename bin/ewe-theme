@@ -70,7 +70,13 @@ OUT_JSON = os.path.join(CFG_DIR, "quickshell", "theme-tokens.json")
 OUT_CSS = os.path.join(HERE, "design", "tokens.css")
 
 DEFAULTS = {"accent": "#0a84ff", "corner": "round", "density": "comfortable",
-            "stroke": "none", "neutral_tint": 8, "bar_opacity": 100, "app_blur": False}
+            "stroke": "none", "neutral_tint": 8, "bar_opacity": 100, "app_blur": False,
+            # scheme: "accent" (everything derived from the one accent — the
+            # default), or the slug of a palette in [[desktop.theme.schemes]]
+            # (see the SCHEMES section): a full Base24 palette the user
+            # imported, wrote, or had derived from the wallpaper. Dark by
+            # default; a scheme that says it is light IS light.
+            "scheme": "accent"}
 # app_blur: every window is drawn at 85% with the compositor blurring what is
 # behind it — terminal, browser, file manager, the ewe apps alike, so the
 # desktop reads as one material. A fixed level, not the bar's slider: apps
@@ -410,6 +416,17 @@ def read_conf(path=None):
             pass  # a broken conf must never leave the desktop unthemed
     if not isinstance(cfg["accent"], str) or not cfg["accent"].startswith("#"):
         cfg["accent"] = DEFAULTS["accent"]
+    cfg["scheme"] = str(cfg.get("scheme") or "accent").strip() or "accent"
+    raw = []
+    if os.path.isfile(p):
+        try:
+            with open(p, "rb") as f:
+                raw = (((tomllib.load(f).get("desktop") or {}).get("theme") or {}).get("schemes") or [])
+        except (tomllib.TOMLDecodeError, OSError):
+            raw = []
+    cfg["schemes"] = [x for x in (norm_scheme(r) for r in raw if isinstance(r, dict)) if x]
+    if cfg["scheme"] != "accent" and not active_scheme(cfg):
+        cfg["scheme"] = "accent"          # a slug nothing matches: accent mode, never unthemed
     for k, table in (("corner", CORNER), ("density", DENSITY), ("stroke", STROKE_RAMP)):
         if cfg[k] not in table:
             cfg[k] = DEFAULTS[k]
@@ -430,10 +447,28 @@ def read_conf(path=None):
 
 def tokens(cfg):
     """The whole token set, derived. This is the only place it is decided."""
-    grey = grey_ramp(cfg["accent"], cfg["neutral_tint"])
-    brand = brand_ramp(cfg["accent"])
-    color = alias(grey, brand, lambda s: brand_at(cfg["accent"], s))
-    color.update(STATUS)
+    cfg = dict(cfg)
+    schemes = cfg.pop("schemes", [])
+    sc = active_scheme(dict(cfg, schemes=schemes))
+    if sc:
+        # SCHEME mode: the neutral ramp is pinned to the palette's surfaces
+        # and text, the brand ramp runs through the scheme's accent, status
+        # comes from its red/yellow/green. Same role table, same 150 names.
+        grey, black, white = scheme_ramp(sc["palette"], sc["variant"])
+        accent = sc.get("accent") or sc["palette"]["base0D"]
+        brand = brand_ramp(accent)
+        color = alias(grey, brand, lambda s: brand_at(accent, s), white=white, black=black)
+        color.update(scheme_status(sc["palette"]) if sc.get("semantic", True) else STATUS)
+        cfg["accent"] = accent
+        cfg["variant"] = sc["variant"]
+        cfg["scheme_name"] = sc["name"]
+    else:
+        cfg["scheme"] = "accent"
+        cfg["variant"] = "dark"
+        grey = grey_ramp(cfg["accent"], cfg["neutral_tint"])
+        brand = brand_ramp(cfg["accent"])
+        color = alias(grey, brand, lambda s: brand_at(cfg["accent"], s))
+        color.update(STATUS)
 
     corner, dens = CORNER[cfg["corner"]], DENSITY[cfg["density"]]
     w = STROKE_RAMP[cfg["stroke"]]
@@ -477,8 +512,513 @@ def tokens(cfg):
     op = cfg["bar_opacity"]
     surface = {"bar_alpha": op / 100.0, "blur": BAR_BLUR_MIN <= op < 100,
                "app_blur": cfg["app_blur"], "app_alpha": APP_OPACITY if cfg["app_blur"] else 1.0}
-    return {"input": cfg, "color": color, "shape": shape, "size": size,
-            "grey": grey, "brand": brand, "surface": surface}
+    t = {"input": cfg, "color": color, "shape": shape, "size": size,
+         "grey": grey, "brand": brand, "surface": surface}
+    if sc:
+        t["scheme"] = {"slug": sc["slug"], "name": sc["name"], "variant": sc["variant"],
+                       "accent": cfg["accent"], "palette": sc["palette"]}
+    return t
+
+
+# ═══ SCHEMES — a whole palette instead of one accent ══════════════════════
+# A scheme is a Base24 palette (Tinted Theming's format: base00-base07 the
+# surfaces and text, base08-base0F eight hues, base10-base17 optional extra
+# surfaces and bright hues) plus an optional explicit accent. The user
+# imports one (base16/base24 YAML, Omarchy colors.toml, Catppuccin
+# palette.json, Gogh yml), writes one, or has one derived from the wallpaper;
+# it lives in ewe.conf as a [[desktop.theme.schemes]] record, so it syncs.
+#
+# Mapping onto the role table: the neutral ramp is REBUILT with anchors —
+# the palette's surfaces pinned on the stops the dark ladder uses (bg-3 g4 =
+# base00, bg-1 g8 = base01, card/hover g11 = base02, strokes g32 = base03),
+# its text on the text stops (fg-4 g60 = base04, fg-2 g84 = base05, fg-1 =
+# base07) and everything between interpolated in LCH. A LIGHT scheme is the
+# same anchors in the other direction: base00 is its lightest surface and
+# base07 its darkest text, so the ramp simply runs downhill and the dark
+# role table reads correctly off it (hover darkens, text is ink). The brand
+# ramp is the accent-mode one, through the scheme's accent.
+SCHEME_KEYS = ["base%02X" % i for i in range(0x18)]
+SCHEME_REQUIRED = SCHEME_KEYS[:16]
+
+
+def _hex6(v):
+    """'#abc' / 'abcdef' / '#AABBCC' → '#aabbcc', else None."""
+    if not isinstance(v, str):
+        return None
+    h = v.strip().lstrip("#").lower()
+    if len(h) == 3:
+        h = "".join(c * 2 for c in h)
+    if len(h) != 6 or any(c not in "0123456789abcdef" for c in h):
+        return None
+    return "#" + h
+
+
+def slugify(name):
+    out = "".join(c.lower() if c.isalnum() else "-" for c in str(name)).strip("-")
+    while "--" in out:
+        out = out.replace("--", "-")
+    return out or "scheme"
+
+
+def norm_scheme(rec):
+    """A [[desktop.theme.schemes]] record, validated; None if unusable."""
+    pal_in = rec.get("palette") if isinstance(rec.get("palette"), dict) else {}
+    pal = {}
+    for k in SCHEME_KEYS:
+        v = _hex6(pal_in.get(k) or pal_in.get(k.lower()))
+        if v:
+            pal[k] = v
+    if any(k not in pal for k in SCHEME_REQUIRED):
+        return None
+    name = str(rec.get("name") or "").strip() or "Untitled"
+    variant = "light" if str(rec.get("variant", "dark")).lower() == "light" else "dark"
+    out = {"name": name, "slug": slugify(rec.get("slug") or name), "variant": variant,
+           "palette": pal, "semantic": str(rec.get("semantic", True)).lower() not in ("0", "false", "no")}
+    acc = _hex6(rec.get("accent"))
+    if acc:
+        out["accent"] = acc
+    for k in ("author", "source", "wallpaper"):
+        if rec.get(k):
+            out[k] = str(rec[k])
+    return out
+
+
+def active_scheme(cfg):
+    slug = cfg.get("scheme", "accent")
+    if slug == "accent":
+        return None
+    for sc in cfg.get("schemes") or []:
+        if sc["slug"] == slug:
+            return sc
+    return None
+
+
+def lch_mix(h1, h2, f):
+    """h1 → h2 at f in LCH, hue along the short arc."""
+    L1, C1, H1 = hex_to_lch(h1)
+    L2, C2, H2 = hex_to_lch(h2)
+    if C1 < 2:
+        H1 = H2
+    if C2 < 2:
+        H2 = H1
+    d = ((H2 - H1 + 180) % 360) - 180
+    return lch_to_hex(L1 + (L2 - L1) * f, C1 + (C2 - C1) * f, (H1 + d * f) % 360)
+
+
+def shift_l(h, dL):
+    L, C, H = hex_to_lch(h)
+    return lch_to_hex(max(0, min(100, L + dL)), C, H)
+
+
+def scheme_ramp(pal, variant):
+    """The 99-stop neutral ramp through a palette. Returns (ramp, black, white)
+    where black/white are what the role table's two literals become."""
+    dark = variant != "light"
+    sgn = -1 if dark else 1                   # "deeper than base00" goes this way
+    deepest = pal.get("base11") or shift_l(pal["base00"], 6 * sgn)
+    anchors = {
+        0: shift_l(deepest, 3 * sgn),
+        2: deepest,
+        4: pal["base00"],
+        6: lch_mix(pal["base00"], pal["base01"], 0.5),
+        8: pal["base01"],
+        10: pal["base02"],                    # card
+        11: pal["base02"],                    # subtle-hover / bg-1-selected
+        14: shift_l(pal["base02"], -3 * sgn), # card-hover
+        32: pal["base03"],
+        60: pal["base04"],
+        68: lch_mix(pal["base04"], pal["base05"], 0.45),
+        84: pal["base05"],
+        92: pal["base06"],
+        100: pal["base07"],
+    }
+    ks = sorted(anchors)
+    ramp = {}
+    for k in GREY_KEYS:
+        lo = max(x for x in ks if x <= k)
+        hi = min(x for x in ks if x >= k)
+        ramp[k] = anchors[lo] if lo == hi else lch_mix(anchors[lo], anchors[hi], (k - lo) / (hi - lo))
+    return ramp, anchors[0], pal["base07"]
+
+
+def scheme_status(pal):
+    """Status from the scheme's own hues: text = the hue, bg = the hue sunk
+    into base00, border = the hue. Info uses the cyan."""
+    out = {}
+    for role, key in (("success", "base0B"), ("warning", "base0A"),
+                      ("danger", "base08"), ("info", "base0C")):
+        c = pal.get(key) or STATUS[role]
+        out[role] = c
+        out[role + "-bg"] = lch_mix(pal["base00"], c, 0.18)
+        out[role + "-border"] = c
+    return out
+
+
+# ── importers: every format becomes a scheme record ─────────────────────────
+def _mini_yaml(text):
+    """Enough YAML for scheme files: `key: value` lines, one level of nesting,
+    quotes, comments. Base16/Base24 and Gogh files are exactly this shape."""
+    root, stack = {}, [(-1, None)]
+    cur = root
+    for raw in text.splitlines():
+        line = raw.split(" #", 1)[0].rstrip() if not raw.strip().startswith("#") else ""
+        if not line.strip() or line.strip().startswith("#"):
+            continue
+        indent = len(line) - len(line.lstrip(" "))
+        body = line.strip()
+        if body.startswith("- "):
+            continue
+        if ":" not in body:
+            continue
+        key, _, val = body.partition(":")
+        key, val = key.strip().strip('"\''), val.strip()
+        while stack and indent <= stack[-1][0]:
+            stack.pop()
+        cur = stack[-1][1] if stack and stack[-1][1] is not None else root
+        if val == "":
+            cur[key] = {}
+            stack.append((indent, cur[key]))
+        else:
+            if (val.startswith('"') and val.endswith('"')) or (val.startswith("'") and val.endswith("'")):
+                val = val[1:-1]
+            cur[key] = val
+    return root
+
+
+def _from_base16(d, src):
+    pal = d.get("palette") if isinstance(d.get("palette"), dict) else d
+    rec = {"name": d.get("name") or d.get("scheme") or os.path.basename(src),
+           "author": d.get("author", ""), "variant": d.get("variant", ""), "palette": {}}
+    for k in SCHEME_KEYS:
+        v = pal.get(k) or pal.get(k.lower())
+        if v:
+            rec["palette"][k] = v
+    if not rec["variant"]:
+        rec["variant"] = "light" if hex_to_lch(_hex6(rec["palette"].get("base00", "#000")) or "#000")[0] > 50 else "dark"
+    return rec
+
+
+def _from_omarchy(d, src):
+    g = lambda *ks: next((d[k] for k in ks if d.get(k)), None)
+    pal = {"base00": g("background"), "base01": g("lighter_background", "background"),
+           "base02": g("selection", "lighter_background"), "base03": g("muted"),
+           "base04": g("dark_foreground", "muted"), "base05": g("foreground"),
+           "base06": g("light_foreground", "foreground"), "base07": g("bright_foreground", "foreground"),
+           "base08": g("red"), "base09": g("orange", "yellow"), "base0A": g("yellow"), "base0B": g("green"),
+           "base0C": g("cyan"), "base0D": g("blue"), "base0E": g("magenta"), "base0F": g("brown", "orange"),
+           "base10": g("dark_background"), "base11": g("darker_background"),
+           "base12": g("bright_red"), "base13": g("bright_yellow"), "base14": g("bright_green"),
+           "base15": g("bright_cyan"), "base16": g("bright_blue"), "base17": g("bright_magenta")}
+    return {"name": os.path.basename(os.path.dirname(os.path.abspath(src))) or "Omarchy theme",
+            "variant": d.get("mode", "dark"), "accent": g("accent"), "palette": {k: v for k, v in pal.items() if v}}
+
+
+def _from_catppuccin(d, flavour):
+    flavour = (flavour or "mocha").lower()
+    fl = d.get(flavour)
+    if not isinstance(fl, dict) or "colors" not in fl:
+        raise ValueError("no flavour %r in this palette.json (have: %s)" % (
+            flavour, ", ".join(k for k in d if isinstance(d.get(k), dict) and "colors" in d[k])))
+    c = {k: v["hex"] for k, v in fl["colors"].items() if isinstance(v, dict) and v.get("hex")}
+    pal = {"base00": c["base"], "base01": c["surface0"], "base02": c["surface1"], "base03": c["surface2"],
+           "base04": c["subtext0"], "base05": c["text"], "base06": c["subtext1"], "base07": c["text"],
+           "base08": c["red"], "base09": c["peach"], "base0A": c["yellow"], "base0B": c["green"],
+           "base0C": c["teal"], "base0D": c["blue"], "base0E": c["mauve"], "base0F": c["flamingo"],
+           "base10": c["mantle"], "base11": c["crust"], "base12": c["maroon"], "base13": c["yellow"],
+           "base14": c["green"], "base15": c["sky"], "base16": c["sapphire"], "base17": c["pink"]}
+    return {"name": "Catppuccin " + flavour.capitalize(), "variant": "light" if not fl.get("dark", True) else "dark",
+            "accent": c.get("blue"), "palette": pal}
+
+
+def _from_gogh(d, src):
+    bg, fg = d.get("background"), d.get("foreground")
+    c = {i: d.get("color_%02d" % i) for i in range(1, 17)}
+    if not (bg and fg and all(c[i] for i in range(1, 17))):
+        raise ValueError("not a Gogh theme (needs background, foreground, color_01..16)")
+    light = hex_to_lch(_hex6(bg) or "#000")[0] > 50
+    sgn = 1 if light else -1
+    pal = {"base00": bg, "base01": shift_l(_hex6(bg), -4 * sgn), "base02": shift_l(_hex6(bg), -8 * sgn),
+           "base03": c[9], "base04": lch_mix(_hex6(fg), _hex6(bg), 0.3), "base05": fg,
+           "base06": shift_l(_hex6(fg), 4 * -sgn), "base07": c[16],
+           "base08": c[2], "base09": c[4], "base0A": c[12], "base0B": c[3], "base0C": c[7],
+           "base0D": c[5], "base0E": c[6], "base0F": c[10],
+           "base12": c[10], "base13": c[12], "base14": c[11], "base15": c[15], "base16": c[13], "base17": c[14]}
+    return {"name": d.get("name") or os.path.splitext(os.path.basename(src))[0],
+            "variant": "light" if light else "dark", "palette": pal}
+
+
+def read_scheme_file(src, flavour=None):
+    """A scheme record from any supported file or URL; the format is sniffed."""
+    if src.startswith(("http://", "https://")):
+        import urllib.request
+        with urllib.request.urlopen(src, timeout=20) as r:
+            text = r.read().decode("utf-8", "replace")
+    else:
+        with open(src, encoding="utf-8") as f:
+            text = f.read()
+    stripped = text.lstrip()
+    rec = None
+    if stripped.startswith("{"):
+        d = json.loads(text)
+        if any(isinstance(d.get(k), dict) and "colors" in d[k] for k in d):
+            rec = _from_catppuccin(d, flavour)
+        else:
+            rec = _from_base16(d, src)
+    elif src.endswith(".toml") or ("=" in stripped.splitlines()[0] and ":" not in stripped.splitlines()[0]):
+        d = tomllib.loads(text)
+        rec = _from_omarchy(d, src)
+    else:
+        d = _mini_yaml(text)
+        if "color_01" in d:
+            rec = _from_gogh(d, src)
+        else:
+            rec = _from_base16(d, src)
+    rec["source"] = src
+    sc = norm_scheme(rec)
+    if not sc:
+        raise ValueError("no usable palette in %s (need base00-base0F or an equivalent)" % src)
+    return sc
+
+
+def scheme_yaml(sc):
+    """A scheme as a Base24 YAML file — what `export` prints and `import` reads back."""
+    lines = ['system: "base24"', 'name: "%s"' % sc["name"].replace('"', "'"),
+             'author: "%s"' % sc.get("author", "ewe").replace('"', "'"),
+             'variant: "%s"' % sc["variant"]]
+    if sc.get("accent"):
+        lines.append('accent: "%s"' % sc["accent"])
+    lines.append("palette:")
+    for k in SCHEME_KEYS:
+        if k in sc["palette"]:
+            lines.append('  %s: "%s"' % (k, sc["palette"][k]))
+    return "\n".join(lines) + "\n"
+
+
+# ── the wallpaper: a palette from an image, no daemon ───────────────────────
+def image_colors(path):
+    """[(count, '#rrggbb')] — the image's dominant colours. ImageMagick when
+    present (a hard dependency of ewe), Pillow as the fallback."""
+    import shutil
+    import subprocess
+    exe = shutil.which("magick") or shutil.which("convert")
+    if exe:
+        r = subprocess.run([exe, path + "[0]", "-resize", "96x96!", "-depth", "8", "-colors", "32",
+                            "-format", "%c", "histogram:info:-"], capture_output=True, text=True, timeout=60)
+        cols = []
+        for line in r.stdout.splitlines():
+            line = line.strip()
+            if ":" not in line or "#" not in line:
+                continue
+            n = line.split(":", 1)[0].strip()
+            h = line.split("#", 1)[1][:6]
+            if n.isdigit() and _hex6(h):
+                cols.append((int(n), _hex6(h)))
+        if cols:
+            return cols
+    try:
+        from PIL import Image
+        im = Image.open(path).convert("RGB").resize((96, 96))
+        q = im.quantize(32)
+        pal = q.getpalette()
+        return [(n, "#%02x%02x%02x" % tuple(pal[i * 3:i * 3 + 3])) for n, i in q.getcolors()]
+    except ImportError:
+        raise RuntimeError("no image tool — install imagemagick")
+
+
+def scheme_from_image(path, light=False, name=None):
+    cols = image_colors(path)
+    total = sum(n for n, _ in cols) or 1
+    lch = [(n / total, h, *hex_to_lch(h)) for n, h in cols]
+    # the surface hue: the most present colour that is not shouting
+    surf = max(lch, key=lambda x: x[0] * (1.0 if x[3] < 40 else 0.5))
+    hue_bg, C_bg = surf[4], min(surf[3], 10)
+    # the accent: the most saturated colour with real presence, readable lightness
+    cand = [x for x in lch if x[0] >= 0.01 and 30 <= x[2] <= 78 and x[3] >= 18]
+    acc = max(cand, key=lambda x: x[3] * (0.6 + x[0])) if cand else max(lch, key=lambda x: x[3])
+    accent = lch_to_hex(max(45, min(70, acc[2])), max(30, acc[3]), acc[4])
+    sgn = 1 if light else -1
+    L0 = 95 if light else 13
+    step = lambda dl, c=C_bg, h=hue_bg: lch_to_hex(max(0, min(100, L0 + dl * sgn)), c, h)
+    text = lambda L, c=min(C_bg, 4), h=hue_bg: lch_to_hex(L, c, h)
+    tl = [30, 20, 12, 5] if light else [62, 80, 88, 94]
+    hue = lambda L, C, H: lch_to_hex(L if not light else L - 12, C, H)
+    pal = {"base11": step(-4), "base10": step(-2), "base00": step(0), "base01": step(5),
+           "base02": step(9), "base03": lch_to_hex(L0 + 28 * sgn, min(C_bg, 6), hue_bg),
+           "base04": text(tl[0]), "base05": text(tl[1]), "base06": text(tl[2]), "base07": text(tl[3]),
+           "base08": hue(62, 48, 27), "base09": hue(68, 55, 58), "base0A": hue(78, 60, 92),
+           "base0B": hue(66, 45, 140), "base0C": hue(70, 32, 205), "base0D": accent,
+           "base0E": hue(64, 40, 320), "base0F": hue(52, 30, 50)}
+    return norm_scheme({"name": name or "Wallpaper", "slug": "wallpaper", "variant": "light" if light else "dark",
+                        "accent": accent, "palette": pal, "source": "wallpaper", "wallpaper": path})
+
+
+# ── the CLI: `ewe-theme scheme …` ────────────────────────────────────────────
+def _ewe_conf_exe():
+    import shutil
+    sib = os.path.join(HERE, "bin", "ewe-conf")
+    return sib if os.path.exists(sib) else shutil.which("ewe-conf")
+
+
+def conf_set(key, value, hooks=True):
+    import subprocess
+    exe = _ewe_conf_exe()
+    if not exe:
+        fail("no-ewe-conf", "ewe-conf not found beside this tool or on PATH")
+    cmd = [exe, "set"] + ([] if hooks else ["--no-hooks"]) + [key, json.dumps(value)]
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
+    if r.returncode != 0:
+        fail("conf-set", "ewe-conf set %s failed: %s" % (key, (r.stderr or r.stdout).strip()))
+
+
+def _current_wallpaper():
+    """The first image in generated/wallpapers.conf (the shell's own record)."""
+    conf = os.path.join(CFG_DIR, "hypr", "generated", "wallpapers.conf")
+    try:
+        with open(conf) as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                v = line.split("=", 1)[1].strip().strip('"')
+                if v.lower().endswith((".png", ".jpg", ".jpeg", ".webp", ".bmp")) and os.path.isfile(v):
+                    return v
+    except OSError:
+        pass
+    return None
+
+
+def _scheme_summary(sc, current):
+    p = sc["palette"]
+    return {"slug": sc["slug"], "name": sc["name"], "variant": sc["variant"],
+            "accent": sc.get("accent") or p["base0D"], "current": sc["slug"] == current,
+            "source": sc.get("source", ""),
+            "swatch": [p["base00"], p["base01"], p["base05"], sc.get("accent") or p["base0D"], p["base08"]]}
+
+
+def cmd_scheme(a):
+    cfg, src = read_conf(a.conf)
+    hooks = not getattr(a, "no_hooks", False)
+    schemes, current = cfg["schemes"], cfg["scheme"]
+    verb = a.scheme_cmd or "list"
+
+    def save_list(lst):
+        conf_set("desktop.theme.schemes", [{k: v for k, v in s.items()} for s in lst], hooks=False)
+
+    if verb == "list":
+        out({"ok": True, "current": current, "schemes": [_scheme_summary(s, current) for s in schemes]})
+    if verb == "show":
+        slug = a.slug or current
+        if slug == "accent":
+            out({"ok": True, "current": current, "scheme": None, "note": "accent mode — every colour derives from desktop.theme.accent"})
+        sc = next((s for s in schemes if s["slug"] == slug), None)
+        if not sc:
+            fail("no-scheme", "no scheme %r (ewe-theme scheme list)" % slug)
+        t = tokens(dict(cfg, scheme=slug))
+        out({"ok": True, "current": current, "scheme": sc, "roles": {k: t["color"][k] for k in (
+            "bg-1", "bg-2", "bg-3", "bg-4", "bg-5", "card", "fg-1", "fg-2", "fg-3", "fg-4",
+            "stroke-1", "brand-bg", "brand-fg-1", "danger", "warning", "success")}})
+    if verb == "apply":
+        slug = a.slug
+        if slug != "accent" and not any(s["slug"] == slug for s in schemes):
+            fail("no-scheme", "no scheme %r — import it first (ewe-theme scheme import FILE)" % slug)
+        conf_set("desktop.theme.scheme", slug, hooks=hooks)
+        out({"ok": True, "scheme": slug})
+    if verb == "import":
+        try:
+            sc = read_scheme_file(a.path, getattr(a, "flavour", None))
+        except Exception as e:  # any parse failure is one message, not a traceback
+            fail("import", str(e))
+        if a.name:
+            sc["name"] = a.name
+            sc["slug"] = slugify(a.name)
+        if getattr(a, "slug_opt", None):
+            sc["slug"] = slugify(a.slug_opt)
+        if getattr(a, "accent", None):
+            acc = _hex6(a.accent)
+            if not acc:
+                fail("bad-accent", "accent must be a hex colour")
+            sc["accent"] = acc
+        lst = [s for s in schemes if s["slug"] != sc["slug"]] + [sc]
+        save_list(lst)
+        if a.apply:
+            conf_set("desktop.theme.scheme", sc["slug"], hooks=hooks)
+        out({"ok": True, "imported": _scheme_summary(sc, sc["slug"] if a.apply else current), "applied": bool(a.apply)})
+    if verb == "remove":
+        if not any(s["slug"] == a.slug for s in schemes):
+            fail("no-scheme", "no scheme %r" % a.slug)
+        save_list([s for s in schemes if s["slug"] != a.slug])
+        if current == a.slug:
+            conf_set("desktop.theme.scheme", "accent", hooks=hooks)
+        out({"ok": True, "removed": a.slug, "current": "accent" if current == a.slug else current})
+    if verb == "export":
+        slug = a.slug or current
+        sc = next((s for s in schemes if s["slug"] == slug), None)
+        if not sc:
+            if slug == "accent":
+                # accent mode has no palette of its own — export the live tokens as one
+                t = tokens(cfg)
+                c = t["color"]
+                sc = norm_scheme({"name": "ewe accent %s" % cfg["accent"], "variant": "dark", "accent": cfg["accent"], "palette": {
+                    "base00": c["bg-3"], "base01": c["bg-1"], "base02": c["card"], "base03": c["stroke-2"],
+                    "base04": c["fg-4"], "base05": c["fg-2"], "base06": c["fg-2"], "base07": c["fg-1"],
+                    "base08": c["danger"], "base09": "#e8a04a", "base0A": c["warning"], "base0B": c["success"],
+                    "base0C": c["info"], "base0D": c["brand-fg-1"], "base0E": "#b38aff", "base0F": "#a0785a",
+                    "base10": c["bg-4"], "base11": c["bg-5"]}})
+            else:
+                fail("no-scheme", "no scheme %r" % slug)
+        sys.stdout.write(scheme_yaml(sc))
+        sys.exit(0)
+    if verb == "set":
+        slug = a.slug_opt or current
+        sc = next((s for s in schemes if s["slug"] == slug), None)
+        if not sc:
+            fail("no-scheme", "no scheme to edit — apply or import one first, or pass --slug")
+        field, value = a.field, a.value
+        if field == "accent":
+            v = _hex6(value)
+            if not v:
+                fail("bad-value", "accent must be a hex colour")
+            sc["accent"] = v
+        elif field.startswith("base") and field.upper().replace("BASE", "base") in SCHEME_KEYS:
+            v = _hex6(value)
+            if not v:
+                fail("bad-value", "%s must be a hex colour" % field)
+            sc["palette"][field.upper().replace("BASE", "base")] = v
+        elif field == "name":
+            sc["name"] = value
+        elif field == "variant":
+            if value not in ("dark", "light"):
+                fail("bad-value", "variant is dark or light")
+            sc["variant"] = value
+        elif field == "semantic":
+            sc["semantic"] = value.lower() in ("1", "true", "yes", "on")
+        else:
+            fail("bad-field", "fields: accent, name, variant, semantic, base00…base17")
+        save_list(schemes)
+        if current == slug:
+            conf_set("desktop.theme.scheme", slug, hooks=hooks)   # re-apply so the shell repaints
+        out({"ok": True, "scheme": _scheme_summary(sc, current)})
+    if verb == "from-wallpaper":
+        path = a.path or _current_wallpaper()
+        if not path or not os.path.isfile(path):
+            fail("no-wallpaper", "no image wallpaper is set (pass --path FILE)")
+        if getattr(a, "if_changed", False):
+            prev = next((s for s in schemes if s["slug"] == "wallpaper"), None)
+            if prev and prev.get("wallpaper") == path and current == "wallpaper":
+                out({"ok": True, "unchanged": True, "wallpaper": path})
+        try:
+            sc = scheme_from_image(path, light=bool(a.light), name=a.name or "Wallpaper")
+        except Exception as e:
+            fail("wallpaper", str(e))
+        if not sc:
+            fail("wallpaper", "could not derive a palette from %s" % path)
+        lst = [s for s in schemes if s["slug"] != sc["slug"]] + [sc]
+        save_list(lst)
+        if a.apply:
+            conf_set("desktop.theme.scheme", sc["slug"], hooks=hooks)
+        out({"ok": True, "scheme": _scheme_summary(sc, sc["slug"] if a.apply else current),
+             "wallpaper": path, "applied": bool(a.apply)})
+    fail("bad-verb", "scheme verbs: list, show, apply, import, remove, export, set, from-wallpaper")
 
 
 # ═══ the compatibility layer ══════════════════════════════════════════════
@@ -565,14 +1105,17 @@ def gen_json(t):
     # legacy() hands every look the SAME dict, so convert each object once
     for look in {id(l): l for l in lg.values()}.values():
         look["color"] = {k: color_qml(LEGACY_COLOR[k], v) for k, v in look["color"].items()}
-    return json.dumps({
+    doc = {
         "version": 2,
         "input": t["input"],
         "color": {k: color_qml(k, v) for k, v in t["color"].items()},
         "shape": t["shape"], "size": t["size"],
         "grey": t["grey"], "brand": t["brand"], "surface": t["surface"],
         "themes": lg,
-    }, indent=2) + "\n"
+    }
+    if t.get("scheme"):
+        doc["scheme"] = t["scheme"]        # colorscheme.sh reads the palette for kitty's ANSI
+    return json.dumps(doc, indent=2) + "\n"
 
 
 def _rgba(hex6, alpha):
@@ -658,9 +1201,9 @@ def cmd_show(a):
     # compiled in, built from the DEFAULT accent; this is the same map built
     # from THIS machine's ewe.conf, so the apps wear the user's accent — and
     # the greys its tint produced — without being rebuilt.
-    out({"ok": True, "conf": src, "input": cfg, "color": t["color"],
+    out({"ok": True, "conf": src, "input": t["input"], "color": t["color"],
          "shape": t["shape"], "size": t["size"], "brand": t["brand"],
-         "surface": t["surface"], "css_vars": css_vars(t)})
+         "surface": t["surface"], "scheme": t.get("scheme"), "css_vars": css_vars(t)})
 
 
 def cmd_build(a):
@@ -895,6 +1438,34 @@ def main():
     add("build", "--json", "--css")
     add("check", "--json", "--css")
     add("preview", "--out")
+    sp = sub.add_parser("scheme", help="named / imported / wallpaper palettes")
+    sp.add_argument("--conf")
+    sp.add_argument("--no-hooks", action="store_true", dest="no_hooks",
+                    help="write ewe.conf without the colorscheme + reload pokes")
+    ss = sp.add_subparsers(dest="scheme_cmd")
+    ss.add_parser("list")
+    ss.add_parser("show").add_argument("slug", nargs="?")
+    ss.add_parser("apply").add_argument("slug", help="a scheme slug, or `accent`")
+    si = ss.add_parser("import")
+    si.add_argument("path", help="base16/base24 YAML, Omarchy colors.toml, Catppuccin palette.json, Gogh yml — file or URL")
+    si.add_argument("--name")
+    si.add_argument("--slug", dest="slug_opt")
+    si.add_argument("--accent")
+    si.add_argument("--flavour", help="Catppuccin: latte / frappe / macchiato / mocha")
+    si.add_argument("--apply", action="store_true")
+    ss.add_parser("remove").add_argument("slug")
+    ss.add_parser("export").add_argument("slug", nargs="?")
+    st = ss.add_parser("set")
+    st.add_argument("field", help="accent, name, variant, semantic, base00…base17")
+    st.add_argument("value")
+    st.add_argument("--slug", dest="slug_opt")
+    sw = ss.add_parser("from-wallpaper")
+    sw.add_argument("--path")
+    sw.add_argument("--name")
+    sw.add_argument("--light", action="store_true")
+    sw.add_argument("--apply", action="store_true")
+    sw.add_argument("--if-changed", action="store_true", dest="if_changed",
+                    help="no-op when the wallpaper scheme already comes from this image")
     a = p.parse_args()
     if getattr(a, "conf", None) is None:
         # The subparser carries its own --conf, and argparse writes its
@@ -906,7 +1477,7 @@ def main():
         pre.add_argument("--conf")
         a.conf = pre.parse_known_args()[0].conf
     {"show": cmd_show, "build": cmd_build, "check": cmd_check,
-     "preview": cmd_preview}.get(a.cmd or "show", cmd_show)(a)
+     "preview": cmd_preview, "scheme": cmd_scheme}.get(a.cmd or "show", cmd_show)(a)
 
 
 if __name__ == "__main__":

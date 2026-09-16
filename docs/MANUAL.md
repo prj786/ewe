@@ -309,6 +309,30 @@ ewe's **Cast** tile to mirror the whole desktop, then play the video normally �
 picture and sound both go over Miracast. (A real Chromecast/Google TV *does*
 answer Stremio's cast, and also shows up under ewe's Chromecast path.)
 
+## Colours: accent, a scheme, or the wallpaper
+
+By default every colour on the desktop derives from one accent. A **scheme**
+is a whole palette instead — Gruvbox, Catppuccin, Nord, your own, or one
+pulled out of the wallpaper. Nothing is bundled; you add what you like:
+
+```sh
+ewe-theme scheme import https://raw.githubusercontent.com/tinted-theming/schemes/spec-0.11/base16/gruvbox-dark-medium.yaml --apply
+ewe-theme scheme import ~/omarchy/themes/tokyo-night/colors.toml --apply
+ewe-theme scheme from-wallpaper --apply
+ewe-theme scheme apply accent          # back to the accent
+```
+
+Formats: Base16 / Base24 YAML (Tinted Theming's 500+ schemes), Omarchy
+`colors.toml`, Catppuccin `palette.json` (`--flavour mocha`), Gogh terminal
+themes. The accent still works on top of a scheme (`ewe-theme scheme set
+accent '#…'`), and `export` writes your current palette as Base24 for
+another machine or a friend. Schemes sync with `ewe.conf`.
+
+ewe is dark by default; a scheme that declares itself light is honoured
+end to end — GTK, Qt, kitty, icons and the shell. The Settings app's
+Appearance pane has the same controls: Accent · Scheme · Wallpaper, an
+Import… button and a small editor for the palette.
+
 ## "No application found" — and where the store button goes
 
 When nothing can open a link or file (a `claude://` link before Claude

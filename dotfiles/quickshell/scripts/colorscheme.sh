@@ -71,6 +71,21 @@ S_BG="$(tok bg-3 090a0e)"; S_PANEL="$(tok bg-1 131417)"; S_ELEV="$(tok card 191a
 S_STROKE="$(tok stroke-2 515255)"; S_HOVER="$(tok subtle-hover 1c1c1e)"; S_FRAME="$(tok bg-6 191a1d)"
 S_FG="$(tok fg-1 ffffff)"; S_FG_DIM="$(tok fg-3 adadad)"; S_FG_INV="$(tok fg-inverted 232427)"
 S_BG_R=$((16#${S_BG:0:2}));    S_BG_G=$((16#${S_BG:2:2}));    S_BG_B=$((16#${S_BG:4:2}))
+tokrgb() {  # tok as "r,g,b" (kdeglobals' spelling)
+    local h; h="$(tok "$1" "$2")"
+    printf '%d,%d,%d' "$((16#${h:0:2}))" "$((16#${h:2:2}))" "$((16#${h:4:2}))"
+}
+# ── variant: dark by default; a LIGHT scheme (ewe-theme scheme … variant
+# light) flips the toolkit-level switches. Everything else already follows
+# the tokens, which are the scheme's own colours either way.
+VARIANT="$(sed -n 's/.*"variant": *"\([a-z]*\)".*/\1/p' "$TOK" 2>/dev/null | head -n1)"
+if [ "$VARIANT" = "light" ]; then
+    GTK_THEME="adw-gtk3"; PREFER_DARK=0; CS="prefer-light"; ICONS="Reversal-${RC}"
+    CURSOR="Mocu-Black-Right"
+fi
+# the active scheme's palette (base00…base0F), for the terminal's sixteen
+# colours — absent in accent mode, where kitty keeps its defaults
+SCH_BASE00="$(tok base00 "")"
 S_PN_R=$((16#${S_PANEL:0:2})); S_PN_G=$((16#${S_PANEL:2:2})); S_PN_B=$((16#${S_PANEL:4:2}))
 S_EL_R=$((16#${S_ELEV:0:2}));  S_EL_G=$((16#${S_ELEV:2:2}));  S_EL_B=$((16#${S_ELEV:4:2}))
 S_ST_R=$((16#${S_STROKE:0:2}));S_ST_G=$((16#${S_STROKE:2:2}));S_ST_B=$((16#${S_STROKE:4:2}))
@@ -155,6 +170,30 @@ active_tab_foreground   #${ACC_FG}
 inactive_tab_background #${S_PANEL}
 active_border_color     #${ACC}
 EOF
+if [ -n "$SCH_BASE00" ]; then
+    # Tinted Theming's kitty mapping: normal = the eight hues, bright = the
+    # same hues (base24's brights when the scheme has them), 7/15 = text
+    _b() { tok "$1" "$2"; }
+    cat >> "$CFG/kitty/flock.conf" <<EOF
+foreground            #$(_b base05 "${S_FG}")
+color0  #$(_b base00 "$S_BG")
+color1  #$(_b base08 f1707b)
+color2  #$(_b base0B 54b054)
+color3  #$(_b base0A fdea3d)
+color4  #$(_b base0D "$ACC")
+color5  #$(_b base0E b38aff)
+color6  #$(_b base0C 9ea2a6)
+color7  #$(_b base05 d6d6d6)
+color8  #$(_b base03 5b5c5f)
+color9  #$(_b base12 "$(_b base08 f1707b)")
+color10 #$(_b base14 "$(_b base0B 54b054)")
+color11 #$(_b base13 "$(_b base0A fdea3d)")
+color12 #$(_b base16 "$(_b base0D "$ACC")")
+color13 #$(_b base17 "$(_b base0E b38aff)")
+color14 #$(_b base15 "$(_b base0C 9ea2a6)")
+color15 #$(_b base07 ffffff)
+EOF
+fi
 pkill -USR1 -x kitty 2>/dev/null || true
 
 # ── zathura — style palette + accent; zathurarc includes this file ──
@@ -359,11 +398,21 @@ fi
 # (QT_QPA_PLATFORMTHEME=qt6ct is set in start-hyprland.sh).
 COLORS="$CFG/qt6ct/colors"
 mkdir -p "$COLORS"
+# QPalette role order: WindowText Button Light Midlight Dark Mid Text BrightText
+# ButtonText Base Window Shadow Highlight HighlightedText Link LinkVisited
+# AlternateBase NoRole ToolTipBase ToolTipText PlaceholderText — every value
+# a token, so a scheme (or a light one) reaches Qt apps too (was a frozen
+# grey palette with only the accent substituted).
+Q_FG="$(tok fg-1 ffffff)"; Q_FG3="$(tok fg-3 adadad)"; Q_DIS="$(tok fg-disabled 5b5c5f)"
+Q_BTN="$(tok bg-1 131417)"; Q_LIGHT="$(tok bg-1-hover 1e1f22)"; Q_MIDL="$(tok card 191a1d)"
+Q_DARK="$(tok bg-4 040509)"; Q_MID="$(tok bg-2 0e0f12)"; Q_BASE="$(tok bg-3 090a0e)"
+Q_WIN="$(tok bg-2 0e0f12)"; Q_SHADOW="$(tok bg-5 000000)"; Q_ALT="$(tok bg-2-hover 191a1d)"
+Q_LINKV="$(tok brand-fg-2 93b8ff)"; Q_ACC_FG="${ACC_FG}"
 cat > "$COLORS/ewe-dark.conf" <<EOF
 [ColorScheme]
-active_colors=#ffdcdcdc, #ff2d2d2d, #ff3a3a3a, #ff333333, #ff1a1a1a, #ff262626, #ffdcdcdc, #ffffffff, #ffdcdcdc, #ff1e1e1e, #ff2a2a2a, #ff000000, #ff${ACC}, #ffffffff, #ff${ACC}, #ffb38aff, #ff242424, #ff2d2d2d, #ffdcdcdc, #ff7f7f7f
-inactive_colors=#ffdcdcdc, #ff2d2d2d, #ff3a3a3a, #ff333333, #ff1a1a1a, #ff262626, #ffdcdcdc, #ffffffff, #ffdcdcdc, #ff1e1e1e, #ff2a2a2a, #ff000000, #ff3a3a3a, #ffdcdcdc, #ff${ACC}, #ffb38aff, #ff242424, #ff2d2d2d, #ffdcdcdc, #ff7f7f7f
-disabled_colors=#ff6f6f6f, #ff2d2d2d, #ff3a3a3a, #ff333333, #ff1a1a1a, #ff262626, #ff6f6f6f, #ffffffff, #ff6f6f6f, #ff1e1e1e, #ff2a2a2a, #ff000000, #ff3a3a3a, #ff9f9f9f, #ff${ACC}, #ffb38aff, #ff242424, #ff2d2d2d, #ff6f6f6f, #ff5f5f5f
+active_colors=#ff${Q_FG}, #ff${Q_BTN}, #ff${Q_LIGHT}, #ff${Q_MIDL}, #ff${Q_DARK}, #ff${Q_MID}, #ff${Q_FG}, #ff${Q_FG}, #ff${Q_FG}, #ff${Q_BASE}, #ff${Q_WIN}, #ff${Q_SHADOW}, #ff${ACC}, #ff${Q_ACC_FG}, #ff${ACC}, #ff${Q_LINKV}, #ff${Q_ALT}, #ff${Q_BTN}, #ff${Q_MIDL}, #ff${Q_FG}, #ff${Q_FG3}
+inactive_colors=#ff${Q_FG}, #ff${Q_BTN}, #ff${Q_LIGHT}, #ff${Q_MIDL}, #ff${Q_DARK}, #ff${Q_MID}, #ff${Q_FG}, #ff${Q_FG}, #ff${Q_FG}, #ff${Q_BASE}, #ff${Q_WIN}, #ff${Q_SHADOW}, #ff${Q_LIGHT}, #ff${Q_FG}, #ff${ACC}, #ff${Q_LINKV}, #ff${Q_ALT}, #ff${Q_BTN}, #ff${Q_MIDL}, #ff${Q_FG}, #ff${Q_FG3}
+disabled_colors=#ff${Q_DIS}, #ff${Q_BTN}, #ff${Q_LIGHT}, #ff${Q_MIDL}, #ff${Q_DARK}, #ff${Q_MID}, #ff${Q_DIS}, #ff${Q_FG}, #ff${Q_DIS}, #ff${Q_BASE}, #ff${Q_WIN}, #ff${Q_SHADOW}, #ff${Q_LIGHT}, #ff${Q_FG3}, #ff${ACC}, #ff${Q_LINKV}, #ff${Q_ALT}, #ff${Q_BTN}, #ff${Q_MIDL}, #ff${Q_DIS}, #ff${Q_DIS}
 EOF
 SCHEME="$COLORS/ewe-dark.conf"
 # migrate: drop the pre-rename scheme files (and the deleted light scheme) so
@@ -385,9 +434,11 @@ done
 # We ship no KDE apps, but writing this keeps any KColorScheme-aware app you install
 # later dark (incl. its item views) instead of falling back to a light default.
 # Accent = Selection + Decoration*.
-C_WIN="42,42,42";  C_WINA="36,36,36";  C_VIEW="30,30,30";  C_VIEWA="36,36,36"
-C_BTN="45,45,45";  C_FG="220,220,220";  C_FGI="130,130,130"; C_TIP="45,45,45"
-C_VIS="150,120,200"
+C_WIN="$(tokrgb bg-2 0e0f12)";   C_WINA="$(tokrgb bg-1 131417)"
+C_VIEW="$(tokrgb bg-3 090a0e)";  C_VIEWA="$(tokrgb bg-2 0e0f12)"
+C_BTN="$(tokrgb bg-1 131417)";   C_FG="$(tokrgb fg-1 ffffff)"
+C_FGI="$(tokrgb fg-3 adadad)";   C_TIP="$(tokrgb card 191a1d)"
+C_VIS="$(tokrgb brand-fg-2 93b8ff)"
 A="$AR,$AG,$AB"
 _cgroup() {  # $1 bg  $2 bgAlt
     cat <<EOF

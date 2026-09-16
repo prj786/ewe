@@ -274,7 +274,7 @@ QtObject {
     // user's in-shell pick always wins; until there is one this falls back to
     // the accent in ewe.conf [desktop.theme], which is the same seed the
     // whole token file above was derived from.
-    readonly property color accent:      Globals.accentExplicit ? Globals.accentColor
+    readonly property color accent:      (Globals.accentExplicit && !Globals.schemeActive) ? Globals.accentColor
                                          : _f("brand-fg-1", Globals.accentColor)
     // accentText auto-contrasts with the accent (white on dark accents, ink on
     // light ones) so foreground text on accent fills stays legible at any hue.

@@ -145,6 +145,35 @@ any change to `bin/ewe-theme`.
 Applying this section re-runs `colorscheme.sh`, which writes every toolkit's
 config (GTK, Qt, cursor, icon hue) in one pass.
 
+#### Colour schemes — `scheme` and `[[desktop.theme.schemes]]`
+
+`scheme = "accent"` (the default) derives every colour from `accent`.
+Any other value is the slug of a palette in `[[desktop.theme.schemes]]`:
+a Base24 palette (`base00`…`base0F` required, `base10`…`base17` optional),
+a `name`, `variant = "dark" | "light"`, an optional explicit `accent`, and
+`semantic = true` (status colours from the palette's red / yellow / green;
+`false` keeps ewe's fixed status hues). Schemes live in the conf so they
+sync. Nobody edits this table by hand — `ewe-theme scheme` does:
+
+```sh
+ewe-theme scheme list                          # what you have, which is on
+ewe-theme scheme import ~/dl/kanagawa.yaml --apply   # base16/base24 YAML,
+        # Omarchy colors.toml, Catppuccin palette.json (--flavour), Gogh yml; file or URL
+ewe-theme scheme apply gruvbox-dark-medium     # or `apply accent` to go back
+ewe-theme scheme set accent '#fe8019'          # this scheme, a different accent
+ewe-theme scheme set base00 '#1d2021'          # edit one palette entry
+ewe-theme scheme export > mine.yaml            # share it (Base24)
+ewe-theme scheme from-wallpaper --apply        # a palette from the wallpaper;
+        # with scheme = "wallpaper" it follows every wallpaper change
+ewe-theme scheme remove kanagawa
+```
+
+ewe is dark by default and a scheme that says `variant = "light"` is
+honoured: the surfaces run the other way, GTK switches to `adw-gtk3` and
+`prefer-light`, the icon theme to its light variant. The 150 token roles
+never change — the shell, both apps, Hyprland's borders, GTK, Qt, kitty (its
+sixteen colours come from the palette), Zathura and mpv all follow.
+
 ### `[desktop.dock]`
 
 `enabled` (bool) · `autohide` (bool — "intelligent hide") ·
