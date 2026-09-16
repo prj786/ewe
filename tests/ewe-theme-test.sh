@@ -98,6 +98,38 @@ check "light: variant light, bg-3 is the light base00, fg-1 is the dark base07" 
 check "light: hover DARKENS, text is ink on paper (L* gap > 40)" "[ $(L "$(echo "$show" | role bg-1-hover)") -lt $(L "$(echo "$show" | role bg-1)") ] && [ $(( $(L "$(echo "$show" | role bg-1)") - $(L "$(echo "$show" | role fg-2)") )) -gt 40 ]"
 check "light: fg-on-brand picked for the fill, not hard-coded" "[ -n \"$(echo "$show" | role fg-on-brand)\" ]"
 
+# 4b. a FLAT light scheme (surfaces two L* apart) still has visible layer steps
+cat > "$SB/flat.yaml" <<'Y'
+system: "base16"
+name: "Flat light"
+variant: "light"
+palette:
+  base00: "#ffffff"
+  base01: "#fbfbfb"
+  base02: "#f6f6f6"
+  base03: "#d0d0d0"
+  base04: "#7a7a7a"
+  base05: "#3a3a3a"
+  base06: "#202020"
+  base07: "#101010"
+  base08: "#d02020"
+  base09: "#d07020"
+  base0A: "#c0a000"
+  base0B: "#308030"
+  base0C: "#208090"
+  base0D: "#2060c0"
+  base0E: "#8040a0"
+  base0F: "#806040"
+Y
+$T scheme --no-hooks import "$SB/flat.yaml" --apply >/dev/null
+show="$($T show)"
+check "flat light: panel sits below the ground, card below the panel (L* steps kept)" "[ $(( $(L "$(echo "$show" | role bg-3)") - $(L "$(echo "$show" | role bg-1)") )) -ge 5 ] && [ $(( $(L "$(echo "$show" | role bg-1)") - $(L "$(echo "$show" | role card)") )) -ge 3 ] && [ $(( $(L "$(echo "$show" | role card)") - $(L "$(echo "$show" | role card-hover)") )) -ge 2 ]"
+check "flat light: the ground itself is untouched" "[ \"$(echo "$show" | role bg-3)\" = '#ffffff' ]"
+$T scheme --no-hooks import "$SB/gruvbox.yaml" --apply >/dev/null
+$T scheme --no-hooks set accent '#fe8019' >/dev/null      # the override the later ewe-conf check expects
+show="$($T show)"
+check "gruvbox (well spaced) is unchanged by the step rule" "[ \"$(echo "$show" | role bg-1)\" = '#3c3836' ] && [ \"$(echo "$show" | role card)\" = '#504945' ]"
+
 # 5. Omarchy colors.toml -----------------------------------------------------
 mkdir -p "$SB/tokyo-night"; cat > "$SB/tokyo-night/colors.toml" <<'T2'
 mode = "dark"
