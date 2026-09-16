@@ -266,6 +266,15 @@ phase_services() {
     # reason the greeter wrapper lives in /usr/local/bin. Config: hypr/xdph.conf.
     sudo_run install -m 755 "$DOTREPO/system/bin/ewe-share-picker" /usr/local/bin/ewe-share-picker \
         && ok "installed screen-share picker wrapper (/usr/local/bin/ewe-share-picker)"
+
+    # ── "Find New Applications" leads to Komble: GTK's no-app-found chooser
+    # runs a binary named gnome-software; this stand-in maps the file/link
+    # type to a search and opens Komble on it (system/bin/gnome-software).
+    # /usr/local/bin so it never conflicts with the real package if installed.
+    if [ ! -x /usr/bin/gnome-software ]; then
+        sudo_run install -m 755 "$DOTREPO/system/bin/gnome-software" /usr/local/bin/gnome-software \
+            && ok "installed the Komble stand-in for gnome-software (/usr/local/bin/gnome-software)"
+    fi
     if systemctl --user is-active --quiet xdg-desktop-portal-hyprland.service 2>/dev/null; then
         run systemctl --user restart xdg-desktop-portal-hyprland.service 2>/dev/null \
             || info "restart xdg-desktop-portal-hyprland (or log out) to pick up the new share picker"
