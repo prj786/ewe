@@ -1,0 +1,28 @@
+#!/bin/sh
+# gnome-software — ewe's stand-in for the GNOME store, so GTK's "no app for
+# this" dialog leads somewhere. Installed to /usr/local/bin by phase 30.
+#
+# When a GTK app has nothing to open a file or link with, its chooser dialog
+# ("No applications found for x-scheme-handler/…") offers "Find New
+# Applications" — and that button runs a binary literally called
+# `gnome-software` with `--search=<mime type>` (or `--details=<id>`,
+# `--mode=overview`). Without GNOME's store that is a second error on top of
+# the first. Here the type becomes a word people search by and Komble opens
+# on it: x-scheme-handler/claude → "claude", application/pdf → "pdf".
+set -u
+q=""
+for a in "$@"; do
+    case "$a" in
+        --search=*)  q="${a#--search=}" ;;
+        --details=*) q="${a#--details=}" ;;
+        --install=*) q="${a#--install=}" ;;
+    esac
+done
+q="$(printf '%s' "$q" | sed -E 's#^x-scheme-handler/##; s#^[a-z]+/##; s#^(x-|vnd\.)##; s#[+.;].*$##; s#[^A-Za-z0-9 _-]# #g' | tr -s ' ')"
+if command -v komble >/dev/null 2>&1; then
+    if [ -n "$q" ]; then exec komble "--search=$q"; fi
+    exec komble
+fi
+notify-send -a ewe -i system-software-install "No app for this yet" \
+    "Komble (the software manager) isn't installed, so nothing can be found for \"$q\"." 2>/dev/null
+exit 1

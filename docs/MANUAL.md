@@ -309,6 +309,16 @@ ewe's **Cast** tile to mirror the whole desktop, then play the video normally �
 picture and sound both go over Miracast. (A real Chromecast/Google TV *does*
 answer Stremio's cast, and also shows up under ewe's Chromecast path.)
 
+## "No application found" — and where the store button goes
+
+When nothing can open a link or file (a `claude://` link before Claude
+Desktop is installed, a file type with no app), GTK shows "No applications
+found" with a **Find New Applications** button. That button runs a program
+called `gnome-software`; on ewe it is a stand-in that turns the type into a
+search — `x-scheme-handler/claude` → "claude", `application/pdf` → "pdf" —
+and opens **Komble** on it (`komble --search=…`). No GNOME store, no second
+error. If Komble is missing, a notification says so instead.
+
 ## Network: saved networks, the wired switch, X11 apps, JetBrains
 
 **A saved Wi-Fi network never asks for its password again.** The shell and
