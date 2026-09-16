@@ -632,6 +632,32 @@ def scheme_ramp(pal, variant):
         92: pal["base06"],
         100: pal["base07"],
     }
+    # The layer steps ARE the design (rule 09: nothing is outlined) — a card
+    # reads as a card because it sits a few L* off its panel. Many schemes,
+    # light ones especially, put base00/01/02 within a point or two of each
+    # other, and then panels, tiles and hover states all come out one flat
+    # colour. So the surface ladder is forced to advance by at least these
+    # steps, in the scheme's direction, keeping each pinned colour's hue.
+    # base00 (stop 4, the ground) is never moved; the raised surfaces above it
+    # advance away from it, the two deeper stops below it sink away from it
+    # (clamped at black / white — a light scheme on pure white has nowhere
+    # deeper to go, and that is fine: bg-4/5 are rare in a light look).
+    up = 1 if dark else -1
+    MIN_UP = {6: 2.5, 8: 3.0, 10: 3.0, 11: 0.0, 14: 3.0, 32: 10.0}
+    prev = anchors[4]
+    for k in (6, 8, 10, 11, 14, 32):
+        Lp = hex_to_lch(prev)[0]
+        Lk, Ck, Hk = hex_to_lch(anchors[k])
+        if (Lk - Lp) * up < MIN_UP[k]:
+            anchors[k] = lch_to_hex(max(0, min(100, Lp + MIN_UP[k] * up)), Ck, Hk)
+        prev = anchors[k]
+    prev = anchors[4]
+    for k in (2, 0):
+        Lp = hex_to_lch(prev)[0]
+        Lk, Ck, Hk = hex_to_lch(anchors[k])
+        if (Lp - Lk) * up < 2.5:
+            anchors[k] = lch_to_hex(max(0, min(100, Lp - 2.5 * up)), Ck, Hk)
+        prev = anchors[k]
     ks = sorted(anchors)
     ramp = {}
     for k in GREY_KEYS:
