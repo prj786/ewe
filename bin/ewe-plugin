@@ -507,7 +507,9 @@ def scan():
 
 def missing_ids(plugins):
     """What `restore` would fetch: known, absent, and fetchable."""
-    return [p["id"] for p in plugins if not p["installed"] and p["source"] and p["source"] != "local"]
+    # "local" and "bundled" cannot be fetched: one came from a directory, the
+    # other from the ewe package (ewe-setup seeds it; `seed --restore` if removed)
+    return [p["id"] for p in plugins if not p["installed"] and p["source"] and p["source"] not in ("local", "bundled")]
 
 
 def find(pid):
