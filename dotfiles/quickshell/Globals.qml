@@ -30,7 +30,7 @@ QtObject {
     // Project version — the shell's runtime copy. Keep in sync with the repo-root
     // VERSION file (the canonical source used for git tags / releases). Semver, with
     // an -alpha/-beta pre-release suffix until the first stable cut.
-    readonly property string version: "0.18.0-beta"
+    readonly property string version: "0.19.0-beta"
 
     // ── event sounds (GNOME-style; the freedesktop sound theme, one toggle) ──
     // playSound("message-new-instant") etc — names are theme event ids from
@@ -292,6 +292,9 @@ QtObject {
     // one in the shell. Theme.accent then falls back to the accent in
     // ewe.conf [desktop.theme], which is what the token file was built from.
     property bool accentExplicit: false
+    // a palette scheme is active (ewe.conf desktop.theme.scheme != "accent"):
+    // its accent is in the tokens and wins over the in-shell pick above
+    property bool schemeActive: false
     property bool tintBorders: false        // mirror window border colour to the accent
     // false → fully opaque windows (decoration inactive_opacity forced to 1.0);
     // true keeps hyprland.lua's subtle unfocused translucency. user-theme.json.
@@ -558,6 +561,7 @@ QtObject {
                     if (j && j.shape && typeof j.shape === "object") g.tokShape = j.shape
                     if (j && j.size  && typeof j.size  === "object") g.tokSize  = j.size
                     if (j && j.input && typeof j.input === "object") g.tokInput = j.input
+                    g.schemeActive = !!(j && j.input && j.input.scheme && j.input.scheme !== "accent")
                     g.tokSurface = (j && j.surface && typeof j.surface === "object") ? j.surface : {}
                 } catch (e) {}
             }

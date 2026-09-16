@@ -237,4 +237,14 @@ if [ "${#IMG[@]}" -gt 0 ]; then
     fi
 fi
 
+# ── "follow the wallpaper": ewe.conf desktop.theme.scheme = "wallpaper" means
+# the palette is derived from the image (ewe-theme scheme from-wallpaper).
+# Re-derive after a successful apply; --if-changed makes the login re-apply
+# a no-op when the image is the same one the scheme was made from.
+if [ "$st" -eq 0 ] && [ "${#IMG[@]}" -gt 0 ] && command -v ewe-theme >/dev/null 2>&1; then
+    if [ "$(ewe-conf get desktop.theme.scheme 2>/dev/null)" = "wallpaper" ]; then
+        ewe-theme scheme from-wallpaper --apply --if-changed >/dev/null 2>&1 &
+    fi
+fi
+
 exit "$st"
