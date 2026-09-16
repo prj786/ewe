@@ -708,6 +708,8 @@ pcall(dofile, home .. "/.config/hypr/generated/keybinds.lua")
 -- apps' portal global shortcuts (1Password Quick Access, Discord…) bound to the
 -- `global` dispatcher — ewe-globalshortcuts writes it, the shell keeps it current
 pcall(dofile, home .. "/.config/hypr/generated/globalshortcuts.lua")
+-- keybinds that enabled plugins declared in their manifest (ewe-plugin writes it)
+pcall(dofile, home .. "/.config/hypr/generated/plugin-keybinds.lua")
 
 -- Window-group chrome LAST: group-theme.lua shares the window corner radius, so
 -- it must read decoration.rounding AFTER the generated files above have had
