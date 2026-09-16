@@ -206,11 +206,11 @@ Scope {
         signal secondary()
         signal tertiary()
         signal scrolled(real dy)
-        implicitWidth: lbl.implicitWidth + Theme.barItemPad * 2
+        implicitWidth: Theme.barCellPx
         height: parent ? parent.height : Theme.barHeight
         Rectangle {
             anchors.centerIn: parent
-            width: parent.width; height: Theme.barItemHeight
+            width: Theme.barCellPx + 10; height: Theme.barItemHeight
             radius: Theme.barItemRadius
             color: si.active ? Theme.barActive : Theme.barHover
             // `visible: si.active` alone made the hover branch above dead
@@ -388,7 +388,7 @@ Scope {
                             delegate: Item {
                                 id: trayDelegate
                                 required property var modelData
-                                width: Theme.trayIconPx + 2; height: Theme.barHeight
+                                width: Theme.barCellPx; height: Theme.barHeight
                                 TrayIcon {
                                     anchors.centerIn: parent
                                     px: Theme.trayIconPx
@@ -455,7 +455,7 @@ Scope {
                     Item {
                         readonly property bool updating: Globals.updatesBusy || Globals.updatesWorking
                         id: updItem
-                        width: updRow.implicitWidth + 14
+                        width: Math.max(Theme.barCellPx, updRow.implicitWidth + 2)
                         height: parent.height
                         Row {
                             id: updRow
@@ -500,7 +500,7 @@ Scope {
                     Item {
                         visible: Globals.barShows("keyboard")
                         anchors.verticalCenter: parent.verticalCenter
-                        width: kbLbl.implicitWidth + 16
+                        width: kbLbl.implicitWidth + 2
                         height: parent.height
                         Text {
                             id: kbLbl
@@ -539,7 +539,7 @@ Scope {
                         Row {
                             id: ctlRow
                             anchors.centerIn: parent
-                            spacing: 8
+                            spacing: Theme.barItemSpacing
 
                             // ORDER is deterministic and grouped, not first-come:
                             //   spinner (transient) → TOGGLER STATES the user
@@ -549,7 +549,7 @@ Scope {
                             //   profile · battery) → clock.
                             // Metrics are uniform on purpose: every glyph is
                             //   Theme.barIconPx, every count/label 11 px, 4 px
-                            //   inside a glyph+label pair, 8 px between items —
+                            //   inside a glyph+label pair, barItemSpacing between items —
                             //   the group reads as one calm instrument row.
 
                             // connecting… — spins while a Wi-Fi/VPN attempt
