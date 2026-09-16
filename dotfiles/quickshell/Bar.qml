@@ -373,25 +373,26 @@ Scope {
                     anchors.verticalCenter: parent.verticalCenter
                     spacing: Theme.barItemSpacing
 
-                    // third-party bar widgets (defaultSection = right, the default)
-                    BarPluginSlots { section: "right"; anchors.verticalCenter: parent.verticalCenter }
-
-                    // system tray
+                    // system tray, then the plugins' bar widgets (defaultSection =
+                    // right, the default) — one row, so a widget sits in the tray's
+                    // rhythm: 18 px cells, 9 px apart, 16 px icons (Theme.trayIconPx)
                     Row {
-                        visible: Globals.barShows("tray")
                         anchors.verticalCenter: parent.verticalCenter
-                        spacing: 9
+                        spacing: Theme.trayItemSpacing
+                        Row {
+                        visible: Globals.barShows("tray") && SystemTray.items.values.length > 0
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: Theme.trayItemSpacing
                         Repeater {
                             model: SystemTray.items
                             delegate: Item {
                                 id: trayDelegate
                                 required property var modelData
-                                width: 18; height: Theme.barHeight
-                                Image {
+                                width: Theme.trayIconPx + 2; height: Theme.barHeight
+                                TrayIcon {
                                     anchors.centerIn: parent
-                                    width: 16; height: 16
+                                    px: Theme.trayIconPx
                                     source: modelData.icon
-                                    sourceSize.width: 32; sourceSize.height: 32; mipmap: true
                                 }
                                 // Open the app's context menu (SNI DBusMenu) in our own
                                 // themed popup (TrayMenu.qml), anchored under the icon.
@@ -428,11 +429,9 @@ Scope {
                                 }
                             }
                         }
+                        }
+                        BarPluginSlots { section: "right"; spacing: Theme.trayItemSpacing; anchors.verticalCenter: parent.verticalCenter }
                     }
-
-                    // The camera and the scissors used to live here; since 0.21 they are
-                    // the ewe.screenshot and ewe.clipboard plugins' bar widgets (bundled,
-                    // removable), packed by BarPluginSlots above like any plugin.
 
                     // tiling ⇄ floating — the icon IS the state (grid = tiling,
                     // stacked windows = floating). Globals.setTiling goes

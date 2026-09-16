@@ -259,6 +259,10 @@ QtObject {
     // the 22px pill it already had rather than shrinking.
     readonly property int barItemHeight: Math.max(22, barHeight - 10)
     readonly property int barItemSpacing: 6
+    // the system tray's rhythm — 16 px app icons, 9 px apart; plugins' bar
+    // widgets sit in the same row and should size themselves to trayIconPx
+    readonly property int trayIconPx:      16
+    readonly property int trayItemSpacing: 9
     // Horizontal padding inside that pill. A glyph is narrow, so 14px total
     // made the highlight barely wider than the icon itself.
     readonly property int barItemPad: 10

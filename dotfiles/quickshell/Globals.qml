@@ -30,7 +30,7 @@ QtObject {
     // Project version — the shell's runtime copy. Keep in sync with the repo-root
     // VERSION file (the canonical source used for git tags / releases). Semver, with
     // an -alpha/-beta pre-release suffix until the first stable cut.
-    readonly property string version: "0.21.0-beta"
+    readonly property string version: "0.21.1-beta"
 
     // ── event sounds (GNOME-style; the freedesktop sound theme, one toggle) ──
     // playSound("message-new-instant") etc — names are theme event ids from
@@ -550,7 +550,7 @@ QtObject {
     readonly property bool noBlur: Quickshell.env("EWE_NO_BLUR") === "1"
     property Process _tokenLoad: Process {
         running: true
-        command: ["sh", "-c", "cat \"$HOME/.config/quickshell/theme-tokens.json\" 2>/dev/null"]
+        command: ["sh", "-c", "cat \"${XDG_CONFIG_HOME:-$HOME/.config}/quickshell/theme-tokens.json\" 2>/dev/null"]
         stdout: StdioCollector {
             onStreamFinished: {
                 try {
