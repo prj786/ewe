@@ -79,6 +79,7 @@ ShellRoot {
     BtPairing {}
     Clipboard {}
     Passwords {}
+    DesktopWidgets {}
     ScreenshotPreview {}
     Lock {}
     Caffeine {}

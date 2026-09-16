@@ -380,6 +380,9 @@ hl.bind(mainMod .. " + SHIFT + C", hl.dsp.exec_cmd("qs ipc call cast toggle"))  
 -- Fill a login from the password manager into the focused window (Passwords.qml
 -- + bin/ewe-pass): the manager cannot type into native Wayland apps, the shell can.
 hl.bind(mainMod .. " + P",      hl.dsp.exec_cmd("qs ipc call passwords toggle"))
+-- Desktop widgets (plugins of kind desktop-widget): arrange mode — drag them,
+-- make one sticky (above windows) or hide it; Esc or the same key ends it.
+hl.bind(mainMod .. " + SHIFT + W", hl.dsp.exec_cmd("qs ipc call widgets arrange"))
 -- Blind display recovery: works with a BLACK screen — forces every output's
 -- dpms on and re-asserts the saved display profile. If a plug/unplug or the
 -- xe driver ever blanks everything, press this instead of the power button.

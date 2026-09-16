@@ -15,6 +15,33 @@ ewe-plugin list
 ewe-plugin disable example.hello
 ```
 
+## Writing one
+
+```sh
+ewe-plugin create acme.clock --name "Desk Clock" --kinds desktop-widget,bar-widget
+cd acme.clock && ewe-plugin dev .        # linked, enabled, shell restarted, log follows
+```
+
+That is a git repository with a working plugin in it. You own the QML —
+what it draws and does. ewe owns where it lives and what the user may
+change: a bar widget's section and visibility, a desktop widget's place
+on the screen, whether it is **sticky** (above windows) or on the desktop
+(below them), whether it is shown, and the values of the `settings` you
+declared. None of that is in your code: the user moves widgets in
+**arrange mode** (`Super+Shift+W`: drag, Sticky, Hide, Esc), Komble shows
+your settings as a form, and every entry point that declares
+`property var settings` receives the current values — live, on every
+change.
+
+A `desktop-widget` is a sized `Item` (set `implicitWidth`/`implicitHeight`);
+a `bar-widget` the same but bar-height; `panel`/`overlay`/`menu` own a
+`PanelWindow` and an `IpcHandler { target: "<your id>" }`. `import qs`
+gives you `Theme`, the public `Globals` subset and `Log`.
+
+Ship it by pushing the repo; anyone installs with `ewe-plugin add <url>
+--enable` or from Komble → Plugins. `ewe-plugin remove` on a linked
+working copy only unlinks it.
+
 ## Trust
 
 Installing **never runs plugin code** — there are no install hooks and
@@ -37,6 +64,10 @@ inside one engine, and the tool says so instead of pretending.
 | `restore [--yes]` | clone every plugin `ewe.conf` knows that is not installed here — the plugin half of Komble's "For you" |
 | `validate <dir>` | check a manifest and its entry points; exit 1 lists every problem |
 | `path` | the plugins directory |
+| `create <ns.name> [--name T] [--kinds a,b] [--section right] [--dir P]` | **a new plugin repo**: manifest, one working QML per kind, README, MIT licence, `git init` + first commit — push it and it is installable |
+| `dev [dir]` | link a working copy into the plugins dir (edits are live after a restart), enable it, restart the shell, follow its log lines |
+| `place <id> [--x N --y N] [--layer desktop\|top] [--visible on\|off] [--output NAME] [--reset]` | where a **desktop widget** sits — live, no restart |
+| `set <id> <key> <value>` / `get <id> [key]` | a plugin's declared **settings** (typed by its manifest) — live |
 
 Enabling and disabling restart `ewe.service` — there is no QML hot reload,
 and a one-second restart is honest about that. The shell's own apps are not
@@ -88,7 +119,9 @@ A plugin is a git repository with `manifest.json` at its root:
 | `id` | `<namespace>.<name>`, lowercase `[a-z0-9_-]`, at least one dot. `ewe.` is reserved. The install directory is named after it. |
 | `name`, `version` | non-empty strings; `version` is what `list` shows |
 | `apiVersion` | the shell's plugin API this plugin was written against (`1`); a mismatch is refused at install, not at login |
-| `kinds` | one or more of `service`, `panel`, `overlay`, `menu`, `bar-widget` |
+| `kinds` | one or more of `service`, `panel`, `overlay`, `menu`, `bar-widget`, `desktop-widget` |
+| `desktopWidget` | optional, for `desktop-widget`: `{ "x": 48, "y": 64, "layer": "desktop" }` — the default place; the user's own placement in ewe.conf wins |
+| `settings` | optional: `[{ "key", "type", "default", "label", "choices"?, "min"?, "max"? }]` with `type` one of `bool`, `int`, `string`, `choice`, `color`. The values reach every entry point as `settings` and render as a form in Komble |
 | `entryPoints` | one `.qml` file per kind, relative, inside the plugin (symlinks that resolve outside it are rejected) |
 | `barWidget.defaultSection` | `left`, `center` or `right` (default `right`) — where the widget is packed |
 | `description`, `homepage`, `author` | optional, shown by `info` |

@@ -425,6 +425,15 @@ seconds of it starting (`ewe-globalshortcuts list` shows what is bound, and
 what was skipped because ewe already uses the key). Discord push-to-talk,
 Slack and OBS hotkeys fall out of the same mechanism.
 
+## Desktop widgets
+
+A plugin of kind `desktop-widget` (a clock, a note, a reminder — whatever
+its author drew) sits on the desktop. **Super+Shift+W** enters arrange mode:
+drag a widget where you want it, **Sticky** keeps it above windows, **Hide**
+takes it off the screen (Komble → Plugins brings it back), Esc when done.
+Its options — whatever the plugin declared — are a form on its card in
+Komble. To make one: `ewe-plugin create you.clock --kinds desktop-widget`.
+
 ## Plugins
 
 Third-party bar widgets, panels and services for the shell — the Omarchy

@@ -40,8 +40,10 @@ Row {
             source: "file://" + modelData.entry
             onStatusChanged: {
                 if (status === Loader.Error) Log.warn("plugins", modelData.id + "/bar-widget failed to load (see the qml error above)")
-                else if (status === Loader.Ready) Log.debug("plugins", "bar-widget", modelData.id, "in", slots.section)
+                else if (status === Loader.Ready) { Log.debug("plugins", "bar-widget", modelData.id, "in", slots.section); PluginHost._giveSettings(item, modelData.id) }
             }
+            // `ewe-plugin set …` → plugins.reload → the widget sees its new values
+            Connections { target: PluginHost; function onSettingsChanged() { if (status === Loader.Ready) PluginHost._giveSettings(item, modelData.id) } }
         }
     }
 }

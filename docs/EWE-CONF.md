@@ -287,6 +287,15 @@ plugins themselves live in `~/.config/ewe/plugins/<id>/`, outside the payload �
 they are code, not configuration, and never sync. Toggling a plugin restarts
 the shell; nothing else is regenerated.
 
+### `[plugins.widgets]` and `[plugins.settings]`
+
+Per plugin, keyed by id (quoted — ids carry a dot). `widgets."acme.clock" =
+{x, y, layer = "desktop" | "top", visible, output}` is where a desktop
+widget sits; `settings."acme.clock" = {key = value}` are the values of the
+options the plugin declared. `ewe-plugin place` / `set` write them and the
+shell re-reads live (`qs ipc call plugins reload`); arrange mode writes the
+same keys when you drag.
+
 ### `[system]` — what this machine is
 
 Read by the installer and ewe-os tooling only; the desktop never reads it.

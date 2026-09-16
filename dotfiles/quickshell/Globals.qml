@@ -64,6 +64,7 @@ QtObject {
     property bool overviewOpen: false      // GNOME-style window overview (Super tapped alone)
     property bool clipboardOpen: false     // the clipboard-history / emoji popup (scissors icon)
     property bool passwordsOpen: false     // the fill-from-password-manager picker (Super+P, Passwords.qml)
+    property bool widgetsArrange: false    // desktop widgets in arrange mode (Super+Shift+W): drag to move, frames with sticky/hide
     property bool settingsOpen: false      // the Quickshell Settings window (Super+, or the CC gear)
     // the first-run Welcome overlay is up — Google.qml holds every auto-push
     // while it is (a fresh machine must never upload over the backup it is
