@@ -167,7 +167,7 @@ QtObject {
     function retract() {
         Globals.storeOpen = false
         Globals.placesOpen = false
-        Globals.clipboardOpen = false
+        Quickshell.execDetached(["qs", "ipc", "call", "ewe.clipboard", "hide"])   // the clipboard plugin, if present
         Globals.launcherOpen = false
         Globals.trayMenuOpen = false
         Globals.overviewOpen = false

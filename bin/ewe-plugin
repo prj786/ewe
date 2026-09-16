@@ -1385,6 +1385,14 @@ def main(argv):
     if verb not in verbs:
         die("unknown verb \"%s\" — try `ewe-plugin help`" % verb, 2)
     verbs[verb](args)
+    if verb in ("add", "enable", "disable", "update", "remove", "restore", "dev", "seed"):
+        # the keybinds file follows the enabled set — even on a no-op verb
+        # (an already-enabled plugin, a seed with nothing new), so a shell
+        # that lost the file gets it back
+        try:
+            write_plugin_keybinds()
+        except Exception as e:
+            say("(plugin keybinds not written: %s)" % e)
     return 0
 
 

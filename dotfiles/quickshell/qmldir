@@ -40,10 +40,7 @@ Notifications 1.0 Notifications.qml
 QuickSettings 1.0 QuickSettings.qml
 Auth 1.0 Auth.qml
 BtPairing 1.0 BtPairing.qml
-Clipboard 1.0 Clipboard.qml
-Passwords 1.0 Passwords.qml
 DesktopWidgets 1.0 DesktopWidgets.qml
-ScreenshotPreview 1.0 ScreenshotPreview.qml
 InvertedCorner 1.0 InvertedCorner.qml
 Lock 1.0 Lock.qml
 Caffeine 1.0 Caffeine.qml

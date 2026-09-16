@@ -2,13 +2,21 @@ import QtQuick
 import Quickshell
 import Quickshell.Wayland
 import Quickshell.Io
+import qs
 
-// ScreenshotPreview — captured shots pile into a bottom-right STACK
-// (visually up to 3 cards, a count badge for more). Each new capture resets the
-// shared 5s timer; hovering pauses it. Dragging the stack drops ALL the files.
-// screenshot.sh notifies via `qs ipc call preview pop <path>`.
+// ewe.screenshot — Preview: captured shots pile into a bottom-right STACK
+// (visually up to 3 cards, a count badge for more). Each new capture resets
+// the shared 5s timer; hovering pauses it. Dragging the stack drops ALL the
+// files. screenshot.sh (in this plugin) notifies via
+//     qs ipc call ewe.screenshot pop <path>
+// and the keybinds in manifest.json call `shoot full|region|activewindow`.
 Scope {
     id: root
+    property var settings: ({})         // {copy: bool} — also copy the shot to the clipboard
+    readonly property string script: Qt.resolvedUrl("screenshot.sh").toString().replace(/^file:\/\//, "")
+    function shoot(mode) {
+        Quickshell.execDetached(["sh", "-c", 'EWE_SHOT_COPY="$2" exec "$1" "$3"', "_", root.script, root.settings.copy === false ? "0" : "1", mode])
+    }
 
     property var paths: []
     property bool shown: false
@@ -22,8 +30,9 @@ Scope {
     }
 
     IpcHandler {
-        target: "preview"
+        target: "ewe.screenshot"
         // (not show/hide — those collide with `qs ipc`'s own subcommands)
+        function shoot(mode: string): void { root.shoot(mode) }
         function pop(p: string): void {
             var a = root.paths.slice(); a.push(p); root.paths = a
             root.shown = true
@@ -44,7 +53,7 @@ Scope {
         visible: (root.shown || root.held) && root.n > 0
         color: "transparent"
         exclusiveZone: 0
-        WlrLayershell.namespace: "quickshell:preview"
+        WlrLayershell.namespace: "quickshell:ewe.screenshot"
         WlrLayershell.layer: WlrLayer.Overlay
         WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
         anchors { bottom: true; right: true }

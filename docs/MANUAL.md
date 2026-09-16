@@ -384,7 +384,20 @@ On 2026.1+ (Wayland by default) `-Dsun.awt.wl.WindowDecorationStyle=server`
 in Help → Edit Custom VM Options does the same for the runtime's own title
 bar. ewe does not write into IDE configs; these are yours to set once.
 
-## Passwords — filling logins into any app
+## Clipboard, screenshots, passwords — the bundled plugins
+
+Three things on the bar are plugins rather than parts of the shell: the
+clipboard history (scissors), screenshots (camera, and the `Print` keys) and
+the password fill picker (`Super+P`). They come with ewe and are on from the
+first login, but they are ordinary plugins — `ewe-plugin list` shows them as
+*bundled*, `ewe-plugin remove ewe.clipboard` takes one away for good (a later
+ewe update will not bring it back; `ewe-plugin seed --restore ewe.clipboard`
+does), and `ewe-plugin set ewe.screenshot copy false` changes what they do.
+Their code is public — `prj786/ewe-plugin-clipboard`, `-screenshot`,
+`-passwords` — and they are the reference for writing your own
+(`docs/PLUGINS.md`).
+
+### Passwords — filling logins into any app
 
 Linux has no password-autofill standard, and no password manager fills into
 native Wayland apps: 1Password and Bitwarden can only copy on Linux,
@@ -402,8 +415,9 @@ refuses to type if focus went to another window meanwhile. Nothing is typed
 into the picker's own search box, and secrets never touch the clipboard
 history.
 
-Which manager: `[passwords] provider` in `ewe.conf` (`auto` picks the first
-installed). Providers and their one-time setup:
+Which manager: `ewe-plugin set ewe.passwords provider 1password` (or in
+Settings → Plugins; `auto`, the default, picks the first installed).
+Providers and their one-time setup:
 
 | provider | needs | setup |
 |---|---|---|
@@ -411,11 +425,12 @@ installed). Providers and their one-time setup:
 | Bitwarden | `rbw` | `rbw login`, then `rbw unlock` |
 | pass | `pass` | an existing `~/.password-store`; `login:`/`username:` line = username |
 
-`ewe-pass status` tells you what the picker will do and why not. The typing
+`~/.config/ewe/plugins/ewe.passwords/ewe-pass status` tells you what the
+picker will do and why not. The typing
 goes through `wtype` (a Wayland virtual keyboard): it works in every window,
 XWayland included, but an app that drops characters wants a slower
-`type_delay_ms`. `press_enter = true` submits after the password (off by
-default — desktop apps vary).
+`[passwords] type_delay_ms` in `ewe.conf`. The plugin's `press_enter`
+setting submits after the password (off by default — desktop apps vary).
 
 **1Password Quick Access (`Ctrl+Shift+Space`) and other apps' global
 shortcuts** also work under ewe: apps register them through the desktop

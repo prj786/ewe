@@ -251,7 +251,8 @@ PROVIDERS = [OnePassword(), Bitwarden(), PassStore()]
 
 
 def pick_provider():
-    want = str(conf("passwords.provider", "auto") or "auto").lower()
+    # the plugin hands its settings over as environment; ewe.conf [passwords] is the fallback
+    want = str(os.environ.get("EWE_PASS_PROVIDER") or conf("passwords.provider", "auto") or "auto").lower()
     if want != "auto":
         for p in PROVIDERS:
             if p.name == want:
@@ -453,7 +454,8 @@ def cmd_fill(argv):
     what = arg(argv, "--what", "login")
     if what not in ("login", "username", "password"):
         fail("--what must be login, username or password")
-    enter = "--enter" in argv or (what == "login" and bool(conf("passwords.press_enter", False)))
+    env_enter = os.environ.get("EWE_PASS_ENTER")
+    enter = "--enter" in argv or (what == "login" and (env_enter == "1" if env_enter in ("0", "1") else bool(conf("passwords.press_enter", False))))
     delay = int(conf("passwords.type_delay_ms", TYPE_DELAY_MS) or TYPE_DELAY_MS)
     p = pick_provider()
     try:

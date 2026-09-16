@@ -56,13 +56,13 @@ case "$mode" in
 esac
 
 # Copy the PNG to the clipboard as an image (so it pastes into apps).
-[ -r "$file" ] && wl-copy --type image/png < "$file" 2>/dev/null
+[ "${EWE_SHOT_COPY:-1}" != 0 ] && [ -r "$file" ] && wl-copy --type image/png < "$file" 2>/dev/null
 
 # Show the draggable thumbnail preview (Quickshell), bottom-right. This IS the
 # feedback now — no notify-send (its full-screen toast overlay would block the
 # preview's pointer input). If Quickshell isn't running, fall back to a notify.
 if [ -r "$file" ] && command -v qs >/dev/null 2>&1 && pgrep -x qs >/dev/null 2>&1; then
-    qs ipc call preview pop "$file" >/dev/null 2>&1
+    qs ipc call ewe.screenshot pop "$file" >/dev/null 2>&1
 elif command -v notify-send >/dev/null 2>&1 && [ -r "$file" ]; then
     notify-send -i "$file" "Screenshot saved" "$(basename "$file") — also on clipboard"
 fi

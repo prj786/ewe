@@ -50,6 +50,31 @@ $P place acme.clock --reset >/dev/null
 check "place --reset returns to the manifest defaults" "$P get acme.clock | python3 -c 'import json,sys; w=json.load(sys.stdin)[\"widget\"]; assert w[\"x\"]==48 and w[\"layer\"]==\"desktop\", w'"
 check "place refuses a plugin without a desktop widget" "mkdir -p '$SB/cfg/ewe/plugins/bad.plugin' && cp '$SB/bad.plugin/'* '$SB/cfg/ewe/plugins/bad.plugin/' && ! $P place bad.plugin --x 1 2>/dev/null"
 
+# keybinds: declared in the manifest, generated for enabled plugins ----------
+mkdir -p "$SB/payload/plugins/ewe.demo"; cp "$SB/acme.clock/Widget.qml" "$SB/payload/plugins/ewe.demo/"
+cat > "$SB/payload/plugins/ewe.demo/manifest.json" <<'J'
+{"schemaVersion":1,"id":"ewe.demo","name":"Demo","version":"1.0.0","apiVersion":1,"kinds":["bar-widget"],"entryPoints":{"bar-widget":"Widget.qml"},
+ "keybinds":[{"combo":"SUPER + SHIFT + D","ipc":"ewe.demo toggle"}]}
+J
+check "a reserved id is refused from a plain directory" "! $P validate '$SB/payload/plugins/ewe.demo' >/dev/null 2>&1"
+check "…but accepted as first-party" "$P validate '$SB/payload/plugins/ewe.demo' --first-party >/dev/null 2>&1"
+r="$($P seed "$SB/payload/plugins" --no-restart)"
+check "seed: copied, enabled, source bundled" "echo '$r' | grep -q '\"seeded\": \[\"ewe.demo\"\]' && [ -d '$SB/cfg/ewe/plugins/ewe.demo' ] && grep -q '\"ewe.demo\" = \"bundled\"' '$SB/cfg/ewe/ewe.conf' && $P list --json | grep -q '\"bundled\": true'"
+check "keybinds file has the bind" "grep -q 'hl.bind(\"SUPER + SHIFT + D\", hl.dsp.exec_cmd(\"qs ipc call ewe.demo toggle\"))' '$SB/cfg/hypr/generated/plugin-keybinds.lua'"
+$P disable ewe.demo --no-restart >/dev/null
+check "disabled: the bind is gone" "! grep -q 'ewe.demo' '$SB/cfg/hypr/generated/plugin-keybinds.lua'"
+$P enable ewe.demo --no-restart >/dev/null
+sed -i 's/"version":"1.0.0"/"version":"1.1.0"/' "$SB/payload/plugins/ewe.demo/manifest.json"
+r="$($P seed "$SB/payload/plugins" --no-restart)"
+check "seed: a newer payload version refreshes the copy" "echo '$r' | grep -q '\"refreshed\": \[\"ewe.demo\"\]' && grep -q '1.1.0' '$SB/cfg/ewe/plugins/ewe.demo/manifest.json'"
+$P remove ewe.demo --yes >/dev/null
+check "remove: bundled copy deleted and remembered" "[ ! -e '$SB/cfg/ewe/plugins/ewe.demo' ] && grep -q 'removed = \[\"ewe.demo\"\]' '$SB/cfg/ewe/ewe.conf'"
+r="$($P seed "$SB/payload/plugins" --no-restart)"
+check "seed: a removed plugin stays removed" "echo '$r' | grep -q 'removed by the user' && [ ! -e '$SB/cfg/ewe/plugins/ewe.demo' ]"
+r="$($P seed "$SB/payload/plugins" --no-restart --restore ewe.demo)"
+check "seed --restore brings it back" "echo '$r' | grep -q '\"seeded\": \[\"ewe.demo\"\]'"
+$P remove ewe.demo --yes >/dev/null
+
 # remove on a linked working copy only unlinks ----------------------------------
 $P remove acme.clock --yes >/dev/null
 check "remove: link gone, working copy intact" "[ ! -e '$SB/cfg/ewe/plugins/acme.clock' ] && [ -f '$SB/acme.clock/manifest.json' ]"

@@ -26,7 +26,8 @@
 **ewe** *(the sheep, [juː])* is an Arch-based **operating system** — and this repo
 is the layer you actually look at: the desktop environment. **Hyprland** (Wayland
 compositor, Lua-configured) with a **Quickshell** QML shell — bar, dock, launcher,
-notifications, control centre, lock, OSD, clipboard history — plus the greeter, a
+notifications, control centre, lock, OSD, three bundled plugins (clipboard
+history, screenshots, password fill) — plus the greeter, a
 silent Plymouth boot, the CLI tools, and the `ewe` package that installs the lot.
 
 > **Most people don't want this repo — they want the ISO.**

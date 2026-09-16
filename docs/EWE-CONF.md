@@ -183,8 +183,8 @@ sixteen colours come from the palette), Zathura and mpv all follow.
 
 `enabled` (bool) · `icon_size` (`"small"`/`"normal"`/`"large"`, relative to
 the theme's icon size) · `show` (table of indicator → bool: `sound mic wifi
-bluetooth battery power keyboard tray screenshot clipboard tiling`; a missing
-key means shown). `[desktop.theme].bar_opacity` (0–100) sets how solid the
+bluetooth battery power keyboard tray tiling`; a missing key means shown;
+the camera and scissors are plugins — hide them with `ewe-plugin disable`). `[desktop.theme].bar_opacity` (0–100) sets how solid the
 bar and dock are; below 100 the compositor blurs behind them.
 `[desktop.theme].app_blur` (bool) draws every window at 85 % with blur
 behind it (fullscreen stays opaque) — one material for terminal, browser,
@@ -249,13 +249,15 @@ the DE's own dispatchers stays in Lua territory.
 
 ### `[passwords]`
 
-The fill picker (`Super+P`, see the manual's **Passwords** section).
-`provider` — `auto` (default: the first installed of 1Password's `op`, `rbw`,
-`pass`), `1password`, `bitwarden` or `pass`. `press_enter` — press Enter
-after typing the password (default `false`; desktop apps vary).
-`type_delay_ms` — pause between typed keys (default 8; raise it for an app
-that drops characters). Per-app pins live in `passwords-apps.json` next to
-`ewe.conf`, not in it.
+The fill picker (`Super+P`, the bundled `ewe.passwords` plugin — see the
+manual's **Passwords** section). Its `provider` and `press_enter` are plugin
+settings (`[plugins.settings]."ewe.passwords"`, `ewe-plugin set`); this
+table is the fallback the plugin's `ewe-pass` reads when they are unset:
+`provider` — `auto` (default: the first installed of 1Password's `op`,
+`rbw`, `pass`), `1password`, `bitwarden` or `pass`; `press_enter` (default
+`false`); `type_delay_ms` — pause between typed keys (default 8; raise it
+for an app that drops characters). Per-app pins live in
+`passwords-apps.json` next to `ewe.conf`, not in it.
 
 ### `[apps]`
 
@@ -276,6 +278,7 @@ enabled = ["acme.weather"]
 
 [plugins.sources]
 "acme.weather" = "https://github.com/acme/ewe-weather.git"
+"ewe.clipboard" = "bundled"
 ```
 
 Written by `ewe-plugin` (through `ewe-conf`, like everything else). `enabled`
@@ -285,7 +288,13 @@ installed set — every plugin `ewe-plugin add` fetched, on or off, until
 them back (`"local"` marks one that came from a plain directory and cannot be). The
 plugins themselves live in `~/.config/ewe/plugins/<id>/`, outside the payload —
 they are code, not configuration, and never sync. Toggling a plugin restarts
-the shell; nothing else is regenerated.
+the shell and rewrites `generated/plugin-keybinds.lua` from the enabled
+plugins' manifest keybinds; nothing else is regenerated.
+
+`"bundled"` marks a first-party plugin the ewe package seeded (`ewe.clipboard`,
+`ewe.screenshot`, `ewe.passwords`). `removed = ["ewe.clipboard"]` lists the
+bundled ones you took away with `ewe-plugin remove`, so the next ewe update
+does not seed them again (`ewe-plugin seed --restore <id>` clears the entry).
 
 ### `[plugins.widgets]` and `[plugins.settings]`
 

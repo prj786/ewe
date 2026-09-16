@@ -68,7 +68,7 @@ if [ -x "$DEST/bin/ewe-conf" ]; then
     [ -x "$DEST/bin/ewe-auth" ] && ln -sf "$DEST/bin/ewe-auth" "$HOME/.local/bin/ewe-auth"
     [ -x "$DEST/bin/ewe-drive" ] && ln -sf "$DEST/bin/ewe-drive" "$HOME/.local/bin/ewe-drive"
     [ -x "$DEST/bin/ewe-plugin" ] && ln -sf "$DEST/bin/ewe-plugin" "$HOME/.local/bin/ewe-plugin"
-    [ -x "$DEST/bin/ewe-pass" ] && ln -sf "$DEST/bin/ewe-pass" "$HOME/.local/bin/ewe-pass"
+    rm -f "$HOME/.local/bin/ewe-pass" 2>/dev/null || true   # 0.21: ewe-pass lives inside the ewe.passwords plugin
     [ -x "$DEST/bin/ewe-globalshortcuts" ] && ln -sf "$DEST/bin/ewe-globalshortcuts" "$HOME/.local/bin/ewe-globalshortcuts"
     # first-party plugins (clipboard, screenshot, passwords…) ship in the
     # payload and are seeded into ~/.config/ewe/plugins — removable, and a

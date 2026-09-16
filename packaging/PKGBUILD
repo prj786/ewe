@@ -77,7 +77,7 @@ package() {
     # The payload: everything a user-side deploy or a system setup needs.
     # (.claude/.github are dev tooling; dist/ is build output and untracked.)
     install -d "$pkgdir/usr/share/ewe"
-    cp -a dotfiles systemd system packages phases lib templates docs bin \
+    cp -a dotfiles systemd system packages phases lib templates docs bin plugins \
           install.sh update.sh uninstall.sh VERSION VERSIONS README.md LICENSE \
           "$pkgdir/usr/share/ewe/"
 
@@ -101,6 +101,5 @@ package() {
     # third-party shell plugins: a git URL in, one config bit (docs/PLUGINS.md)
     install -Dm755 bin/ewe-plugin "$pkgdir/usr/bin/ewe-plugin"
     # the fill picker (Super+P) and the portal global-shortcut binder (docs/MANUAL.md "Passwords")
-    install -Dm755 bin/ewe-pass "$pkgdir/usr/bin/ewe-pass"
     install -Dm755 bin/ewe-globalshortcuts "$pkgdir/usr/bin/ewe-globalshortcuts"
 }

@@ -430,24 +430,9 @@ Scope {
                         }
                     }
 
-                    // screenshot (camera) — Left: region · Right: whole screen · Middle: a window
-                    StatusItem {
-                        visible: Globals.barShows("screenshot")
-                        glyph: Theme.icCamera        // camera
-                        onActivated: Quickshell.execDetached(["sh", "-c", "\"$HOME/.config/hypr/scripts/screenshot.sh\" region"])
-                        onSecondary: Quickshell.execDetached(["sh", "-c", "\"$HOME/.config/hypr/scripts/screenshot.sh\" full"])
-                        onTertiary:  Quickshell.execDetached(["sh", "-c", "\"$HOME/.config/hypr/scripts/screenshot.sh\" activewindow"])
-                    }
-
-                    // clipboard history + emoji picker (scissors) — opens its popup
-                    StatusItem {
-                        id: scissorsItem
-                        visible: Globals.barShows("clipboard")
-                        glyph: Theme.icClipboard        // scissors
-                        fg: Globals.clipboardOpen ? Theme.fg1 : Theme.fg2
-                        active: Globals.clipboardOpen
-                        onActivated: { Globals.clipAnchorX = scissorsItem.mapToItem(null, scissorsItem.width / 2, 0).x; Globals.clipboardOpen = !Globals.clipboardOpen }
-                    }
+                    // The camera and the scissors used to live here; since 0.21 they are
+                    // the ewe.screenshot and ewe.clipboard plugins' bar widgets (bundled,
+                    // removable), packed by BarPluginSlots above like any plugin.
 
                     // tiling ⇄ floating — the icon IS the state (grid = tiling,
                     // stacked windows = floating). Globals.setTiling goes
@@ -537,7 +522,7 @@ Scope {
                     // thin separator between the action buttons and the control centre —
                     // only while at least one of them is shown
                     Rectangle {
-                        visible: Globals.barShows("screenshot") || Globals.barShows("clipboard") || Globals.barShows("tiling") || Globals.barShows("keyboard")
+                        visible: Globals.barShows("tiling") || Globals.barShows("keyboard")
                         anchors.verticalCenter: parent.verticalCenter; width: 1; height: 13; color: Theme.fg2; opacity: 0.25
                     }
 
