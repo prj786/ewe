@@ -169,7 +169,20 @@ phase_userconfig() {
 'Name=com.nextcloudgmbh.Nextcloud' \
 'Exec=/bin/true' \
 > '$HOME/.local/share/dbus-1/services/com.nextcloudgmbh.Nextcloud.service'"
-        run systemctl --user mask com.nextcloud.desktopclient.nextcloud.service 2>/dev/null || true
+        # `systemctl --user mask` needs a running user manager, which the
+        # installer (and a first boot's early phases) does not have — on such
+        # machines the unit stayed merely "disabled; preset: enabled" and a
+        # later preset run started the client. The mask IS a symlink to
+        # /dev/null in the user unit dir; make it by hand, unconditionally.
+        run mkdir -p "$HOME/.config/systemd/user"
+        run ln -sfn /dev/null "$HOME/.config/systemd/user/com.nextcloud.desktopclient.nextcloud.service"
+        run systemctl --user daemon-reload 2>/dev/null || true
+        # the client's own "launch on system startup" entry (it writes one the
+        # first time it runs): hide it from any XDG-autostart runner too
+        run mkdir -p "$HOME/.config/autostart"
+        run sh -c "printf '%s\n' '[Desktop Entry]' 'Type=Application' 'Name=Nextcloud' 'Hidden=true' \
+'# ewe: the Nextcloud desktop client is not part of ewe (ewe-sync syncs)' \
+> '$HOME/.config/autostart/Nextcloud.desktop'"
         ok "nextcloud desktop client neutralised (nextcloudcmd kept for ewe-sync)"
     fi
 

@@ -258,11 +258,16 @@ QtObject {
     // read as inset without floating. Clamped so the compact bar (30px) keeps
     // the 22px pill it already had rather than shrinking.
     readonly property int barItemHeight: Math.max(22, barHeight - 10)
-    readonly property int barItemSpacing: 6
-    // the system tray's rhythm — 16 px app icons, 9 px apart; plugins' bar
-    // widgets sit in the same row and should size themselves to trayIconPx
-    readonly property int trayIconPx:      16
-    readonly property int trayItemSpacing: 9
+    // ONE rhythm for every icon on the bar — status glyphs, tray apps, the
+    // tiling switch, Komble, plugin widgets: a barIconPx glyph centred in a
+    // barCellPx cell, barItemSpacing between cells. Hover pills are drawn
+    // wider than the cell (they may reach into the gap; they never reach
+    // the neighbour's glyph). trayIconPx / trayItemSpacing are the same
+    // numbers under the names the plugin contract uses.
+    readonly property int barItemSpacing: 8
+    readonly property int barCellPx:       barIconPx + 2
+    readonly property int trayIconPx:      barIconPx
+    readonly property int trayItemSpacing: barItemSpacing
     // Horizontal padding inside that pill. A glyph is narrow, so 14px total
     // made the highlight barely wider than the icon itself.
     readonly property int barItemPad: 10

@@ -53,6 +53,19 @@ fi
 # Polkit authentication agent is now Quickshell's own (Auth.qml) — no
 # lxqt-policykit-agent / polkit-gnome (only one agent may register per session).
 
+# ── No Nextcloud DESKTOP client — ewe-sync is the sync app (RFC-006). The
+# package is here only for nextcloudcmd. Phase 60 masks the client's user
+# unit and its D-Bus activation, but a machine set up before that fix, or
+# one where the client was once launched by hand ("launch on startup"),
+# still has it running with its own tray cloud and a sync every few seconds.
+# Stop it at every login; the mask symlink keeps it from coming back.
+if [ -x /usr/bin/nextcloud ]; then
+    systemctl --user stop com.nextcloud.desktopclient.nextcloud.service >/dev/null 2>&1 || true
+    [ -e "$HOME/.config/systemd/user/com.nextcloud.desktopclient.nextcloud.service" ] \
+        || ln -sfn /dev/null "$HOME/.config/systemd/user/com.nextcloud.desktopclient.nextcloud.service" 2>/dev/null || true
+    pkill -x nextcloud >/dev/null 2>&1 || true
+fi
+
 # ── Wallpaper (swaybg) ───────────────────────────────────────────────────────
 "$HOME/.config/hypr/scripts/wallpaper.sh" >/dev/null 2>&1 &
 
