@@ -48,6 +48,15 @@ QtObject {
     // bar-widget entries of enabled, valid plugins, for BarPluginSlots:
     // [{ id, name, entry (absolute path), barWidget: { defaultSection } }]
     property var barWidgets: []
+    // desktop-widget entries, for DesktopWidgets: [{ id, name, entry }] —
+    // WHERE each sits is `placement[id]` ({x, y, output, layer, visible}),
+    // kept apart so a drag or `ewe-plugin place` moves it without a reload
+    property var desktopWidgets: []
+    property var placement: ({})
+    // id -> {key: value}: what the plugin declared in manifest.json under the
+    // user's values (ewe.conf plugins.settings.<id>). Handed to every entry
+    // point that has a `settings` property, live on `reload`.
+    property var settings: ({})
     property bool scanned: false
     // true when this start was the third inside a minute: nothing loaded
     property bool safeMode: false
@@ -65,6 +74,58 @@ QtObject {
         stderr: StdioCollector {
             onStreamFinished: { if (this.text.trim()) Log.warn("plugins", "ewe-plugin:", this.text.trim()) }
         }
+    }
+
+    // `qs ipc call plugins reload` — after `ewe-plugin place` / `set`: the
+    // placement and settings maps are re-read and pushed into the live
+    // instances. Enabling/disabling still restarts the shell (no hot reload).
+    function reload() { if (!host._reload.running) host._reload.running = true }
+    property Process _reload: Process {
+        command: [host.tool, "list", "--json"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                var j = null
+                try { j = JSON.parse(this.text) } catch (e) {}
+                if (!j || !Array.isArray(j.plugins)) return
+                var pl = {}, st = {}
+                for (var i = 0; i < j.plugins.length; i++) {
+                    var p = j.plugins[i]
+                    if (p.widget) pl[p.id] = p.widget
+                    st[p.id] = p.settings || {}
+                }
+                host.placement = pl
+                host.settings = st
+                for (var id in host.instances)
+                    for (var kind in host.instances[id]) host._giveSettings(host.instances[id][kind], id)
+                Log.debug("plugins", "reloaded placement + settings")
+            }
+        }
+    }
+    function _giveSettings(obj, id) {
+        if (obj && ("settings" in obj)) obj.settings = host.settings[id] || ({})
+    }
+    function settingsFor(id) { return host.settings[id] || ({}) }
+
+    // a drag in arrange mode, or a Komble control: remember in memory now
+    // (the widget follows the binding), persist through ewe-plugin, which
+    // pokes `reload` back at us — a no-op round trip
+    function placeWidget(id, x, y) {
+        var pl = Object.assign({}, host.placement)
+        pl[id] = Object.assign({}, pl[id] || {}, { x: Math.round(x), y: Math.round(y) })
+        host.placement = pl
+        Quickshell.execDetached([host.tool, "place", id, "--x", String(Math.round(x)), "--y", String(Math.round(y))])
+    }
+    function setWidgetLayer(id, layer) {
+        var pl = Object.assign({}, host.placement)
+        pl[id] = Object.assign({}, pl[id] || {}, { layer: layer })
+        host.placement = pl
+        Quickshell.execDetached([host.tool, "place", id, "--layer", layer])
+    }
+    function setWidgetVisible(id, on) {
+        var pl = Object.assign({}, host.placement)
+        pl[id] = Object.assign({}, pl[id] || {}, { visible: !!on })
+        host.placement = pl
+        Quickshell.execDetached([host.tool, "place", id, "--visible", on ? "on" : "off"])
     }
 
     function _onList(text) {
@@ -90,9 +151,11 @@ QtObject {
             host.loaded()
             return
         }
-        var inst = {}, widgets = [], n = 0
+        var inst = {}, widgets = [], desk = [], pl = {}, st = {}, n = 0
         for (var i = 0; i < j.plugins.length; i++) {
             var p = j.plugins[i]
+            if (p.widget) pl[p.id] = p.widget
+            st[p.id] = p.settings || {}
             if (!p.enabled) continue
             if (!p.installed) {
                 Log.warn("plugins", p.id, "is enabled but not installed" + (p.source ? " — ewe-plugin add " + p.source : ""))
@@ -111,8 +174,13 @@ QtObject {
                     widgets.push({ id: p.id, name: p.name, entry: path, barWidget: p.barWidget || {} })
                     continue
                 }
+                if (kind === "desktop-widget") {
+                    desk.push({ id: p.id, name: p.name, entry: path })
+                    continue
+                }
                 var obj = host._instantiate(p.id, kind, path)
                 if (obj) {
+                    if ("settings" in obj) obj.settings = st[p.id] || ({})
                     if (!inst[p.id]) inst[p.id] = {}
                     inst[p.id][kind] = obj
                     n++
@@ -120,7 +188,10 @@ QtObject {
             }
         }
         host.instances = inst
+        host.placement = pl
+        host.settings = st
         host.barWidgets = widgets
+        host.desktopWidgets = desk
         Log.info("plugins", n + " entry point(s) loaded from " + Object.keys(inst).length + " plugin(s)")
         host._settle.start()
         host.loaded()
@@ -165,6 +236,11 @@ QtObject {
             var w = host.barWidgets[i]
             if (!kinds[w.id]) kinds[w.id] = []
             kinds[w.id].push("bar-widget")
+        }
+        for (var d = 0; d < host.desktopWidgets.length; d++) {
+            var dw = host.desktopWidgets[d]
+            if (!kinds[dw.id]) kinds[dw.id] = []
+            kinds[dw.id].push("desktop-widget")
         }
         var out = []
         for (var k in kinds) out.push({ id: k, kinds: kinds[k] })

@@ -65,6 +65,17 @@ Scope {
         function list(): string { return JSON.stringify(PluginHost.summary()) }
         function apiVersion(): int { return PluginHost.apiVersion }
         function safeMode(): bool { return PluginHost.safeMode }
+        // after `ewe-plugin place` / `set`: placement + settings, live
+        function reload(): void { PluginHost.reload() }
+    }
+
+    // desktop widgets (DesktopWidgets.qml): Super+Shift+W toggles arrange
+    // mode — drag to move, a frame with sticky/hide on each widget, Esc done
+    IpcHandler {
+        target: "widgets"
+        function arrange(): void { Globals.widgetsArrange = !Globals.widgetsArrange }
+        function done(): void { Globals.widgetsArrange = false }
+        function list(): string { return JSON.stringify(PluginHost.desktopWidgets.map(function (w) { return { id: w.id, name: w.name, placement: PluginHost.placement[w.id] || null } })) }
     }
 
     IpcHandler {

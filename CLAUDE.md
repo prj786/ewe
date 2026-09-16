@@ -141,6 +141,18 @@ registered in `qmldir`. Two singletons tie everything together:
   `generated/globalshortcuts.lua` + live `hyprctl eval`; `scripts/clip-store.sh`
   keeps copied passwords out of cliphist. Tests: `tests/ewe-pass-test.sh`,
   `tests/ewe-globalshortcuts-test.sh` (fake CLIs, no vault, no compositor).
+- **Plugin kit (2026-09-16):** `ewe-plugin create|dev|place|set|get`;
+  manifest v1 gains kind `desktop-widget`, `desktopWidget` defaults and a
+  typed `settings` schema (5 types, validated). User side in ewe.conf
+  `[plugins.widgets]` / `[plugins.settings]` keyed by quoted id (dots!) —
+  always written as whole tables. `DesktopWidgets.qml` = two full-output
+  layer windows per screen (Bottom = desktop, Top = sticky), input mask =
+  union of widget rects, arrange mode via `Globals.widgetsArrange`
+  (Super+Shift+W, IPC `widgets`). `PluginHost.reload()` (IPC
+  `plugins reload`) re-reads placement + settings without a restart and
+  pushes `settings` into every instance that declares the property. Inside
+  a Scope use `Variants`, never `Repeater` (needs an Item parent — silently
+  creates nothing). Test: `tests/ewe-plugin-test.sh`.
 - **`AudioState.qml`** — where sound goes (headset / headphones / external /
   built-in, from the default sink's PipeWire properties), the level, whether an
   app has the mic open (a link from the default source to a stream — Quickshell

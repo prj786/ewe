@@ -82,7 +82,12 @@ import tomllib
 
 API_VERSION = 1
 SCHEMA = 1
-KINDS = ("service", "panel", "overlay", "menu", "bar-widget")
+KINDS = ("service", "panel", "overlay", "menu", "bar-widget", "desktop-widget")
+# a plugin's declared options -- what Komble renders as a form and the shell
+# hands the plugin as `settings`; values live in ewe.conf plugins.settings.<id>
+SETTING_TYPES = ("bool", "int", "string", "choice", "color")
+SETTING_KEY_RE = re.compile(r"^[a-z][a-z0-9_]{0,31}$")
+WIDGET_LAYERS = ("desktop", "top")
 RESERVED_PREFIX = "ewe."
 ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,31}(\.[a-z0-9][a-z0-9_-]{0,31})+$")
 SOURCE_RE = re.compile(r"^(https?://|git://|ssh://|git@|file://)")
@@ -128,6 +133,28 @@ def conf_state():
     enabled = [x for x in (p.get("enabled") or []) if isinstance(x, str)]
     sources = {k: v for k, v in (p.get("sources") or {}).items() if isinstance(v, str)}
     return enabled, sources
+
+
+def conf_table(dotted):
+    """A table out of ewe.conf, {} when absent (read directly, like conf_state)."""
+    try:
+        with open(CONF, "rb") as f:
+            doc = tomllib.load(f)
+    except (FileNotFoundError, tomllib.TOMLDecodeError):
+        return {}
+    node = doc
+    for part in dotted.split("."):
+        node = node.get(part) if isinstance(node, dict) else None
+        if node is None:
+            return {}
+    return node if isinstance(node, dict) else {}
+
+
+def poke_shell_reload():
+    """Placement and settings change LIVE: the host re-reads `list --json`
+    on this poke (PluginHost.reload) -- no shell restart."""
+    if shutil.which("qs"):
+        subprocess.run(["qs", "ipc", "call", "plugins", "reload"], capture_output=True, timeout=10)
 
 
 def conf_set(key, value):
@@ -226,7 +253,122 @@ def validate_manifest(d, m, expect_dirname=None):
         p.append("barWidget must be an object")
     elif isinstance(bw, dict) and "defaultSection" in bw and bw["defaultSection"] not in ("left", "center", "right"):
         p.append("barWidget.defaultSection must be left, center or right")
+    dw = m.get("desktopWidget")
+    if dw is not None and not isinstance(dw, dict):
+        p.append("desktopWidget must be an object")
+    elif isinstance(dw, dict):
+        for k in ("x", "y"):
+            if k in dw and (not isinstance(dw[k], (int, float)) or isinstance(dw[k], bool)):
+                p.append("desktopWidget.%s must be a number" % k)
+        if "layer" in dw and dw["layer"] not in WIDGET_LAYERS:
+            p.append("desktopWidget.layer must be desktop or top")
+    st = m.get("settings")
+    if st is not None and not isinstance(st, list):
+        p.append("settings must be a list of {key, type, default, label}")
+    elif isinstance(st, list):
+        seen = set()
+        for i, o in enumerate(st):
+            if not isinstance(o, dict):
+                p.append("settings[%d] must be an object" % i)
+                continue
+            key = o.get("key")
+            if not isinstance(key, str) or not SETTING_KEY_RE.match(key):
+                p.append("settings[%d].key must be lowercase [a-z0-9_] starting with a letter" % i)
+                continue
+            if key in seen:
+                p.append("settings.%s is declared twice" % key)
+            seen.add(key)
+            typ = o.get("type")
+            if typ not in SETTING_TYPES:
+                p.append("settings.%s.type must be one of %s" % (key, ", ".join(SETTING_TYPES)))
+                continue
+            if "default" not in o:
+                p.append("settings.%s needs a default" % key)
+            elif setting_check(o, o["default"]) is not None:
+                p.append("settings.%s.default: %s" % (key, setting_check(o, o["default"])))
+            if typ == "choice" and not (isinstance(o.get("choices"), list) and o["choices"]):
+                p.append("settings.%s (choice) needs a non-empty choices list" % key)
     return p
+
+
+def setting_check(spec, value):
+    """None when `value` fits `spec`, else the reason."""
+    t = spec.get("type")
+    if t == "bool":
+        return None if isinstance(value, bool) else "must be true or false"
+    if t == "int":
+        if not isinstance(value, int) or isinstance(value, bool):
+            return "must be an integer"
+        lo, hi = spec.get("min"), spec.get("max")
+        if isinstance(lo, (int, float)) and value < lo:
+            return "must be at least %s" % lo
+        if isinstance(hi, (int, float)) and value > hi:
+            return "must be at most %s" % hi
+        return None
+    if t == "string":
+        return None if isinstance(value, str) else "must be a string"
+    if t == "choice":
+        return None if value in (spec.get("choices") or []) else "must be one of %s" % ", ".join(map(str, spec.get("choices") or []))
+    if t == "color":
+        ok = isinstance(value, str) and re.fullmatch(r"#[0-9a-fA-F]{6}", value)
+        return None if ok else "must be a #rrggbb colour"
+    return "unknown type"
+
+
+def setting_coerce(spec, raw):
+    """A CLI string -> the typed value the spec wants (or die)."""
+    t = spec.get("type")
+    if t == "bool":
+        if raw.lower() in ("1", "true", "yes", "on"):
+            return True
+        if raw.lower() in ("0", "false", "no", "off"):
+            return False
+        die("%s: must be true or false" % spec["key"])
+    if t == "int":
+        try:
+            v = int(raw)
+        except ValueError:
+            die("%s: must be an integer" % spec["key"])
+        why = setting_check(spec, v)
+        if why:
+            die("%s: %s" % (spec["key"], why))
+        return v
+    why = setting_check(spec, raw)
+    if why:
+        die("%s: %s" % (spec["key"], why))
+    return raw
+
+
+def effective_settings(m, pid):
+    """{key: value} -- the manifest's defaults under the user's values (only
+    values that still fit the schema count; a stale one falls back)."""
+    out = {}
+    vals = conf_table("plugins.settings").get(pid) or {}
+    for o in (m.get("settings") or []) if isinstance(m.get("settings"), list) else []:
+        if not isinstance(o, dict) or not isinstance(o.get("key"), str):
+            continue
+        v = vals.get(o["key"], o.get("default"))
+        out[o["key"]] = v if setting_check(o, v) is None else o.get("default")
+    return out
+
+
+def effective_widget(m, pid):
+    """Where a desktop widget sits: the user's placement over the manifest's
+    defaults. {x, y, output, layer, visible}"""
+    dw = m.get("desktopWidget") if isinstance(m.get("desktopWidget"), dict) else {}
+    user = conf_table("plugins.widgets").get(pid) or {}
+    w = {"x": dw.get("x", 48), "y": dw.get("y", 64), "output": dw.get("output", ""),
+         "layer": dw.get("layer", "desktop"), "visible": True}
+    for k in ("x", "y"):
+        if isinstance(user.get(k), (int, float)) and not isinstance(user.get(k), bool):
+            w[k] = user[k]
+    if isinstance(user.get("output"), str):
+        w["output"] = user["output"]
+    if user.get("layer") in WIDGET_LAYERS:
+        w["layer"] = user["layer"]
+    if isinstance(user.get("visible"), bool):
+        w["visible"] = user["visible"]
+    return w
 
 
 def describe(d, dirname=None, enabled=(), sources=None):
@@ -254,6 +396,12 @@ def describe(d, dirname=None, enabled=(), sources=None):
         "kinds": m.get("kinds") if isinstance(m.get("kinds"), list) else [],
         "entryPoints": m.get("entryPoints") if isinstance(m.get("entryPoints"), dict) else {},
         "barWidget": m.get("barWidget") if isinstance(m.get("barWidget"), dict) else None,
+        # desktop widgets: where it sits (user placement over the manifest's
+        # defaults); settings: the declared schema and the effective values
+        "widget": effective_widget(m, pid) if "desktop-widget" in (m.get("kinds") or []) else None,
+        "settingsSchema": m.get("settings") if isinstance(m.get("settings"), list) else [],
+        "settings": effective_settings(m, pid),
+        "linked": os.path.islink(d.rstrip("/")),
         "enabled": pid in enabled,
         "valid": not problems,
         "problems": problems,
@@ -654,7 +802,11 @@ def cmd_remove(args):
     pid = e["id"]
     enabled, sources = conf_state()
     if e["installed"]:
-        if e["git"]:
+        if e.get("linked"):
+            # `ewe-plugin dev` linked a working copy: forget the link, the code stays
+            os.unlink(e["dir"].rstrip("/"))
+            say("unlinked %s (your working copy is untouched)" % e["dir"])
+        elif e["git"]:
             if not confirm("Delete %s (a git clone; re-add it later from %s)?" % (e["dir"], e["source"] or "its source"), yes):
                 die("cancelled", 1)
             shutil.rmtree(e["dir"])
@@ -694,6 +846,372 @@ def cmd_validate(args):
     sys.exit(1 if problems else 0)
 
 
+# ── create / dev: the plugin author's side ────────────────────────────────────
+
+TEMPLATES = {
+    "bar-widget": '''import QtQuick
+import qs
+
+// {name} -- bar widget. An Item with an IMPLICIT size: the bar packs it like
+// any built-in indicator. Draw with the shell's Theme roles; react to
+// `settings` (the values of what manifest.json declares).
+Item {{
+    id: root
+    property var settings: ({{}})            // filled by ewe from ewe.conf plugins.settings.{id}
+    implicitWidth: row.implicitWidth + 2 * Theme.barItemPad
+    implicitHeight: Theme.barItemHeight
+
+    Rectangle {{
+        anchors.fill: parent; radius: Theme.radiusControl
+        color: ma.containsMouse ? Theme.subtleHover : "transparent"
+        Behavior on color {{ ColorAnimation {{ duration: 130 }} }}
+    }}
+    Row {{
+        id: row
+        anchors.centerIn: parent; spacing: 6
+        Text {{ anchors.verticalCenter: parent.verticalCenter; text: "\\ue151"; font.family: Theme.fontIcons; font.pixelSize: Theme.barIconPx; color: Theme.fg2 }}
+        Text {{ anchors.verticalCenter: parent.verticalCenter; text: root.settings.label || "{name}"; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; color: Theme.fg1 }}
+    }}
+    MouseArea {{
+        id: ma; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+        onClicked: Log.info("{id}", "bar widget clicked")
+    }}
+}}
+''',
+    "desktop-widget": '''import QtQuick
+import qs
+
+// {name} -- desktop widget. A sized Item ewe places on the desktop (or above
+// windows when the user makes it sticky). The user moves it in arrange
+// mode (Super+Shift+W); you draw it. `settings` carries your declared
+// options. This one is a clock: replace the body, keep the shape.
+Item {{
+    id: root
+    property var settings: ({{}})            // from ewe.conf plugins.settings.{id}
+    implicitWidth: 260
+    implicitHeight: 96
+
+    property string now: ""
+    Timer {{
+        interval: 1000; running: true; repeat: true; triggeredOnStart: true
+        onTriggered: root.now = Qt.formatTime(new Date(), root.settings.seconds ? "hh:mm:ss" : "hh:mm")
+    }}
+    Rectangle {{
+        anchors.fill: parent; radius: Theme.radiusInner
+        color: Qt.rgba(Theme.bg1.r, Theme.bg1.g, Theme.bg1.b, 0.72)
+    }}
+    Column {{
+        anchors.centerIn: parent; spacing: 2
+        Text {{ text: root.now; font.family: Theme.fontText; font.pixelSize: 40; font.weight: Font.DemiBold; color: Theme.fg1; anchors.horizontalCenter: parent.horizontalCenter }}
+        Text {{ text: Qt.formatDate(new Date(), "dddd d MMMM"); font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; color: Theme.fg3; anchors.horizontalCenter: parent.horizontalCenter }}
+    }}
+}}
+''',
+    "panel": '''import QtQuick
+import Quickshell
+import Quickshell.Wayland
+import Quickshell.Io
+import qs
+
+// {name} -- a panel: your own window, toggled over IPC
+//     qs ipc call {id} toggle      (bind it: ewe-conf set desktop.keybinds ...)
+Scope {{
+    id: root
+    property bool open: false
+    property var settings: ({{}})
+
+    IpcHandler {{
+        target: "{id}"
+        function toggle(): void {{ root.open = !root.open }}
+        function hide(): void {{ root.open = false }}
+    }}
+    PanelWindow {{
+        visible: root.open
+        anchors {{ right: true; bottom: true }}
+        margins {{ right: 16; bottom: 16 }}
+        implicitWidth: 320
+        implicitHeight: 200
+        color: "transparent"
+        WlrLayershell.namespace: "quickshell:{id}"
+        WlrLayershell.layer: WlrLayer.Overlay
+        WlrLayershell.keyboardFocus: root.open ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+        Rectangle {{
+            anchors.fill: parent; radius: Theme.radius; color: Theme.panel
+            Text {{ anchors.centerIn: parent; text: "{name}"; font.family: Theme.fontText; font.pixelSize: Theme.fsBody; color: Theme.fg1 }}
+        }}
+    }}
+}}
+''',
+    "service": '''import QtQuick
+import qs
+
+// {name} -- a headless service: timers, processes, D-Bus, an IpcHandler.
+QtObject {{
+    property var settings: ({{}})
+    Component.onCompleted: Log.info("{id}", "service started")
+}}
+''',
+}
+TEMPLATES["overlay"] = TEMPLATES["panel"]
+TEMPLATES["menu"] = TEMPLATES["panel"]
+ENTRY_FILE = {"bar-widget": "Widget.qml", "desktop-widget": "DesktopWidget.qml", "panel": "Panel.qml",
+              "overlay": "Overlay.qml", "menu": "Menu.qml", "service": "Service.qml"}
+
+README_TPL = '''# {name}
+
+An [ewe](https://github.com/prj786/ewe) desktop plugin (`{id}`).
+
+## What ewe does, what you do
+
+You draw and behave: every `.qml` in this repo is yours. ewe decides where
+it lives and what the user can change about it:
+
+- **bar-widget**: ewe puts it in the top bar (left / centre / right; the
+  user can hide it in Settings -> Top bar). It must be an `Item` with an
+  implicit size.
+- **desktop-widget**: ewe places it on the desktop; the user moves it
+  (Super+Shift+W, then drag), makes it sticky (above windows) or hides it.
+- **panel / overlay / menu**: your own window, opened over IPC
+  (`qs ipc call {id} toggle`), bindable to a key.
+- **settings** in `manifest.json` become a form in Komble and arrive in
+  every entry point as `settings` ({{key: value}}).
+
+`import qs` gives you the shell's `Theme` roles (colours, radii, fonts),
+`Globals` (accent, dnd, battery...) and `Log`. See docs/PLUGINS.md in ewe.
+
+## Develop
+
+    ewe-plugin dev .        # link this folder, enable, restart the shell, follow its log
+    ewe-plugin validate .   # the manifest and entry points
+
+## Ship
+
+Push this repo anywhere git can reach; users install it with
+
+    ewe-plugin add {url_hint} --enable
+
+or from Komble -> Plugins.
+'''
+
+LICENSE_MIT = '''MIT License
+
+Copyright (c) {year} {author}
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+'''
+
+
+def _opt(args, name, default=None):
+    if name in args:
+        i = args.index(name)
+        if i + 1 < len(args):
+            return args[i + 1]
+    for a in args:
+        if a.startswith(name + "="):
+            return a[len(name) + 1:]
+    return default
+
+
+def cmd_create(args):
+    rest = [a for a in args if not a.startswith("--")]
+    for flag in ("--name", "--kinds", "--section", "--dir", "--author"):
+        v = _opt(args, flag)
+        if v is not None and v in rest:
+            rest.remove(v)
+    if len(rest) != 1:
+        die("usage: ewe-plugin create <namespace.name> [--name \"Title\"] [--kinds bar-widget,panel] [--section right] [--dir PATH] [--no-git]", 2)
+    pid = rest[0]
+    if not ID_RE.match(pid) or pid.startswith(RESERVED_PREFIX):
+        die("id must be <namespace>.<name> in lowercase [a-z0-9_-], not under \"ewe.\" (e.g. acme.weather)")
+    kinds = [k.strip() for k in (_opt(args, "--kinds") or "bar-widget").split(",") if k.strip()]
+    for k in kinds:
+        if k not in KINDS:
+            die("unknown kind \"%s\" (one of: %s)" % (k, ", ".join(KINDS)))
+    name = _opt(args, "--name") or pid.split(".")[-1].replace("-", " ").replace("_", " ").title()
+    section = _opt(args, "--section") or "right"
+    if section not in ("left", "center", "right"):
+        die("--section must be left, center or right")
+    dest = os.path.abspath(_opt(args, "--dir") or os.path.join(os.getcwd(), pid))
+    if os.path.exists(dest) and os.listdir(dest):
+        die("%s exists and is not empty" % dest)
+    author = _opt(args, "--author")
+    if not author and shutil.which("git"):
+        r = subprocess.run(["git", "config", "--get", "user.name"], capture_output=True, text=True)
+        author = r.stdout.strip() or None
+    author = author or os.environ.get("USER", "you")
+    os.makedirs(dest, exist_ok=True)
+    manifest = {"schemaVersion": SCHEMA, "id": pid, "name": name, "version": "0.1.0",
+                "apiVersion": API_VERSION, "description": "%s for the ewe desktop." % name,
+                "author": author, "kinds": kinds,
+                "entryPoints": {k: ENTRY_FILE[k] for k in kinds}}
+    if "bar-widget" in kinds:
+        manifest["barWidget"] = {"defaultSection": section}
+    if "desktop-widget" in kinds:
+        manifest["desktopWidget"] = {"x": 48, "y": 64, "layer": "desktop"}
+        manifest["settings"] = [{"key": "seconds", "type": "bool", "default": False, "label": "Show seconds"}]
+    else:
+        manifest["settings"] = [{"key": "label", "type": "string", "default": name, "label": "Label"}]
+    with open(os.path.join(dest, "manifest.json"), "w") as f:
+        json.dump(manifest, f, indent=2)
+        f.write("\n")
+    for k in kinds:
+        with open(os.path.join(dest, ENTRY_FILE[k]), "w") as f:
+            f.write(TEMPLATES[k].format(id=pid, name=name))
+    with open(os.path.join(dest, "README.md"), "w") as f:
+        f.write(README_TPL.format(id=pid, name=name, url_hint="https://github.com/%s/%s.git" % (pid.split(".")[0], pid.split(".")[-1])))
+    with open(os.path.join(dest, "LICENSE"), "w") as f:
+        f.write(LICENSE_MIT.format(year=time.strftime("%Y"), author=author))
+    with open(os.path.join(dest, ".gitignore"), "w") as f:
+        f.write("*.bak.*\n.DS_Store\n")
+    m, problems = read_manifest(dest)
+    problems = validate_manifest(dest, m, expect_dirname=None) if m else problems
+    if problems:
+        die("the scaffold did not validate (a bug):\n" + "".join("  ! %s\n" % x for x in problems))
+    if "--no-git" not in args and shutil.which("git"):
+        subprocess.run(["git", "init", "-q", "-b", "main"], cwd=dest, capture_output=True)
+        subprocess.run(["git", "add", "-A"], cwd=dest, capture_output=True)
+        # a machine with no git identity yet still gets its first commit
+        ident = []
+        if not subprocess.run(["git", "config", "--get", "user.email"], cwd=dest, capture_output=True, text=True).stdout.strip():
+            ident = ["-c", "user.name=%s" % author, "-c", "user.email=%s@localhost" % re.sub(r"[^a-z0-9]+", "-", author.lower()).strip("-")]
+        subprocess.run(["git", *ident, "commit", "-q", "-m", "%s: ewe plugin scaffold" % name], cwd=dest, capture_output=True)
+    say("created %s (%s) -> %s" % (pid, ", ".join(kinds), dest))
+    say("  next:  cd %s && ewe-plugin dev .     # link it, enable it, watch the log" % dest)
+    say("  ship:  push this repo, then anyone can `ewe-plugin add <url> --enable`")
+
+
+def cmd_dev(args):
+    rest = [a for a in args if not a.startswith("--")]
+    src = os.path.abspath(rest[0] if rest else ".")
+    m, problems = read_manifest(src)
+    if m is not None:
+        problems = validate_manifest(src, m, expect_dirname=None)
+    if problems:
+        die("not a valid ewe plugin:\n" + "".join("  ! %s\n" % x for x in problems).rstrip())
+    pid = m["id"]
+    os.makedirs(PLUGINS_DIR, exist_ok=True)
+    dest = os.path.join(PLUGINS_DIR, pid)
+    if os.path.islink(dest):
+        if os.path.realpath(dest) != os.path.realpath(src):
+            os.unlink(dest)
+            os.symlink(src, dest)
+    elif os.path.exists(dest):
+        die("\"%s\" is installed as a real copy at %s -- `ewe-plugin remove %s` first" % (pid, dest, pid))
+    else:
+        os.symlink(src, dest)          # a LINK: edits in your folder are what the shell loads
+    enabled, sources = conf_state()
+    sources[pid] = "local"
+    set_sources(sources)
+    if pid not in enabled:
+        set_enabled(enabled + [pid])
+    say("linked %s -> %s, enabled; restarting the shell..." % (dest, src))
+    restart_shell()
+    if "--no-follow" in args:
+        return
+    say("following the shell's log for \"%s\" (Ctrl-C stops following; the plugin stays enabled)" % pid)
+    try:
+        subprocess.run(["sh", "-c", "journalctl --user -u %s -f -n 30 2>/dev/null | grep --line-buffered -iE 'plugins|%s|error|warn'"
+                        % (SHELL_UNIT, re.escape(pid))])
+    except KeyboardInterrupt:
+        say()
+
+
+# ── place / set / get: what ewe decides for a plugin ──────────────────────────
+
+def cmd_place(args):
+    rest = [a for a in args if not a.startswith("--")]
+    for flag in ("--x", "--y", "--output", "--layer", "--visible"):
+        v = _opt(args, flag)
+        if v is not None and v in rest:
+            rest.remove(v)
+    if len(rest) != 1:
+        die("usage: ewe-plugin place <id> [--x N] [--y N] [--output NAME] [--layer desktop|top] [--visible on|off] [--reset]", 2)
+    e = find(rest[0])
+    pid = e["id"]
+    if "desktop-widget" not in (e.get("kinds") or []):
+        die("%s has no desktop-widget entry point -- only desktop widgets are placed" % pid)
+    table = conf_table("plugins.widgets")
+    cur = dict(table.get(pid) or {})
+    if "--reset" in args:
+        cur = {}
+    for k in ("x", "y"):
+        v = _opt(args, "--" + k)
+        if v is not None:
+            try:
+                cur[k] = int(float(v))
+            except ValueError:
+                die("--%s must be a number" % k)
+    v = _opt(args, "--output")
+    if v is not None:
+        cur["output"] = v
+    v = _opt(args, "--layer")
+    if v is not None:
+        if v not in WIDGET_LAYERS:
+            die("--layer must be desktop or top")
+        cur["layer"] = v
+    v = _opt(args, "--visible")
+    if v is not None:
+        cur["visible"] = v.lower() in ("1", "true", "yes", "on")
+    # the whole table, not a dotted per-id key: an id has a dot in it, and
+    # ewe-conf would split "plugins.widgets.acme.clock" into nested tables
+    table[pid] = cur
+    conf_set("plugins.widgets", table)
+    poke_shell_reload()
+    print(json.dumps({"ok": True, "id": pid, "widget": effective_widget(read_manifest(e["dir"])[0] or {}, pid)}))
+
+
+def cmd_set(args):
+    rest = [a for a in args if not a.startswith("--")]
+    if len(rest) != 3:
+        die("usage: ewe-plugin set <id> <key> <value>", 2)
+    e = find(rest[0])
+    pid = e["id"]
+    m, _ = read_manifest(e["dir"])
+    schema = {o["key"]: o for o in (m or {}).get("settings", []) if isinstance(o, dict) and isinstance(o.get("key"), str)}
+    if rest[1] not in schema:
+        die("%s declares no setting \"%s\" (has: %s)" % (pid, rest[1], ", ".join(schema) or "none"))
+    val = setting_coerce(schema[rest[1]], rest[2])
+    table = conf_table("plugins.settings")
+    cur = dict(table.get(pid) or {})
+    cur[rest[1]] = val
+    table[pid] = cur
+    conf_set("plugins.settings", table)     # whole table: ids carry a dot
+    poke_shell_reload()
+    print(json.dumps({"ok": True, "id": pid, "settings": effective_settings(m or {}, pid)}))
+
+
+def cmd_get(args):
+    rest = [a for a in args if not a.startswith("--")]
+    if not rest:
+        die("usage: ewe-plugin get <id> [key]", 2)
+    e = find(rest[0])
+    m, _ = read_manifest(e["dir"])
+    vals = effective_settings(m or {}, e["id"])
+    if len(rest) > 1:
+        if rest[1] not in vals:
+            die("%s has no setting \"%s\"" % (e["id"], rest[1]))
+        print(json.dumps(vals[rest[1]]))
+    else:
+        print(json.dumps({"ok": True, "id": e["id"], "settings": vals,
+                          "schema": (m or {}).get("settings", []), "widget": e.get("widget")}))
+
+
 def main(argv):
     if not argv or argv[0] in ("-h", "--help", "help"):
         print(__doc__.strip())
@@ -701,7 +1219,9 @@ def main(argv):
     verb, args = argv[0], argv[1:]
     verbs = {"add": cmd_add, "list": cmd_list, "info": cmd_info, "enable": cmd_enable,
              "disable": cmd_disable, "update": cmd_update, "remove": cmd_remove,
-             "validate": cmd_validate, "restore": cmd_restore}
+             "validate": cmd_validate, "restore": cmd_restore,
+             "create": cmd_create, "new": cmd_create, "dev": cmd_dev,
+             "place": cmd_place, "set": cmd_set, "get": cmd_get}
     if verb == "path":
         print(PLUGINS_DIR)
         return 0
