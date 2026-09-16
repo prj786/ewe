@@ -28,6 +28,19 @@ QtObject {
     // ── pair/connect bookkeeping (Quick Settings shows these) ───────────────
     property string pairingAddress: ""   // a pair() we started and are waiting on
     property string busyAddress: ""      // a connect() in flight
+    // bluez answers a connect within its own 60 s timeout — normally. If the
+    // bridge dies mid-call no "connect" event ever comes and the row would spin
+    // for the rest of the session; 45 s is past every real headset.
+    onBusyAddressChanged: { if (busyAddress === "") _busyTimeout.stop(); else _busyTimeout.restart() }
+    property Timer _busyTimeout: Timer {
+        interval: 45000
+        onTriggered: {
+            if (bt.busyAddress === "") return
+            bt.lastError = "Connection timed out"; bt.lastErrorAddress = bt.busyAddress
+            Log.warn("bt-agent", "connect", bt.busyAddress, "timed out")
+            bt.busyAddress = ""
+        }
+    }
     property string lastError: ""        // last failure, human text ("" = none)
     property string lastErrorAddress: ""
 

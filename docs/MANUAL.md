@@ -309,6 +309,47 @@ ewe's **Cast** tile to mirror the whole desktop, then play the video normally �
 picture and sound both go over Miracast. (A real Chromecast/Google TV *does*
 answer Stremio's cast, and also shows up under ewe's Chromecast path.)
 
+## Network: saved networks, the wired switch, X11 apps, JetBrains
+
+**A saved Wi-Fi network never asks for its password again.** The shell and
+the Settings app match networks to saved profiles by SSID (a profile need not
+be named after its network — one on this box is called `786  `, trailing
+spaces included) and join through the profile. You are asked only for a
+network NetworkManager has no profile for, or whose key sits in a secret
+agent ewe does not run; the key you type is then stored in that profile, not
+in a duplicate "SSID 1" one. The row keeps its spinner until NetworkManager
+confirms the join, and the panel re-reads on every NetworkManager event, so a
+cable plug or a VPN coming up shows at once.
+
+**Wired has a switch.** Quick Settings → Wi-Fi and Settings → Networking show
+the ethernet port with its own toggle: off keeps you on Wi-Fi with the cable
+still in (`nmcli device disconnect`, autoconnect resumes on re-plug or when
+you switch it back on). With both links up the tile says so ("SSID · Wired")
+instead of hiding the cable behind the SSID.
+
+**X11 apps on a HiDPI screen** (Steam, JetBrains Toolbox — still XWayland in
+2026) looked blurry because Hyprland upscaled them. At login ewe reads the
+primary display's saved scale; at 1.5 or more it sets
+`xwayland.force_zero_scaling`, `GDK_SCALE` and Steam's own scaling variable, so
+they draw at native pixels. Trade-off Hyprland cannot avoid: with a 1x
+external monitor beside the laptop, X11 apps are one size on both. Changing
+the display scale takes effect at the next login.
+
+**JetBrains IDEs show minimise / maximise / close in their header** on
+Hyprland (they were hidden on GNOME). The IDE reads GNOME's button layout
+only when the desktop *is* GNOME or KDE; anywhere else it draws all three.
+Two one-time fixes inside the IDE, either works:
+
+- Help → Find Action → *Registry* → set `ide.linux.window.buttons.config` to
+  `icon:` (no buttons at all, like GNOME) and restart.
+- Or Settings → Advanced Settings → User Interface → untick *Merge main menu
+  with window title*: the IDE gives up its own header and, since Hyprland
+  draws no title bars, nothing is shown.
+
+On 2026.1+ (Wayland by default) `-Dsun.awt.wl.WindowDecorationStyle=server`
+in Help → Edit Custom VM Options does the same for the runtime's own title
+bar. ewe does not write into IDE configs; these are yours to set once.
+
 ## Passwords — filling logins into any app
 
 Linux has no password-autofill standard, and no password manager fills into

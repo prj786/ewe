@@ -40,16 +40,25 @@ Column {
     }
     function connectWifi(ssid, sec) {
         if (root.curSsid() === ssid && root.pwTarget !== ssid) return
-        var known = root.wifiSaved[ssid] === true
-        if (sec && sec !== "" && !known && root.pwText === "") {
+        // same rules as Quick Settings: a saved profile (matched by SSID) joins
+        // without a prompt; a fresh key goes into the existing profile
+        var saved = root.wifiSaved[ssid] || null
+        var needsKey = sec && sec !== "" && (!saved || saved.psk === "agent")
+        if (needsKey && root.pwText === "") {
             root.pwTarget = (root.pwTarget === ssid) ? "" : ssid
             return
         }
-        var cmd = (known && root.pwText === "")
-            ? ["nmcli", "connection", "up", "id", ssid]
-            : ["nmcli", "device", "wifi", "connect", ssid]
-        if (root.pwText !== "") cmd = cmd.concat(["password", root.pwText])
+        var cmd
+        if (saved && root.pwText === "")
+            cmd = ["nmcli", "connection", "up", "id", saved.name]
+        else if (saved)
+            cmd = ["sh", "-c", 'nmcli connection modify "$1" 802-11-wireless-security.psk "$2" 802-11-wireless-security.psk-flags 0 && exec nmcli connection up id "$1"', "_", saved.name, root.pwText]
+        else {
+            cmd = ["nmcli", "device", "wifi", "connect", ssid]
+            if (root.pwText !== "") cmd = cmd.concat(["password", root.pwText])
+        }
         root.wifiPending = ssid
+        root.wifiConfirm = ""
         root.lastError = ""
         wifiConnProc.command = cmd
         wifiConnProc.running = true
@@ -79,21 +88,25 @@ Column {
     }
     Process { id: wifiState; command: ["nmcli", "-t", "-f", "WIFI", "radio"]; stdout: StdioCollector { onStreamFinished: root.wifiOn = this.text.trim() === "enabled" } }
     Process { id: wiredState; command: ["sh", "-c", "nmcli -t -f TYPE,STATE device 2>/dev/null | awk -F: '$1==\"ethernet\" && $2==\"connected\"{print \"yes\"; exit}'"]; stdout: StdioCollector { onStreamFinished: root.wiredUp = this.text.trim() === "yes" } }
+    // saved profiles by SSID — {ssid: {name, psk}}, see scripts/wifi-profiles.sh
+    readonly property string wifiProfilesScript: Qt.resolvedUrl("scripts/wifi-profiles.sh").toString().replace(/^file:\/\//, "")
     Process {
         id: wifiSavedScan
-        command: ["nmcli", "-t", "-f", "NAME,TYPE", "connection", "show"]
+        command: ["bash", root.wifiProfilesScript]
         stdout: StdioCollector {
             onStreamFinished: {
                 var m = {}, ls = this.text.split("\n")
                 for (var i = 0; i < ls.length; i++) {
-                    var f = ls[i].split(":")
-                    if (f.length >= 2 && f[f.length - 1] === "802-11-wireless")
-                        m[f.slice(0, f.length - 1).join(":")] = true
+                    var f = ls[i].split("\t")
+                    if (f.length >= 3 && f[0] !== "") m[f[0]] = { name: f[1], psk: f[2] }
                 }
                 root.wifiSaved = m
             }
         }
     }
+    // the network we just joined, until a list read shows it IN-USE
+    property string wifiConfirm: ""
+    Timer { id: wifiConfirmTimer; interval: 4000; onTriggered: { root.wifiConfirm = ""; root.wifiPending = "" } }
     Process {
         id: wifiScan
         command: ["nmcli", "-t", "-f", "IN-USE,SIGNAL,SECURITY,SSID", "device", "wifi", "list"]
@@ -110,6 +123,9 @@ Column {
                 }
                 arr.sort(function (a, b) { return (b.active - a.active) || (b.signal - a.signal) })
                 root.wifiList = arr
+                if (root.wifiConfirm !== "" && root.curSsid() === root.wifiConfirm) {
+                    root.wifiConfirm = ""; root.wifiPending = ""; wifiConfirmTimer.stop()
+                }
             }
         }
     }
@@ -118,6 +134,13 @@ Column {
         stderr: StdioCollector { id: wifiConnErr }
         onExited: function (exitCode, exitStatus) {
             var failed = root.wifiPending
+            if (exitCode === 0) {
+                // keep the spinner until the list shows us on the network (≤ 4 s)
+                root.wifiConfirm = failed
+                wifiConfirmTimer.restart()
+                root.rescan()
+                return
+            }
             root.wifiPending = ""
             root.rescan()
             if (exitCode !== 0) {

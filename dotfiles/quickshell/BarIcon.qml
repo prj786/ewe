@@ -9,16 +9,18 @@ import QtQuick
 // accent disc pinned to the glyph's top-right corner.
 //
 // The badge is a PILL, not a fixed circle — it is at least as wide as it is
-// tall (so 1-9 is a true circle) and grows for wider text, which is what
-// keeps "99+" from either clipping or shoving the row around. Anything past
-// `max` renders as "<max>+".
+// tall (so 1-9 is a true circle) and grows for wider text. Anything past
+// `max` renders as "<max>+" — and on the BAR max is 9: a glyph 16 px tall
+// cannot carry "99+" without the pill swallowing it and touching the bar's
+// edge (2026-09-16). "9+" says all a bar badge needs to; the exact figure
+// lives in the panel behind the icon.
 Item {
     id: root
 
     property string glyph: ""
     property color color: Theme.fg2
     property int count: 0             // 0 = no badge
-    property int max: 99
+    property int max: 9
     property int pixelSize: Theme.barIconPx
     // a plain dot instead of a number — for "something is unread" where the
     // exact figure is noise (the phone's notification pip)
@@ -52,14 +54,15 @@ Item {
         visible: root.showBadge
         anchors.right: parent.right
         anchors.top: parent.top
-        anchors.topMargin: -Math.round(height * 0.28)
+        anchors.topMargin: -Math.round(height * 0.2)
 
-        // 0.58 of the glyph, not 0.72: a badge sized to the icon covers it.
-        // This sits ON the corner and still leaves the glyph readable, which
-        // is the whole point of putting the count there instead of beside it.
-        readonly property int h: root.dotOnly ? 6 : Math.max(11, Math.round(root.pixelSize * 0.58))
+        // Half the glyph (was 0.58): a badge sized to the icon covers it, and
+        // on a 30 px bar the old pill ran into the top edge. This sits ON the
+        // corner and still leaves the glyph readable, which is the whole
+        // point of putting the count there instead of beside it.
+        readonly property int h: root.dotOnly ? 6 : Math.max(10, Math.round(root.pixelSize * 0.5))
         height: h
-        width: root.dotOnly ? h : Math.max(h, num.implicitWidth + Math.round(h * 0.7))
+        width: root.dotOnly ? h : Math.max(h, num.implicitWidth + Math.round(h * 0.6))
         radius: height / 2
         color: Theme.accentFill
         // a hairline in the bar's own colour, so the disc reads as a separate
@@ -73,7 +76,7 @@ Item {
             anchors.centerIn: parent
             text: root.countText
             font.family: Theme.fontText
-            font.pixelSize: Math.max(8, Math.round(badge.h * 0.68))
+            font.pixelSize: Math.max(7, Math.round(badge.h * 0.72))
             font.weight: Font.Bold
             color: Theme.accentOn
         }

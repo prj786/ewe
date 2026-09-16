@@ -117,6 +117,7 @@ Scope {
     function netRefresh() {
         vpnProc.running = false; vpnProc.running = true
         devProc.running = false; devProc.running = true
+        Globals.netEpoch++                  // Quick Settings re-reads its lists on this
     }
     // NM emits a burst of lines per transition — coalesce them into one re-query
     Timer { id: netDebounce; interval: 400; onTriggered: bar.netRefresh() }

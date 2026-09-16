@@ -53,6 +53,35 @@ export EWE_SESSION=1
 #    scripts/colorscheme.sh (writes the GTK settings.ini + qt6ct/kdeglobals fallback)
 #    and ~/.icons/default (cursor inheritance).
 export QT_QPA_PLATFORM="wayland;xcb"
+
+# ── X11 apps on a HiDPI screen (Steam, JetBrains Toolbox — still XWayland in
+#    2026). At a fractional monitor scale Hyprland UPSCALES their pixels, so
+#    they look blurry. The fix is the wiki's: xwayland.force_zero_scaling (set
+#    in hyprland.lua when EWE_X11_SCALE is present) makes them draw at native
+#    pixels, and each toolkit scales itself from its own variable — GDK_SCALE
+#    for GTK/X11 and the JetBrains runtime (a Wayland GTK app ignores it),
+#    Steam's own STEAM_FORCE_DESKTOPUI_SCALING. Decided from the PRIMARY
+#    display's saved scale (Settings → Displays) at login; below 1.5 nothing
+#    is set. Trade-off Hyprland cannot avoid (#6281, not planned): with a 1x
+#    external monitor beside a 2x laptop, X11 apps are one size everywhere.
+_x11scale="$(python3 - "$HOME/.config/quickshell/display-profiles.json" 2>/dev/null <<'PY'
+import json, sys
+try:
+    d = json.load(open(sys.argv[1]))
+    mons = d.get("profiles", {}).get(d.get("lastKey", ""), []) or []
+    prim = [m for m in mons if m.get("primary") and not m.get("disabled")] or [m for m in mons if not m.get("disabled")]
+    s = float(prim[0].get("scale", 1)) if prim else 1.0
+    print("%.2f" % s if s >= 1.5 else "")
+except Exception:
+    print("")
+PY
+)"
+if [ -n "$_x11scale" ]; then
+    export EWE_X11_SCALE="$_x11scale"
+    export GDK_SCALE="$(python3 -c "import sys; print(max(1, round(float(sys.argv[1]))))" "$_x11scale")"
+    export STEAM_FORCE_DESKTOPUI_SCALING="$_x11scale"
+fi
+unset _x11scale
 # glibc per-thread malloc arenas trade RSS for lock contention; heavily
 # threaded desktop apps (browsers, Qt, the shell) bloat noticeably with the
 # default (8×cores). 4 is the sweet spot measured for desktop workloads —
