@@ -194,6 +194,7 @@ Scope {
             component DockBtn: Rectangle {
                 id: db
                 property string glyph: ""
+                property string image: ""          // an SVG instead of a glyph (the ewe sheep), tinted like one
                 property bool activeState: false
                 signal go()
                 width: win.cell; height: win.cell; radius: Theme.radiusControl
@@ -201,12 +202,31 @@ Scope {
                 Behavior on color { ColorAnimation { duration: Theme.durFast } }
                 scale: dbMa.pressed ? 0.9 : (dbMa.containsMouse ? 1.08 : 1.0)
                 Behavior on scale { NumberAnimation { duration: Theme.durFast; easing.type: Easing.OutBack; easing.overshoot: 2 } }
+                readonly property color tint: db.activeState ? Theme.accent : (dbMa.containsMouse ? Theme.fg1 : Theme.fg2)
                 Text {
+                    visible: db.image === ""
                     anchors.centerIn: parent
                     text: db.glyph
                     font.family: Theme.fontIcons; font.pixelSize: Math.round(22 * win.k)
-                    color: db.activeState ? Theme.accent : (dbMa.containsMouse ? Theme.fg1 : Theme.fg2)
+                    color: db.tint
                     Behavior on color { ColorAnimation { duration: Theme.durFast } }
+                }
+                Image {
+                    id: dbImg
+                    visible: false
+                    source: db.image
+                    width: Math.round(24 * win.k); height: width
+                    sourceSize: Qt.size(width * 2, height * 2)
+                    fillMode: Image.PreserveAspectFit
+                }
+                MultiEffect {
+                    visible: db.image !== ""
+                    anchors.centerIn: parent
+                    width: dbImg.width; height: dbImg.height
+                    source: dbImg
+                    colorization: 1.0
+                    colorizationColor: db.tint
+                    Behavior on colorizationColor { ColorAnimation { duration: Theme.durFast } }
                 }
                 MouseArea { id: dbMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: db.go() }
             }
@@ -216,11 +236,11 @@ Scope {
                 anchors.centerIn: parent
                 spacing: 8
 
-                DockBtn { id: launchBtn; glyph: Theme.icApps; activeState: Globals.launcherOpen; anchors.verticalCenter: parent.verticalCenter; onGo: { Globals.launcherAnchorX = launchBtn.mapToItem(null, launchBtn.width / 2, 0).x; Globals.storeOpen = false; Globals.placesOpen = false; Globals.mediaOpen = false; Globals.launcherOpen = !Globals.launcherOpen } }
+                DockBtn { id: launchBtn; image: Qt.resolvedUrl("assets/sheep.svg"); activeState: Globals.launcherOpen; anchors.verticalCenter: parent.verticalCenter; onGo: { Globals.launcherAnchorX = launchBtn.mapToItem(null, launchBtn.width / 2, 0).x; Globals.storeOpen = false; Globals.placesOpen = false; Globals.mediaOpen = false; Globals.launcherOpen = !Globals.launcherOpen } }
                 DockBtn { glyph: Theme.icStack; anchors.verticalCenter: parent.verticalCenter; onGo: Quickshell.execDetached(["qs", "ipc", "call", "overview", "toggle"]) }
                 // store button → Komble (the software manager) when installed;
                 // the in-shell quick-installer panel is only the fallback.
-                DockBtn { id: storeBtn; glyph: Theme.icDownload; activeState: Globals.storeOpen; anchors.verticalCenter: parent.verticalCenter; onGo: { if (Globals.kombleInstalled) { Quickshell.execDetached(["komble"]) } else { Globals.storeAnchorX = storeBtn.mapToItem(null, storeBtn.width / 2, 0).x; Globals.launcherOpen = false; Globals.placesOpen = false; Globals.mediaOpen = false; Globals.storeOpen = !Globals.storeOpen } } }
+                DockBtn { id: storeBtn; glyph: Theme.icStore; activeState: Globals.storeOpen; anchors.verticalCenter: parent.verticalCenter; onGo: { if (Globals.kombleInstalled) { Quickshell.execDetached(["komble"]) } else { Globals.storeAnchorX = storeBtn.mapToItem(null, storeBtn.width / 2, 0).x; Globals.launcherOpen = false; Globals.placesOpen = false; Globals.mediaOpen = false; Globals.storeOpen = !Globals.storeOpen } } }
                 DockBtn { id: placesBtn; glyph: Theme.icFolder; activeState: Globals.placesOpen; anchors.verticalCenter: parent.verticalCenter; onGo: { Globals.placesAnchorX = placesBtn.mapToItem(null, placesBtn.width / 2, 0).x; Globals.launcherOpen = false; Globals.storeOpen = false; Globals.mediaOpen = false; Globals.placesOpen = !Globals.placesOpen } }
                 // now-playing — only exists while an MPRIS player does (MediaPlayer.qml resolves it)
                 DockBtn { id: mediaBtn; visible: Globals.mediaPlayer !== null; glyph: Theme.icMusic; activeState: Globals.mediaOpen; anchors.verticalCenter: parent.verticalCenter; onGo: { Globals.mediaAnchorX = mediaBtn.mapToItem(null, mediaBtn.width / 2, 0).x; Globals.launcherOpen = false; Globals.storeOpen = false; Globals.placesOpen = false; Globals.mediaOpen = !Globals.mediaOpen } }
