@@ -1,60 +1,71 @@
 #!/usr/bin/env python3
 """ewe-theme — the ONE writer of what ewe looks like.
 
-There is no theme file to edit. What a look IS — the grey ramp, the brand
-ramp, every alias token, the radius/spacing/stroke/type ramps — is DERIVED,
-and the derivation lives in this file, in the repo. What you can CHANGE lives
-in `ewe.conf` under `[desktop.theme]`, with everything else in the document
-that describes your machine:
+There is no theme file to edit. What a look IS — every colour role, the
+accent ramp, the type scale, spacing, radii, sizes, shadows, motion — is
+DERIVED here, in the repo, from the Ewe design system (design/system/,
+version 3). What you can CHANGE lives in `ewe.conf`:
 
     [desktop.theme]
-    accent       = "#ffcc00"      # THE seed. brand[10..160] comes from this.
-    corner       = "round"        # none | small | medium | large | round
+    scheme       = "ewe-dark"     # ewe-dark | ewe-light | a user scheme slug
+    accent       = "#eeb407"      # any colour; the accent roles + ramp follow it
+    corner       = "medium"       # none | small | medium | large  (round -> large)
     density      = "comfortable"  # compact | comfortable | roomy
-    stroke       = "none"         # none | thin | thick   (component outlines)
-    neutral_tint = 8              # 0 = pure neutral greys; higher = more accent
-    bar_opacity  = 100            # 0-100, the bar and dock only
-    app_blur     = false          # blur behind every window at a fixed level
+    stroke       = "thin"         # none | thin | thick
+    bar_opacity  = 100            # 0-100; the Glass preset is 80
+    app_blur     = false          # every window at opacity-app, blurred behind
+    window_transparency = false   # unfocused windows at opacity-inactive
+    [desktop.bar]            size = "normal"      # normal (48) | large (64)
+    [desktop.accessibility]  reduce_motion, reduce_transparency,
+                             increase_contrast = false; text_scale = 100|115|130
+    [desktop.animations]     speed = 1            # divides the motion durations
 
-That is the whole surface. One accent in, a complete Fluent 2 token set out,
-written to the two artefacts the desktop reads:
+One scheme + one accent in, the whole Ewe token set out, written to the two
+artefacts the desktop reads:
 
-  ~/.config/quickshell/theme-tokens.json   the shell — Theme.qml reads it and
-                                           falls back to its built-ins if absent
-  design/tokens.css                        the apps — compiled in by Tailwind
+  ~/.config/quickshell/theme-tokens.json   the shell — Theme.qml reads it
+  design/tokens.css                        the apps — copied into each repo
 
 Commands (each prints one JSON object and exits 0, like the other ewe tools):
-  show                 -> {ok, input{}, color{}, shape{}, size{}, brand{}, grey{}}
-  build [--json F] [--css F]   -> {ok, written:[...]}
-  check                -> {ok, drift:[...]}
-  preview [--out F]    -> {ok, path}   a specimen page, generated from the tokens
+  show                                  -> {ok, input, color, shape, size, ...}
+  build [--json F] [--css F] [--scheme SLUG --selector SEL]  -> {ok, written}
+  check                                 -> {ok, drift:[...]}
+  preview [--out F]                     -> {ok, path}   a specimen page
+  scheme list|show|apply|import|export|set|remove|duplicate|from-wallpaper
 
-WHY FLUENT 2. ewe's own palette had one `hover` and one `stroke`, so there was
-no way to say "hover on a card" as distinct from "hover on a bare row", or
-"divider" as distinct from "focus ring". Every border/hover bug came from that
-missing vocabulary. Fluent names them: six background levels each with their
-own Hover/Pressed/Selected, a `subtle` set for things with no fill of their
-own, and three stroke levels plus an accessible one and two focus strokes.
+THE MODEL (design/system/guidelines/10-color-schemes.md). A scheme is a
+Base24 palette (base00..base0F required, base10..base17 optional) plus a few
+ewe keys: `slug`, `variant` (dark|light), `accent`, `semantic` (status
+colours from the palette), `overrides` (any colour role, applied after
+derivation) and `builtin`. Ewe Dark and Ewe Light are two such records,
+embedded below and marked built-in; they run through exactly the same
+derivation as an imported Gruvbox or a palette pulled off the wallpaper:
 
-WHERE WE DEVIATE, deliberately, and why:
-  1. Fluent's greys are pure neutral (grey[20] is literally #333333). ewe's
-     premise is that the accent colours everything, so the ramp is pulled a
-     little toward the accent's hue. `neutral_tint = 0` restores Fluent's.
-  2. Fluent hard-codes text-on-brand to white, which is safe only because its
-     brand fills are always dark blue. ewe lets you pick yellow, so the
-     foreground is chosen from the fill's measured lightness instead.
+  1. every ROLE (surface-*, text-*, border-*, the accent set, status,
+     scrim, glass-*) comes from one palette entry, an OKLCH mix of two, or
+     the accent, per the role table in that guide;
+  2. the scheme's `overrides` are applied on top;
+  3. the GUARANTEES run: text 4.5:1 and border-strong/focus-ring 3:1 on
+     every surface role, surfaces at least 2 L apart, warning never within
+     20 degrees of the accent. Only lightness moves, hue stays, and every
+     move is recorded so `scheme show` (and Settings) can say which role was
+     adjusted and why;
+  4. look presets (corner / density / stroke) and accessibility modes are
+     applied as REMAPS of the finished set. Components never know which is
+     active — they only ever read roles.
 
-THE 2026-09 REVAMP (design/spec/ewe-design-system.html is the reference, and
-design/check-spec.sh holds this file to it). Same 150 token names, new values
-and new rules, all expressed as a remap in `alias()` so the derivation stays:
-  - the background ladder sits at HALF the grey stops it used to (bg-1 g16 ->
-    g8, card g20 -> g10) — the desktop got a lot darker;
-  - the filled brand roles moved two stops down the brand ramp (b70 -> b50);
-  - strokes carry alpha 0.5, and nothing is OUTLINED by default: the `stroke`
-    knob gained `none`, which zeroes `outline-width` (component edges) while
-    `stroke-width` (hairlines, the window ring) stays 1;
-  - the `round` corner preset (12 / 20 / 26 / capsule) is pitched by role
-    rather than taken off Fluent's ladder, and is the default.
+WHAT IS FIXED. The design system defines the foundations as values, not
+derivations, and they live in the tables below — the one place raw values
+are allowed: the brand colour `ewellow` and `black`, the warm `neutral-*`
+scale, Ewe's default status colours, the type scale, weights, tracking,
+spacing, radii per corner preset, sizes, shadows, gradients, opacity and
+the motion table. Everything else is derived.
+
+THE ALIAS LAYER. The shell and the three apps still read the Fluent 2 names
+this tool emitted until version 3 (bg-1, fg-2, stroke-1, brand-bg …). Every
+one of them is still emitted, as an alias onto its Ewe token per
+design/system/guidelines/20-migration.md, so nothing breaks while components
+move over. The alias layer is deleted in Phase 6.
 """
 import argparse
 import json
@@ -69,27 +80,24 @@ EWE_CONF = os.path.join(CFG_DIR, "ewe", "ewe.conf")
 OUT_JSON = os.path.join(CFG_DIR, "quickshell", "theme-tokens.json")
 OUT_CSS = os.path.join(HERE, "design", "tokens.css")
 
-DEFAULTS = {"accent": "#0a84ff", "corner": "round", "density": "comfortable",
-            "stroke": "none", "neutral_tint": 8, "bar_opacity": 100, "app_blur": False,
-            # scheme: "accent" (everything derived from the one accent — the
-            # default), or the slug of a palette in [[desktop.theme.schemes]]
-            # (see the SCHEMES section): a full Base24 palette the user
-            # imported, wrote, or had derived from the wallpaper. Dark by
-            # default; a scheme that says it is light IS light.
-            "scheme": "accent"}
-# app_blur: every window is drawn at 85% with the compositor blurring what is
-# behind it — terminal, browser, file manager, the ewe apps alike, so the
-# desktop reads as one material. A fixed level, not the bar's slider: apps
-# at 60% are unreadable, and one look everywhere is the point. Fullscreen
-# windows stay opaque (video). Blur itself is skipped under EWE_NO_BLUR.
-APP_OPACITY = 0.85
-# bar_opacity: how solid the TOP BAR and DOCK are, 0 (see-through) … 100
-# (opaque, the default). Below 100 the compositor blurs what is behind them
-# (ewe-conf writes the blur + layer rule into generated/user.lua) — except
-# under BAR_BLUR_MIN, where there is too little surface left to frost and the
-# bar simply floats on the wallpaper. Every other panel stays opaque: that is
-# what keeps the control centre and launcher legible over a bright picture.
+DS_VERSION = 3          # design/system/tokens.json "version" — named in every artefact
+
+DEFAULTS = {"accent": "#eeb407", "scheme": "ewe-dark", "corner": "medium",
+            "density": "comfortable", "stroke": "thin",
+            # neutral_tint drove the pre-v3 accent-tinted grey ramp. The Ewe
+            # neutrals are a fixed warm scale now, so the key is read and
+            # reported but changes nothing. It stays so old confs round-trip.
+            "neutral_tint": 8,
+            "bar_opacity": 100, "app_blur": False, "window_transparency": False,
+            "bar_size": "normal", "reduce_motion": False, "reduce_transparency": False,
+            "increase_contrast": False, "text_scale": 100, "speed": 1}
+# bar_opacity: how solid the TOP BAR, DOCK and LOCK CARD are, 0 … 100 (the
+# default). Below 100 they are Glass: the compositor blurs what is behind
+# them (ewe-conf writes the blur + layer rule into generated/user.lua) —
+# except under BAR_BLUR_MIN, where there is too little surface left to
+# frost. Every other panel stays solid (Glass card).
 BAR_BLUR_MIN = 10
+GLASS_PRESET = 80       # the Glass preset (opacity-glass); Settings warns below it
 
 
 def out(o):
@@ -102,10 +110,11 @@ def fail(code, msg):
     sys.exit(0)
 
 
-# ═══ colour math — sRGB <-> CIELAB <-> LCH, D65. Stdlib only. ═══════════════
-Xn, Yn, Zn = 0.95047, 1.0, 1.08883
-
-
+# ═══ colour math. Stdlib only. ═════════════════════════════════════════════
+# Two spaces: OKLCH for every role derivation (the design system's "mixes
+# use OKLCH, so hue stays steady") and CIELAB LCH for the palette importers
+# and the wallpaper extractor, which were tuned in Lab and produce a PALETTE
+# (an input), not roles.
 def _lin(c):
     c /= 255.0
     return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
@@ -115,11 +124,98 @@ def _gam(c):
     return 12.92 * c if c <= 0.0031308 else 1.055 * (c ** (1 / 2.4)) - 0.055
 
 
-def hex_to_lch(h):
-    h = h.lstrip("#")
+def _rgb(hexv):
+    h = hexv.lstrip("#")
     if len(h) == 3:
         h = "".join(c * 2 for c in h)
-    r, g, b = (_lin(int(h[i:i + 2], 16)) for i in (0, 2, 4))
+    return int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+
+
+def _hex(r, g, b):
+    q = lambda c: max(0, min(255, round(c)))
+    return "#%02x%02x%02x" % (q(r), q(g), q(b))
+
+
+def _cbrt(x):
+    return math.copysign(abs(x) ** (1 / 3), x)
+
+
+def oklch(hexv):
+    """'#rrggbb' -> (L 0..100, C, h degrees) in OKLCH."""
+    r, g, b = (_lin(c) for c in _rgb(hexv))
+    l = _cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b)
+    m = _cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b)
+    s = _cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b)
+    L = 0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s
+    a = 1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s
+    bb = 0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s
+    return L * 100, math.hypot(a, bb), math.degrees(math.atan2(bb, a)) % 360
+
+
+def _oklch_rgb(L, C, h):
+    L /= 100.0
+    a = C * math.cos(math.radians(h))
+    b = C * math.sin(math.radians(h))
+    l = (L + 0.3963377774 * a + 0.2158037573 * b) ** 3
+    m = (L - 0.1055613458 * a - 0.0638541728 * b) ** 3
+    s = (L - 0.0894841775 * a - 1.2914855480 * b) ** 3
+    return (_gam(4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s),
+            _gam(-1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s),
+            _gam(-0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s))
+
+
+def _fits(t):
+    return all(-0.0005 <= c <= 1.0005 for c in t)
+
+
+def oklch_hex(L, C, h):
+    """OKLCH -> '#rrggbb'. Holds L and h, drops chroma until sRGB fits."""
+    L = max(0.0, min(100.0, L))
+    if not _fits(_oklch_rgb(L, C, h)):
+        lo, hi = 0.0, C
+        for _ in range(32):
+            mid = (lo + hi) / 2
+            if _fits(_oklch_rgb(L, mid, h)):
+                lo = mid
+            else:
+                hi = mid
+        C = lo
+    r, g, b = _oklch_rgb(L, C, h)
+    return _hex(r * 255, g * 255, b * 255)
+
+
+def ok_mix(h1, h2, f):
+    """h1 -> h2 at f in OKLCH, hue along the short arc; a grey takes the
+    other's hue so the mix does not swing through an arbitrary angle."""
+    L1, C1, H1 = oklch(h1)
+    L2, C2, H2 = oklch(h2)
+    if C1 < 0.005:
+        H1 = H2
+    if C2 < 0.005:
+        H2 = H1
+    d = ((H2 - H1 + 180) % 360) - 180
+    return oklch_hex(L1 + (L2 - L1) * f, C1 + (C2 - C1) * f, (H1 + d * f) % 360)
+
+
+def ok_shift(hexv, dL):
+    L, C, H = oklch(hexv)
+    return oklch_hex(L + dL, C, H)
+
+
+def ok_toward(hexv, target, dL):
+    """`hexv` moved `dL` in lightness toward `target`, keeping its own hue
+    and chroma ("base02 moved 8 L toward base05")."""
+    L, C, H = oklch(hexv)
+    Lt = oklch(target)[0]
+    return oklch_hex(L + (dL if Lt >= L else -dL), C, H)
+
+
+# ── CIELAB LCH: the importers' and the wallpaper extractor's space ─────────
+Xn, Yn, Zn = 0.95047, 1.0, 1.08883
+
+
+def hex_to_lch(h):
+    r, g, b = (_lin(c) for c in _rgb(h))
     X = 0.4124564 * r + 0.3575761 * g + 0.1804375 * b
     Y = 0.2126729 * r + 0.7151522 * g + 0.0721750 * b
     Z = 0.0193339 * r + 0.1191920 * g + 0.9503041 * b
@@ -143,12 +239,7 @@ def lch_to_rgb(L, C, H):
             _gam(0.0556434 * X - 0.2040259 * Y + 1.0572252 * Z))
 
 
-def _fits(t):
-    return all(-0.0005 <= c <= 1.0005 for c in t)
-
-
 def lch_to_hex(L, C, H):
-    """Fluent's snap_into_gamut: hold L and H, drop chroma until sRGB fits."""
     if not _fits(lch_to_rgb(L, C, H)):
         lo, hi = 0.0, C
         for _ in range(32):
@@ -159,384 +250,263 @@ def lch_to_hex(L, C, H):
                 hi = mid
         C = lo
     r, g, b = lch_to_rgb(L, C, H)
-    q = lambda c: max(0, min(255, round(c * 255)))
-    return "#%02x%02x%02x" % (q(r), q(g), q(b))
+    return _hex(r * 255, g * 255, b * 255)
 
 
-# ═══ global ramp 1: the greys ══════════════════════════════════════════════
-# Fluent's grey ramp is 50 stops keyed by percent lightness, and the value is
-# simply round(2.55 * key) in all three channels — grey[20] is #333333. Fluent
-# publishes the even keys; the odd ones are the same formula and exist because
-# the revamp's background ladder is Fluent's at HALF the stop index (g22 -> g11).
-GREY_KEYS = list(range(1, 100))
+def lch_mix(h1, h2, f):
+    L1, C1, H1 = hex_to_lch(h1)
+    L2, C2, H2 = hex_to_lch(h2)
+    if C1 < 2:
+        H1 = H2
+    if C2 < 2:
+        H2 = H1
+    d = ((H2 - H1 + 180) % 360) - 180
+    return lch_to_hex(L1 + (L2 - L1) * f, C1 + (C2 - C1) * f, (H1 + d * f) % 360)
 
 
-def grey_ramp(accent, tint):
-    """The neutral ladder, pulled `tint` toward the accent's hue.
+def shift_l(h, dL):
+    L, C, H = hex_to_lch(h)
+    return lch_to_hex(max(0, min(100, L + dL)), C, H)
 
-    tint = 0 gives Fluent's pure greys. The pull tapers to nothing at both ends
-    (black and white must stay black and white) and peaks in the midtones,
-    which is where a surface's colour actually reads."""
-    _, _, hue = hex_to_lch(accent)
-    ramp = {}
-    for k in GREY_KEYS:
-        v = round(2.55 * k)
-        base = "#%02x%02x%02x" % (v, v, v)
-        if not tint:
-            ramp[k] = base
-            continue
-        L = hex_to_lch(base)[0]
-        t = L / 100.0
-        # Weighted to the DARK end on purpose. The dark rungs are the large
-        # surfaces — the desktop, panels, cards — and that is where a hue
-        # actually reads. The light rungs are text, which must stay neutral
-        # white or it goes muddy, so the curve is gone by L* 85.
-        C = tint * 0.32 * math.exp(-(((t - 0.22) / 0.30) ** 2))
-        ramp[k] = lch_to_hex(L, C, hue)
+
+# ── WCAG contrast ──────────────────────────────────────────────────────────
+def luminance(hexv):
+    r, g, b = (_lin(c) for c in _rgb(hexv))
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def contrast(a, b):
+    la, lb = luminance(a), luminance(b)
+    hi, lo = max(la, lb), min(la, lb)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+def over(fg, alpha, bg):
+    """`fg` at `alpha` composited over `bg` (sRGB, as the compositor does)."""
+    f, b = _rgb(fg), _rgb(bg)
+    return _hex(*(f[i] * alpha + b[i] * (1 - alpha) for i in range(3)))
+
+
+def on_color(fill, dark="#020202", light="#ffffff"):
+    """black or white, whichever contrasts more with `fill`."""
+    return dark if contrast(fill, dark) >= contrast(fill, light) else light
+
+
+# ═══ FOUNDATIONS — the design system's fixed values ═══════════════════════
+# design/system/tokens.json v3. Colours here are the ones the guide defines
+# as values rather than derivations; every role is derived further down.
+EWELLOW = "#eeb407"     # the brand hue and default accent
+BLACK = "#020202"       # the deepest ground
+# The warm neutral scale, tinted toward ewellow. The built-in palettes are
+# drawn from it; components use roles, never these steps.
+NEUTRAL = {0: "#fefdfc", 50: "#faf9f6", 100: "#f4f2ee", 200: "#e9e6e0", 300: "#d5d2cb",
+           400: "#a8a49d", 500: "#7f7b75", 600: "#5d5a55", 700: "#423f3a", 800: "#2c2a26",
+           850: "#201e1a", 900: "#151411", 950: "#0b0a08"}
+# The reference accent ramp (ewellow-50 … ewellow-950). Its SHAPE — the
+# lightness ladder, the chroma envelope and the slight hue drift toward the
+# dark end — is what a person's own accent is run through (see accent_ramp);
+# with the default accent it reproduces these exactly.
+REF_RAMP = {50: "#fff6e4", 100: "#ffedc6", 200: "#ffdf9a", 300: "#fdcf64", 400: "#f8c23a",
+            500: EWELLOW, 600: "#ce9707", 700: "#a77607", 800: "#805708", 900: "#5a3b09",
+            950: "#352206"}
+RAMP_STEPS = list(REF_RAMP)
+# Ewe's own status colours, used when a scheme says `semantic: false`.
+# Warning is orange so it never reads as the brand gold.
+EWE_STATUS = {
+    "dark": {"success": "#69d6aa", "warning": "#f9a870", "danger": "#ffa196", "info": "#76c7ff"},
+    "light": {"success": "#047554", "warning": "#964d09", "danger": "#a04038", "info": "#026a9d"},
+}
+# Where the accent roles sit on the ramp (10-color-schemes.md, role table):
+# hover/pressed are RELATIVE to the accent's own lightness, the rest are
+# absolute. "Low chroma" for the subtle tints is the ramp's own chroma at
+# that lightness.
+ACCENT_L = {"dark": {"hover": +4, "pressed": -10, "subtle": 27, "text": 84, "ring": 84},
+            "light": {"hover": -10, "pressed": -20, "subtle": 97, "text": 49, "ring": 60}}
+# Status tints: the status colour at this L, with chroma capped here.
+STATUS_SUBTLE = {"dark": (27, 0.045), "light": (95, 0.026)}
+# surface-sunken without a base10: base00 darkened by this much
+SUNKEN_DL = 4
+# scrim: base11 (dark) / base05 (light) at this alpha
+SCRIM_ALPHA = {"dark": 0.64, "light": 0.32}
+# glass tints over the glass fill: the outline, hover and pressed alphas
+GLASS_ALPHA = {"dark": {"border": 0.10, "hover": 0.08, "pressed": 0.14},
+               "light": {"border": 0.10, "hover": 0.06, "pressed": 0.12}}
+# the guarantees (10-color-schemes.md)
+CONTRAST_TEXT, CONTRAST_BORDER = 4.5, 3.0
+SURFACE_STEP = 2.0          # L between a surface and the one below it
+WARNING_HUE_GAP = 20.0      # degrees between warning and the accent
+RED_HUE = 27.0              # where "toward red" points (OKLCH)
+
+FONT_SANS = ["Geist", "Noto Sans Georgian"]
+FONT_MONO = ["Geist Mono", "Noto Sans Georgian"]
+FONT_SIZE = {"xs": 11, "s": 12, "md": 13, "lg": 15, "xl": 18, "2xl": 22, "3xl": 28,
+             "4xl": 36, "5xl": 48, "6xl": 64}
+LINE_HEIGHT = {"xs": 14, "s": 16, "md": 18, "lg": 20, "lg-relaxed": 22, "xl": 24, "2xl": 28,
+               "3xl": 34, "4xl": 44, "5xl": 56, "6xl": 72}
+FONT_WEIGHT = {"thin": 100, "extralight": 200, "light": 300, "regular": 400, "medium": 500,
+               "semibold": 600, "bold": 700, "extrabold": 800, "black": 900}
+TRACKING = {"tightest": -0.03, "tighter": -0.02, "tight": -0.015, "snug": -0.01,
+            "normal": 0, "wide": 0.06}            # em
+# name: (family, size, line height, weight, tracking em, italic)
+TYPE_STYLES = {
+    "display-xl": ("sans", 64, 72, 300, -0.03, False),
+    "display-lg": ("sans", 48, 56, 400, -0.025, False),
+    "display": ("sans", 36, 44, 500, -0.02, False),
+    "h1": ("sans", 28, 34, 600, -0.02, False),
+    "h2": ("sans", 22, 28, 600, -0.015, False),
+    "h3": ("sans", 18, 24, 600, -0.01, False),
+    "h4": ("sans", 15, 20, 600, 0, False),
+    "h4-italic": ("sans", 15, 20, 600, 0, True),
+    "body-lg": ("sans", 15, 22, 400, 0, False),
+    "body": ("sans", 13, 18, 400, 0, False),
+    "body-strong": ("sans", 13, 18, 500, 0, False),
+    "body-italic": ("sans", 13, 18, 400, 0, True),
+    "body-strong-italic": ("sans", 13, 18, 500, 0, True),
+    "label": ("sans", 12, 16, 500, 0, False),
+    "label-italic": ("sans", 12, 16, 500, 0, True),
+    "caption": ("sans", 11, 14, 400, 0, False),
+    "caption-italic": ("sans", 11, 14, 400, 0, True),
+    "overline": ("sans", 11, 14, 600, 0.06, False),
+    "mono": ("mono", 12, 16, 400, 0, False),
+    "mono-strong": ("mono", 12, 16, 600, 0, False),
+    "mono-italic": ("mono", 12, 16, 400, 0, True),
+    "mono-numeric": ("mono", 12, 16, 500, 0, False),
+}
+SPACING = {"xxs": 2, "xs": 4, "s": 8, "md": 16, "lg": 32, "xl": 64}
+# Look presets (components/LookPresets): corner -> (slight, secondary,
+# primary, rounded, fully-rounded); density -> (control-md, control-lg);
+# stroke -> (border-width-1, border-width-2). `round` is the pre-v3 name.
+CORNER = {"none": (0, 0, 0, 0, 0), "small": (2, 2, 4, 6, 9999),
+          "medium": (4, 6, 8, 10, 9999), "large": (6, 8, 12, 16, 9999)}
+CORNER_LEGACY = {"round": "large"}
+DENSITY = {"compact": (24, 28), "comfortable": (28, 32), "roomy": (32, 40)}
+STROKE = {"none": (0, 2), "thin": (1, 2), "thick": (2, 3)}
+FOCUS_WIDTH = 1             # 2 under Increase contrast
+SIZES = {"control-sm": 24, "control-xl": 40, "control-2xl": 48,
+         "bar-height": 48, "bar-height-lg": 64,
+         "icon-xs": 12, "icon-sm": 14, "icon-md": 16, "icon-lg": 20, "icon-xl": 24,
+         "icon-2xl": 32, "icon-3xl": 48, "icon-4xl": 64,
+         "panel-sm": 360, "panel-md": 400, "panel-lg": 560, "window-gap": 8, "blur-glass": 24}
+BAR = {"normal": {"height": "bar-height", "module": "control-lg", "icon": "icon-lg"},
+       "large": {"height": "bar-height-lg", "module": "control-xl", "icon": "icon-xl"}}
+TEXT_SCALES = (100, 115, 130)
+# shadow: (x, y, blur, colour, alpha) per variant
+SHADOW = {"shadow-sm": {"dark": (0, 1, 2, "#000000", 0.40), "light": (0, 1, 2, "#141008", 0.08)},
+          "shadow-float": {"dark": (0, 2, 6, "#000000", 0.35), "light": (0, 2, 6, "#141008", 0.10)}}
+GRADIENT = {
+    "gradient-ewellow": {"kind": "linear", "angle": 135, "stops": [["#f4bd28", 1, 0], ["#e6ab09", 1, 100]]},
+    "gradient-ember": {"kind": "linear", "angle": 160, "stops": [["#1b150b", 1, 0], ["#0b0a08", 1, 100]]},
+    "gradient-night": {"kind": "linear", "angle": 180, "stops": [["#151411", 1, 0], ["#0b0a08", 1, 100]]},
+    "gradient-glow": {"kind": "radial", "at": "50% 0%", "stops": [[EWELLOW, 0.08, 0], [EWELLOW, 0, 60]]},
+}
+OPACITY = {"opacity-solid": 1, "opacity-glass": GLASS_PRESET / 100, "opacity-app": 0.85,
+           "opacity-inactive": 0.97}
+# Motion (README): the Normal-speed durations; the animation speed setting
+# divides them, Reduce motion turns slides and zooms into fades at `fast`.
+MOTION = {"durFast": 150, "durBase": 200, "durSlow": 250, "durDim": 1500}
+EASING = {"fast": "OutCubic", "base": "OutCubic", "slow": "InOutCubic", "dim": "Linear"}
+SLIDE_OFFSET = 4            # px: panels and popups slide this far while fading in
+
+
+# ═══ the two built-in schemes (design/system/assets/Schemes) ═══════════════
+# Plain Base24 records, identical to the shipped YAML/JSON (tests hold them
+# to it). They are not written into ewe.conf: the tool knows them, so a
+# synced or hand-edited file can never corrupt or lose them.
+BUILTIN_SCHEMES = [
+    {"slug": "ewe-dark", "name": "Ewe Dark", "author": "ewe", "variant": "dark", "builtin": True,
+     "accent": EWELLOW, "semantic": True,
+     "palette": {"base00": "#0b0a08", "base01": "#151411", "base02": "#2c2a26", "base03": "#5d5a55",
+                 "base04": "#a8a49d", "base05": "#faf9f6", "base06": "#d5d2cb", "base07": "#fefdfc",
+                 "base08": "#ffa196", "base09": "#f9a870", "base0A": "#eeb407", "base0B": "#69d6aa",
+                 "base0C": "#64d1d7", "base0D": "#76c7ff", "base0E": "#e0a4ee", "base0F": "#805708",
+                 "base10": "#020202", "base11": "#000000", "base12": "#febfb7", "base13": "#ffc29a",
+                 "base14": "#7deabd", "base15": "#79e5eb", "base16": "#a3d8ff", "base17": "#f1bafe"},
+     "overrides": {"on-accent": "#020202", "accent-text": "#f8c23a", "focus-ring": "#f8c23a",
+                   "surface-overlay": "#201e1a", "surface-pressed": "#423f3a",
+                   "surface-selected": "#2c2a26", "border-subtle": "#2c2a26",
+                   "border-strong": "#7f7b75", "accent-subtle": "#352206"}},
+    {"slug": "ewe-light", "name": "Ewe Light", "author": "ewe", "variant": "light", "builtin": True,
+     "accent": EWELLOW, "semantic": True,
+     "palette": {"base00": "#f4f2ee", "base01": "#faf9f6", "base02": "#e9e6e0", "base03": "#a8a49d",
+                 "base04": "#5d5a55", "base05": "#0b0a08", "base06": "#423f3a", "base07": "#fefdfc",
+                 "base08": "#a04038", "base09": "#964d09", "base0A": "#eeb407", "base0B": "#047554",
+                 "base0C": "#057176", "base0D": "#026a9d", "base0E": "#814a8d", "base0F": "#805708",
+                 "base10": "#e9e6e0", "base11": "#d5d2cb", "base12": "#8c2e28", "base13": "#7f3f02",
+                 "base14": "#016245", "base15": "#035e62", "base16": "#025884", "base17": "#6f397b"},
+     "overrides": {"on-accent": "#020202", "accent-text": "#805708", "focus-ring": "#a77607",
+                   "surface-overlay": "#fefdfc", "surface-pressed": "#d5d2cb",
+                   "surface-selected": "#fefdfc", "border-subtle": "#d5d2cb",
+                   "border-strong": "#7f7b75", "accent-subtle": "#fff6e4"}},
+]
+BUILTIN_BY_SLUG = {s["slug"]: s for s in BUILTIN_SCHEMES}
+DEFAULT_SCHEME = "ewe-dark"
+LEGACY_SCHEME = "accent"    # pre-v3 "derive everything from the accent" = Ewe Dark
+
+# the colour ROLES a scheme may override, in emission order
+SURFACES = ["surface-base", "surface-raised", "surface-overlay", "surface-sunken",
+            "surface-hover", "surface-pressed", "surface-selected"]
+RESTING = [s for s in SURFACES if s != "surface-pressed"]   # text of every kind sits here
+STATUS = ["success", "warning", "danger", "info"]
+ROLES = (SURFACES + ["border-subtle", "border-strong", "text-primary", "text-secondary",
+                     "text-muted", "text-disabled", "accent", "accent-hover", "accent-pressed",
+                     "on-accent", "accent-subtle", "accent-text", "focus-ring"]
+         + STATUS + [s + "-subtle" for s in STATUS] + ["on-status", "glass-accent"])
+TEXT_ROLES = ["text-primary", "text-secondary", "text-muted", "accent-text"] + STATUS
+ACCENT_ROLES = ["accent", "accent-hover", "accent-pressed", "on-accent", "accent-subtle",
+                "accent-text", "focus-ring", "glass-accent"]
+
+
+# ═══ the accent ramp ═══════════════════════════════════════════════════════
+def _ramp_profile():
+    """The reference ramp as (L, chroma ratio to step 500, hue delta)."""
+    L5, C5, H5 = oklch(REF_RAMP[500])
+    prof = {}
+    for step, hx in REF_RAMP.items():
+        L, C, H = oklch(hx)
+        prof[step] = (L, C / C5, ((H - H5 + 180) % 360) - 180)
+    return prof
+
+
+PROFILE = _ramp_profile()
+
+
+def accent_ramp_lch(accent):
+    """Every step as OKLCH: the reference ladder re-anchored so the accent
+    lands exactly on 500, chroma scaled by the accent's own, hue drifting
+    as the reference does."""
+    L0, C0, H0 = oklch(accent)
+    La = PROFILE[500][0]
+    steps = {}
+    for step, (L, cr, dh) in PROFILE.items():
+        Ls = L0 + (100 - L0) * (L - La) / (100 - La) if L >= La else L0 * L / La
+        steps[step] = (Ls, C0 * cr, (H0 + dh) % 360)
+    return steps
+
+
+def accent_ramp(accent):
+    steps = accent_ramp_lch(accent)
+    ramp = {s: oklch_hex(*v) for s, v in steps.items()}
+    ramp[500] = _hex6(accent)              # the anchor is the accent itself
     return ramp
 
 
-# ═══ global ramp 2: the brand ═════════════════════════════════════════════
-# Fluent's real generator walks a curved helix through CIELAB with a per-hue
-# snapping table. This is a faithful reduction of it: hold the accent's hue,
-# ride a lightness ladder anchored so the accent lands EXACTLY on its stop,
-# scale chroma by the measured envelope, twist slightly toward the ends, and
-# snap into gamut. Validated against Microsoft's own published ramps —
-# mean dE 1.5 (brandWeb) and 3.8 (brandTeams), anchor stop exact.
-BRAND_STOPS = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160]
-# measured off brandWeb: the lightness ladder and the chroma envelope
-REF_L = [7.0, 12.9, 18.0, 23.7, 29.1, 34.7, 39.2, 44.9,
-         54.8, 63.7, 68.2, 72.6, 78.3, 84.3, 89.7, 95.5]
-REF_C = [11.2, 16.6, 20.9, 25.2, 31.3, 36.7, 43.6, 49.8,
-         52.5, 51.1, 43.7, 38.1, 30.7, 21.5, 13.2, 5.3]
-ANCHOR = 80          # the stop your accent lands on, exactly
-TORSION = -13.0      # degrees of hue twist toward the ends
+def ramp_at(accent, L):
+    """The accent ramp read at lightness L: chroma and hue interpolated
+    between the two steps that bracket it. "accent at 84 L" means this."""
+    pts = sorted(accent_ramp_lch(accent).values())
+    if L <= pts[0][0]:
+        return oklch_hex(L, pts[0][1], pts[0][2])
+    if L >= pts[-1][0]:
+        return oklch_hex(L, pts[-1][1], pts[-1][2])
+    for (L1, C1, H1), (L2, C2, H2) in zip(pts, pts[1:]):
+        if L1 <= L <= L2:
+            f = (L - L1) / (L2 - L1) if L2 > L1 else 0
+            d = ((H2 - H1 + 180) % 360) - 180
+            return oklch_hex(L, C1 + (C2 - C1) * f, (H1 + d * f) % 360)
+    return oklch_hex(L, pts[-1][1], pts[-1][2])
 
 
-def _ref_at(stop):
-    """REF_L / REF_C read at any stop, linear between the published ones."""
-    stop = max(BRAND_STOPS[0], min(BRAND_STOPS[-1], stop))
-    j = max(i for i, s in enumerate(BRAND_STOPS) if s <= stop)
-    if j == len(BRAND_STOPS) - 1:
-        return REF_L[j], REF_C[j]
-    f = (stop - BRAND_STOPS[j]) / (BRAND_STOPS[j + 1] - BRAND_STOPS[j])
-    return (REF_L[j] + (REF_L[j + 1] - REF_L[j]) * f,
-            REF_C[j] + (REF_C[j + 1] - REF_C[j]) * f)
-
-
-def brand_at(accent, stop):
-    """One brand colour at `stop` — the published 16 stops or anything between
-    them. The revamp's filled roles sit at 45 and 38, which Fluent never named,
-    and inventing a hex for them would move the decision out of the accent."""
-    L0, C0, H0 = hex_to_lch(accent)
-    La, Ca = _ref_at(ANCHOR)
-    ks = (C0 / Ca) if Ca else 0
-    L, C = _ref_at(stop)
-    Lo = L0 * (L / La) if L <= La else L0 + (100 - L0) * (L - La) / (100 - La)
-    t = (L - La) / (100 - La) if L >= La else (La - L) / La * 0.55
-    return lch_to_hex(Lo, C * ks, (H0 + TORSION * t) % 360)
-
-
-def brand_ramp(accent):
-    return {s: brand_at(accent, s) for s in BRAND_STOPS}
-
-
-def on(fill):
-    """Foreground for text sitting ON a fill. Fluent hard-codes white here;
-    ewe cannot, because you may pick yellow. L* 60 is where white gives up."""
-    return "#242424" if hex_to_lch(fill)[0] > 60 else "#ffffff"
-
-
-# ═══ the alias layer — Fluent's dark theme, verbatim ══════════════════════
-# Every right-hand side below is Fluent's own dark mapping. Read it as the
-# contract: a component asks for a ROLE and this table decides the value.
-# The strokes that carry alpha (0.5, per the spec). alias() keeps them as
-# opaque hex so the maths stays in one colour space; the two emitters below
-# apply the alpha in the form each consumer reads — `rgba()` for CSS,
-# `#AARRGGBB` for QML. Focus strokes stay opaque: a ring must not fade.
-STROKE_ALPHA = 0.5
-ALPHA_ROLES = ("stroke-1", "stroke-1-hover", "stroke-1-pressed", "stroke-1-selected",
-               "stroke-2", "stroke-3", "stroke-accessible", "stroke-disabled")
-
-
-def alias(grey, brand, bx, white="#ffffff", black="#000000"):
-    """`grey` and `brand` are the ramps; `bx(stop)` is the brand ramp read
-    between its stops, for the filled roles the revamp pitched off-grid."""
-    g, b = grey, brand
-    return {
-        # ── foregrounds ────────────────────────────────────────────────────
-        "fg-1": white,                    # primary text
-        "fg-2": g[84],                    # secondary text
-        "fg-2-hover": white,
-        "fg-3": g[68],                    # tertiary / placeholder / icons
-        "fg-3-hover": g[84],
-        "fg-4": g[60],                    # the quietest readable text
-        "fg-disabled": g[36],
-        "fg-inverted": g[14],             # text on a light fill
-        "fg-on-brand": on(bx(50)),        # DEVIATION: measured, not white
-        # ── backgrounds: six levels, each with its own states ─────────────
-        # Fluent's dark ladder is bg-1 g16 / bg-2 g12 / bg-3 g8 / bg-4 g4 and
-        # the hover/pressed/selected deltas are +8 / -4 / +6. The revamp keeps
-        # the ladder and the deltas but at HALF the stop index throughout —
-        # bg-1 g8, hover g12, pressed g6, selected g11 — so the whole desktop
-        # sits two stops deeper and a card no longer reads as a grey slab.
-        "bg-1": g[8], "bg-1-hover": g[12], "bg-1-pressed": g[6], "bg-1-selected": g[11],
-        "bg-2": g[6], "bg-2-hover": g[10], "bg-2-pressed": g[4], "bg-2-selected": g[9],
-        "bg-3": g[4], "bg-3-hover": g[8], "bg-3-pressed": g[2], "bg-3-selected": g[7],
-        "bg-4": g[2], "bg-4-hover": g[6], "bg-4-pressed": black, "bg-4-selected": g[5],
-        "bg-5": black, "bg-5-hover": g[4], "bg-5-pressed": g[1], "bg-5-selected": g[3],
-        "bg-6": g[10],
-        "bg-disabled": g[4],
-        # ── card: a raised, FILLED surface that reacts to the pointer ──────
-        # DEVIATION. Fluent's bg-6 has no state variants, because its Card
-        # component carries its own. ewe's panels are full of cards and tiles
-        # that must hover, so the ladder is extended here using Fluent's own
-        # deltas off bg-1 (+8 hover, -4 pressed, +6 selected) applied to g20.
-        # Without this a hovered card had to borrow `subtle-hover`, which is a
-        # DIFFERENT surface — that is why hovering a tile made it jump colour.
-        "card": g[10],
-        "card-hover": g[14],
-        "card-pressed": g[8],
-        "card-selected": g[13],
-        # ── subtle: a thing with no fill of its own until you point at it ──
-        # THIS is the token ewe never had. Every "hover a bare row" bug was
-        # this concept being spelled with a surface colour instead.
-        "subtle": "transparent",
-        "subtle-hover": g[11],
-        "subtle-pressed": g[9],
-        "subtle-selected": g[10],
-        # ── strokes: three weights, not one ────────────────────────────────
-        # (the greys Fluent uses, at alpha 0.5 — see ALPHA_ROLES)
-        "stroke-1": g[40],                # a real UI border
-        "stroke-1-hover": g[46],
-        "stroke-1-pressed": g[42],
-        "stroke-1-selected": g[44],
-        "stroke-2": g[32],                # subtle outline
-        "stroke-3": g[24],                # divider / separator
-        "stroke-accessible": g[68],       # a border that must be SEEN
-        "stroke-disabled": g[26],
-        "stroke-focus-1": black,          # the inner half of a focus ring
-        "stroke-focus-2": white,          # the outer half
-        # ── brand ──────────────────────────────────────────────────────────
-        # The filled roles sit two stops lower than Fluent's b70/b80/b40/b60
-        # since the revamp: a primary button is a deep fill under white text,
-        # not the accent itself. The accent as a colour stays at b100 below.
-        "brand-bg": bx(50),               # a filled primary control
-        "brand-bg-hover": bx(60),
-        "brand-bg-pressed": bx(38),
-        "brand-bg-selected": bx(45),
-        "brand-fg-1": b[100],             # accent AS text / icon on dark
-        "brand-fg-2": b[110],
-        "brand-fg-link": b[100],
-        "brand-fg-link-hover": b[110],
-        "brand-stroke-1": b[100],
-        "brand-stroke-2": bx(40),
-        # compound = a control whose fill and stroke move together (checkbox,
-        # radio, switch): the one place Fluent brightens on hover instead of
-        # darkening, so the control reads as "live" under the pointer
-        "compound-brand-bg": b[100],
-        "compound-brand-bg-hover": b[110],
-        "compound-brand-bg-pressed": b[90],
-        "compound-brand-fg": b[100],
-        "compound-brand-stroke": b[100],
-        # ── shadow (Fluent's own alphas) ───────────────────────────────────
-        "shadow-ambient": "rgba(0,0,0,0.24)",
-        "shadow-key": "rgba(0,0,0,0.28)",
-    }
-
-
-# status colours — Fluent's shared status hues, taken at the tints its dark
-# theme uses. They are NOT derived from the accent: "this failed" must not
-# change meaning because you picked a red accent.
-STATUS = {
-    "success": "#54b054", "success-bg": "#052505", "success-border": "#9fd89f",
-    "warning": "#fdea3d", "warning-bg": "#332a00", "warning-border": "#fbde3d",
-    "danger": "#f1707b", "danger-bg": "#3b0509", "danger-border": "#f1707b",
-    "info": "#9ea2a6", "info-bg": "#222527", "info-border": "#9ea2a6",
-}
-
-
-# ═══ the non-colour ramps ═════════════════════════════════════════════════
-# Fluent's global ramps, verbatim. Nothing here is invented.
-RADIUS_RAMP = {"none": 0, "small": 2, "medium": 4, "large": 6, "xlarge": 8,
-               "2xlarge": 12, "3xlarge": 16, "4xlarge": 24,
-               # 999, not Fluent's 10000: the spec says 999 and both Qt and the
-               # browser clamp it to half the box anyway — a capsule either way.
-               "circular": 999}
-SPACING_RAMP = {"none": 0, "xxs": 2, "xs": 4, "snudge": 6, "s": 8, "mnudge": 10,
-                "m": 12, "l": 16, "xl": 20, "xxl": 24, "xxxl": 32}
-# `none` is the revamp's default: component OUTLINES go to 0 while hairlines
-# and the window ring keep 1px — see `outline-width` vs `stroke-width` below.
-STROKE_RAMP = {"none": 0, "thin": 1, "thick": 2, "thicker": 3, "thickest": 4}
-FONT_RAMP = {100: (10, 14), 200: (12, 16), 300: (14, 20), 400: (16, 22),
-             500: (20, 28), 600: (24, 32), 700: (28, 36), 800: (32, 40)}
-
-# `corner` picks which rung of the radius ramp each ROLE stands on. One knob,
-# and the whole desktop's cornering moves together.
-# A value is a rung name on RADIUS_RAMP, or a pixel count for a preset that
-# is pitched by role instead: `round` (the default since the 2026-09 revamp)
-# is 12 / 20 / 26 / capsule, which is not on Fluent's ladder on purpose.
-CORNER = {
-    "none":   {"control": "none", "card": "none", "panel": "none", "pill": "none"},
-    "small":  {"control": "small", "card": "medium", "panel": "large", "pill": "small"},
-    "medium": {"control": "medium", "card": "large", "panel": "xlarge", "pill": "medium"},
-    "large":  {"control": "large", "card": "xlarge", "panel": "2xlarge", "pill": "circular"},
-    "round":  {"control": 12, "card": 20, "panel": 26, "pill": "circular"},
-}
-
-
-def radius(v):
-    return RADIUS_RAMP[v] if isinstance(v, str) else int(v)
-# `density` picks the spacing rungs and the control heights. Fluent's own
-# button sizes are 24 / 32 / 40, which is exactly this ladder.
-DENSITY = {
-    "compact":     {"pad": "s", "gap": "xs", "control": 24, "row": 28, "font": 200},
-    "comfortable": {"pad": "m", "gap": "s", "control": 32, "row": 36, "font": 300},
-    "roomy":       {"pad": "l", "gap": "m", "control": 40, "row": 44, "font": 300},
-}
-
-
-# ═══ reading the one config ═══════════════════════════════════════════════
-def read_conf(path=None):
-    """`[desktop.theme]` out of ewe.conf. Missing file, missing section and
-    missing keys all fall back to DEFAULTS — a fresh machine still themes."""
-    p = path or EWE_CONF
-    cfg = dict(DEFAULTS)
-    src = "defaults"
-    if os.path.isfile(p):
-        try:
-            with open(p, "rb") as f:
-                doc = tomllib.load(f)
-            t = ((doc.get("desktop") or {}).get("theme") or {})
-            for k in DEFAULTS:
-                if k in t:
-                    cfg[k] = t[k]
-            src = p
-        except (tomllib.TOMLDecodeError, OSError):
-            pass  # a broken conf must never leave the desktop unthemed
-    if not isinstance(cfg["accent"], str) or not cfg["accent"].startswith("#"):
-        cfg["accent"] = DEFAULTS["accent"]
-    cfg["scheme"] = str(cfg.get("scheme") or "accent").strip() or "accent"
-    raw = []
-    if os.path.isfile(p):
-        try:
-            with open(p, "rb") as f:
-                raw = (((tomllib.load(f).get("desktop") or {}).get("theme") or {}).get("schemes") or [])
-        except (tomllib.TOMLDecodeError, OSError):
-            raw = []
-    cfg["schemes"] = [x for x in (norm_scheme(r) for r in raw if isinstance(r, dict)) if x]
-    if cfg["scheme"] != "accent" and not active_scheme(cfg):
-        cfg["scheme"] = "accent"          # a slug nothing matches: accent mode, never unthemed
-    for k, table in (("corner", CORNER), ("density", DENSITY), ("stroke", STROKE_RAMP)):
-        if cfg[k] not in table:
-            cfg[k] = DEFAULTS[k]
-    try:
-        cfg["neutral_tint"] = max(0, min(40, int(cfg["neutral_tint"])))
-    except (TypeError, ValueError):
-        cfg["neutral_tint"] = DEFAULTS["neutral_tint"]
-    try:
-        cfg["bar_opacity"] = max(0, min(100, int(cfg["bar_opacity"])))
-    except (TypeError, ValueError):
-        cfg["bar_opacity"] = DEFAULTS["bar_opacity"]
-    cfg["app_blur"] = str(cfg.get("app_blur", False)).lower() in ("1", "true", "yes", "on")
-    # 0.12.8's one-release `surface = "glass"` reads as its old tint
-    if str(cfg.pop("surface", "solid")) == "glass" and cfg["bar_opacity"] == 100:
-        cfg["bar_opacity"] = 72
-    return cfg, src
-
-
-def tokens(cfg):
-    """The whole token set, derived. This is the only place it is decided."""
-    cfg = dict(cfg)
-    schemes = cfg.pop("schemes", [])
-    sc = active_scheme(dict(cfg, schemes=schemes))
-    if sc:
-        # SCHEME mode: the neutral ramp is pinned to the palette's surfaces
-        # and text, the brand ramp runs through the scheme's accent, status
-        # comes from its red/yellow/green. Same role table, same 150 names.
-        grey, black, white = scheme_ramp(sc["palette"], sc["variant"])
-        accent = sc.get("accent") or sc["palette"]["base0D"]
-        brand = brand_ramp(accent)
-        color = alias(grey, brand, lambda s: brand_at(accent, s), white=white, black=black)
-        color.update(scheme_status(sc["palette"]) if sc.get("semantic", True) else STATUS)
-        cfg["accent"] = accent
-        cfg["variant"] = sc["variant"]
-        cfg["scheme_name"] = sc["name"]
-    else:
-        cfg["scheme"] = "accent"
-        cfg["variant"] = "dark"
-        grey = grey_ramp(cfg["accent"], cfg["neutral_tint"])
-        brand = brand_ramp(cfg["accent"])
-        color = alias(grey, brand, lambda s: brand_at(cfg["accent"], s))
-        color.update(STATUS)
-
-    corner, dens = CORNER[cfg["corner"]], DENSITY[cfg["density"]]
-    w = STROKE_RAMP[cfg["stroke"]]
-    shape = {
-        "radius-control": radius(corner["control"]),
-        "radius-card": radius(corner["card"]),
-        "radius-panel": radius(corner["panel"]),
-        "radius-pill": radius(corner["pill"]),
-        # Two widths since the revamp. `outline-width` is the edge a component
-        # draws around ITSELF (button, input, card, tile, dock) and is 0 under
-        # `stroke = none`: the layer step separates it from what is behind.
-        # `stroke-width` is a rule INSIDE a surface — a divider, the rail's
-        # hairline, the 1px window ring — and never drops below 1.
-        "outline-width": w,
-        "stroke-width": max(1, w),
-        "stroke-width-thick": max(2, min(4, w + 1)),
-        "focus-width": 2,
-    }
-    size = {
-        "pad": SPACING_RAMP[dens["pad"]],
-        "gap": SPACING_RAMP[dens["gap"]],
-        "control": dens["control"],
-        "row": dens["row"],
-        # 18, not 16. Lucide is STROKE art where the old face was solid, so
-        # the same nominal size reads lighter; a font cannot vary its stroke
-        # width, which makes size the only lever for optical weight. Compact
-        # keeps the two-step drop it always had.
-        "icon": 20 if dens["control"] >= 40 else 18 if dens["control"] >= 32 else 16,
-        "bar-height": dens["control"] - 2,
-    }
-    for name, step in SPACING_RAMP.items():
-        size["space-" + name] = step
-    base = dens["font"]
-    for key, (fs, lh) in FONT_RAMP.items():
-        size["fs-%d" % key] = fs
-        size["lh-%d" % key] = lh
-    size["fs-body"] = FONT_RAMP[base][0]
-    size["fs-small"] = FONT_RAMP[max(100, base - 100)][0]
-    size["fs-large"] = FONT_RAMP[base + 100][0]
-    size["fs-title"] = FONT_RAMP[600][0]
-    op = cfg["bar_opacity"]
-    surface = {"bar_alpha": op / 100.0, "blur": BAR_BLUR_MIN <= op < 100,
-               "app_blur": cfg["app_blur"], "app_alpha": APP_OPACITY if cfg["app_blur"] else 1.0}
-    t = {"input": cfg, "color": color, "shape": shape, "size": size,
-         "grey": grey, "brand": brand, "surface": surface}
-    if sc:
-        t["scheme"] = {"slug": sc["slug"], "name": sc["name"], "variant": sc["variant"],
-                       "accent": cfg["accent"], "palette": sc["palette"]}
-    return t
-
-
-# ═══ SCHEMES — a whole palette instead of one accent ══════════════════════
-# A scheme is a Base24 palette (Tinted Theming's format: base00-base07 the
-# surfaces and text, base08-base0F eight hues, base10-base17 optional extra
-# surfaces and bright hues) plus an optional explicit accent. The user
-# imports one (base16/base24 YAML, Omarchy colors.toml, Catppuccin
-# palette.json, Gogh yml), writes one, or has one derived from the wallpaper;
-# it lives in ewe.conf as a [[desktop.theme.schemes]] record, so it syncs.
-#
-# Mapping onto the role table: the neutral ramp is REBUILT with anchors —
-# the palette's surfaces pinned on the stops the dark ladder uses (bg-3 g4 =
-# base00, bg-1 g8 = base01, card/hover g11 = base02, strokes g32 = base03),
-# its text on the text stops (fg-4 g60 = base04, fg-2 g84 = base05, fg-1 =
-# base07) and everything between interpolated in LCH. A LIGHT scheme is the
-# same anchors in the other direction: base00 is its lightest surface and
-# base07 its darkest text, so the ramp simply runs downhill and the dark
-# role table reads correctly off it (hover darkens, text is ink). The brand
-# ramp is the accent-mode one, through the scheme's accent.
+# ═══ SCHEMES — Base24 records ══════════════════════════════════════════════
 SCHEME_KEYS = ["base%02X" % i for i in range(0x18)]
 SCHEME_REQUIRED = SCHEME_KEYS[:16]
 
@@ -560,8 +530,18 @@ def slugify(name):
     return out or "scheme"
 
 
-def norm_scheme(rec):
-    """A [[desktop.theme.schemes]] record, validated; None if unusable."""
+def _truthy(v, default=True):
+    if isinstance(v, bool):
+        return v
+    if v is None:
+        return default
+    return str(v).strip().lower() not in ("0", "false", "no", "off", "")
+
+
+def norm_scheme(rec, builtin=False):
+    """A scheme record (a [[desktop.theme.schemes]] entry or an imported
+    file), validated; None if unusable. `builtin` is only ever set for the
+    two shipped schemes — a file that says builtin: true is just a file."""
     pal_in = rec.get("palette") if isinstance(rec.get("palette"), dict) else {}
     pal = {}
     for k in SCHEME_KEYS:
@@ -573,114 +553,551 @@ def norm_scheme(rec):
     name = str(rec.get("name") or "").strip() or "Untitled"
     variant = "light" if str(rec.get("variant", "dark")).lower() == "light" else "dark"
     out = {"name": name, "slug": slugify(rec.get("slug") or name), "variant": variant,
-           "palette": pal, "semantic": str(rec.get("semantic", True)).lower() not in ("0", "false", "no")}
+           "palette": pal, "semantic": _truthy(rec.get("semantic"), True)}
     acc = _hex6(rec.get("accent"))
     if acc:
         out["accent"] = acc
+    ov_in = rec.get("overrides") if isinstance(rec.get("overrides"), dict) else {}
+    ov = {}
+    for k, v in ov_in.items():
+        hv = _hex6(v)
+        if k in ROLES and hv:
+            ov[k] = hv
+    if ov:
+        out["overrides"] = ov
     for k in ("author", "source", "wallpaper"):
         if rec.get(k):
             out[k] = str(rec[k])
+    if builtin:
+        out["builtin"] = True
     return out
 
 
-def active_scheme(cfg):
-    slug = cfg.get("scheme", "accent")
-    if slug == "accent":
-        return None
-    for sc in cfg.get("schemes") or []:
+BUILTINS = [norm_scheme(s, builtin=True) for s in BUILTIN_SCHEMES]
+
+
+def all_schemes(cfg):
+    """Built-ins first, then the user's — the order Settings lists them."""
+    return BUILTINS + list(cfg.get("schemes") or [])
+
+
+def find_scheme(cfg, slug):
+    if slug == LEGACY_SCHEME:
+        slug = DEFAULT_SCHEME
+    for sc in all_schemes(cfg):
         if sc["slug"] == slug:
             return sc
     return None
 
 
-def lch_mix(h1, h2, f):
-    """h1 → h2 at f in LCH, hue along the short arc."""
-    L1, C1, H1 = hex_to_lch(h1)
-    L2, C2, H2 = hex_to_lch(h2)
-    if C1 < 2:
-        H1 = H2
-    if C2 < 2:
-        H2 = H1
-    d = ((H2 - H1 + 180) % 360) - 180
-    return lch_to_hex(L1 + (L2 - L1) * f, C1 + (C2 - C1) * f, (H1 + d * f) % 360)
+def active_scheme(cfg):
+    return find_scheme(cfg, cfg.get("scheme") or DEFAULT_SCHEME) or find_scheme(cfg, DEFAULT_SCHEME)
 
 
-def shift_l(h, dL):
-    L, C, H = hex_to_lch(h)
-    return lch_to_hex(max(0, min(100, L + dL)), C, H)
+def scheme_accent(sc, cfg):
+    """The accent this scheme wears. A built-in wears the person's
+    `desktop.theme.accent` (that is what "pick an accent" means); a user
+    scheme wears its own `accent` key, else its base0A."""
+    if sc.get("builtin"):
+        return _hex6(cfg.get("accent")) or DEFAULTS["accent"]
+    return sc.get("accent") or sc["palette"]["base0A"]
 
 
-def scheme_ramp(pal, variant):
-    """The 99-stop neutral ramp through a palette. Returns (ramp, black, white)
-    where black/white are what the role table's two literals become."""
-    dark = variant != "light"
-    sgn = -1 if dark else 1                   # "deeper than base00" goes this way
-    deepest = pal.get("base11") or shift_l(pal["base00"], 6 * sgn)
-    anchors = {
-        0: shift_l(deepest, 3 * sgn),
-        2: deepest,
-        4: pal["base00"],
-        6: lch_mix(pal["base00"], pal["base01"], 0.5),
-        8: pal["base01"],
-        10: pal["base02"],                    # card
-        11: pal["base02"],                    # subtle-hover / bg-1-selected
-        14: shift_l(pal["base02"], -3 * sgn), # card-hover
-        32: pal["base03"],
-        60: pal["base04"],
-        68: lch_mix(pal["base04"], pal["base05"], 0.45),
-        84: pal["base05"],
-        92: pal["base06"],
-        100: pal["base07"],
-    }
-    # The layer steps ARE the design (rule 09: nothing is outlined) — a card
-    # reads as a card because it sits a few L* off its panel. Many schemes,
-    # light ones especially, put base00/01/02 within a point or two of each
-    # other, and then panels, tiles and hover states all come out one flat
-    # colour. So the surface ladder is forced to advance by at least these
-    # steps, in the scheme's direction, keeping each pinned colour's hue.
-    # base00 (stop 4, the ground) is never moved; the raised surfaces above it
-    # advance away from it, the two deeper stops below it sink away from it
-    # (clamped at black / white — a light scheme on pure white has nowhere
-    # deeper to go, and that is fine: bg-4/5 are rare in a light look).
-    up = 1 if dark else -1
-    MIN_UP = {6: 2.5, 8: 3.0, 10: 3.0, 11: 0.0, 14: 3.0, 32: 10.0}
-    prev = anchors[4]
-    for k in (6, 8, 10, 11, 14, 32):
-        Lp = hex_to_lch(prev)[0]
-        Lk, Ck, Hk = hex_to_lch(anchors[k])
-        if (Lk - Lp) * up < MIN_UP[k]:
-            anchors[k] = lch_to_hex(max(0, min(100, Lp + MIN_UP[k] * up)), Ck, Hk)
-        prev = anchors[k]
-    prev = anchors[4]
-    for k in (2, 0):
-        Lp = hex_to_lch(prev)[0]
-        Lk, Ck, Hk = hex_to_lch(anchors[k])
-        if (Lp - Lk) * up < 2.5:
-            anchors[k] = lch_to_hex(max(0, min(100, Lp - 2.5 * up)), Ck, Hk)
-        prev = anchors[k]
-    ks = sorted(anchors)
-    ramp = {}
-    for k in GREY_KEYS:
-        lo = max(x for x in ks if x <= k)
-        hi = min(x for x in ks if x >= k)
-        ramp[k] = anchors[lo] if lo == hi else lch_mix(anchors[lo], anchors[hi], (k - lo) / (hi - lo))
-    return ramp, anchors[0], pal["base07"]
+# ═══ reading the one config ═══════════════════════════════════════════════
+def read_conf(path=None):
+    """`[desktop.theme]`, `[desktop.bar]`, `[desktop.accessibility]` and the
+    animation speed out of ewe.conf. Missing file, section or key falls
+    back to DEFAULTS — a fresh machine still themes."""
+    p = path or EWE_CONF
+    cfg = dict(DEFAULTS)
+    src = "defaults"
+    doc = {}
+    if os.path.isfile(p):
+        try:
+            with open(p, "rb") as f:
+                doc = tomllib.load(f)
+            src = p
+        except (tomllib.TOMLDecodeError, OSError):
+            doc = {}  # a broken conf must never leave the desktop unthemed
+    desk = doc.get("desktop") if isinstance(doc.get("desktop"), dict) else {}
+    t = desk.get("theme") if isinstance(desk.get("theme"), dict) else {}
+    for k in ("accent", "scheme", "corner", "density", "stroke", "neutral_tint",
+              "bar_opacity", "app_blur", "window_transparency"):
+        if k in t:
+            cfg[k] = t[k]
+    bar = desk.get("bar") if isinstance(desk.get("bar"), dict) else {}
+    if bar.get("size") in BAR:
+        cfg["bar_size"] = bar["size"]
+    elif bar.get("icon_size") == "large":
+        cfg["bar_size"] = "large"          # the pre-v3 key, as a fallback
+    a11y = desk.get("accessibility") if isinstance(desk.get("accessibility"), dict) else {}
+    for k in ("reduce_motion", "reduce_transparency", "increase_contrast"):
+        cfg[k] = _truthy(a11y.get(k), False)
+    try:
+        cfg["text_scale"] = int(a11y.get("text_scale", 100))
+    except (TypeError, ValueError):
+        cfg["text_scale"] = 100
+    if cfg["text_scale"] not in TEXT_SCALES:
+        cfg["text_scale"] = min(TEXT_SCALES, key=lambda s: abs(s - cfg["text_scale"]))
+    anim = desk.get("animations") if isinstance(desk.get("animations"), dict) else {}
+    try:
+        cfg["speed"] = max(0.0, float(anim.get("speed", 1)))
+    except (TypeError, ValueError):
+        cfg["speed"] = 1.0
+    if not _hex6(cfg["accent"]):
+        cfg["accent"] = DEFAULTS["accent"]
+    cfg["accent"] = _hex6(cfg["accent"])
+    cfg["scheme"] = str(cfg.get("scheme") or DEFAULT_SCHEME).strip() or DEFAULT_SCHEME
+    raw = t.get("schemes") or []
+    user = [x for x in (norm_scheme(r) for r in raw if isinstance(r, dict)) if x]
+    cfg["schemes"] = [s for s in user if s["slug"] not in BUILTIN_BY_SLUG]
+    if not find_scheme(cfg, cfg["scheme"]):
+        cfg["scheme"] = DEFAULT_SCHEME      # a slug nothing matches: Ewe Dark, never unthemed
+    cfg["corner"] = CORNER_LEGACY.get(cfg["corner"], cfg["corner"])
+    for k, table in (("corner", CORNER), ("density", DENSITY), ("stroke", STROKE)):
+        if cfg[k] not in table:
+            cfg[k] = DEFAULTS[k]
+    try:
+        cfg["neutral_tint"] = max(0, min(40, int(cfg["neutral_tint"])))
+    except (TypeError, ValueError):
+        cfg["neutral_tint"] = DEFAULTS["neutral_tint"]
+    try:
+        cfg["bar_opacity"] = max(0, min(100, int(cfg["bar_opacity"])))
+    except (TypeError, ValueError):
+        cfg["bar_opacity"] = DEFAULTS["bar_opacity"]
+    cfg["app_blur"] = _truthy(cfg.get("app_blur"), False)
+    cfg["window_transparency"] = _truthy(cfg.get("window_transparency"), False)
+    # 0.12.8's one-release `surface = "glass"` reads as the Glass preset
+    if str(t.get("surface", "solid")) == "glass" and cfg["bar_opacity"] == 100:
+        cfg["bar_opacity"] = GLASS_PRESET
+    return cfg, src
 
 
-def scheme_status(pal):
-    """Status from the scheme's own hues: text = the hue, bg = the hue sunk
-    into base00, border = the hue. Info uses the cyan."""
-    out = {}
-    for role, key in (("success", "base0B"), ("warning", "base0A"),
-                      ("danger", "base08"), ("info", "base0C")):
-        c = pal.get(key) or STATUS[role]
-        out[role] = c
-        out[role + "-bg"] = lch_mix(pal["base00"], c, 0.18)
-        out[role + "-border"] = c
-    return out
+# ═══ role derivation ═══════════════════════════════════════════════════════
+def derive_roles(sc, accent):
+    """Every colour role from the scheme's palette and the accent, per the
+    role table in 10-color-schemes.md. Returns (colors, alpha): `alpha`
+    carries the opacity of the roles that are translucent (scrim)."""
+    p = sc["palette"]
+    variant = sc["variant"]
+    dark = variant == "dark"
+    c = {"ewellow": EWELLOW, "black": BLACK}
+    ramp = accent_ramp(accent)
+    for s in RAMP_STEPS:
+        c["ewellow-%d" % s] = ramp[s]
+    for k, v in NEUTRAL.items():
+        c["neutral-%d" % k] = v
+    sunken = p.get("base10") or ok_shift(p["base00"], -SUNKEN_DL)
+    if dark:
+        c.update({
+            "surface-base": p["base00"], "surface-raised": p["base01"],
+            "surface-overlay": ok_mix(p["base01"], p["base02"], 0.5),
+            "surface-sunken": sunken, "surface-hover": p["base02"],
+            "surface-pressed": ok_toward(p["base02"], p["base05"], 8),
+            "surface-selected": p["base02"], "border-subtle": p["base02"],
+            "border-strong": ok_mix(p["base03"], p["base04"], 0.5)})
+    else:
+        # base07 is the lightest surface in Ewe Light's palette. A light
+        # scheme in the Base16 convention runs the other way (base07 is its
+        # darkest ink, Solarized Light: #002b36), and a black menu is not a
+        # menu — then the overlay is the ground lifted toward white instead.
+        top = p["base07"] if oklch(p["base07"])[0] >= oklch(p["base00"])[0] else ok_shift(p["base00"], SURFACE_STEP)
+        c.update({
+            "surface-base": p["base00"], "surface-raised": p["base01"],
+            "surface-overlay": top, "surface-sunken": sunken,
+            "surface-hover": p["base02"],
+            "surface-pressed": ok_toward(p["base02"], p["base05"], 8),
+            "surface-selected": top,
+            "border-subtle": ok_mix(p["base02"], p["base03"], 0.5),
+            "border-strong": ok_mix(p["base03"], p["base04"], 0.5)})
+    c.update({"text-primary": p["base05"], "text-secondary": p["base06"],
+              "text-muted": p["base04"], "text-disabled": p["base03"]})
+    L0 = oklch(accent)[0]
+    A = ACCENT_L[variant]
+    c["accent"] = accent
+    c["accent-hover"] = ramp_at(accent, L0 + A["hover"])
+    c["accent-pressed"] = ramp_at(accent, L0 + A["pressed"])
+    c["on-accent"] = on_color(accent, BLACK, "#ffffff")
+    c["accent-subtle"] = ramp_at(accent, A["subtle"])
+    c["accent-text"] = ramp_at(accent, A["text"])
+    c["focus-ring"] = ramp_at(accent, A["ring"])
+    if sc.get("semantic", True):
+        c.update({"danger": p["base08"], "warning": p["base09"],
+                  "success": p["base0B"], "info": p["base0D"]})
+    else:
+        c.update(EWE_STATUS[variant])
+    alpha = {"scrim": SCRIM_ALPHA[variant]}
+    c["scrim"] = (p.get("base11") or BLACK) if dark else p["base05"]
+    return c, alpha
 
 
-# ── importers: every format becomes a scheme record ─────────────────────────
+def status_subtle(color, variant):
+    """A status colour as a tinted ground: at the subtle L, chroma capped."""
+    Ls, Cmax = STATUS_SUBTLE[variant]
+    L, C, H = oklch(color)
+    return oklch_hex(Ls, min(C, Cmax), H)
+
+
+def finish_status(c, variant):
+    for s in STATUS:
+        c[s + "-subtle"] = status_subtle(c[s], variant)
+    # one on-status for the four fills: the candidate that holds best on all
+    best = max(("#020202", "#ffffff"), key=lambda cand: min(contrast(c[s], cand) for s in STATUS))
+    c["on-status"] = best
+
+
+# ═══ the guarantees ════════════════════════════════════════════════════════
+def _move_l(hexv, L):
+    _, C, H = oklch(hexv)
+    return oklch_hex(L, C, H)
+
+
+def ensure_contrast(c, role, surfaces, target, adjusted, why):
+    """Move `role`'s lightness, hue held, until it reaches `target` against
+    every surface named. Direction: away from the surfaces' mean lightness,
+    then the other way if that runs out of room."""
+    worst = min(contrast(c[role], c[s]) for s in surfaces)
+    if worst >= target - 1e-9:
+        return
+    L, C, H = oklch(c[role])
+    mean = sum(oklch(c[s])[0] for s in surfaces) / len(surfaces)
+    first = 1 if L >= mean else -1
+    for direction in (first, -first):
+        for step in range(1, 101):
+            Ln = L + direction * step
+            if not 0 <= Ln <= 100:
+                break
+            cand = oklch_hex(Ln, C, H)
+            if min(contrast(cand, c[s]) for s in surfaces) >= target:
+                adjusted.append({"role": role, "from": c[role], "to": cand,
+                                 "why": "%s (was %.2f:1)" % (why, worst)})
+                c[role] = cand
+                return
+    adjusted.append({"role": role, "from": c[role], "to": c[role],
+                     "why": "%s — could not be reached by moving lightness alone (%.2f:1)" % (why, worst)})
+
+
+def guarantees(c, variant, accent, adjusted):
+    dark = variant == "dark"
+    # 1. surfaces stay apart: each differs from the surface below by 2 L
+    for below, role in (("surface-base", "surface-raised"), ("surface-raised", "surface-overlay"),
+                        ("surface-raised", "surface-hover")):
+        Lb, L = oklch(c[below])[0], oklch(c[role])[0]
+        if abs(L - Lb) >= SURFACE_STEP - 0.05:
+            continue
+        sign = (1 if L > Lb else -1) if abs(L - Lb) > 1e-6 else (1 if dark else -1)
+        new = _move_l(c[role], max(0.0, min(100.0, Lb + sign * SURFACE_STEP)))
+        if new != c[role]:
+            adjusted.append({"role": role, "from": c[role], "to": new,
+                             "why": "at least %g L from %s" % (SURFACE_STEP, below)})
+            c[role] = new
+    # 2. warning never looks like the accent
+    La, Ca, Ha = oklch(accent)
+    Lw, Cw, Hw = oklch(c["warning"])
+    if Ca > 0.02 and Cw > 0.02:
+        d = ((Hw - Ha + 180) % 360) - 180
+        if abs(d) < WARNING_HUE_GAP:
+            toward = ((RED_HUE - Ha + 180) % 360) - 180
+            sign = 1 if toward >= 0 else -1
+            new = oklch_hex(Lw, Cw, (Ha + sign * WARNING_HUE_GAP) % 360)
+            adjusted.append({"role": "warning", "from": c["warning"], "to": new,
+                             "why": "hue within %g° of the accent; turned toward red" % WARNING_HUE_GAP})
+            c["warning"] = new
+    # 3. text reads on every surface role; pressed carries primary/secondary
+    for role in TEXT_ROLES:
+        ensure_contrast(c, role, RESTING, CONTRAST_TEXT, adjusted,
+                        "%g:1 on every surface" % CONTRAST_TEXT)
+    for role in ("text-primary", "text-secondary"):
+        ensure_contrast(c, role, ["surface-pressed"], CONTRAST_TEXT, adjusted,
+                        "%g:1 on surface-pressed" % CONTRAST_TEXT)
+    # 4. control outlines and the focus ring are visible on every surface
+    for role in ("border-strong", "focus-ring"):
+        ensure_contrast(c, role, RESTING, CONTRAST_BORDER, adjusted,
+                        "%g:1 on every surface" % CONTRAST_BORDER)
+
+
+def scheme_colors(sc, accent):
+    """derive -> overrides -> guarantees. The finished role set and the list
+    of what the guarantees had to move."""
+    c, alpha = derive_roles(sc, accent)
+    for k, v in (sc.get("overrides") or {}).items():
+        # an override of an accent role belongs to the accent the file was
+        # written for: when the person picked another accent (a built-in
+        # always wears desktop.theme.accent), those roles follow the pick
+        if k in ACCENT_ROLES and sc.get("builtin") and accent != sc.get("accent"):
+            continue
+        c[k] = v
+    adjusted = []
+    guarantees(c, sc["variant"], accent, adjusted)
+    finish_status(c, sc["variant"])
+    if "on-status" in (sc.get("overrides") or {}):
+        c["on-status"] = sc["overrides"]["on-status"]
+    for s in STATUS:
+        k = s + "-subtle"
+        if k in (sc.get("overrides") or {}):
+            c[k] = sc["overrides"][k]
+    return c, alpha, adjusted
+
+
+# ═══ the token set ═════════════════════════════════════════════════════════
+def _scale(px, pct):
+    return int(round(px * pct / 100.0))
+
+
+def tokens(cfg):
+    """The whole token set, derived. This is the only place it is decided."""
+    cfg = dict(cfg)
+    schemes = cfg.pop("schemes", [])
+    sc = active_scheme(dict(cfg, schemes=schemes))
+    variant = sc["variant"]
+    dark = variant == "dark"
+    accent = scheme_accent(sc, cfg)
+    color, alpha, adjusted = scheme_colors(sc, accent)
+    cfg.update({"accent": accent, "variant": variant, "scheme_name": sc["name"],
+                "scheme_slug": sc["slug"]})
+    inc, red_t = cfg["increase_contrast"], cfg["reduce_transparency"]
+
+    # ── accessibility: Increase contrast remaps roles (AccessibilityModes) ──
+    if inc:
+        color["border-subtle"] = color["border-strong"]
+        color["text-muted"] = color["text-secondary"]
+        color["surface-hover"] = color["surface-pressed"]
+
+    # ── Glass (components/Glass): the bar, dock and lock card's roles ──────
+    op = cfg["bar_opacity"]
+    glass_solid = inc or red_t
+    glass_alpha = 1.0 if glass_solid else (op / 100.0 if op < 100 else OPACITY["opacity-glass"])
+    tint = max((sc["palette"]["base05"], sc["palette"]["base07"]),
+               key=lambda h: contrast(h, color["surface-base"]))
+    ga = GLASS_ALPHA[variant]
+    if glass_solid:
+        color.update({"glass-base": color["surface-base"], "glass-raised": color["surface-raised"],
+                      "glass-border": color["border-subtle"], "glass-hover": color["surface-hover"],
+                      "glass-pressed": color["surface-pressed"]})
+    else:
+        color.update({"glass-base": color["surface-base"], "glass-raised": color["surface-raised"],
+                      "glass-border": tint, "glass-hover": tint, "glass-pressed": tint})
+        alpha.update({"glass-base": glass_alpha, "glass-raised": glass_alpha,
+                      "glass-border": ga["border"], "glass-hover": ga["hover"],
+                      "glass-pressed": ga["pressed"]})
+    # glass-accent: accent-text in the dark; a deeper accent in the light,
+    # so it keeps 4.5:1 over a bright wallpaper (ewellow-900 by default)
+    color["glass-accent"] = color["accent-text"] if dark else ramp_at(accent, oklch(color["ewellow-900"])[0])
+    if "glass-accent" in (sc.get("overrides") or {}) and not (sc.get("builtin") and accent != sc.get("accent")):
+        color["glass-accent"] = sc["overrides"]["glass-accent"]
+    if not glass_solid and op < 100:
+        # The Glass contrast rule (Glass card), applied while Glass is in
+        # use: at the preset, text-primary, text-secondary and glass-accent
+        # hold 4.5:1 and status glyphs 3:1 over the glass fill composited on
+        # white AND black. Lightness moves away from the fill, hue stays —
+        # the same direction that keeps them readable on the solid surfaces
+        # above. (Below the preset Settings warns; nothing is blocked.)
+        ga0 = OPACITY["opacity-glass"]
+        backs = [over(color[k], ga0, w) for k in ("glass-base", "glass-raised") for w in ("#ffffff", "#000000")]
+        direction = 1 if dark else -1
+        for role, target in (("text-primary", CONTRAST_TEXT), ("text-secondary", CONTRAST_TEXT),
+                             ("glass-accent", CONTRAST_TEXT), ("success", CONTRAST_BORDER),
+                             ("warning", CONTRAST_BORDER), ("danger", CONTRAST_BORDER), ("info", CONTRAST_BORDER)):
+            worst = min(contrast(color[role], b) for b in backs)
+            if worst >= target - 1e-9:
+                continue
+            L, C, H = oklch(color[role])
+            for step in range(1, 101):
+                Ln = L + direction * step
+                if not 0 <= Ln <= 100:
+                    break
+                cand = oklch_hex(Ln, C, H)
+                if min(contrast(cand, b) for b in backs) >= target:
+                    adjusted.append({"role": role, "from": color[role], "to": cand,
+                                     "why": "%g:1 over glass at %d%% (was %.2f:1)" % (target, GLASS_PRESET, worst)})
+                    color[role] = cand
+                    break
+        for st in STATUS:
+            if any(a["role"] == st and "glass" in a["why"] for a in adjusted):
+                color[st + "-subtle"] = status_subtle(color[st], variant)
+
+    # ── look presets: a remap of a few tokens, never colours or type ───────
+    slight, secondary, primary, rounded, full = CORNER[cfg["corner"]]
+    ctrl_md, ctrl_lg = DENSITY[cfg["density"]]
+    bw1, bw2 = STROKE[cfg["stroke"]]
+    focus_w = 2 if inc else FOCUS_WIDTH
+    shape = {"slight": slight, "secondary": secondary, "primary": primary, "rounded": rounded,
+             "fully-rounded": full, "border-width-1": bw1, "border-width-2": bw2,
+             "focus-width": focus_w}
+
+    # ── sizes, with Text size scaling the type scale ───────────────────────
+    ts = cfg["text_scale"]
+    bar_size = "large" if ts == 130 else cfg["bar_size"]
+    size = {}
+    for k, v in FONT_SIZE.items():
+        size["font-size-" + k] = _scale(v, ts)
+    for k, v in LINE_HEIGHT.items():
+        size["line-height-" + k] = _scale(v, ts)
+    for k, v in SPACING.items():
+        size["space-" + k] = v
+    size.update({"control-sm": SIZES["control-sm"], "control-md": ctrl_md, "control-lg": ctrl_lg,
+                 "control-xl": SIZES["control-xl"], "control-2xl": SIZES["control-2xl"]})
+    for k in ("bar-height", "bar-height-lg", "icon-xs", "icon-sm", "icon-md", "icon-lg", "icon-xl",
+              "icon-2xl", "icon-3xl", "icon-4xl", "panel-sm", "panel-md", "panel-lg", "window-gap",
+              "blur-glass"):
+        size[k] = SIZES[k]
+    bar = {"size": bar_size, "height": size[BAR[bar_size]["height"]],
+           "module": size[BAR[bar_size]["module"]], "icon": size[BAR[bar_size]["icon"]]}
+
+    # ── type: families, weights, tracking and the styles ───────────────────
+    styles = {}
+    for name, (fam, fs, lh, w, tr, it) in TYPE_STYLES.items():
+        styles[name] = {"family": fam, "size": _scale(fs, ts), "lineHeight": _scale(lh, ts),
+                        "weight": w, "tracking": tr, "italic": it}
+    typ = {"sans": FONT_SANS, "mono": FONT_MONO,
+           "css": {"sans": ", ".join('"%s"' % f for f in FONT_SANS) + ", system-ui, sans-serif",
+                   "mono": ", ".join('"%s"' % f for f in FONT_MONO) + ", ui-monospace, monospace"},
+           "weight": {"font-weight-" + k: v for k, v in FONT_WEIGHT.items()},
+           "tracking": {"tracking-" + k: v for k, v in TRACKING.items()},
+           "scale": ts, "styles": styles}
+
+    # ── motion: the table, divided by the speed; Reduce motion = fades ─────
+    sp = cfg["speed"]
+    div = lambda ms: int(round(ms / sp)) if sp > 0 else 0
+    motion = {k: div(v) for k, v in MOTION.items()}
+    motion["easing"] = dict(EASING)
+    motion["speed"] = sp
+    motion["reduceMotion"] = bool(cfg["reduce_motion"])
+    motion["slideOffset"] = SLIDE_OFFSET
+    if cfg["reduce_motion"]:
+        motion["durBase"] = motion["durSlow"] = motion["durFast"]
+        motion["slideOffset"] = 0
+        motion["easing"]["slow"] = EASING["fast"]
+
+    # ── opacity + the surface block the shell and ewe-conf act on ──────────
+    opacity = dict(OPACITY)
+    app_blur = cfg["app_blur"] and not red_t
+    win_t = cfg["window_transparency"] and not red_t
+    surface = {"bar_alpha": glass_alpha if op < 100 else 1.0,
+               "glass": (op < 100) and not glass_solid,
+               "blur": BAR_BLUR_MIN <= op < 100 and not glass_solid,
+               "app_blur": app_blur, "app_alpha": opacity["opacity-app"] if app_blur else 1.0,
+               "inactive_alpha": opacity["opacity-inactive"] if win_t else 1.0,
+               "solid": glass_solid}
+
+    shadow = {"shadow-none": None}
+    for k, per in SHADOW.items():
+        x, y, blur, col, a = per[variant]
+        shadow[k] = {"x": x, "y": y, "blur": blur, "color": col, "alpha": a}
+
+    presets = {"corner": cfg["corner"], "density": cfg["density"], "stroke": cfg["stroke"]}
+    a11y = {k: cfg[k] for k in ("reduce_motion", "reduce_transparency", "increase_contrast", "text_scale")}
+    inp = {k: cfg[k] for k in ("accent", "scheme", "scheme_name", "scheme_slug", "variant", "corner",
+                               "density", "stroke", "neutral_tint", "bar_opacity", "app_blur",
+                               "window_transparency", "bar_size", "reduce_motion",
+                               "reduce_transparency", "increase_contrast", "text_scale", "speed")}
+    t = {"input": inp, "color": color, "alpha": alpha, "shape": shape, "size": size,
+         "type": typ, "motion": motion, "opacity": opacity, "shadow": shadow,
+         "gradient": GRADIENT, "surface": surface, "bar": bar, "presets": presets,
+         "accessibility": a11y, "adjusted": adjusted,
+         "brand": {str(s): color["ewellow-%d" % s] for s in RAMP_STEPS},
+         "grey": {str(k): v for k, v in NEUTRAL.items()},
+         "scheme": {"slug": sc["slug"], "name": sc["name"], "variant": variant,
+                    "builtin": bool(sc.get("builtin")), "accent": accent,
+                    "semantic": sc.get("semantic", True), "palette": sc["palette"],
+                    "overrides": sc.get("overrides") or {}}}
+    add_aliases(t)
+    return t
+
+
+# ═══ the alias layer — today's Fluent names onto the Ewe tokens ════════════
+# design/system/guidelines/20-migration.md, verbatim. A value here is an Ewe
+# role name, or a literal for the handful the guide marks "removed" (kept
+# at a neutral value so an unmigrated component still renders).
+ALIAS_COLOR = {
+    "fg-1": "text-primary", "fg-2": "text-secondary", "fg-2-hover": "text-primary",
+    "fg-3": "text-muted", "fg-3-hover": "text-primary", "fg-4": "text-muted",
+    "fg-disabled": "text-disabled", "fg-inverted": "on-accent", "fg-on-brand": "on-accent",
+    "bg-1": "surface-raised", "bg-1-hover": "surface-hover", "bg-1-pressed": "surface-pressed",
+    "bg-1-selected": "accent-subtle",
+    "bg-2": "surface-base", "bg-2-hover": "surface-hover", "bg-2-pressed": "surface-pressed",
+    "bg-2-selected": "accent-subtle",
+    "bg-3": "surface-base", "bg-3-hover": "surface-hover", "bg-3-pressed": "surface-pressed",
+    "bg-3-selected": "accent-subtle",
+    "bg-4": "surface-sunken", "bg-4-hover": "surface-hover", "bg-4-pressed": "surface-pressed",
+    "bg-4-selected": "accent-subtle",
+    "bg-5": "surface-sunken", "bg-5-hover": "surface-hover", "bg-5-pressed": "surface-pressed",
+    "bg-5-selected": "accent-subtle",
+    "bg-6": "surface-overlay", "bg-disabled": "surface-raised",
+    "card": "surface-raised", "card-hover": "surface-hover", "card-pressed": "surface-pressed",
+    "card-selected": "accent-subtle",
+    "subtle": "transparent", "subtle-hover": "surface-hover", "subtle-pressed": "surface-pressed",
+    "subtle-selected": "accent-subtle",
+    "stroke-1": "border-strong", "stroke-1-hover": "text-muted", "stroke-1-pressed": "border-strong",
+    "stroke-1-selected": "accent-text", "stroke-2": "border-subtle", "stroke-3": "border-subtle",
+    "stroke-accessible": "border-strong", "stroke-disabled": "border-subtle",
+    "stroke-focus-1": "transparent",       # removed: Ewe draws a single 1px ring
+    "stroke-focus-2": "focus-ring",
+    "brand-bg": "accent", "brand-bg-hover": "accent-hover", "brand-bg-pressed": "accent-pressed",
+    "brand-bg-selected": "accent-pressed", "brand-fg-1": "accent-text", "brand-fg-2": "accent-text",
+    "brand-fg-link": "accent-text", "brand-fg-link-hover": "accent-text",
+    "brand-stroke-1": "focus-ring", "brand-stroke-2": "ewellow-900",
+    "compound-brand-bg": "accent", "compound-brand-bg-hover": "accent-hover",
+    "compound-brand-bg-pressed": "accent-pressed", "compound-brand-fg": "accent-text",
+    "compound-brand-stroke": "focus-ring",
+    "success-bg": "success-subtle", "success-border": "success",
+    "warning-bg": "warning-subtle", "warning-border": "warning",
+    "danger-bg": "danger-subtle", "danger-border": "danger",
+    "info-bg": "info-subtle", "info-border": "info",
+}
+# the pre-Fluent names (2026-08), still injected into installed app binaries
+LEGACY_COLOR = {
+    "bg": "surface-base", "panel": "surface-raised", "elevated": "surface-overlay",
+    "hover": "surface-hover", "stroke": "border-subtle", "fg": "text-primary",
+    "fg-secondary": "text-secondary", "fg-dim": "text-muted", "link": "accent-text",
+    "link-solid": "accent", "accent-fg": "on-accent",
+}
+ALIAS_SHAPE = {"radius-control": "primary", "radius-card": "rounded", "radius-panel": "rounded",
+               "radius-pill": "fully-rounded", "radius": "rounded", "radius-inner": "primary",
+               "outline-width": "border-width-1", "stroke-width-thick": "border-width-2",
+               "border": "border-width-1", "border-thin": "border-width-1",
+               "input-border-width": "border-width-1", "focus": "focus-width"}
+ALIAS_SIZE = {"control": "control-md", "row": "control-md", "icon": "icon-md",
+              "fs-100": "font-size-xs", "lh-100": "line-height-xs",
+              "fs-200": "font-size-s", "lh-200": "line-height-s",
+              "fs-300": "font-size-md", "lh-300": "line-height-md",
+              "fs-400": "font-size-lg", "lh-400": "line-height-lg",
+              "fs-500": "font-size-xl", "lh-500": "line-height-xl",
+              "fs-600": "font-size-2xl", "lh-600": "line-height-2xl",
+              "fs-700": "font-size-3xl", "lh-700": "line-height-3xl",
+              "fs-800": "font-size-4xl", "lh-800": "line-height-4xl",
+              "fs-body": "font-size-md", "fs-small": "font-size-s", "fs-large": "font-size-lg",
+              "fs-title": "font-size-2xl",
+              "space-none": 0, "space-snudge": "space-s", "space-mnudge": "space-s",
+              "space-m": 12, "space-l": "space-md", "space-xxl": 24, "space-xxxl": "space-lg"}
+LEGACY_LOOKS = ("flock", "blacksheep")     # the `themes` block's two old look names
+
+
+def add_aliases(t):
+    c, s, z = t["color"], t["shape"], t["size"]
+    for k, v in ALIAS_COLOR.items():
+        c[k] = c[v] if v in c else v
+    for k, v in LEGACY_COLOR.items():
+        c[k] = c[v]
+    for k in ("success", "warning", "danger"):
+        c.setdefault(k, c[k])
+    # the old two-layer shadow: both layers are the one Ewe shadow now
+    sf = t["shadow"]["shadow-float"]
+    c["shadow-ambient"] = c["shadow-key"] = sf["color"]
+    t["alpha"]["shadow-ambient"] = t["alpha"]["shadow-key"] = sf["alpha"]
+    for k, v in ALIAS_SHAPE.items():
+        s[k] = s[v]
+    # `stroke-width` is a rule INSIDE a surface (dividers, the window ring)
+    # and never drops below 1, even under stroke = none; that is what kept
+    # hairlines visible before v3 and what the current shell still reads.
+    s["stroke-width"] = max(1, s["border-width-1"])
+    for k, v in ALIAS_SIZE.items():
+        z[k] = z[v] if isinstance(v, str) else v
+    z["pad"] = z["space-s"] + z["space-xs"]
+    z["gap"] = z["space-s"]
+
+
+# ═══ SCHEMES — import / export / wallpaper ═════════════════════════════════
 def _mini_yaml(text):
     """Enough YAML for scheme files: `key: value` lines, one level of nesting,
     quotes, comments. Base16/Base24 and Gogh files are exactly this shape."""
@@ -714,7 +1131,9 @@ def _mini_yaml(text):
 def _from_base16(d, src):
     pal = d.get("palette") if isinstance(d.get("palette"), dict) else d
     rec = {"name": d.get("name") or d.get("scheme") or os.path.basename(src),
-           "author": d.get("author", ""), "variant": d.get("variant", ""), "palette": {}}
+           "author": d.get("author", ""), "variant": d.get("variant", ""), "palette": {},
+           "slug": d.get("slug"), "accent": d.get("accent"), "semantic": d.get("semantic"),
+           "overrides": d.get("overrides")}
     for k in SCHEME_KEYS:
         v = pal.get(k) or pal.get(k.lower())
         if v:
@@ -746,13 +1165,19 @@ def _from_catppuccin(d, flavour):
         raise ValueError("no flavour %r in this palette.json (have: %s)" % (
             flavour, ", ".join(k for k in d if isinstance(d.get(k), dict) and "colors" in d[k])))
     c = {k: v["hex"] for k, v in fl["colors"].items() if isinstance(v, dict) and v.get("hex")}
+    dark = bool(fl.get("dark", True))
     pal = {"base00": c["base"], "base01": c["surface0"], "base02": c["surface1"], "base03": c["surface2"],
            "base04": c["subtext0"], "base05": c["text"], "base06": c["subtext1"], "base07": c["text"],
            "base08": c["red"], "base09": c["peach"], "base0A": c["yellow"], "base0B": c["green"],
            "base0C": c["teal"], "base0D": c["blue"], "base0E": c["mauve"], "base0F": c["flamingo"],
            "base10": c["mantle"], "base11": c["crust"], "base12": c["maroon"], "base13": c["yellow"],
            "base14": c["green"], "base15": c["sky"], "base16": c["sapphire"], "base17": c["pink"]}
-    return {"name": "Catppuccin " + flavour.capitalize(), "variant": "light" if not fl.get("dark", True) else "dark",
+    if not dark:
+        # Latte: panels are the mantle, wells the crust, the overlay (base07)
+        # the base itself — the lightest the flavour has
+        pal.update({"base01": c["mantle"], "base02": c["surface0"], "base03": c["surface2"],
+                    "base07": c["base"], "base10": c["crust"], "base11": c["crust"]})
+    return {"name": "Catppuccin " + flavour.capitalize(), "variant": "dark" if dark else "light",
             "accent": c.get("blue"), "palette": pal}
 
 
@@ -807,16 +1232,26 @@ def read_scheme_file(src, flavour=None):
 
 
 def scheme_yaml(sc):
-    """A scheme as a Base24 YAML file — what `export` prints and `import` reads back."""
-    lines = ['system: "base24"', 'name: "%s"' % sc["name"].replace('"', "'"),
-             'author: "%s"' % sc.get("author", "ewe").replace('"', "'"),
-             'variant: "%s"' % sc["variant"]]
+    """A scheme as a Base24 YAML file — what `export` prints and `import`
+    reads back (the shape of design/system/assets/Schemes/*.yaml)."""
+    q = lambda s: str(s).replace('"', "'")
+    lines = ['system: "base24"', 'name: "%s"' % q(sc["name"]),
+             'author: "%s"' % q(sc.get("author", "ewe")),
+             'slug: "%s"' % sc["slug"], 'variant: "%s"' % sc["variant"]]
+    if sc.get("builtin"):
+        lines.append("builtin: true")
     if sc.get("accent"):
         lines.append('accent: "%s"' % sc["accent"])
+    lines.append("semantic: %s" % ("true" if sc.get("semantic", True) else "false"))
     lines.append("palette:")
     for k in SCHEME_KEYS:
         if k in sc["palette"]:
             lines.append('  %s: "%s"' % (k, sc["palette"][k]))
+    if sc.get("overrides"):
+        lines.append("overrides:")
+        for k in ROLES:
+            if k in sc["overrides"]:
+                lines.append('  %s: "%s"' % (k, sc["overrides"][k]))
     return "\n".join(lines) + "\n"
 
 
@@ -866,11 +1301,15 @@ def scheme_from_image(path, light=False, name=None):
     L0 = 95 if light else 13
     step = lambda dl, c=C_bg, h=hue_bg: lch_to_hex(max(0, min(100, L0 + dl * sgn)), c, h)
     text = lambda L, c=min(C_bg, 4), h=hue_bg: lch_to_hex(L, c, h)
-    tl = [30, 20, 12, 5] if light else [62, 80, 88, 94]
+    # base04 muted, base05 primary, base06 secondary (the role table's order);
+    # base07 is the brightest text in the dark and the lightest surface in
+    # the light, as in the two built-in palettes
+    tl = [38, 12, 24] if light else [62, 92, 82]
+    top = step(-4) if light else text(96)
     hue = lambda L, C, H: lch_to_hex(L if not light else L - 12, C, H)
     pal = {"base11": step(-4), "base10": step(-2), "base00": step(0), "base01": step(5),
            "base02": step(9), "base03": lch_to_hex(L0 + 28 * sgn, min(C_bg, 6), hue_bg),
-           "base04": text(tl[0]), "base05": text(tl[1]), "base06": text(tl[2]), "base07": text(tl[3]),
+           "base04": text(tl[0]), "base05": text(tl[1]), "base06": text(tl[2]), "base07": top,
            "base08": hue(62, 48, 27), "base09": hue(68, 55, 58), "base0A": hue(78, 60, 92),
            "base0B": hue(66, 45, 140), "base0C": hue(70, 32, 205), "base0D": accent,
            "base0E": hue(64, 40, 320), "base0F": hue(52, 30, 50)}
@@ -913,12 +1352,20 @@ def _current_wallpaper():
     return None
 
 
-def _scheme_summary(sc, current):
+def _scheme_summary(sc, cfg, current):
     p = sc["palette"]
+    acc = scheme_accent(sc, cfg)
+    cur = current == sc["slug"] or (current == LEGACY_SCHEME and sc["slug"] == DEFAULT_SCHEME)
     return {"slug": sc["slug"], "name": sc["name"], "variant": sc["variant"],
-            "accent": sc.get("accent") or p["base0D"], "current": sc["slug"] == current,
-            "source": sc.get("source", ""),
-            "swatch": [p["base00"], p["base01"], p["base05"], sc.get("accent") or p["base0D"], p["base08"]]}
+            "builtin": bool(sc.get("builtin")), "semantic": sc.get("semantic", True),
+            "accent": acc, "current": cur, "source": sc.get("source", ""),
+            "overrides": sorted(sc.get("overrides") or {}),
+            "swatch": [p["base00"], p["base01"], p["base05"], acc, p["base08"]]}
+
+
+def _user_record(sc):
+    """What goes into ewe.conf: the record minus the built-in mark."""
+    return {k: v for k, v in sc.items() if k != "builtin"}
 
 
 def cmd_scheme(a):
@@ -928,24 +1375,32 @@ def cmd_scheme(a):
     verb = a.scheme_cmd or "list"
 
     def save_list(lst):
-        conf_set("desktop.theme.schemes", [{k: v for k, v in s.items()} for s in lst], hooks=False)
+        conf_set("desktop.theme.schemes", [_user_record(s) for s in lst], hooks=False)
 
-    if verb == "list":
-        out({"ok": True, "current": current, "schemes": [_scheme_summary(s, current) for s in schemes]})
-    if verb == "show":
-        slug = a.slug or current
-        if slug == "accent":
-            out({"ok": True, "current": current, "scheme": None, "note": "accent mode — every colour derives from desktop.theme.accent"})
-        sc = next((s for s in schemes if s["slug"] == slug), None)
+    def user_scheme(slug, what):
+        sc = find_scheme(cfg, slug)
         if not sc:
             fail("no-scheme", "no scheme %r (ewe-theme scheme list)" % slug)
-        t = tokens(dict(cfg, scheme=slug))
-        out({"ok": True, "current": current, "scheme": sc, "roles": {k: t["color"][k] for k in (
-            "bg-1", "bg-2", "bg-3", "bg-4", "bg-5", "card", "fg-1", "fg-2", "fg-3", "fg-4",
-            "stroke-1", "brand-bg", "brand-fg-1", "danger", "warning", "success")}})
+        if sc.get("builtin"):
+            fail("builtin", "%s is built in and cannot be %s — duplicate it first "
+                 "(ewe-theme scheme duplicate %s)" % (sc["name"], what, sc["slug"]))
+        return sc
+
+    if verb == "list":
+        out({"ok": True, "current": DEFAULT_SCHEME if current == LEGACY_SCHEME else current,
+             "schemes": [_scheme_summary(s, cfg, current) for s in all_schemes(cfg)]})
+    if verb == "show":
+        slug = a.slug or current
+        sc = find_scheme(cfg, slug)
+        if not sc:
+            fail("no-scheme", "no scheme %r (ewe-theme scheme list)" % slug)
+        t = tokens(dict(cfg, scheme=sc["slug"]))
+        out({"ok": True, "current": DEFAULT_SCHEME if current == LEGACY_SCHEME else current,
+             "scheme": sc, "accent": t["input"]["accent"],
+             "roles": {k: t["color"][k] for k in ROLES}, "adjusted": t["adjusted"]})
     if verb == "apply":
-        slug = a.slug
-        if slug != "accent" and not any(s["slug"] == slug for s in schemes):
+        slug = DEFAULT_SCHEME if a.slug == LEGACY_SCHEME else a.slug
+        if not find_scheme(cfg, slug):
             fail("no-scheme", "no scheme %r — import it first (ewe-theme scheme import FILE)" % slug)
         conf_set("desktop.theme.scheme", slug, hooks=hooks)
         out({"ok": True, "scheme": slug})
@@ -964,41 +1419,53 @@ def cmd_scheme(a):
             if not acc:
                 fail("bad-accent", "accent must be a hex colour")
             sc["accent"] = acc
+        if sc["slug"] in BUILTIN_BY_SLUG:
+            fail("builtin", "%r is a built-in scheme — import it under another name (--name or --slug), "
+                 "or duplicate it (ewe-theme scheme duplicate %s)" % (sc["slug"], sc["slug"]))
         lst = [s for s in schemes if s["slug"] != sc["slug"]] + [sc]
         save_list(lst)
         if a.apply:
             conf_set("desktop.theme.scheme", sc["slug"], hooks=hooks)
-        out({"ok": True, "imported": _scheme_summary(sc, sc["slug"] if a.apply else current), "applied": bool(a.apply)})
+        out({"ok": True, "imported": _scheme_summary(sc, cfg, sc["slug"] if a.apply else current),
+             "applied": bool(a.apply)})
+    if verb == "duplicate":
+        sc = find_scheme(cfg, a.slug)
+        if not sc:
+            fail("no-scheme", "no scheme %r (ewe-theme scheme list)" % a.slug)
+        cp = _user_record(sc)
+        cp["name"] = a.name or (sc["name"] + " copy")
+        cp["slug"] = slugify(getattr(a, "slug_opt", None) or cp["name"])
+        if cp["slug"] in BUILTIN_BY_SLUG:
+            fail("builtin", "%r is a built-in slug — pick another with --slug" % cp["slug"])
+        cp.pop("source", None)
+        if sc.get("builtin"):
+            cp["accent"] = scheme_accent(sc, cfg)   # the copy wears what the original wore
+        cp = norm_scheme(cp)
+        lst = [s for s in schemes if s["slug"] != cp["slug"]] + [cp]
+        save_list(lst)
+        if a.apply:
+            conf_set("desktop.theme.scheme", cp["slug"], hooks=hooks)
+        out({"ok": True, "duplicated": _scheme_summary(cp, cfg, cp["slug"] if a.apply else current),
+             "from": sc["slug"], "applied": bool(a.apply)})
     if verb == "remove":
-        if not any(s["slug"] == a.slug for s in schemes):
-            fail("no-scheme", "no scheme %r" % a.slug)
-        save_list([s for s in schemes if s["slug"] != a.slug])
-        if current == a.slug:
-            conf_set("desktop.theme.scheme", "accent", hooks=hooks)
-        out({"ok": True, "removed": a.slug, "current": "accent" if current == a.slug else current})
+        sc = user_scheme(a.slug, "removed")
+        save_list([s for s in schemes if s["slug"] != sc["slug"]])
+        was_current = current == sc["slug"]
+        if was_current:
+            conf_set("desktop.theme.scheme", DEFAULT_SCHEME, hooks=hooks)
+        out({"ok": True, "removed": sc["slug"], "current": DEFAULT_SCHEME if was_current else current})
     if verb == "export":
         slug = a.slug or current
-        sc = next((s for s in schemes if s["slug"] == slug), None)
+        sc = find_scheme(cfg, slug)
         if not sc:
-            if slug == "accent":
-                # accent mode has no palette of its own — export the live tokens as one
-                t = tokens(cfg)
-                c = t["color"]
-                sc = norm_scheme({"name": "ewe accent %s" % cfg["accent"], "variant": "dark", "accent": cfg["accent"], "palette": {
-                    "base00": c["bg-3"], "base01": c["bg-1"], "base02": c["card"], "base03": c["stroke-2"],
-                    "base04": c["fg-4"], "base05": c["fg-2"], "base06": c["fg-2"], "base07": c["fg-1"],
-                    "base08": c["danger"], "base09": "#e8a04a", "base0A": c["warning"], "base0B": c["success"],
-                    "base0C": c["info"], "base0D": c["brand-fg-1"], "base0E": "#b38aff", "base0F": "#a0785a",
-                    "base10": c["bg-4"], "base11": c["bg-5"]}})
-            else:
-                fail("no-scheme", "no scheme %r" % slug)
+            fail("no-scheme", "no scheme %r" % slug)
+        if sc.get("builtin"):
+            sc = dict(sc, accent=scheme_accent(sc, cfg))
         sys.stdout.write(scheme_yaml(sc))
         sys.exit(0)
     if verb == "set":
-        slug = a.slug_opt or current
-        sc = next((s for s in schemes if s["slug"] == slug), None)
-        if not sc:
-            fail("no-scheme", "no scheme to edit — apply or import one first, or pass --slug")
+        sc = user_scheme(a.slug_opt or current, "changed")
+        slug = sc["slug"]
         field, value = a.field, a.value
         if field == "accent":
             v = _hex6(value)
@@ -1017,13 +1484,29 @@ def cmd_scheme(a):
                 fail("bad-value", "variant is dark or light")
             sc["variant"] = value
         elif field == "semantic":
-            sc["semantic"] = value.lower() in ("1", "true", "yes", "on")
+            sc["semantic"] = _truthy(value, True)
+        elif field.startswith("overrides."):
+            role = field[len("overrides."):]
+            if role not in ROLES:
+                fail("bad-field", "overrides.<role>: one of " + ", ".join(ROLES))
+            ov = dict(sc.get("overrides") or {})
+            if value.strip().lower() in ("", "none", "null", "-"):
+                ov.pop(role, None)          # clear: back to the derived value
+            else:
+                v = _hex6(value)
+                if not v:
+                    fail("bad-value", "%s must be a hex colour (or `none` to clear it)" % field)
+                ov[role] = v
+            if ov:
+                sc["overrides"] = ov
+            else:
+                sc.pop("overrides", None)
         else:
-            fail("bad-field", "fields: accent, name, variant, semantic, base00…base17")
+            fail("bad-field", "fields: accent, name, variant, semantic, base00…base17, overrides.<role>")
         save_list(schemes)
         if current == slug:
             conf_set("desktop.theme.scheme", slug, hooks=hooks)   # re-apply so the shell repaints
-        out({"ok": True, "scheme": _scheme_summary(sc, current)})
+        out({"ok": True, "scheme": _scheme_summary(sc, cfg, current)})
     if verb == "from-wallpaper":
         path = a.path or _current_wallpaper()
         if not path or not os.path.isfile(path):
@@ -1042,169 +1525,214 @@ def cmd_scheme(a):
         save_list(lst)
         if a.apply:
             conf_set("desktop.theme.scheme", sc["slug"], hooks=hooks)
-        out({"ok": True, "scheme": _scheme_summary(sc, sc["slug"] if a.apply else current),
+        out({"ok": True, "scheme": _scheme_summary(sc, cfg, sc["slug"] if a.apply else current),
              "wallpaper": path, "applied": bool(a.apply)})
-    fail("bad-verb", "scheme verbs: list, show, apply, import, remove, export, set, from-wallpaper")
+    fail("bad-verb", "scheme verbs: list, show, apply, import, duplicate, remove, export, set, from-wallpaper")
 
 
-# ═══ the compatibility layer ══════════════════════════════════════════════
-# ewe's ~50 QML files and three Svelte apps still ask for the OLD names. They
-# are migrated file by file, not in one commit, so every old name is published
-# here as an alias onto its Fluent role. Nothing breaks on the day the engine
-# lands; a component stops appearing in this table when it has been migrated,
-# and when the table is empty it is deleted.
-# ── the legacy alias layer ────────────────────────────────────────────────
-# NOTHING in this tree reads these any more: the shell moved onto the Fluent
-# roles on 2026-09-04, and so did design/components.css and all three apps.
-# They are emitted for ONE reason — an already-installed app binary, built
-# before the move, calls `ewe-theme show` and injects whatever css_vars it
-# gets. Dropping them would leave such a binary painting itself with the
-# defaults compiled into its own tokens.css. Delete them a release after the
-# Fluent move ships.
-LEGACY_COLOR = {
-    "bg": "bg-3",                 # desktop / app base — the deepest surface
-    "panel": "bg-1",              # a popup or panel sitting on it
-    "elevated": "card",           # a card or row raised on the panel
-    "hover": "subtle-hover",      # what ewe called "hover" was always this
-    "stroke": "stroke-2",
-    "fg": "fg-1",
-    "fg-secondary": "fg-2",
-    "fg-dim": "fg-3",
-    "link": "brand-fg-link",
-    "link-solid": "brand-bg",
-    "accent-fg": "fg-on-brand",
-    "success": "success", "warning": "warning", "danger": "danger",
-}
-LEGACY_SHAPE = {
-    "radius": "radius-panel", "radius-inner": "radius-card",
-    "radius-pill": "radius-pill", "border": "outline-width",
-    "border-thin": "outline-width", "hover-inset": "stroke-width",
-    "focus": "focus-width",
-}
-LEGACY_SIZE = ("pad", "gap", "row", "control", "bar-height", "icon",
-               "fs-small", "fs-body", "fs-large", "fs-title")
-# One look now, so both old names resolve to it. Keeping the two keys means a
-# machine whose ewe.conf still says theme_name = "blacksheep" themes correctly
-# instead of falling back to Theme.qml's built-ins.
-LEGACY_LOOKS = ("flock", "blacksheep")
+# ═══ artefacts ════════════════════════════════════════════════════════════
+def _fmt(x):
+    return ("%.3f" % x).rstrip("0").rstrip(".") or "0"
+
+
+def _rgba(hex6, alpha):
+    return "rgba(%d, %d, %d, %s)" % (*_rgb(hex6), _fmt(alpha))
+
+
+def color_css(t, role):
+    """A colour as CSS reads it: translucent roles as rgba()."""
+    v = t["color"][role]
+    if role in t["alpha"]:
+        return _rgba(v, t["alpha"][role])
+    return v
+
+
+def color_qml(t, role):
+    """The same colour as QML reads it: #AARRGGBB."""
+    v = t["color"][role]
+    if role in t["alpha"]:
+        return "#%02x%s" % (round(t["alpha"][role] * 255), v.lstrip("#"))
+    return v
+
+
+def shadow_css(sh):
+    if not sh:
+        return "none"
+    return "%s %s %s %s" % (_px(sh["x"]), _px(sh["y"]), _px(sh["blur"]), _rgba(sh["color"], sh["alpha"]))
+
+
+def _px(v):
+    return "0" if v == 0 else "%dpx" % v
+
+
+def gradient_css(g):
+    stops = ", ".join("%s %d%%" % (_rgba(c, a) if a < 1 else c, pos) for c, a, pos in g["stops"])
+    if g["kind"] == "radial":
+        return "radial-gradient(circle at %s, %s)" % (g["at"], stops)
+    return "linear-gradient(%ddeg, %s)" % (g["angle"], stops)
+
+
+def shadow_qml(sh):
+    if not sh:
+        return None
+    return {"x": sh["x"], "y": sh["y"], "blur": sh["blur"],
+            "color": "#%02x%s" % (round(sh["alpha"] * 255), sh["color"].lstrip("#"))}
 
 
 def legacy(t):
+    """The pre-Fluent `themes` block: one look under both of its old names,
+    so a machine whose user-theme.json still says "blacksheep" themes."""
     c, s, z = t["color"], t["shape"], t["size"]
     look = {
         "label": "Ewe",
-        "note": "Fluent 2 tokens, derived from your accent.",
-        "accent": c["brand-fg-1"],
-        "color": {k: c[v] for k, v in LEGACY_COLOR.items()},
-        "shape": dict({k: s[v] for k, v in LEGACY_SHAPE.items()}, **{"shadow-offset": 0}),
-        "size": {k: z[k] for k in LEGACY_SIZE},
-        # the retired Bauhaus/Alexandria "voice" keys — one look, one voice
+        "note": "Ewe design system v%d tokens, derived from the active scheme." % DS_VERSION,
+        "accent": c["accent-text"],
+        "color": {k: color_qml(t, k) for k in LEGACY_COLOR},
+        "shape": dict({k: s[k] for k in ("radius", "radius-inner", "radius-pill", "border",
+                                         "border-thin", "focus")},
+                      **{"hover-inset": s["stroke-width"], "shadow-offset": 0}),
+        "size": {k: z[k] for k in ("pad", "gap", "row", "control", "bar-height", "icon",
+                                   "fs-small", "fs-body", "fs-large", "fs-title")},
         "voice": {"label-transform": "none", "label-tracking": "normal",
-                  "label-weight": 600, "hover": "brighten",
+                  "label-weight": FONT_WEIGHT["medium"], "hover": "brighten",
                   "input-border": "all", "surface": "tonal"},
     }
     return {n: look for n in LEGACY_LOOKS}
 
 
-# ═══ artefacts ════════════════════════════════════════════════════════════
-def _rgb(hexv):
-    h = hexv.lstrip("#")
-    return int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
-
-
-def color_css(role, hexv):
-    """A colour as CSS reads it: strokes carry their alpha as rgba()."""
-    if role in ALPHA_ROLES:
-        return "rgba(%d, %d, %d, %s)" % (*_rgb(hexv), STROKE_ALPHA)
-    return hexv
-
-
-def color_qml(role, hexv):
-    """The same colour as QML reads it: #AARRGGBB."""
-    if role in ALPHA_ROLES:
-        return "#%02x%s" % (round(STROKE_ALPHA * 255), hexv.lstrip("#"))
-    return hexv
-
-
 def gen_json(t):
-    lg = legacy(t)
-    # legacy() hands every look the SAME dict, so convert each object once
-    for look in {id(l): l for l in lg.values()}.values():
-        look["color"] = {k: color_qml(LEGACY_COLOR[k], v) for k, v in look["color"].items()}
     doc = {
-        "version": 2,
+        "version": DS_VERSION,
         "input": t["input"],
-        "color": {k: color_qml(k, v) for k, v in t["color"].items()},
+        "color": {k: color_qml(t, k) for k in t["color"]},
         "shape": t["shape"], "size": t["size"],
-        "grey": t["grey"], "brand": t["brand"], "surface": t["surface"],
-        "themes": lg,
+        "type": t["type"], "motion": t["motion"], "opacity": t["opacity"],
+        "shadow": {k: shadow_qml(v) for k, v in t["shadow"].items()},
+        "gradient": {k: dict(v, css=gradient_css(v)) for k, v in t["gradient"].items()},
+        "surface": t["surface"], "bar": t["bar"], "presets": t["presets"],
+        "accessibility": t["accessibility"], "adjusted": t["adjusted"],
+        "brand": t["brand"], "grey": t["grey"],
+        "scheme": t["scheme"],          # colorscheme.sh reads the palette for kitty's ANSI
+        "themes": legacy(t),
     }
-    if t.get("scheme"):
-        doc["scheme"] = t["scheme"]        # colorscheme.sh reads the palette for kitty's ANSI
     return json.dumps(doc, indent=2) + "\n"
 
 
-def _rgba(hex6, alpha):
-    h = hex6.lstrip("#")
-    return "rgba(%d, %d, %d, %s)" % (int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16),
-                                     ("%.2f" % alpha).rstrip("0").rstrip("."))
-
-
 def css_vars(t):
+    """Every token as a CSS custom property (names = token names), then the
+    Fluent aliases and the handful of helpers the apps inject at runtime."""
     v = {}
-    for k, val in t["color"].items():
-        v["--" + k] = color_css(k, val)
-    # the bar/dock alpha, and the bar's own colour at it (an app that wants
-    # to match the bar paints --bg-3-bar on a transparent window)
-    sf = t.get("surface", {"bar_alpha": 1.0, "blur": False})
-    v["--bar-alpha"] = ("%.2f" % sf["bar_alpha"]).rstrip("0").rstrip(".") or "0"
-    v["--bg-3-bar"] = _rgba(t["color"]["bg-3"], sf["bar_alpha"])
-    for k, val in t["shape"].items():
-        v["--" + k] = "%dpx" % val
-    for k, val in t["size"].items():
-        v["--" + k] = "%dpx" % val
-    # the accent itself, and depth. ewe is dark-only, so depth is ambient:
-    # Fluent's own two-layer shadow, key over ambient.
-    v["--accent-default"] = t["color"]["brand-fg-1"]
-    v["--elevation-sm"] = "0 1px 2px %s, 0 0 2px %s" % (
-        t["color"]["shadow-key"], t["color"]["shadow-ambient"])
-    v["--elevation"] = "0 8px 16px %s, 0 0 2px %s" % (
-        t["color"]["shadow-key"], t["color"]["shadow-ambient"])
-    # legacy aliases — see LEGACY_COLOR
-    for k, src in LEGACY_COLOR.items():
-        v["--" + k] = color_css(src, t["color"][src])
-    for k, src in LEGACY_SHAPE.items():
-        v["--" + k] = "%dpx" % t["shape"][src]
-    v["--shadow-offset"] = "0px"
+    ewe_colors = [k for k in t["color"] if k not in ALIAS_COLOR and k not in LEGACY_COLOR
+                  and k not in ("shadow-ambient", "shadow-key")]
+    for k in ewe_colors:
+        v["--" + k] = color_css(t, k)
+    v["--font-sans"] = t["type"]["css"]["sans"]
+    v["--font-mono"] = t["type"]["css"]["mono"]
+    for k in [x for x in t["size"] if x.startswith("font-size-")]:
+        v["--" + k] = "%dpx" % t["size"][k]
+    for k in [x for x in t["size"] if x.startswith("line-height-")]:
+        v["--" + k] = "%dpx" % t["size"][k]
+    for k, val in t["type"]["weight"].items():
+        v["--" + k] = str(val)
+    for k, val in t["type"]["tracking"].items():
+        v["--" + k] = "0" if val == 0 else "%gem" % val
+    for k in [x for x in t["size"] if x.startswith("space-") and x[6:] in SPACING]:
+        v["--" + k] = "%dpx" % t["size"][k]
+    for k in ("slight", "secondary", "primary", "rounded", "fully-rounded"):
+        v["--" + k] = "%dpx" % t["shape"][k]
+    for k, sh in t["shadow"].items():
+        v["--" + k] = shadow_css(sh)
+    for k, g in t["gradient"].items():
+        v["--" + k] = gradient_css(g)
+    for k in ("border-width-1", "border-width-2", "focus-width"):
+        v["--" + k] = "%dpx" % t["shape"][k]
+    for k in ("control-sm", "control-md", "control-lg", "control-xl", "control-2xl", "bar-height",
+              "bar-height-lg", "icon-xs", "icon-sm", "icon-md", "icon-lg", "icon-xl", "icon-2xl",
+              "icon-3xl", "icon-4xl", "panel-sm", "panel-md", "panel-lg", "window-gap", "blur-glass"):
+        v["--" + k] = "%dpx" % t["size"][k]
+    for k, val in t["opacity"].items():
+        v["--" + k] = _fmt(val)
+    # ── the alias layer (Migration guide) — deleted in Phase 6 ─────────────
+    for k in ALIAS_COLOR:
+        v["--" + k] = color_css(t, k)
+    v["--shadow-ambient"] = color_css(t, "shadow-ambient")
+    v["--shadow-key"] = color_css(t, "shadow-key")
+    sf = t["surface"]
+    v["--bar-alpha"] = _fmt(sf["bar_alpha"])
+    v["--bg-3-bar"] = _rgba(t["color"]["surface-base"], sf["bar_alpha"])
+    for k in ALIAS_SHAPE:
+        v["--" + k] = "%dpx" % t["shape"][k]
+    v["--stroke-width"] = "%dpx" % t["shape"]["stroke-width"]
+    v["--hover-inset"] = "0px"                 # removed
+    v["--shadow-offset"] = "0px"               # removed
+    for k in list(ALIAS_SIZE) + ["pad", "gap"]:
+        v["--" + k] = "%dpx" % t["size"][k]
+    v["--accent-default"] = t["color"]["accent"]
+    v["--elevation-sm"] = shadow_css(t["shadow"]["shadow-sm"])
+    v["--elevation"] = shadow_css(t["shadow"]["shadow-float"])
+    for k in LEGACY_COLOR:
+        v["--" + k] = color_css(t, k)
     v["--label-transform"] = "none"
     v["--label-tracking"] = "normal"
-    v["--label-weight"] = "600"
-    v["--btn-hover-bg"] = t["color"]["brand-bg-hover"]
-    v["--btn-hover-fg"] = t["color"]["fg-on-brand"]
-    v["--input-border-width"] = "%dpx" % t["shape"]["outline-width"]
+    v["--label-weight"] = str(FONT_WEIGHT["medium"])
+    v["--btn-hover-bg"] = t["color"]["accent-hover"]
+    v["--btn-hover-fg"] = t["color"]["on-accent"]
     return v
 
 
-def gen_css(t):
+def type_css(t):
+    """The type styles as classes: .body, .label, .h1 … (40-implementation)."""
+    s = []
+    for name, st in t["type"]["styles"].items():
+        fam = "var(--font-mono)" if st["family"] == "mono" else "var(--font-sans)"
+        rule = ["font-family: %s" % fam, "font-size: %dpx" % st["size"],
+                "line-height: %dpx" % st["lineHeight"], "font-weight: %d" % st["weight"]]
+        if st["tracking"]:
+            rule.append("letter-spacing: %gem" % st["tracking"])
+        if st["italic"]:
+            rule.append("font-style: italic")
+        if name == "mono-numeric":
+            rule.append("font-variant-numeric: tabular-nums")
+        s.append(".%s { %s; }" % (name, "; ".join(rule)))
+    return "\n".join(s)
+
+
+def gen_css(t, selector=":root"):
+    sc = t["scheme"]
     s = ["/* AUTO-GENERATED by `ewe-theme build`. Do not edit by hand.",
          " *",
-         " * There is no theme file. Every value below is DERIVED from the one",
-         " * accent in ewe.conf [desktop.theme] — change it there and rebuild:",
+         " * Ewe design system, version %d (design/system/). Every value below is" % DS_VERSION,
+         " * DERIVED from the active scheme and accent in ewe.conf [desktop.theme]:",
          " *",
-         " *     ewe-conf set desktop.theme.accent '#ffcc00'",
+         " *     ewe-theme scheme apply ewe-light",
+         " *     ewe-conf set desktop.theme.accent '#7e9cd8'",
          " *",
-         " * Names are Fluent 2's roles. A component asks for a role and this",
-         " * layer decides the value; no component carries a palette literal.",
-         " * The --bg/--panel/--stroke names near the bottom are the pre-Fluent",
-         " * aliases, kept so unmigrated components keep working.",
+         " * This file: scheme %s (%s, %s), accent %s." % (sc["slug"], sc["name"], sc["variant"], sc["accent"]),
          " *",
-         " * --accent is the user's pick, injected inline at runtime, which",
-         " * beats any rule here. The font stack is never themed.",
-         " */", "", ":root {"]
-    for k, val in css_vars(t).items():
+         " * Custom property names are the token names (--surface-raised,",
+         " * --control-md); the type styles are classes (.body, .label). A",
+         " * component asks for a role and this layer decides the value; no",
+         " * component carries a palette literal.",
+         " *",
+         " * The Fluent 2 names after the Ewe tokens (--bg-1, --fg-2, --stroke-1 …)",
+         " * are ALIASES onto the Ewe tokens, kept while components migrate",
+         " * (guidelines/20-migration.md) and deleted in Phase 6.",
+         " *",
+         " * --accent is the person's pick, injected inline at runtime, which",
+         " * beats any rule here.",
+         " */", "", selector + " {"]
+    vars_ = css_vars(t)
+    first_alias = "--fg-1"
+    for k, val in vars_.items():
+        if k == first_alias:
+            s.append("")
+            s.append("  /* ── Fluent aliases (Migration guide); removed in Phase 6 ── */")
         s.append("  %s: %s;" % (k, val))
     s.append("  --accent: var(--accent-default);")
     s.append("}")
+    s.append("")
+    s.append("/* type styles */")
+    s.append(type_css(t))
     s.append("")
     return "\n".join(s)
 
@@ -1224,20 +1752,37 @@ def cmd_show(a):
     cfg, src = read_conf(a.conf)
     t = tokens(cfg)
     # css_vars is what the Tauri apps inject at runtime. They ship tokens.css
-    # compiled in, built from the DEFAULT accent; this is the same map built
-    # from THIS machine's ewe.conf, so the apps wear the user's accent — and
-    # the greys its tint produced — without being rebuilt.
+    # compiled in, built from the DEFAULTS; this is the same map built from
+    # THIS machine's ewe.conf, so the apps wear the person's scheme and
+    # accent without being rebuilt.
     out({"ok": True, "conf": src, "input": t["input"], "color": t["color"],
-         "shape": t["shape"], "size": t["size"], "brand": t["brand"],
-         "surface": t["surface"], "scheme": t.get("scheme"), "css_vars": css_vars(t)})
+         "alpha": t["alpha"], "shape": t["shape"], "size": t["size"], "type": t["type"],
+         "motion": t["motion"], "opacity": t["opacity"], "surface": t["surface"], "bar": t["bar"],
+         "presets": t["presets"], "accessibility": t["accessibility"], "brand": t["brand"],
+         "scheme": t["scheme"], "adjusted": t["adjusted"], "css_vars": css_vars(t)})
+
+
+def design_tokens(cfg, slug=None):
+    """The token set the REPO file is built from: the defaults (never the
+    machine's own knobs), for the named built-in or user scheme."""
+    d = dict(DEFAULTS, schemes=cfg.get("schemes") or [])
+    if slug:
+        if not find_scheme(d, slug):
+            fail("no-scheme", "no scheme %r (ewe-theme scheme list)" % slug)
+        d["scheme"] = slug
+    return tokens(d)
 
 
 def cmd_build(a):
     cfg, src = read_conf(a.conf)
     t = tokens(cfg)
     written, skipped = [], []
-    jp = a.json if a.json is not None else OUT_JSON
-    if jp == "/dev/null":
+    scheme = getattr(a, "scheme", None)
+    selector = getattr(a, "selector", None) or ":root"
+    # `--scheme` is a design-time build (the website, a check): it never
+    # rewrites this machine's token file unless --json is given explicitly
+    jp = a.json if a.json is not None else (None if scheme else OUT_JSON)
+    if jp is None or jp == "/dev/null":
         skipped.append("json (asked to discard)")
     else:
         _write(jp, gen_json(t))
@@ -1246,18 +1791,17 @@ def cmd_build(a):
     if cp == "/dev/null":
         skipped.append("css (asked to discard)")
     elif os.path.isdir(os.path.dirname(cp) or "."):
-        # The CSS is a REPO file, committed and compiled into the apps, so it
+        # The CSS is a REPO file, committed and copied into the apps, so it
         # is built from the DEFAULTS — never from whichever machine ran the
         # build. (The JSON above is the opposite: it is this machine's state.)
-        # At runtime the apps re-inject the live token set over the top; this
-        # file is the baseline they start from and what they fall back to.
-        _write(cp, gen_css(tokens(dict(DEFAULTS))))
+        # At runtime the apps re-inject the live token set over the top.
+        _write(cp, gen_css(design_tokens(cfg, scheme), selector))
         written.append(cp)
     else:
         # an installed tree has no design/ — the apps ship their CSS compiled in
         skipped.append("css (no %s)" % os.path.dirname(cp))
-    out({"ok": True, "conf": src, "accent": cfg["accent"],
-         "written": written, "skipped": skipped})
+    out({"ok": True, "conf": src, "accent": t["input"]["accent"], "scheme": t["input"]["scheme_slug"],
+         "css_scheme": scheme or DEFAULT_SCHEME, "written": written, "skipped": skipped})
 
 
 def cmd_check(a):
@@ -1265,7 +1809,7 @@ def cmd_check(a):
     t = tokens(cfg)
     drift = []
     for path, want in ((a.json or OUT_JSON, gen_json(t)),
-                       (a.css or OUT_CSS, gen_css(tokens(dict(DEFAULTS))))):
+                       (a.css or OUT_CSS, gen_css(design_tokens(cfg)))):
         if path == "/dev/null":
             continue
         try:
@@ -1282,148 +1826,121 @@ def cmd_check(a):
 SPECIMEN = """<!doctype html>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Ewe Theme Specimen</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
 <style>
 __TOKENS__
 * { box-sizing: border-box; }
-body { margin:0; font-family: Inter, "Noto Sans Georgian", Cantarell, system-ui, sans-serif;
-       background: var(--bg-3); color: var(--fg-1); font-size: var(--fs-body); }
+body { margin:0; font-family: var(--font-sans); background: var(--surface-base); color: var(--text-primary); }
 .wrap { max-width: 1060px; margin: 0 auto; padding: 24px 22px 72px; }
-h1 { font-size: var(--fs-600); line-height: var(--lh-600); margin: 0 0 2px; font-weight: 600; }
-.sub { color: var(--fg-3); font-size: var(--fs-200); margin-bottom: 20px; }
-h2 { font-size: var(--fs-200); color: var(--fg-3); margin: 28px 0 9px; font-weight: 600; }
-.card { background: var(--bg-1); border: var(--outline-width) solid var(--stroke-2);
-        border-radius: var(--radius-card); box-shadow: var(--elevation-sm); padding: var(--pad); }
-.row { display:flex; flex-wrap:wrap; gap: var(--gap); align-items:center; }
-/* controls */
-.btn { display:inline-flex; align-items:center; justify-content:center; gap:6px;
-       min-height: var(--control); padding-inline: var(--pad); font: inherit;
-       font-weight: 600; cursor:pointer; border-radius: var(--radius-pill);
-       border: var(--outline-width) solid transparent; transition: background .1s, border-color .1s; }
-.btn-primary { background: var(--brand-bg); color: var(--fg-on-brand); border-color: var(--brand-bg); }
-.btn-primary:hover { background: var(--brand-bg-hover); border-color: var(--brand-bg-hover); }
-.btn-primary:active { background: var(--brand-bg-pressed); border-color: var(--brand-bg-pressed); }
-.btn-ghost { background: var(--bg-1); color: var(--fg-1); border-color: var(--stroke-1); }
-.btn-ghost:hover { background: var(--bg-1-hover); border-color: var(--stroke-1-hover); }
-.btn-ghost:active { background: var(--bg-1-pressed); }
-.btn-subtle { background: var(--subtle); color: var(--fg-2); border-color: transparent; }
-.btn-subtle:hover { background: var(--subtle-hover); color: var(--fg-2-hover); }
-.btn[disabled] { background: var(--bg-disabled); color: var(--fg-disabled);
-                 border-color: var(--stroke-disabled); pointer-events:none; }
-input.f { width:100%; min-height: var(--control); padding-inline: var(--pad); font: inherit;
-          background: var(--bg-1); color: var(--fg-1); border-radius: var(--radius-card);
-          border: var(--outline-width) solid var(--stroke-1); outline: none; }
-input.f:hover { border-color: var(--stroke-1-hover); }
-input.f:focus { box-shadow: inset 0 0 0 var(--stroke-width-thick) var(--compound-brand-stroke); }
-input.f::placeholder { color: var(--fg-3); }
-/* THE case ewe had no word for: a row with no fill of its own. Inset by the
-   stroke width so a hovered row can never paint over its container's rule. */
-.list { padding: var(--stroke-width); }
+.sub { color: var(--text-muted); margin-bottom: 20px; }
+h2 { margin: 28px 0 9px; color: var(--text-muted); }
+.card { background: var(--surface-raised); border: var(--border-width-1) solid var(--border-subtle);
+        border-radius: var(--rounded); padding: var(--space-s); }
+.row { display:flex; flex-wrap:wrap; gap: var(--space-s); align-items:center; }
+.btn { display:inline-flex; align-items:center; justify-content:center; gap: var(--space-xs);
+       min-height: var(--control-md); padding-inline: var(--space-s); font: inherit;
+       cursor:pointer; border-radius: var(--primary);
+       border: var(--border-width-1) solid transparent; transition: background var(--dur-fast); }
+.btn-primary { background: var(--accent); color: var(--on-accent); }
+.btn-primary:hover { background: var(--accent-hover); }
+.btn-primary:active { background: var(--accent-pressed); }
+.btn-secondary { background: var(--surface-raised); color: var(--text-primary); border-color: var(--border-strong); }
+.btn-secondary:hover { background: var(--surface-hover); border-color: var(--text-muted); }
+.btn-secondary:active { background: var(--surface-pressed); }
+.btn-ghost { background: transparent; color: var(--text-secondary); }
+.btn-ghost:hover { background: var(--surface-hover); color: var(--text-primary); }
+.btn[disabled] { background: var(--surface-raised); color: var(--text-disabled);
+                 border-color: var(--border-subtle); pointer-events:none; }
+.btn:focus-visible { outline: var(--focus-width) solid var(--focus-ring); outline-offset: 1px; }
+input.f { width:100%; min-height: var(--control-md); padding-inline: var(--space-s); font: inherit;
+          background: var(--surface-sunken); color: var(--text-primary); border-radius: var(--primary);
+          border: var(--border-width-1) solid var(--border-strong); outline: none; }
+input.f:hover { border-color: var(--text-muted); }
+input.f:focus { border-color: var(--focus-ring); }
+input.f::placeholder { color: var(--text-muted); }
 .list .item { display:flex; align-items:center; justify-content:space-between;
-      min-height: var(--row); padding-inline: calc(var(--pad) - var(--stroke-width));
-      border-radius: calc(var(--radius-card) - var(--stroke-width));
-      background: var(--subtle); cursor:pointer; transition: background .1s; }
-.list .item:hover { background: var(--subtle-hover); }
-.list .item:active { background: var(--subtle-pressed); }
-.list .item.sel { background: var(--subtle-selected); }
-.list .item + .item { border-top: var(--stroke-width) solid var(--stroke-3); }
-.sw { width:38px; height:22px; border-radius: var(--radius-pill); position:relative; cursor:pointer;
-      border: var(--outline-width) solid var(--stroke-accessible); background: var(--bg-2); }
-.sw.on { background: var(--brand-bg); border-color: var(--brand-bg); }
-.sw.on:hover { background: var(--brand-bg-hover); border-color: var(--brand-bg-hover); }
-.sw i { position:absolute; top:2px; left:2px; width:18px; height:18px; border-radius:50%;
-        background: var(--fg-3); transition:left .15s; }
-.sw.on i { left:18px; background: var(--fg-on-brand); }
-.chip { display:inline-flex; align-items:center; padding:2px 9px; font-size: var(--fs-200);
-        border-radius: var(--radius-pill); border: var(--outline-width) solid currentColor; }
-/* ramps */
-.ramp { display:flex; border-radius: var(--radius-card); overflow:hidden;
-        border: var(--outline-width) solid var(--stroke-2); }
+      min-height: var(--control-md); padding-inline: var(--space-s);
+      border-radius: var(--secondary); cursor:pointer; }
+.list .item:hover { background: var(--surface-hover); }
+.list .item:active { background: var(--surface-pressed); }
+.list .item.sel { background: var(--accent-subtle); color: var(--accent-text); }
+.list .item + .item { border-top: var(--border-width-1) solid var(--border-subtle); }
+.chip { display:inline-flex; align-items:center; padding: var(--space-xxs) var(--space-s);
+        border-radius: var(--fully-rounded); border: var(--border-width-1) solid currentColor; }
+.glass { padding: var(--space-md); border-radius: var(--rounded); background: linear-gradient(90deg, #fff, #000);
+         display:flex; gap: var(--space-s); }
+.glass > div { flex:1; padding: var(--space-s); border-radius: var(--rounded); background: var(--glass-raised);
+               border: var(--border-width-1) solid var(--glass-border); backdrop-filter: blur(var(--blur-glass)); }
+.glass b { color: var(--glass-accent); }
+.ramp { display:flex; border-radius: var(--rounded); overflow:hidden; border: var(--border-width-1) solid var(--border-subtle); }
 .ramp span { flex:1; height:44px; position:relative; }
-.ramp span b { position:absolute; inset:auto 0 2px 0; text-align:center; font-size:8px;
-               font-family:ui-monospace,Menlo,Consolas,monospace; font-weight:400; color:#8888; }
-.grid { display:grid; grid-template-columns: repeat(auto-fill,minmax(150px,1fr)); gap:8px; }
-.grid > div { background:var(--bg-2); border-radius:var(--radius-control);
-              padding:7px; font-size:10px; font-family:ui-monospace,Menlo,Consolas,monospace; color:var(--fg-3); }
-.grid > div s { display:block; height:26px; border-radius:calc(var(--radius-control) - 1px);
-                margin-bottom:5px; text-decoration:none; border:1px solid var(--stroke-3); }
-.states { display:grid; grid-template-columns:repeat(4,1fr); gap:0; border-radius:var(--radius-card);
-          overflow:hidden; border:var(--outline-width) solid var(--stroke-2); }
-.states div { padding:12px 10px; font-size:10px; font-family:ui-monospace,Menlo,Consolas,monospace; color:var(--fg-3); }
-.dens { display:grid; grid-template-columns:repeat(auto-fill,minmax(104px,1fr)); gap:7px;
-        font-family:ui-monospace,Menlo,Consolas,monospace; font-size:10px; color:var(--fg-3); }
-.dens b { display:block; color:var(--fg-1); font-size:12px; }
+.ramp span b { position:absolute; inset:auto 0 2px 0; text-align:center; font-weight:400; color:#8888; }
+.grid { display:grid; grid-template-columns: repeat(auto-fill,minmax(150px,1fr)); gap: var(--space-s); }
+.grid > div { background:var(--surface-base); border-radius:var(--primary); padding: var(--space-xs); color:var(--text-muted); }
+.grid > div s { display:block; height:26px; border-radius:var(--slight); margin-bottom: var(--space-xs);
+                text-decoration:none; border:1px solid var(--border-subtle); }
+.type > div { margin: var(--space-s) 0; }
+.type code { color: var(--text-muted); }
 </style>
 <body><div class="wrap">
-  <h1>Ewe</h1><div class="sub" id="sub"></div>
+  <h1 class="h1">Ewe</h1><div class="sub label" id="sub"></div>
 
-  <h2>Brand ramp &mdash; derived from your accent, which lands exactly on stop 80</h2>
+  <h2 class="overline">Accent ramp &mdash; derived from the accent, which is step 500</h2>
   <div class="ramp" id="brand"></div>
-
-  <h2>Neutral ramp &mdash; Fluent's greys, pulled toward the accent's hue</h2>
+  <h2 class="overline">Neutrals &mdash; the warm scale</h2>
   <div class="ramp" id="grey"></div>
 
-  <h2>Controls &mdash; rest / hover / pressed / disabled</h2>
-  <div class="card"><div class="row">
-    <button class="btn btn-primary">Save changes</button>
-    <button class="btn btn-ghost">Secondary</button>
-    <button class="btn btn-subtle">Subtle</button>
-    <button class="btn btn-ghost" disabled>Disabled</button>
-    <span class="chip" style="color:var(--success)">Connected</span>
-    <span class="chip" style="color:var(--warning)">Pending</span>
-    <span class="chip" style="color:var(--danger)">Failed</span>
+  <h2 class="overline">Controls &mdash; rest / hover / pressed / disabled</h2>
+  <div class="card"><div class="row body">
+    <button class="btn btn-primary label">Save changes</button>
+    <button class="btn btn-secondary label">Secondary</button>
+    <button class="btn btn-ghost label">Ghost</button>
+    <button class="btn btn-secondary label" disabled>Disabled</button>
+    <span class="chip caption" style="color:var(--success)">Connected</span>
+    <span class="chip caption" style="color:var(--warning)">Pending</span>
+    <span class="chip caption" style="color:var(--danger)">Failed</span>
+    <span class="chip caption" style="color:var(--info)">Note</span>
   </div>
-  <div style="margin-top:12px"><input class="f" placeholder="Focus me &mdash; the ring is a compound brand stroke"></div>
-  <div class="row" style="margin-top:12px;justify-content:space-between">
-    <span>Auto-sync</span><div class="sw on" onclick="this.classList.toggle('on')"><i></i></div></div>
+  <div class="body" style="margin-top:12px"><input class="f" placeholder="Focus me &mdash; the border turns focus-ring"></div>
   </div>
 
-  <h2>Rows &mdash; the case that had no name: no fill until you point at it</h2>
-  <div class="card" style="padding:0"><div class="list">
-    <div class="item"><span>Living room speaker</span><span style="color:var(--fg-3)">Default</span></div>
-    <div class="item sel"><span>Headphones</span><span style="color:var(--brand-fg-1)">&#10003;</span></div>
-    <div class="item"><span>HDMI output</span><span style="color:var(--fg-3)">Unplugged</span></div>
+  <h2 class="overline">Rows</h2>
+  <div class="card body" style="padding:0"><div class="list">
+    <div class="item"><span>Living room speaker</span><span style="color:var(--text-muted)">Default</span></div>
+    <div class="item sel"><span>Headphones</span><span>&#10003;</span></div>
+    <div class="item"><span>HDMI output</span><span style="color:var(--text-muted)">Unplugged</span></div>
   </div></div>
 
-  <h2>Surfaces &mdash; five levels plus the card ladder, each with its own states</h2>
-  <div class="states" id="states"></div>
+  <h2 class="overline">Glass &mdash; the bar and dock roles over a bright and a dark wallpaper</h2>
+  <div class="glass body"><div>text-primary &middot; <span style="color:var(--text-secondary)">text-secondary</span> &middot; <b>glass-accent</b></div>
+  <div>text-primary &middot; <span style="color:var(--text-secondary)">text-secondary</span> &middot; <b>glass-accent</b></div></div>
 
-  <h2>Strokes &mdash; three weights, plus accessible and focus</h2>
-  <div class="card"><div class="grid" id="strokes"></div></div>
+  <h2 class="overline">Type styles</h2>
+  <div class="card type" id="type"></div>
 
-  <h2>Every colour token</h2>
-  <div class="card"><div class="grid" id="all"></div></div>
+  <h2 class="overline">Every colour token</h2>
+  <div class="card caption"><div class="grid" id="all"></div></div>
 
-  <h2>Shape &amp; density &mdash; [desktop.theme] in ewe.conf</h2>
-  <div class="card"><div class="dens" id="dens"></div></div>
+  <h2 class="overline">Shape &amp; size</h2>
+  <div class="card caption"><div class="grid" id="dens"></div></div>
 </div>
 <script>
 const T = __TOKENS_JSON__;
 document.getElementById("sub").textContent =
-  "accent " + T.input.accent + "  \\u00b7  corner " + T.input.corner +
+  T.input.scheme_name + "  \\u00b7  accent " + T.input.accent + "  \\u00b7  corner " + T.input.corner +
   "  \\u00b7  density " + T.input.density + "  \\u00b7  stroke " + T.input.stroke +
-  "  \\u00b7  neutral_tint " + T.input.neutral_tint + "  \\u00b7  bar_opacity " + T.input.bar_opacity;
+  "  \\u00b7  bar_opacity " + T.input.bar_opacity + (T.adjusted.length ? "  \\u00b7  adjusted: " + T.adjusted.map(a => a.role).join(", ") : "");
 const bar = (o) => Object.entries(o).map(([k,v]) =>
-  `<span style="background:${v}"><b>${k}</b></span>`).join("");
+  `<span style="background:${v}"><b class="caption">${k}</b></span>`).join("");
 document.getElementById("brand").innerHTML = bar(T.brand);
 document.getElementById("grey").innerHTML  = bar(T.grey);
-document.getElementById("states").innerHTML = ["bg-1","bg-2","bg-3","bg-4","bg-5","card"].flatMap(n => {
-  if (!T.color[n]) return [];
-  return ["", "-hover", "-pressed", "-selected"].map(s => {
-    const v = T.color[n+s];
-    return v ? `<div style="background:${v}">${n}${s||" (rest)"}<br>${v}</div>` : "";
-  });
-}).join("");
-const swatches = (keys) => keys.map(k =>
+document.getElementById("type").innerHTML = Object.keys(T.type.styles).map(n =>
+  `<div class="${n}">The quick brown sheep &mdash; ${n} <code class="caption">${T.type.styles[n].size}/${T.type.styles[n].lineHeight} ${T.type.styles[n].weight}</code></div>`).join("");
+const roles = Object.keys(T.color).filter(k => !T.aliases.includes(k));
+document.getElementById("all").innerHTML = roles.map(k =>
   `<div><s style="background:${T.color[k]}"></s>--${k}<br>${T.color[k]}</div>`).join("");
-document.getElementById("strokes").innerHTML = swatches(
-  Object.keys(T.color).filter(k => k.startsWith("stroke")));
-document.getElementById("all").innerHTML = swatches(Object.keys(T.color));
 document.getElementById("dens").innerHTML =
   Object.entries(Object.assign({}, T.shape, T.size))
-    .map(([k,v]) => `<div><b>${v}px</b>--${k}</div>`).join("");
+    .map(([k,v]) => `<div><b>${v}px</b> --${k}</div>`).join("");
 </script>
 """
 
@@ -1433,20 +1950,21 @@ def cmd_preview(a):
     the shell and the apps render, not a mock-up."""
     cfg, src = read_conf(a.conf)
     t = tokens(cfg)
-    html = (SPECIMEN.replace("__TOKENS__", gen_css(t))
+    css = gen_css(t) + "\n:root { --dur-fast: %dms; }\n" % t["motion"]["durFast"]
+    html = (SPECIMEN.replace("__TOKENS__", css)
                     .replace("__TOKENS_JSON__", json.dumps({
-                        "input": t["input"], "color": t["color"],
-                        "shape": t["shape"], "size": t["size"],
-                        "grey": t["grey"], "brand": t["brand"],
-                        "surface": t["surface"]})))
+                        "input": t["input"], "color": {k: color_css(t, k) for k in t["color"]},
+                        "shape": t["shape"], "size": t["size"], "type": t["type"],
+                        "brand": t["brand"], "grey": t["grey"], "adjusted": t["adjusted"],
+                        "aliases": list(ALIAS_COLOR) + list(LEGACY_COLOR) + ["shadow-ambient", "shadow-key"]})))
     target = a.out or os.path.join(HERE, "design", "specimen.html")
     _write(target, html)
-    out({"ok": True, "path": target, "conf": src, "accent": cfg["accent"]})
+    out({"ok": True, "path": target, "conf": src, "accent": t["input"]["accent"]})
 
 
 def main():
     p = argparse.ArgumentParser(add_help=True)
-    p.add_argument("--conf", help="read [desktop.theme] from this ewe.conf")
+    p.add_argument("--conf", help="read ewe.conf from this path")
     sub = p.add_subparsers(dest="cmd")
     # --conf is accepted on either side of the subcommand: `ewe-theme --conf F
     # build` and `ewe-theme build --conf F` both read the same flag, because
@@ -1461,7 +1979,9 @@ def main():
     # `ewe-theme show <look>` from when there were two looks, and an argparse
     # error there would leave them with no tokens at all.
     add("show").add_argument("legacy_look", nargs="?")
-    add("build", "--json", "--css")
+    b = add("build", "--json", "--css")
+    b.add_argument("--scheme", help="build the CSS for this scheme (design-time; ewe.conf untouched)")
+    b.add_argument("--selector", help="wrap the CSS in this selector instead of :root")
     add("check", "--json", "--css")
     add("preview", "--out")
     sp = sub.add_parser("scheme", help="named / imported / wallpaper palettes")
@@ -1471,7 +1991,7 @@ def main():
     ss = sp.add_subparsers(dest="scheme_cmd")
     ss.add_parser("list")
     ss.add_parser("show").add_argument("slug", nargs="?")
-    ss.add_parser("apply").add_argument("slug", help="a scheme slug, or `accent`")
+    ss.add_parser("apply").add_argument("slug", help="ewe-dark, ewe-light or a user scheme slug")
     si = ss.add_parser("import")
     si.add_argument("path", help="base16/base24 YAML, Omarchy colors.toml, Catppuccin palette.json, Gogh yml — file or URL")
     si.add_argument("--name")
@@ -1479,10 +1999,15 @@ def main():
     si.add_argument("--accent")
     si.add_argument("--flavour", help="Catppuccin: latte / frappe / macchiato / mocha")
     si.add_argument("--apply", action="store_true")
+    sd = ss.add_parser("duplicate")
+    sd.add_argument("slug", help="the scheme to copy (a built-in or a user scheme)")
+    sd.add_argument("--name")
+    sd.add_argument("--slug", dest="slug_opt")
+    sd.add_argument("--apply", action="store_true")
     ss.add_parser("remove").add_argument("slug")
     ss.add_parser("export").add_argument("slug", nargs="?")
     st = ss.add_parser("set")
-    st.add_argument("field", help="accent, name, variant, semantic, base00…base17")
+    st.add_argument("field", help="accent, name, variant, semantic, base00…base17, overrides.<role>")
     st.add_argument("value")
     st.add_argument("--slug", dest="slug_opt")
     sw = ss.add_parser("from-wallpaper")
