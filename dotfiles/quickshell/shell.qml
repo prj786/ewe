@@ -5,6 +5,7 @@ import Quickshell
 //   - Bar:           top bar (Search… · window · workspaces · status · clock).
 //   - Launcher:      centered fuzzy app launcher (Super+D).
 //   - Notifications: native notification server + top-right toasts.
+//   - Toast:         bottom-centre confirmation of an action, with Undo.
 //   - QuickSettings: clock → calendar + Do Not Disturb + notifications.
 ShellRoot {
     // HyprMon is a lazy singleton: poke it at startup so its display guard —
@@ -25,6 +26,9 @@ ShellRoot {
     Scope { Component.onCompleted: { HyprMon.start(); Logind.start(); Resume.start(); Lid.start(); Wallpaper.start(); BtAgent.start(); GlobalShortcuts.start(); PluginHost.start() } }
 
     Notifications {}
+    // Toast: one overlay window at the bottom of the screen, confirming an
+    // action and offering one way back (Globals.toast / `qs ipc call toast`).
+    Toast {}
     IpcHub {}
     // RSS diet (ewe#18): the fallback panels are the two biggest QML trees
     // and almost never render now that ewe-settings and Komble exist as

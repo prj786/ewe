@@ -37,6 +37,7 @@ Screensaver 1.0 Screensaver.qml
 Launcher 1.0 Launcher.qml
 Bar 1.0 Bar.qml
 Notifications 1.0 Notifications.qml
+Toast 1.0 Toast.qml
 QuickSettings 1.0 QuickSettings.qml
 Auth 1.0 Auth.qml
 BtPairing 1.0 BtPairing.qml

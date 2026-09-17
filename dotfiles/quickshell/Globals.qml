@@ -73,6 +73,15 @@ QtObject {
     property int settingsPaneRequest: -1
     property string openDd: ""             // ddId of the one open DropRow, shell-wide ("" = none)
 
+    // ── Toasts (design system: Toast) ─────────────────────────────────────────
+    // Toast.qml registers itself here so any component can confirm an action
+    // it just took and offer one way back, without reaching for a notification:
+    //   Globals.toast("Moved <b>report.pdf</b> to Trash",
+    //                 { actionLabel: "Undo", action: function () { … } })
+    // Out-of-process callers use `qs ipc call toast show|action|undo|hide`.
+    property var toastHost: null
+    function toast(message, opts) { if (toastHost) toastHost.show(message, opts) }
+
     // ── Standalone first-party apps ───────────────────────────────────────────
     // Komble (the software manager) and ewe-settings (the Settings app) are
     // separate Tauri binaries installed by phase 20. When present they ARE the
