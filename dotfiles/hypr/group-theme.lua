@@ -49,9 +49,9 @@ hl.config({
             enabled          = true,
             height           = 22,
             indicator_height = 0,         -- the filled tab IS the indicator
-            font_family      = "Inter",   -- Theme.fontText — the DE face
+            font_family      = "Geist",   -- Theme.fontSans — the DE face
             font_size        = 12,
-            -- Inter's regular is thin at this size against a saturated accent
+            -- The regular weight is thin at this size against a saturated accent
             -- fill, so the strip gets a weight step instead of relying on
             -- colour alone: the active tab is the only bold thing on screen.
             -- NOTE: `hyprctl getoption` reports these as "invalid type
