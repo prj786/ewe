@@ -382,6 +382,7 @@ CORNER_LEGACY = {"round": "large"}
 DENSITY = {"compact": (24, 28), "comfortable": (28, 32), "roomy": (32, 40)}
 STROKE = {"none": (0, 2), "thin": (1, 2), "thick": (2, 3)}
 FOCUS_WIDTH = 1             # 2 under Increase contrast
+FIELD_BORDER_WIDTH = 1      # fields/checkboxes/switches keep an outline at stroke = none
 SIZES = {"control-sm": 24, "control-xl": 40, "control-2xl": 48,
          "bar-height": 48, "bar-height-lg": 64,
          "icon-xs": 12, "icon-sm": 14, "icon-md": 16, "icon-lg": 20, "icon-xl": 24,
@@ -921,9 +922,14 @@ def tokens(cfg):
     ctrl_md, ctrl_lg = DENSITY[cfg["density"]]
     bw1, bw2 = STROKE[cfg["stroke"]]
     focus_w = 2 if inc else FOCUS_WIDTH
+    # A field, checkbox or switch keeps its outline at every stroke preset
+    # (Look presets: "Fields, checkboxes and switches always keep a 1px
+    # outline"), so it needs a width of its own: never 0, 2 under Increase
+    # contrast, and it follows `stroke = thick` up like any other outline.
+    field_bw = max(2 if inc else FIELD_BORDER_WIDTH, bw1)
     shape = {"slight": slight, "secondary": secondary, "primary": primary, "rounded": rounded,
              "fully-rounded": full, "border-width-1": bw1, "border-width-2": bw2,
-             "focus-width": focus_w}
+             "focus-width": focus_w, "field-border-width": field_bw}
 
     # ── sizes, with Text size scaling the type scale ───────────────────────
     ts = cfg["text_scale"]
@@ -1644,7 +1650,7 @@ def css_vars(t):
         v["--" + k] = shadow_css(sh)
     for k, g in t["gradient"].items():
         v["--" + k] = gradient_css(g)
-    for k in ("border-width-1", "border-width-2", "focus-width"):
+    for k in ("border-width-1", "border-width-2", "focus-width", "field-border-width"):
         v["--" + k] = "%dpx" % t["shape"][k]
     for k in ("control-sm", "control-md", "control-lg", "control-xl", "control-2xl", "bar-height",
               "bar-height-lg", "icon-xs", "icon-sm", "icon-md", "icon-lg", "icon-xl", "icon-2xl",

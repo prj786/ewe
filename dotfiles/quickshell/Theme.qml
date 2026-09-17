@@ -306,6 +306,12 @@ QtObject {
     readonly property int borderWidth1:      _s("border-width-1", 1)
     readonly property int borderWidth2:      _s("border-width-2", 2)
     readonly property int focusWidth:        _s("focus-width", 1)
+    // A field, checkbox or switch keeps its outline even at `stroke = none`
+    // (Look presets), where borderWidth1 is 0 — that is what this is for. It
+    // is never 0, follows `stroke = thick` up, and is 2 under Increase
+    // contrast. Nothing else uses it: cards, panels and buttons take
+    // borderWidth1 and lose their rule with the preset, on purpose.
+    readonly property int fieldBorderWidth:  _s("field-border-width", 1)
 
     // ── Control, icon and panel sizes ─────────────────────────────────────
     readonly property int controlSm:               _z("control-sm", 24)
