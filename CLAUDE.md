@@ -232,6 +232,27 @@ hook the scheme's accent; `Globals.schemeActive` stops the in-shell accent
 pick from overriding a scheme. `wallpaper.sh` re-derives when scheme =
 "wallpaper".
 
+**Fonts + Theme.qml (2026-09-17, Phases 2-3):** the DE faces are **Geist**
+and **Geist Mono** (OFL, not in the Arch repos): the variable woff2 files
+ship in `dotfiles/quickshell/fonts/geist/` and `dotfiles/fontconfig/fonts.conf`
+adds that folder with a relative `<dir>` (no installer change) and prefers
+**Noto Sans Georgian** (noto-fonts) next in every stack — Geist has no
+Georgian glyphs, and Georgian is NEVER uppercased (`Theme.labelCaps` is
+MixedCase for good). GTK, kitty (with the Nerd PUA mapped to Symbols Nerd
+Font Mono), Zed, mpv, the groupbar and Helium follow; the greeter keeps
+Inter because it runs from /etc as another user. `Theme.qml` is now one
+property per v3 token (QML names from `40-implementation.md`), plus
+`Theme.type.<style>` (both `body-strong` and `bodyStrong`), the motion
+table (`durFast/Base/Slow/Dim`, OutCubic + InOutCubic, no OutBack), the
+Glass trio (`glass`, `barAlpha`, `glassBlur` — `EWE_NO_BLUR=1` keeps the
+translucency, drops the blur) and the accessibility modes. Every Fluent
+name still exists pointing at its Ewe role (Migration guide) until Phase 6.
+**Gotcha:** `onAccent: <expr>` beside a property called `accent` parses as a
+signal handler — the token is declared bare and filled by a `Binding`.
+Iterating: `.claude/skills/run-ewe/driver.sh` now sandboxes HOME/XDG and
+generates the tokens itself (`HS_SCHEME=ewe-light`, `HS_CONF=<ewe.conf>`),
+so the live config and ewe-conf's sync hooks are never touched.
+
 **Bar & dock opacity:** `desktop.theme.bar_opacity = 0..100` in ewe.conf
 (Settings → Appearance slider). The bar and dock are painted at
 `Theme.barAlpha` (`barTop`, `dockFill`); between 10 and 99 `ewe-conf` writes
