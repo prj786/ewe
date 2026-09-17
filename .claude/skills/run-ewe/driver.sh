@@ -21,6 +21,15 @@
 #   driver.sh log                # tail the shell's qs log
 #   driver.sh check              # luac -p the Hyprland Lua config (static syntax check)
 #   driver.sh down               # tear everything down
+#
+# SANDBOX (default): the shell runs with HOME and every XDG_* dir under
+# $HS_WORK/home, so it never reads or writes the live ~/.config (no live
+# theme-tokens.json, ewe.conf, user-theme.json; ewe-conf and colorscheme.sh
+# are not reachable, so no sync hook can push). `up` writes a sandbox ewe.conf
+# and generates theme-tokens.json with THIS checkout's bin/ewe-theme:
+#   HS_SCHEME=ewe-light          # [desktop.theme] scheme (default ewe-dark)
+#   HS_CONF=<file>               # use this ewe.conf instead (HS_SCHEME ignored)
+#   HS_SANDBOX=0                 # old behaviour: the live HOME and config
 set -u
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
@@ -34,9 +43,40 @@ export AQ_DRM_DEVICES="${AQ_DRM_DEVICES:-/dev/dri/renderD128}"
 # (PluginHost.qml honours the override); reads real ~/.config/ewe/plugins
 export EWE_PLUGIN_TOOL="${EWE_PLUGIN_TOOL:-$REPO/bin/ewe-plugin}"
 mkdir -p "$WORK"
+SANDBOX="${HS_SANDBOX:-1}"
+SBHOME="$WORK/home"
 
 die()  { echo "driver: $*" >&2; exit 1; }
 load() { [ -f "$STATE" ] && . "$STATE" || die "not up — run 'driver.sh up' first"; }
+
+# the sandbox: a throwaway HOME whose fontconfig is this checkout's (so the
+# shipped Geist fonts resolve) and whose theme-tokens.json is generated here
+sandbox_env() {
+  [ "$SANDBOX" = "1" ] || return 0
+  export HOME="$SBHOME" XDG_CONFIG_HOME="$SBHOME/.config" XDG_DATA_HOME="$SBHOME/.local/share" \
+         XDG_STATE_HOME="$SBHOME/.local/state" XDG_CACHE_HOME="$SBHOME/.cache"
+}
+sandbox_prepare() {
+  if [ "$SANDBOX" != "1" ]; then
+    echo "driver: HS_SANDBOX=0 — the shell reads the LIVE ~/.config" >&2
+    return 0
+  fi
+  rm -rf "$SBHOME"
+  mkdir -p "$SBHOME/.config/quickshell" "$SBHOME/.config/ewe" "$SBHOME/.local/share" \
+           "$SBHOME/.local/state" "$SBHOME/.cache"
+  ln -s "$REPO/dotfiles/fontconfig" "$SBHOME/.config/fontconfig"
+  # fontconfig's relative <dir> resolves beside the linked fontconfig dir
+  ln -s "$REPO/dotfiles/quickshell/fonts" "$SBHOME/.config/quickshell/fonts"
+  if [ -n "${HS_CONF:-}" ]; then
+    cp "$HS_CONF" "$SBHOME/.config/ewe/ewe.conf" || die "HS_CONF $HS_CONF unreadable"
+  else
+    printf '[desktop.theme]\nscheme = "%s"\n' "${HS_SCHEME:-ewe-dark}" > "$SBHOME/.config/ewe/ewe.conf"
+  fi
+  ( sandbox_env
+    "$REPO/bin/ewe-theme" build --json "$XDG_CONFIG_HOME/quickshell/theme-tokens.json" --css /dev/null >"$WORK/theme.log" 2>&1
+  ) || die "ewe-theme build failed — see $WORK/theme.log"
+  echo "sandbox: $SBHOME ($(python3 -c "import json,sys;j=json.load(open(sys.argv[1]));print(j['input']['scheme'])" "$SBHOME/.config/quickshell/theme-tokens.json"))"
+}
 
 cmd_up() {
   # tear down any prior instance first — `up` is idempotent and never leaks an
@@ -45,6 +85,7 @@ cmd_up() {
   [ -n "${WAYLAND_DISPLAY:-}" ] || die "no host WAYLAND_DISPLAY — need a parent Wayland session to nest into"
   command -v Hyprland >/dev/null || die "Hyprland not found"
   command -v qs >/dev/null       || die "qs (quickshell) not found"
+  sandbox_prepare
 
   cat > "$WORK/hypr-min.lua" <<'EOF'
 -- minimal compositor just to host the shell — no autostart, no keybinds.
@@ -104,8 +145,9 @@ except Exception: pass" 2>/dev/null)"
   # be in a README screenshot. A private bus renders every pane signed-out/empty.
   local qs_wrap=()
   [ "${HS_PRIVATE_BUS:-0}" = "1" ] && command -v dbus-run-session >/dev/null && qs_wrap=(dbus-run-session --)
-  WAYLAND_DISPLAY="$nestwd" HYPRLAND_INSTANCE_SIGNATURE="$nestsig" QT_QPA_PLATFORM=wayland \
-    "${qs_wrap[@]}" qs -p "$QSDIR" > "$WORK/qs.log" 2>&1 &
+  ( sandbox_env
+    exec env WAYLAND_DISPLAY="$nestwd" HYPRLAND_INSTANCE_SIGNATURE="$nestsig" QT_QPA_PLATFORM=wayland \
+      "${qs_wrap[@]}" qs -p "$QSDIR" ) > "$WORK/qs.log" 2>&1 &
   local qpid=$!
   for _ in $(seq 1 30); do
     sleep 0.3
