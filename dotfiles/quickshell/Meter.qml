@@ -1,42 +1,95 @@
 import QtQuick
 
-// Meter — a labelled load bar (spec: 6 px bar r3 on bg2). The fill is the
-// accent until it isn't: `warning` past `warn`, `danger` past `dangerAt`,
-// so severity reads without a label. Digits are tabular so a column of
-// meters lines up.
+// Meter — how full something is: CPU, memory, disk, battery (design system:
+// Meter). A level, never a task — a task that finishes is a progress bar.
+//
+//   header  an iconSm glyph and the label in the label style, textSecondary,
+//           with the value in the mono-numeric style on the right
+//   track   spaceXs + borderWidth2 (6) tall, surfaceHover, radiusFull
+//   fill    accent · warning past `warn` (70%) · danger past `dangerAt`
+//           (90%), which also turns the value danger, so severity reads
+//           without a word
+//
+// `segmented` draws the ten equal segments quick settings uses for the
+// battery. The thresholds are per resource — a battery is critical BELOW
+// 10%, so its caller passes its own.
 //     Meter { label: "CPU"; glyph: Theme.icCpu; value: Globals.cpuUsage }
 Column {
     id: m
     property string label: ""
     property string glyph: ""
-    property real value: 0               // 0..1
-    property real warn: 0.6
-    property real dangerAt: 0.85
-    readonly property real frac: Math.max(0, Math.min(1, value))
-    width: parent ? parent.width : 200
-    spacing: 4
+    property real value: 0               // 0..max
+    property real max: 1
+    property string valueText: ""        // overrides the percentage
+    property real warn: 0.7
+    property real dangerAt: 0.9
+    property bool segmented: false       // ten equal segments
+    readonly property real frac: Math.max(0, Math.min(1, m.max > 0 ? value / m.max : 0))
+    readonly property bool critical: m.frac > m.dangerAt
+    readonly property color fillColor: m.critical ? Theme.danger
+                                     : m.frac > m.warn ? Theme.warning : Theme.accent
+
+    width: parent ? parent.width : Theme.panelSm
+    spacing: Theme.spaceXs
+
     Item {
-        width: parent.width; height: 16
+        width: parent.width; height: Theme.lineHeightS
         Row {
-            anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; spacing: 7
-            Text { anchors.verticalCenter: parent.verticalCenter; visible: m.glyph !== ""; text: m.glyph; font.family: Theme.fontIcons; font.pixelSize: 13; color: Theme.fg3 }
-            Text { anchors.verticalCenter: parent.verticalCenter; text: m.label; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold }
+            anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter
+            spacing: Theme.spaceXs
+            Text {
+                anchors.verticalCenter: parent.verticalCenter
+                visible: m.glyph !== ""
+                text: m.glyph; font.family: Theme.fontIcons; font.pixelSize: Theme.iconSm
+                color: Theme.textSecondary
+            }
+            Text {
+                anchors.verticalCenter: parent.verticalCenter
+                text: m.label; color: Theme.textSecondary
+                font.family: Theme.type.label.family
+                font.pixelSize: Theme.type.label.size
+                font.weight: Theme.type.label.weight
+            }
         }
         Text {
             anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
-            text: Math.round(m.frac * 100) + "%"; color: Theme.fg2
-            font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
+            text: m.valueText !== "" ? m.valueText : Math.round(m.frac * 100) + "%"
+            color: m.critical ? Theme.danger : Theme.textPrimary
+            font.family: Theme.type.monoNumeric.family
+            font.pixelSize: Theme.type.monoNumeric.size
+            font.weight: Theme.type.monoNumeric.weight
             font.features: ({ "tnum": 1 })
         }
     }
     Rectangle {
-        width: parent.width; height: 6; radius: 3; color: Theme.bg2
+        width: parent.width
+        height: Theme.spaceXs + Theme.borderWidth2
+        radius: Theme.radiusFull
+        color: Theme.surfaceHover
         Rectangle {
-            height: parent.height; radius: 3
+            visible: !m.segmented
+            height: parent.height; radius: Theme.radiusFull
             width: parent.width * m.frac
-            color: m.frac > m.dangerAt ? Theme.danger : (m.frac > m.warn ? Theme.warning : Theme.accent)
-            Behavior on width { NumberAnimation { duration: 400 } }
-            Behavior on color { ColorAnimation { duration: 150 } }
+            color: m.fillColor
+            Behavior on width { NumberAnimation { duration: Theme.durSlow; easing.type: Theme.easeSlow } }
+            Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
+        }
+        // the segmented form: ten equal bars with borderWidth2 gaps
+        Row {
+            visible: m.segmented
+            anchors.fill: parent
+            spacing: Theme.borderWidth2
+            Repeater {
+                model: 10
+                delegate: Rectangle {
+                    required property int index
+                    width: (parent.width - 9 * parent.spacing) / 10
+                    height: parent.height
+                    radius: Theme.radiusFull
+                    color: (index + 1) / 10 <= m.frac + 0.0001 ? m.fillColor : "transparent"
+                    Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
+                }
+            }
         }
     }
 }
