@@ -285,7 +285,7 @@ QtObject {
     // Single mutable source the Settings → Theme pane writes; Theme.accent binds to
     // it so the whole shell recolours live. Persisted to ~/.config/quickshell/
     // user-theme.json and re-read here at startup (default = system blue).
-    property color accentColor: "#0a84ff"
+    property color accentColor: "#eeb407"
     // false = user-theme.json carries no accent, i.e. nobody has ever picked
     // one in the shell. Theme.accent then falls back to the accent in
     // ewe.conf [desktop.theme], which is what the token file was built from.
@@ -295,8 +295,10 @@ QtObject {
     property bool schemeActive: false
     property bool tintBorders: false        // mirror window border colour to the accent
     // false → fully opaque windows (decoration inactive_opacity forced to 1.0);
-    // true keeps hyprland.lua's subtle unfocused translucency. user-theme.json.
-    property bool windowTransparency: true
+    // true draws unfocused windows at opacity-inactive (97%). Default false,
+    // which is what ewe-conf's [desktop.theme] window_transparency says; this
+    // singleton disagreed with it until the design system v3 (Phase 3).
+    property bool windowTransparency: false
 
     // Tiling on (the Hyprland default) vs every new window opening floating, for
     // people who want the DE to behave like GNOME/Unity rather than a tiling WM.
@@ -543,10 +545,26 @@ QtObject {
     // stroke, neutral_tint. The Settings pane shows the live value from here
     // rather than keeping a second copy that can disagree with the file.
     property var tokInput: ({})
-    property var tokSurface: ({})           // {kind: solid|glass, alpha, blur} — Theme.glass reads it
+    // {bar_alpha, glass, blur, app_blur, app_alpha, inactive_alpha, solid} —
+    // Theme.glass / Theme.barAlpha / Theme.glassBlur read it
+    property var tokSurface: ({})
+    // The rest of the v3 token file, each block as the generator wrote it:
+    // type (families, weights, tracking, the styles), motion (the four
+    // durations already divided by the animation speed, the easings),
+    // opacity, shadow, gradient, bar (height/module/icon for the bar size)
+    // and accessibility (the four modes). Theme.qml turns them into
+    // properties; nothing else should read these directly.
+    property var tokType: ({})
+    property var tokMotion: ({})
+    property var tokOpacity: ({})
+    property var tokShadow: ({})
+    property var tokGradient: ({})
+    property var tokBar: ({})
+    property var tokA11y: ({})
     // start-hyprland.sh exports EWE_NO_BLUR=1 in VMs and on NVIDIA, where the
-    // compositor's blur is a known cost or glitch; the shell paints solid there
-    // whatever the theme says (alpha without blur is just a see-through panel)
+    // compositor's blur is a known cost or glitch. Glass still applies there —
+    // the fills stay translucent (Theme.barAlpha, the glass-* roles), only the
+    // compositor blur behind them is skipped (Theme.glassBlur is false).
     readonly property bool noBlur: Quickshell.env("EWE_NO_BLUR") === "1"
     property Process _tokenLoad: Process {
         running: true
@@ -561,6 +579,13 @@ QtObject {
                     if (j && j.input && typeof j.input === "object") g.tokInput = j.input
                     g.schemeActive = !!(j && j.input && j.input.scheme && j.input.scheme !== "accent")
                     g.tokSurface = (j && j.surface && typeof j.surface === "object") ? j.surface : {}
+                    if (j && j.type && typeof j.type === "object") g.tokType = j.type
+                    if (j && j.motion && typeof j.motion === "object") g.tokMotion = j.motion
+                    if (j && j.opacity && typeof j.opacity === "object") g.tokOpacity = j.opacity
+                    if (j && j.shadow && typeof j.shadow === "object") g.tokShadow = j.shadow
+                    if (j && j.gradient && typeof j.gradient === "object") g.tokGradient = j.gradient
+                    if (j && j.bar && typeof j.bar === "object") g.tokBar = j.bar
+                    if (j && j.accessibility && typeof j.accessibility === "object") g.tokA11y = j.accessibility
                 } catch (e) {}
             }
         }
