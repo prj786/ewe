@@ -11,6 +11,20 @@ import Quickshell.Io
 // separate from QuickSettings on purpose — a hotfix must not refactor the
 // panel; the two share the same nmcli contract.
 //
+// Design system: Wi-Fi picker.
+//
+//   status  an iconMd glyph and a body-strong line: "Connected to <network>"
+//           in success, or the offline wording in textSecondary behind
+//           wifi-off
+//   box     surfaceSunken inside a borderWidth1 borderSubtle outline on the
+//           radiusPrimary corner, spaceXs of padding, scrolling after 8 rows
+//   row     controlMd on the radiusSecondary corner: the signal glyph, the
+//           name, a lock for secured networks, and a tick (connected) or a
+//           Spinner (joining); the connected row is accentText at semibold
+//   join    the row being joined becomes a borderless field with a show/hide
+//           eye and a small primary Join, inside a focusRing outline
+//   error   the caption size in danger behind a warning glyph
+//
 //   active   scanning/polling only while true (the host step is on screen)
 //   online   true once NetworkManager reports full connectivity (or, with
 //            connectivity checks disabled, the sign-in host answers)
@@ -28,7 +42,7 @@ Column {
     property string pwText: ""
     property bool pwShow: false
     property string lastError: ""
-    spacing: 8
+    spacing: Theme.spaceS
 
     function curSsid() {
         for (var i = 0; i < root.wifiList.length; i++) if (root.wifiList[i].active) return root.wifiList[i].ssid
@@ -146,89 +160,218 @@ Column {
             if (exitCode !== 0) {
                 var msg = (wifiConnErr.text || "").trim()
                 if (/secrets|no key|password|802-1x|auth/i.test(msg)) root.pwTarget = failed
-                root.lastError = "Joining " + failed + " failed" + (msg !== "" ? ": " + msg : " (nmcli exited with code " + exitCode + ")")
+                root.lastError = "Couldn\u2019t join " + failed
+                    + (msg !== "" ? ": " + msg.charAt(0).toLowerCase() + msg.slice(1) : ".")
             }
         }
     }
 
     // ── status line ──
     Row {
-        width: parent.width; spacing: 8
+        width: parent.width; spacing: Theme.spaceS
         Text {
             anchors.verticalCenter: parent.verticalCenter
             text: root.online ? Theme.icCheck : (root.wiredUp || root.wifiOn ? Theme.icWifi : Theme.icWifiOff)
-            font.family: Theme.fontIcons; font.pixelSize: 14
-            color: root.online ? Theme.success : Theme.fg3
+            font.family: Theme.fontIcons; font.pixelSize: Theme.iconMd
+            color: root.online ? Theme.success : Theme.textSecondary
         }
         Text {
             anchors.verticalCenter: parent.verticalCenter
-            text: root.online ? ("Connected" + (root.wiredUp ? " (Ethernet)" : (root.curSsid() !== "" ? " to " + root.curSsid() : "")))
-                : (root.wiredUp ? "Ethernet link, but no internet yet…"
-                : (root.wifiOn ? (root.curSsid() !== "" ? "Joined " + root.curSsid() + " — waiting for internet…" : "Not connected — pick a network below")
-                : "Wi-Fi is off — turn it on to see networks"))
-            color: root.online ? Theme.success : Theme.fg2
-            font.family: Theme.fontText; font.pixelSize: Theme.fsBody; font.weight: Font.DemiBold
+            width: parent.width - Theme.iconMd - parent.spacing
+            text: root.online ? (root.wiredUp ? "Connected over Ethernet"
+                                : root.curSsid() !== "" ? "Connected to " + root.curSsid() : "Connected")
+                : (root.wiredUp ? "Ethernet is plugged in. Waiting for the internet…"
+                : (root.wifiOn ? (root.curSsid() !== ""
+                                  ? "Joined " + root.curSsid() + ". Waiting for the internet…"
+                                  : "Not connected. Pick a network.")
+                : "Wi-Fi is off"))
+            color: root.online ? Theme.success : Theme.textSecondary
+            font.family: Theme.type.bodyStrong.family
+            font.pixelSize: Theme.type.bodyStrong.size
+            font.weight: Theme.fontWeightSemibold
+            elide: Text.ElideRight
         }
     }
     Text {
         visible: !root.wifiOn
-        text: "Turn Wi-Fi on"; color: Theme.accent; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold
-        MouseArea { anchors.fill: parent; anchors.margins: -6; cursorShape: Qt.PointingHandCursor; onClicked: { Quickshell.execDetached(["nmcli", "radio", "wifi", "on"]); rescanSoon.restart() } }
+        text: "Turn on Wi-Fi"
+        color: Theme.accentText
+        font.family: Theme.type.body.family
+        font.pixelSize: Theme.type.body.size
+        font.weight: Theme.fontWeightSemibold
+        MouseArea {
+            anchors.fill: parent; anchors.margins: -Theme.spaceXs
+            cursorShape: Qt.PointingHandCursor
+            onClicked: { Quickshell.execDetached(["nmcli", "radio", "wifi", "on"]); rescanSoon.restart() }
+        }
     }
     Timer { id: rescanSoon; interval: 1500; onTriggered: root.rescan() }
 
-    // ── list ──
+    // ── the list ──
     Item {
-        width: parent.width; height: 28; visible: root.wifiOn && root.wifiList.length === 0
+        width: parent.width; height: Theme.controlLg
+        visible: root.wifiOn && root.wifiList.length === 0
         Row {
-            anchors.left: parent.left; anchors.leftMargin: 8; anchors.verticalCenter: parent.verticalCenter; spacing: 8
-            Spinner { visible: wifiScan.running; anchors.verticalCenter: parent.verticalCenter; font.pixelSize: 12 }
-            Text { anchors.verticalCenter: parent.verticalCenter; text: wifiScan.running ? "Looking for networks…" : "No networks found."; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
+            anchors.centerIn: parent
+            spacing: Theme.spaceS
+            Spinner { visible: wifiScan.running; anchors.verticalCenter: parent.verticalCenter; size: Theme.iconMd }
+            Text {
+                anchors.verticalCenter: parent.verticalCenter
+                text: wifiScan.running ? "Looking for networks…" : "No networks found."
+                color: Theme.textSecondary
+                font.family: Theme.type.label.family
+                font.pixelSize: Theme.fontSizeS
+            }
         }
     }
     Rectangle {
         width: parent.width
         visible: root.wifiOn && root.wifiList.length > 0
-        height: visible ? Math.min(wifiOptCol.implicitHeight + 10, 232) : 0
-        radius: Theme.r(7); color: Theme.bg3; border.color: Theme.stroke2; border.width: Theme.borderThin
+        // the card's eight rows, then it scrolls
+        height: visible ? Math.min(wifiOptCol.implicitHeight + 2 * Theme.spaceXs,
+                                   8 * Theme.controlMd + 2 * Theme.spaceXs) : 0
+        radius: Theme.radiusPrimary
+        color: Theme.surfaceSunken
+        border.color: Theme.borderSubtle; border.width: Theme.borderWidth1
         clip: true
         Flickable {
-            anchors.fill: parent; anchors.margins: 5
+            anchors.fill: parent; anchors.margins: Theme.spaceXs + parent.border.width
             contentHeight: wifiOptCol.implicitHeight; clip: true
+            boundsBehavior: Flickable.StopAtBounds
             Column {
                 id: wifiOptCol
                 width: parent.width
+                spacing: Theme.spaceXxs
                 Repeater {
                     model: root.wifiOn ? root.wifiList : []
                     delegate: Column {
                         required property var modelData
                         width: wifiOptCol.width
+                        spacing: Theme.spaceXxs
                         Item {
-                            width: parent.width; height: 30
-                            Rectangle { anchors.fill: parent; radius: Theme.r(6); color: wMa.containsMouse ? Theme.subtleHover : Theme.subtle }
-                            Text { anchors.left: parent.left; anchors.leftMargin: 8; anchors.verticalCenter: parent.verticalCenter; text: modelData.signal >= 66 ? Theme.icWifi : (modelData.signal >= 33 ? Theme.icWifiMed : Theme.icWifiLow); font.family: Theme.fontIcons; font.pixelSize: 13; color: modelData.active ? Theme.accent : Theme.fg3 }
-                            Text { anchors.left: parent.left; anchors.leftMargin: 32; anchors.right: parent.right; anchors.rightMargin: 40; anchors.verticalCenter: parent.verticalCenter; text: modelData.ssid; color: modelData.active ? Theme.accent : Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: modelData.active ? Font.DemiBold : Font.Normal; elide: Text.ElideRight }
-                            Text { anchors.right: parent.right; anchors.rightMargin: modelData.active ? 26 : 8; anchors.verticalCenter: parent.verticalCenter; visible: modelData.sec !== ""; text: Theme.icLock; font.family: Theme.fontIcons; font.pixelSize: 10; color: Theme.fg3 }
-                            Text { anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter; visible: modelData.active && root.wifiPending !== modelData.ssid; text: Theme.icCheck; font.family: Theme.fontIcons; font.pixelSize: 11; color: Theme.accent }
-                            Spinner { anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter; visible: root.wifiPending === modelData.ssid; font.pixelSize: 12 }
-                            MouseArea { id: wMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.connectWifi(modelData.ssid, modelData.sec) }
-                        }
-                        Item {
-                            width: parent.width; height: visible ? 36 : 0; visible: root.pwTarget === modelData.ssid
+                            width: parent.width; height: Theme.controlMd
+                            visible: root.pwTarget !== modelData.ssid
                             Rectangle {
-                                anchors.fill: parent; anchors.topMargin: 2; anchors.bottomMargin: 4; radius: Theme.r(7); color: Theme.bg3; border.color: Theme.accent; border.width: Theme.borderThin
-                                TextInput {
-                                    id: pwInput
-                                    anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 84; verticalAlignment: TextInput.AlignVCenter
-                                    echoMode: root.pwShow ? TextInput.Normal : TextInput.Password; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
-                                    onTextChanged: root.pwText = text
-                                    Component.onCompleted: if (root.pwTarget === modelData.ssid) forceActiveFocus()
-                                    onAccepted: root.connectWifi(modelData.ssid, modelData.sec)
-                                    Keys.onEscapePressed: root.pwTarget = ""
-                                    Text { anchors.verticalCenter: parent.verticalCenter; visible: pwInput.text.length === 0; text: "Password"; color: Theme.fg3; font: pwInput.font }
+                                anchors.fill: parent
+                                radius: Theme.radiusSecondary
+                                color: wMa.containsMouse ? Theme.surfaceHover : "transparent"
+                                Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
+                            }
+                            Text {
+                                id: sig
+                                anchors.left: parent.left; anchors.leftMargin: Theme.spaceS
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: modelData.signal >= 66 ? Theme.icWifi
+                                    : modelData.signal >= 33 ? Theme.icWifiMed : Theme.icWifiLow
+                                font.family: Theme.fontIcons; font.pixelSize: Theme.iconMd
+                                color: modelData.active ? Theme.accentText : Theme.textSecondary
+                            }
+                            Text {
+                                anchors.left: sig.right; anchors.leftMargin: Theme.spaceS
+                                anchors.right: tail.left; anchors.rightMargin: Theme.spaceS
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: modelData.ssid
+                                color: modelData.active ? Theme.accentText : Theme.textPrimary
+                                font.family: Theme.type.body.family
+                                font.pixelSize: Theme.type.body.size
+                                font.weight: modelData.active ? Theme.fontWeightSemibold : Theme.type.body.weight
+                                elide: Text.ElideRight
+                            }
+                            Row {
+                                id: tail
+                                anchors.right: parent.right; anchors.rightMargin: Theme.spaceS
+                                anchors.verticalCenter: parent.verticalCenter
+                                spacing: Theme.spaceS
+                                Text {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    visible: modelData.sec !== ""
+                                    text: Theme.icLock
+                                    font.family: Theme.fontIcons; font.pixelSize: Theme.iconSm
+                                    color: Theme.textMuted
                                 }
-                                Text { anchors.right: parent.right; anchors.rightMargin: 46; anchors.verticalCenter: parent.verticalCenter; text: root.pwShow ? Theme.icEyeOff : Theme.icEye; font.family: Theme.fontIcons; font.pixelSize: 13; color: root.pwShow ? Theme.accent : Theme.fg3; MouseArea { anchors.fill: parent; anchors.margins: -6; cursorShape: Qt.PointingHandCursor; onClicked: root.pwShow = !root.pwShow } }
-                                Text { anchors.right: parent.right; anchors.rightMargin: 12; anchors.verticalCenter: parent.verticalCenter; text: "Join"; color: Theme.accent; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold; MouseArea { anchors.fill: parent; anchors.margins: -6; cursorShape: Qt.PointingHandCursor; onClicked: root.connectWifi(modelData.ssid, modelData.sec) } }
+                                Text {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    visible: modelData.active && root.wifiPending !== modelData.ssid
+                                    text: Theme.icCheck
+                                    font.family: Theme.fontIcons; font.pixelSize: Theme.iconMd
+                                    color: Theme.accentText
+                                }
+                                Spinner {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    visible: root.wifiPending === modelData.ssid
+                                    size: Theme.iconMd
+                                }
+                            }
+                            MouseArea {
+                                id: wMa
+                                anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                                onClicked: root.connectWifi(modelData.ssid, modelData.sec)
+                            }
+                        }
+                        // the password row REPLACES the row being joined
+                        Rectangle {
+                            width: parent.width
+                            height: visible ? Theme.controlMd : 0
+                            visible: root.pwTarget === modelData.ssid
+                            radius: Theme.radiusSecondary
+                            color: Theme.surfaceBase
+                            border.color: Theme.focusRing; border.width: Theme.borderWidth1
+                            TextInput {
+                                id: pwInput
+                                anchors.left: parent.left; anchors.leftMargin: Theme.spaceS
+                                anchors.right: eye.left; anchors.rightMargin: Theme.spaceXs
+                                anchors.top: parent.top; anchors.bottom: parent.bottom
+                                verticalAlignment: TextInput.AlignVCenter
+                                echoMode: root.pwShow ? TextInput.Normal : TextInput.Password
+                                color: Theme.textPrimary
+                                font.family: Theme.type.body.family
+                                font.pixelSize: Theme.type.body.size
+                                onTextChanged: root.pwText = text
+                                Component.onCompleted: if (root.pwTarget === modelData.ssid) forceActiveFocus()
+                                onAccepted: root.connectWifi(modelData.ssid, modelData.sec)
+                                Keys.onEscapePressed: root.pwTarget = ""
+                                Text {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    visible: pwInput.text.length === 0
+                                    text: "Password"; color: Theme.textMuted; font: pwInput.font
+                                }
+                            }
+                            Text {
+                                id: eye
+                                anchors.right: joinBtn.left; anchors.rightMargin: Theme.spaceXs
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: root.pwShow ? Theme.icEyeOff : Theme.icEye
+                                font.family: Theme.fontIcons; font.pixelSize: Theme.iconMd
+                                color: root.pwShow ? Theme.accentText : Theme.textMuted
+                                MouseArea {
+                                    anchors.fill: parent; anchors.margins: -Theme.spaceXs
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: root.pwShow = !root.pwShow
+                                }
+                            }
+                            Rectangle {
+                                id: joinBtn
+                                anchors.right: parent.right; anchors.rightMargin: Theme.spaceXxs
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: joinTxt.implicitWidth + 2 * Theme.spaceS
+                                height: Theme.controlSm
+                                radius: Theme.radiusSecondary
+                                color: joinMa.pressed ? Theme.accentPressed
+                                     : joinMa.containsMouse ? Theme.accentHover : Theme.accent
+                                Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
+                                Text {
+                                    id: joinTxt
+                                    anchors.centerIn: parent; text: "Join"
+                                    color: Theme.onAccent
+                                    font.family: Theme.type.label.family
+                                    font.pixelSize: Theme.type.label.size
+                                    font.weight: Theme.fontWeightSemibold
+                                }
+                                MouseArea {
+                                    id: joinMa
+                                    anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                                    onClicked: root.connectWifi(modelData.ssid, modelData.sec)
+                                }
                             }
                         }
                     }
@@ -236,9 +379,20 @@ Column {
             }
         }
     }
-    Text {
+    Row {
         visible: root.lastError !== ""
-        width: parent.width; wrapMode: Text.Wrap
-        text: root.lastError; color: Theme.danger; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
+        width: parent.width; spacing: Theme.spaceXs
+        Text {
+            text: Theme.icWarning
+            font.family: Theme.fontIcons; font.pixelSize: Theme.iconSm
+            color: Theme.danger
+        }
+        Text {
+            width: parent.width - Theme.iconSm - parent.spacing
+            wrapMode: Text.Wrap
+            text: root.lastError; color: Theme.danger
+            font.family: Theme.type.label.family
+            font.pixelSize: Theme.fontSizeS
+        }
     }
 }
