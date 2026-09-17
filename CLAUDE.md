@@ -30,6 +30,11 @@ called `hypr-shell`; that's outside the repo. Distribution:
 `ewe-<version>.tar.zst` artefact built by `release.sh` (`--publish` creates the
 GitHub release).
 
+## Design system
+
+- The design system in `design/system/` is the source of truth for how every surface looks.
+- Read `design/system/guidelines/40-implementation.md` before UI work.
+
 ## Development workflow (critical)
 
 - **Work in the repo, then push — do not edit the live `~/.config`.** This repo is
