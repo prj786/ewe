@@ -126,9 +126,10 @@ registered in `qmldir`. Two singletons tie everything together:
   In-shell toggles flip a `Globals` bool directly (no IPC round-trip).
 - **`Theme.qml`** — the palette/metrics; `accent` binds to `Globals.accentColor`
   so changing the accent recolours the whole shell live. Values come from
-  `bin/ewe-theme` (one accent in `ewe.conf` → every token); the designer's
-  reference sheet is `design/spec/ewe-design-system.html` and
-  `design/check-spec.sh` holds the generated `design/tokens.css` to it.
+  `bin/ewe-theme` (scheme + accent in `ewe.conf` → every token of the Ewe
+  design system v3, `design/system/`); `design/check-spec.sh` holds the
+  generated `design/tokens.css` to `design/system/tokens.json` and
+  `design/check-contrast.sh` holds the derivation to the contrast rules.
 - **`BtAgent.qml`** — the bluez pairing agent (`scripts/bt-agent.py`, default
   `org.bluez.Agent1`, NDJSON over stdio like `KdeConnect.qml`); `BtPairing.qml`
   is its dialog. Device state still comes from `Quickshell.Bluetooth`; pairing
@@ -206,22 +207,30 @@ through to apps behind it.
 
 ### Theming (single source: `scripts/colorscheme.sh`)
 
-**Schemes (2026-09-16):** `bin/ewe-theme` has a second way to build its two
-ramps. `desktop.theme.scheme = accent` is the accent engine, byte-identical
-to before (`tests/ewe-theme-test.sh` pins `design/tokens.css`); any other
-value is the slug of a `[[desktop.theme.schemes]]` record (Base24 palette +
-optional accent + variant dark|light), and `scheme_ramp()` pins bg-3/bg-1/
-card/strokes/fg on base00/01/02/03/04/05/07 with LCH interpolation between —
-the role table `alias()` is untouched, so the 150 names never change. A
-light scheme is the same anchors running the other way. `ewe-theme scheme
-list|show|apply|import|remove|export|set|from-wallpaper` is the CLI (imports:
-base16/24 YAML via a mini parser, Omarchy TOML, Catppuccin JSON, Gogh;
-wallpaper via ImageMagick histogram, Pillow fallback). `colorscheme.sh`
-reads `input.variant` and `scheme.palette` from theme-tokens.json (GTK
-light switch, Qt/KDE palettes from tokens, kitty ANSI); `ewe-conf
-effective_accent()` gives the border and the colorscheme hook the scheme's
-accent; `Globals.schemeActive` stops the in-shell accent pick from
-overriding a scheme. `wallpaper.sh` re-derives when scheme = "wallpaper".
+**Schemes + the v3 generator (2026-09-17, branch `ewe-design-v3`, Phase 1):**
+`bin/ewe-theme` derives the Ewe design system v3 token set from a Base24
+scheme + an accent (`design/system/guidelines/10-color-schemes.md`): Ewe
+Dark (`ewe-dark`, the default) and Ewe Light are records embedded in the
+tool and marked `builtin` (tests hold them to
+`design/system/assets/Schemes/*.json`); user schemes live in
+`[[desktop.theme.schemes]]`. Derivation → `overrides` → guarantees (text
+4.5:1, borders 3:1, surfaces 2 L apart, warning ≠ accent hue; every move
+recorded in `adjusted`, shown by `scheme show`) → look presets and
+accessibility modes as remaps. The pre-v3 value `scheme = "accent"` reads
+as ewe-dark wearing `desktop.theme.accent`; `corner = round` reads as
+`large`. Every Fluent name is still emitted as an alias (Migration guide)
+until Phase 6. `ewe-theme scheme list|show|apply|import|duplicate|remove|
+export|set|from-wallpaper` is the CLI (imports: base16/24 YAML via a mini
+parser, Omarchy TOML, Catppuccin JSON, Gogh; wallpaper via ImageMagick
+histogram, Pillow fallback); `set overrides.<role> <hex|none>` edits an
+override. `build --scheme SLUG --selector SEL` builds the CSS for another
+scheme without touching ewe.conf (the website's light/dark toggle).
+`colorscheme.sh` reads `input.variant` and `scheme.palette` from
+theme-tokens.json (GTK light switch, Qt/KDE palettes from tokens, kitty
+ANSI); `ewe-conf effective_accent()` gives the border and the colorscheme
+hook the scheme's accent; `Globals.schemeActive` stops the in-shell accent
+pick from overriding a scheme. `wallpaper.sh` re-derives when scheme =
+"wallpaper".
 
 **Bar & dock opacity:** `desktop.theme.bar_opacity = 0..100` in ewe.conf
 (Settings → Appearance slider). The bar and dock are painted at
