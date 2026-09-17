@@ -149,7 +149,15 @@ QtObject {
     readonly property color textDisabled:    _f("text-disabled", "#5d5a55")
     readonly property color accentHover:     _f("accent-hover", "#f8c23b")
     readonly property color accentPressed:   _f("accent-pressed", "#cb9407")
-    readonly property color onAccent:        _f("on-accent", "#020202")
+    // on-accent, through a Binding on purpose. `onAccent: <expression>` next to
+    // a property called `accent` parses as a SIGNAL HANDLER, not a property
+    // initialiser: QML silently ran the expression on accentChanged and left
+    // the colour at its default black. A bare declaration plus a Binding is
+    // the same value, still reactive, and keeps the name the token has.
+    property color onAccent
+    readonly property Binding _onAccentBind: Binding {
+        target: t; property: "onAccent"; value: t._f("on-accent", "#020202")
+    }
     readonly property color accentSubtle:    _f("accent-subtle", "#352206")
     readonly property color accentText:      _f("accent-text", "#f8c23a")
     readonly property color focusRing:       _f("focus-ring", "#f8c23a")
