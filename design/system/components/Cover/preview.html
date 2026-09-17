@@ -1,0 +1,36 @@
+<!-- @dsCard height=288 -->
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Ewe — cover</title><style>
+html,body{margin:0}
+.cover{position:relative;width:960px;height:288px;overflow:hidden;background:var(--surface-base);font-family:var(--font-sans)}
+.art{position:absolute;left:480px;top:0;display:block}
+.b{rx:var(--rounded);ry:var(--rounded)}
+.gold{fill:var(--ewellow)}
+.amber{fill:var(--ewellow-800)}
+.ink{fill:var(--neutral-800)}
+.tint{fill:var(--ewellow-200)}
+.fleece{fill:var(--ewellow-600)}
+.text{position:absolute;left:var(--space-lg);bottom:var(--space-lg);max-width:440px}
+.name{margin:0;font-size:120px;line-height:.92;font-weight:var(--font-weight-semibold);letter-spacing:var(--tracking-tightest);color:var(--text-primary)}
+.tag{margin:var(--space-s) 0 0;font-size:var(--font-size-md);line-height:var(--line-height-md);color:var(--text-muted)}
+</style></head>
+<body>
+<div class="cover">
+<svg class="art" viewBox="0 0 480 288" width="480" height="288" aria-hidden="true">
+<!--
+blocks: ewellow 224x240 slab, ewellow-800 104x120, neutral-800 104x192, ewellow-200 88x96; gaps space-s (8), insets space-lg (32) and space-xl (64)
+arrangement: one tall gold slab bleeding off the top, two satellites bleeding off the right edge, one tint lower left
+pattern: a staggered cluster of discs in ewellow-600 on the slab (literal motif: the flock, fleece curls from the rounded radius)
+steps and radii: pitch 32 (space-lg) by 20, disc r = rounded (10), block corners rounded (10)
+-->
+<rect class="b gold" x="160" y="-16" width="224" height="240"/>
+<rect class="b amber" x="392" y="-16" width="104" height="120"/>
+<rect class="b ink" x="392" y="112" width="104" height="192"/>
+<rect class="b tint" x="64" y="160" width="88" height="96"/>
+<circle class="fleece" cx="196" cy="120" r="10"/><circle class="fleece" cx="228" cy="120" r="10"/><circle class="fleece" cx="260" cy="120" r="10"/><circle class="fleece" cx="292" cy="120" r="10"/><circle class="fleece" cx="324" cy="120" r="10"/><circle class="fleece" cx="208" cy="140" r="10"/><circle class="fleece" cx="240" cy="140" r="10"/><circle class="fleece" cx="272" cy="140" r="10"/><circle class="fleece" cx="304" cy="140" r="10"/><circle class="fleece" cx="336" cy="140" r="10"/><circle class="fleece" cx="196" cy="160" r="10"/><circle class="fleece" cx="228" cy="160" r="10"/><circle class="fleece" cx="260" cy="160" r="10"/><circle class="fleece" cx="292" cy="160" r="10"/><circle class="fleece" cx="324" cy="160" r="10"/><circle class="fleece" cx="208" cy="180" r="10"/><circle class="fleece" cx="240" cy="180" r="10"/><circle class="fleece" cx="272" cy="180" r="10"/><circle class="fleece" cx="304" cy="180" r="10"/>
+</svg>
+<div class="text"><h1 class="name">Ewe</h1><p class="tag">The design language of the Ewe desktop: warm gold, near-black, calm.</p></div>
+</div>
+</body>
+</html>
