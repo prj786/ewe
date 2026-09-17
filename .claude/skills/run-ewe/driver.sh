@@ -29,6 +29,7 @@
 # and generates theme-tokens.json with THIS checkout's bin/ewe-theme:
 #   HS_SCHEME=ewe-light          # [desktop.theme] scheme (default ewe-dark)
 #   HS_CONF=<file>               # use this ewe.conf instead (HS_SCHEME ignored)
+#   HS_WELCOME=1                 # let the first-run Welcome screen appear
 #   HS_SANDBOX=0                 # old behaviour: the live HOME and config
 set -u
 
@@ -64,6 +65,9 @@ sandbox_prepare() {
   rm -rf "$SBHOME"
   mkdir -p "$SBHOME/.config/quickshell" "$SBHOME/.config/ewe" "$SBHOME/.local/share" \
            "$SBHOME/.local/state" "$SBHOME/.cache"
+  # Welcome shows once per fresh state dir and covers every screenshot;
+  # HS_WELCOME=1 leaves the stamp off so it does appear.
+  [ "${HS_WELCOME:-0}" = "1" ] || { mkdir -p "$SBHOME/.local/state/ewe"; : > "$SBHOME/.local/state/ewe/welcomed"; }
   ln -s "$REPO/dotfiles/fontconfig" "$SBHOME/.config/fontconfig"
   # fontconfig's relative <dir> resolves beside the linked fontconfig dir
   ln -s "$REPO/dotfiles/quickshell/fonts" "$SBHOME/.config/quickshell/fonts"

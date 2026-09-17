@@ -1,468 +1,590 @@
 pragma Singleton
 import QtQuick
 
-// Theme — single source of truth for colour, type, metrics and icons.
+// Theme — single source of truth for colour, type, metrics, motion and icons.
 // Imported as `Theme.*`; components must never define their own.
 //
-// ONE look, built on FLUENT 2 roles, revamped 2026-09 to the designer's spec
-// (design/spec/ewe-design-system.html). There is no theme file: every value
-// here is DERIVED from the single accent in ewe.conf by `ewe-theme`, which
-// writes ~/.config/quickshell/theme-tokens.json. What you can change:
+// ONE look: the EWE DESIGN SYSTEM v3 (design/system/). Every value here comes
+// from `bin/ewe-theme`, which derives the whole token set from the scheme and
+// the accent in ewe.conf and writes ~/.config/quickshell/theme-tokens.json.
+// What you can change:
 //
 //   [desktop.theme]
-//   accent       = "#ffcc00"      # THE seed — the brand ramp comes from this
-//   corner       = "round"        # none | small | medium | large | round
+//   scheme       = "ewe-dark"     # ewe-dark | ewe-light | a user scheme slug
+//   accent       = "#eeb407"      # ewellow, the brand gold — any colour works
+//   corner       = "medium"       # none | small | medium | large
 //   density      = "comfortable"  # compact | comfortable | roomy
-//   stroke       = "none"         # none | thin | thick   (component outlines)
-//   neutral_tint = 8              # how far the greys follow the accent
-//   bar_opacity  = 100            # 0-100, the bar and the dock only
+//   stroke       = "thin"         # none | thin | thick   (component outlines)
+//   bar_opacity  = 100            # 0-100 — Glass on the bar, dock, lock card
 //   app_blur     = false          # blur behind every window (Hyprland side)
+//   [desktop.bar]            size = "normal"   # normal (48) | large (64)
+//   [desktop.accessibility]  reduce_motion, reduce_transparency,
+//                            increase_contrast, text_scale = 100|115|130
 //
-// THE TEN WORKING RULES (the spec's, restated for QML):
+// THE WORKING RULES (design/system/README.md, restated for QML):
 //
-//   01  Ask for a ROLE, never a value. A component that needs a colour
-//       not in this file means this file is wrong — add the role here.
-//   02  The accent is the user's pick at runtime and beats everything:
-//       `accent` follows Globals.accentColor; brand-fg-1 is the fallback.
-//   03  State comes from the NEXT role in the set, never from opacity or
-//       a lighter()/darker() call:  bg1 → bg1Hover → bg1Pressed → bg1Selected.
-//   04  Dark only, on purpose. No light set, no mode switch; every layer
-//       paints its own ground.
-//   05  Chrome isn't text — labels on shell surfaces are never selectable.
-//   06  Transitions are 120–170 ms and colour-only. Rail items 120, fills
-//       130–150, a chevron turn 170. Nothing animates layout.
-//   07  The apps map their framework onto these roles, not the other way
-//       round — one palette for a QML surface and a Svelte pane.
+//   01  Ask for a ROLE, never a value. No raw colours, sizes or durations in
+//       a component: if a role is missing, it is missing HERE. The literals
+//       below are FALLBACKS mirroring the generator's Ewe Dark defaults, for
+//       a machine whose token file is missing or unparsable.
+//   02  Schemes, look presets, Glass and the accessibility modes are REMAPS
+//       the generator applies. A component never asks which one is active.
+//   03  State comes from the next role in the set, never from opacity or a
+//       lighter()/darker() call:  surface → surfaceHover → surfacePressed.
+//   04  Two line weights only: borderWidth1 and borderWidth2. Focus rings are
+//       focusWidth (1px; Increase contrast makes it 2).
+//   05  Corners by ROLE: radiusPrimary (8) controls, radiusRounded (10)
+//       panels and cards, radiusFull only badges, tags and switches.
+//   06  Motion confirms, never decorates: durFast 150 / durBase 200 /
+//       durSlow 250 / durDim 1500 at Normal speed, OutCubic (InOutCubic for
+//       slow). Nothing bounces — there is no OutBack anywhere.
+//   07  Type comes from `type.<style>`; build custom text from the scale
+//       tokens, always pairing a size with the line height of its step.
+//       Georgian is NEVER uppercased (labelCaps is MixedCase, on purpose).
 //   08  Icons are a font (Lucide, fontIcons): size and tint go through
 //       pixelSize and color, never a per-icon asset.
-//   09  NOTHING IS OUTLINED. Buttons, inputs, cards, tiles, the dock, the
-//       panels all carry `outline` (0 by default): each already sits on a
-//       different background role than what is behind it, and a 1 px edge
-//       on top of that step is a second, redundant signal. Three exceptions
-//       earn a stroke: the keyboard focus ring (focusWidth), the 2 px accent
-//       border on an OPEN control-centre tile, and the window ring Hyprland
-//       draws. Dividers and hairlines are `hairline` (stroke-width, 1).
-//   10  Corners are pitched by ROLE, not size: radiusControl 12 (button,
-//       row, input), radiusInner 20 (card), radius 26 (panel), radiusPill
-//       999 (a true capsule — Qt clamps it to half the height).
+//   09  Text, glyphs, badges and accent fills stay solid. Only bar, dock and
+//       lock-card FILLS turn translucent, through the glass* roles.
+//   10  The apps map their framework onto the same tokens (design/tokens.css),
+//       so a QML surface and a Svelte pane are one design.
 //
-// PICKING A TOKEN. Ask what the thing IS, not what colour you want:
-//
-//   a surface at rest        bg-1 (panel) · bg-2 (a well) · bg-3 (the base)
-//   a raised, FILLED thing   card / cardHover / cardPressed / cardSelected
-//   no fill until you point  subtle / subtleHover / subtlePressed
-//   a divider between rows   stroke3 at `hairline`
-//   a border that MUST show  focus ring: strokeFocus1/2 at `focusWidth`
-//   a filled brand control   brandBg + fgOnBrand (never `accent` + white)
-//   the accent AS a mark     accent (text, icon, dot, indicator)
-//
-// Hover a FILLED thing with its own level's hover; hover a bare row with
-// subtleHover. Getting that pair the wrong way round is what made a hovered
-// tile jump colour.
-//
-// Every literal below is a FALLBACK for a machine whose token file is missing
-// or unreadable; the file is authoritative whenever it is there. The
-// literals are `ewe-theme build`'s output for the default accent
-// (design/tokens.css) — regenerate, don't hand-tune.
-//
-// ewe is dark-only (decision 2026-09-01). Fonts are never themed.
+// The FLUENT names (bg1, card, brandBg, …) are still published at the bottom,
+// each pointing at its Ewe role per the Migration guide, so unmigrated
+// components keep working. Phase 6 deletes them.
 QtObject {
     id: t
 
     // ── Which look ────────────────────────────────────────────────────────
-    // There is ONE ewe. Nothing asks "which theme is on" any more — the last
-    // component reading `blacksheep`/`pitchBlack` was migrated 2026-09-04 and
-    // both flags are gone. Squareness is a TOKEN, not a look: `corner =
-    // "none"` in ewe.conf zeroes the radius ramp and this follows.
-    readonly property bool brutalist:    radius === 0
+    // Squareness is a TOKEN, not a look: `corner = "none"` in ewe.conf zeroes
+    // the radius ramp and this follows.
+    readonly property bool brutalist:    radiusRounded === 0
 
     // ── Where the values come from ────────────────────────────────────────
-    // ewe-theme.conf is the source of truth; `ewe-theme build` writes
-    // ~/.config/quickshell/theme-tokens.json and Globals loads it. Everything
-    // below asks _c/_s/_v for its value and passes the shipped literal as the
-    // FALLBACK, so the file is authoritative when present and the desktop
-    // still comes up correctly when it is missing, stale or unparsable.
-    // Three maps, straight off theme-tokens.json: colour, shape, size. Every
-    // literal passed as `fb` below is a FALLBACK for a machine whose token
-    // file is missing or unreadable — the file wins whenever it is there.
-    readonly property var _fc: Globals.tokColor
-    readonly property var _fs: Globals.tokShape
-    readonly property var _fz: Globals.tokSize
-    // what ewe.conf [desktop.theme] said — bar_opacity lives here
-    readonly property var _fi: Globals.tokInput
-    function _f(k, fb) { return (_fc && _fc[k]) || fb }
-    function _s(k, fb) { return (_fs && _fs[k] !== undefined) ? _fs[k] : fb }
-    function _z(k, fb) { return (_fz && _fz[k] !== undefined) ? _fz[k] : fb }
-    function _i(k, fb) { return (_fi && _fi[k] !== undefined) ? _fi[k] : fb }
+    // theme-tokens.json, block by block, through Globals. Every property asks
+    // its block for a token and passes the shipped literal as the FALLBACK,
+    // so the file is authoritative when present and the desktop still comes
+    // up correctly when it is missing, stale or unparsable.
+    readonly property var _fc: Globals.tokColor      // color
+    readonly property var _fs: Globals.tokShape      // shape
+    readonly property var _fz: Globals.tokSize       // size
+    readonly property var _fi: Globals.tokInput      // what ewe.conf said
+    readonly property var _ft: Globals.tokType       // families, weights, styles
+    readonly property var _fm: Globals.tokMotion     // durations + easings
+    readonly property var _fo: Globals.tokOpacity    // opacity
+    readonly property var _fd: Globals.tokShadow     // shadow
+    readonly property var _fg: Globals.tokGradient   // gradient
+    readonly property var _fb: Globals.tokBar        // bar height/module/icon
+    readonly property var _fa: Globals.tokA11y       // accessibility modes
+    function _get(m, k, fb) { return (m && m[k] !== undefined && m[k] !== null) ? m[k] : fb }
+    function _f(k, fb)  { return (_fc && _fc[k]) || fb }
+    function _s(k, fb)  { return _get(_fs, k, fb) }
+    function _z(k, fb)  { return _get(_fz, k, fb) }
+    function _i(k, fb)  { return _get(_fi, k, fb) }
+    function _o(k, fb)  { return _get(_fo, k, fb) }
+    function _m(k, fb)  { return _get(_fm, k, fb) }
+    function _w(k, fb)  { return _get(_ft && _ft.weight, k, fb) }
+    function _tr(k, fb) { return _get(_ft && _ft.tracking, k, fb) }
+    function _d(k, fb)  { return _get(_fd, k, fb) }
+    function _gr(k, fb) { return _get(_fg, k, fb) }
+    function _bz(k, fb) { return _get(_fb, k, fb) }
+    function _ax(k, fb) { return _get(_fa, k, fb) }
 
-    // ══ FLUENT ROLES ══════════════════════════════════════════════════════
-    // The vocabulary ewe was missing. Everything below comes straight off the
-    // top level of theme-tokens.json; the literals are the DEFAULT accent's
-    // values, used only when that file is absent. Components are migrating
-    // onto these names — see the legacy aliases further down.
+    // ══ EWE TOKENS ════════════════════════════════════════════════════════
+    // One property per token, named as design/system/guidelines/
+    // 40-implementation.md's QML column: the token name in camelCase, with a
+    // `radius` prefix on the corner tokens.
 
-    // ── Backgrounds: six levels, each with its own four states ────────────
-    // Pick the LEVEL by how deep the surface sits, then always take that
-    // level's own -hover/-pressed. Never hover a filled surface with the
-    // `subtle` tokens: that is what made hovered content jump colour and
-    // paint over its container's border.
-    //   bg-3  desktop / app base      bg-1  panel or popup on it
-    //   bg-2  a well inside a panel   bg-6  a card or row raised on a panel
-    //   bg-4/5  deeper than the base — scrims, the black end
-    readonly property color bg1:         _f("bg-1", "#131417")
-    readonly property color bg1Hover:    _f("bg-1-hover", "#1e1f22")
-    readonly property color bg1Pressed:  _f("bg-1-pressed", "#0e0f12")
-    readonly property color bg1Selected: _f("bg-1-selected", "#1b1c1f")
-    readonly property color bg2:         _f("bg-2", "#0e0f12")
-    readonly property color bg2Hover:    _f("bg-2-hover", "#191a1d")
-    readonly property color bg2Pressed:  _f("bg-2-pressed", "#090a0e")
-    readonly property color bg2Selected: _f("bg-2-selected", "#16171a")
-    readonly property color bg3:         _f("bg-3", "#090a0e")
-    readonly property color bg3Hover:    _f("bg-3-hover", "#131417")
-    readonly property color bg3Pressed:  _f("bg-3-pressed", "#040509")
-    readonly property color bg3Selected: _f("bg-3-selected", "#111215")
-    readonly property color bg4:         _f("bg-4", "#040509")
-    readonly property color bg4Hover:    _f("bg-4-hover", "#0e0f12")
-    readonly property color bg4Pressed:  _f("bg-4-pressed", "#000000")
-    readonly property color bg4Selected: _f("bg-4-selected", "#0c0d10")
-    readonly property color bg5:         _f("bg-5", "#000000")
-    readonly property color bg5Hover:    _f("bg-5-hover", "#090a0e")
-    readonly property color bg5Pressed:  _f("bg-5-pressed", "#020307")
-    readonly property color bg5Selected: _f("bg-5-selected", "#07080c")
-    readonly property color bg6:         _f("bg-6", "#191a1d")
-    readonly property color bgDisabled:  _f("bg-disabled", "#090a0e")
+    // ── Colour ────────────────────────────────────────────────────────────
+    //   surface-*  grounds      text-*    copy        border-*  lines
+    //   accent*    primary actions and selection (on-accent for ink on them)
+    //   glass-*    the bar, dock and lock card while Glass is on
+    //   status     success · warning · danger · info (+ -subtle grounds)
+    // The ewellow-* ramp is derived from the chosen accent; `ewellow` itself
+    // stays the brand gold (logo, installer, wallpapers).
+    readonly property color ewellow:         _f("ewellow", "#eeb407")
+    readonly property color black:           _f("black", "#020202")
+    readonly property color ewellow50:       _f("ewellow-50", "#fff6e4")
+    readonly property color ewellow100:      _f("ewellow-100", "#ffedc6")
+    readonly property color ewellow200:      _f("ewellow-200", "#ffdf9a")
+    readonly property color ewellow300:      _f("ewellow-300", "#fdcf64")
+    readonly property color ewellow400:      _f("ewellow-400", "#f8c23a")
+    readonly property color ewellow500:      _f("ewellow-500", "#eeb407")
+    readonly property color ewellow600:      _f("ewellow-600", "#ce9707")
+    readonly property color ewellow700:      _f("ewellow-700", "#a77607")
+    readonly property color ewellow800:      _f("ewellow-800", "#805708")
+    readonly property color ewellow900:      _f("ewellow-900", "#5a3b09")
+    readonly property color ewellow950:      _f("ewellow-950", "#352206")
+    readonly property color neutral0:        _f("neutral-0", "#fefdfc")
+    readonly property color neutral50:       _f("neutral-50", "#faf9f6")
+    readonly property color neutral100:      _f("neutral-100", "#f4f2ee")
+    readonly property color neutral200:      _f("neutral-200", "#e9e6e0")
+    readonly property color neutral300:      _f("neutral-300", "#d5d2cb")
+    readonly property color neutral400:      _f("neutral-400", "#a8a49d")
+    readonly property color neutral500:      _f("neutral-500", "#7f7b75")
+    readonly property color neutral600:      _f("neutral-600", "#5d5a55")
+    readonly property color neutral700:      _f("neutral-700", "#423f3a")
+    readonly property color neutral800:      _f("neutral-800", "#2c2a26")
+    readonly property color neutral850:      _f("neutral-850", "#201e1a")
+    readonly property color neutral900:      _f("neutral-900", "#151411")
+    readonly property color neutral950:      _f("neutral-950", "#0b0a08")
+    readonly property color surfaceBase:     _f("surface-base", "#0b0a08")
+    readonly property color surfaceRaised:   _f("surface-raised", "#151411")
+    readonly property color surfaceOverlay:  _f("surface-overlay", "#201e1a")
+    readonly property color surfaceSunken:   _f("surface-sunken", "#020202")
+    readonly property color surfaceHover:    _f("surface-hover", "#2c2a26")
+    readonly property color surfacePressed:  _f("surface-pressed", "#423f3a")
+    readonly property color surfaceSelected: _f("surface-selected", "#2c2a26")
+    readonly property color scrim:           _f("scrim", "#a3000000")
+    readonly property color glassBase:       _f("glass-base", "#cc0b0a08")
+    readonly property color glassRaised:     _f("glass-raised", "#cc151411")
+    readonly property color glassBorder:     _f("glass-border", "#1afefdfc")
+    readonly property color glassHover:      _f("glass-hover", "#14fefdfc")
+    readonly property color glassPressed:    _f("glass-pressed", "#24fefdfc")
+    readonly property color glassAccent:     _f("glass-accent", "#f8c23a")
+    readonly property color borderSubtle:    _f("border-subtle", "#2c2a26")
+    readonly property color borderStrong:    _f("border-strong", "#7f7b75")
+    readonly property color textPrimary:     _f("text-primary", "#faf9f6")
+    readonly property color textSecondary:   _f("text-secondary", "#d5d2cb")
+    readonly property color textMuted:       _f("text-muted", "#a8a49d")
+    readonly property color textDisabled:    _f("text-disabled", "#5d5a55")
+    readonly property color accentHover:     _f("accent-hover", "#f8c23b")
+    readonly property color accentPressed:   _f("accent-pressed", "#cb9407")
+    readonly property color onAccent:        _f("on-accent", "#020202")
+    readonly property color accentSubtle:    _f("accent-subtle", "#352206")
+    readonly property color accentText:      _f("accent-text", "#f8c23a")
+    readonly property color focusRing:       _f("focus-ring", "#f8c23a")
+    readonly property color success:         _f("success", "#69d6aa")
+    readonly property color warning:         _f("warning", "#f9a870")
+    readonly property color danger:          _f("danger", "#ffa196")
+    readonly property color info:            _f("info", "#76c7ff")
+    readonly property color successSubtle:   _f("success-subtle", "#0d2d21")
+    readonly property color warningSubtle:   _f("warning-subtle", "#372010")
+    readonly property color dangerSubtle:    _f("danger-subtle", "#3a1d1a")
+    readonly property color infoSubtle:      _f("info-subtle", "#0f293a")
+    readonly property color onStatus:        _f("on-status", "#020202")
 
-    // ── Card: a raised, FILLED surface that reacts to the pointer ─────────
-    // A tile, a card, a filled row on a panel. Use THIS ladder, not `subtle`:
-    // subtle is for something with no fill of its own, and reaching for it to
-    // hover a filled thing is what made tiles jump to an unrelated colour.
-    readonly property color card:         _f("card", "#191a1d")
-    readonly property color cardHover:    _f("card-hover", "#232427")
-    readonly property color cardPressed:  _f("card-pressed", "#131417")
-    readonly property color cardSelected: _f("card-selected", "#202124")
-
-    // ── Subtle: a thing with NO fill of its own until you point at it ─────
-    // List rows, menu items, toolbar buttons, bar items. `subtle` really is
-    // transparent, so the container's own colour shows through and only the
-    // hover paints. THIS is the token every "hover a bare row" bug wanted.
-    // Inset such a row by `hoverInset` so its hover can never cover a rule.
-    readonly property color subtle:         _f("subtle", "transparent")
-    readonly property color subtleHover:    _f("subtle-hover", "#1b1c1f")
-    readonly property color subtlePressed:  _f("subtle-pressed", "#16171a")
-    readonly property color subtleSelected: _f("subtle-selected", "#191a1d")
-
-    // ── Strokes: three weights, not one ───────────────────────────────────
-    //   stroke-1  a real UI border — input, button, anything you interact with
-    //   stroke-2  a subtle outline — a card, a panel edge
-    //   stroke-3  a divider between rows; the quietest rule that still reads
-    //   stroke-accessible  a border that MUST be seen (unchecked checkbox)
-    //   stroke-focus-1/2   the two halves of a focus ring: dark inside,
-    //                      light outside, so it lands on any background
-    // Since the 2026-09 revamp every stroke carries alpha 0.5 (the JSON
-    // emits #AARRGGBB), and nothing is OUTLINED by default (see `outline`):
-    // these colours are for hairline dividers and the odd status ring.
-    readonly property color stroke1:          _f("stroke-1", "#80656668")
-    readonly property color stroke1Hover:     _f("stroke-1-hover", "#80757577")
-    readonly property color stroke1Pressed:   _f("stroke-1-pressed", "#806a6b6d")
-    readonly property color stroke1Selected:  _f("stroke-1-selected", "#80707072")
-    readonly property color stroke2:          _f("stroke-2", "#80515255")
-    readonly property color stroke3:          _f("stroke-3", "#803c3d41")
-    readonly property color strokeAccessible: _f("stroke-accessible", "#80adadad")
-    readonly property color strokeDisabled:   _f("stroke-disabled", "#80414246")
-    readonly property color strokeFocus1:     _f("stroke-focus-1", "#000000")
-    readonly property color strokeFocus2:     _f("stroke-focus-2", "#ffffff")
-
-    // ── Foregrounds ───────────────────────────────────────────────────────
-    //   fg-1 primary · fg-2 secondary · fg-3 tertiary, placeholder, icons
-    //   fg-4 the quietest still-readable text · fg-inverted on a light fill
-    //   fg-on-brand  text ON a brand fill. MEASURED, not assumed white —
-    //                a yellow accent gets ink. (ewe's deviation from Fluent.)
-    readonly property color fg1:        _f("fg-1", "#ffffff")
-    readonly property color fg2:        _f("fg-2", "#d6d6d6")
-    readonly property color fg2Hover:   _f("fg-2-hover", "#ffffff")
-    readonly property color fg3:        _f("fg-3", "#adadad")
-    readonly property color fg3Hover:   _f("fg-3-hover", "#d6d6d6")
-    readonly property color fg4:        _f("fg-4", "#99999a")
-    readonly property color fgDisabled: _f("fg-disabled", "#5b5c5f")
-    readonly property color fgInverted: _f("fg-inverted", "#232427")
-    readonly property color fgOnBrand:  _f("fg-on-brand", "#ffffff")
-
-    // ── Brand ─────────────────────────────────────────────────────────────
-    //   brand-bg*        a FILLED primary control
-    //   brand-fg-1/link  the accent AS text or an icon on a dark ground
-    //   compound-*       a control whose fill and stroke move together
-    //                    (checkbox, radio, switch) — the one place Fluent
-    //                    BRIGHTENS on hover so the control reads as live
-    readonly property color brandBg:                _f("brand-bg", "#1b559c")
-    readonly property color brandBgHover:           _f("brand-bg-hover", "#2065bb")
-    readonly property color brandBgPressed:         _f("brand-bg-pressed", "#1a4277")
-    readonly property color brandBgSelected:        _f("brand-bg-selected", "#1c4d8c")
-    readonly property color brandFg1:               _f("brand-fg-1", "#82aeff")
-    readonly property color brandFg2:               _f("brand-fg-2", "#93b8ff")
-    readonly property color brandFgLink:            _f("brand-fg-link", "#82aeff")
-    readonly property color brandFgLinkHover:       _f("brand-fg-link-hover", "#93b8ff")
-    readonly property color brandStroke1:           _f("brand-stroke-1", "#82aeff")
-    readonly property color brandStroke2:           _f("brand-stroke-2", "#1c467c")
-    readonly property color compoundBrandBg:        _f("compound-brand-bg", "#82aeff")
-    readonly property color compoundBrandBgHover:   _f("compound-brand-bg-hover", "#93b8ff")
-    readonly property color compoundBrandBgPressed: _f("compound-brand-bg-pressed", "#5c9aff")
-    readonly property color compoundBrandFg:        _f("compound-brand-fg", "#82aeff")
-    readonly property color compoundBrandStroke:    _f("compound-brand-stroke", "#82aeff")
-
-    // ── Status backgrounds and borders ────────────────────────────────────
-    // For a banner or badge that needs a tinted ground rather than just
-    // coloured text. Deliberately NOT accent-derived: "this failed" must not
-    // change meaning because you picked a red accent.
-    readonly property color successBg:     _f("success-bg", "#052505")
-    readonly property color successBorder: _f("success-border", "#9fd89f")
-    readonly property color warningBg:     _f("warning-bg", "#332a00")
-    readonly property color warningBorder: _f("warning-border", "#fbde3d")
-    readonly property color dangerBg:      _f("danger-bg", "#3b0509")
-    readonly property color dangerBorder:  _f("danger-border", "#f1707b")
-    readonly property color infoBg:        _f("info-bg", "#222527")
-    readonly property color infoBorder:    _f("info-border", "#9ea2a6")
-
-    readonly property color shadow:      Qt.rgba(0, 0, 0, 0.28)
-
-    // ── Bar shape ─────────────────────────────────────────────────────────
-    // Identical stops render the gradient node flat — kept so Bar.qml needs
-    // no conditional, and a future look can reintroduce a real gradient by
-    // touching only these two tokens.
-    // ── Bar & dock opacity ────────────────────────────────────────────────
-    // `bar_opacity` in ewe.conf [desktop.theme] (Settings → Appearance): the
-    // top bar and the dock are painted at barAlpha and, above 10%, the
-    // compositor blurs what is behind them (generated/user.lua carries the
-    // blur + layer rule; Globals.noBlur machines just get the alpha). Every
-    // OTHER panel stays opaque — that is what keeps the control centre and
-    // launcher legible over a bright wallpaper.
-    readonly property real barAlpha:     (Globals.tokSurface && Globals.tokSurface.bar_alpha !== undefined) ? Globals.tokSurface.bar_alpha : 1
-    function withAlpha(c, a) { return Qt.rgba(c.r, c.g, c.b, a) }
-    readonly property color panel:       bg1                          // every floating panel's fill
-    readonly property color barTop:      withAlpha(bg3, barAlpha)
-    readonly property color barBottom:   withAlpha(bg3, barAlpha)
-    readonly property color barBorder:   withAlpha(stroke2, barAlpha)
-    readonly property color dockFill:    withAlpha(bg1, barAlpha)
-    readonly property color dockStroke:  withAlpha(stroke2, barAlpha)
-    // kept for source compatibility with the revamp's call sites
-    readonly property color barFill:     barTop
-    // A bar item has no fill of its own until you point at it — `subtle` is
-    // exactly that case, and the reason the two are the same token now.
-    readonly property color barHover:    subtleHover
-    readonly property color barActive:   subtleSelected
-    readonly property int barItemRadius: radiusPill
-    // The hover/active pill behind a bar item. Derived from the bar, not a
-    // literal: `density` moves bar-height, and a 22px pill left an 8px gutter
-    // above and below on a roomy 38px bar — enough that the highlight read as
-    // a small chip floating in the bar rather than as the item lighting up.
-    // 10px of breathing room total — a 5px gutter above and below, enough to
-    // read as inset without floating. Clamped so the compact bar (30px) keeps
-    // the 22px pill it already had rather than shrinking.
-    readonly property int barItemHeight: Math.max(22, barHeight - 10)
-    // ONE rhythm for every icon on the bar — status glyphs, tray apps, the
-    // tiling switch, Komble, plugin widgets: a barIconPx glyph centred in a
-    // barCellPx cell, barItemSpacing between cells. Hover pills are drawn
-    // wider than the cell (they may reach into the gap; they never reach
-    // the neighbour's glyph). trayIconPx / trayItemSpacing are the same
-    // numbers under the names the plugin contract uses.
-    readonly property int barItemSpacing: 8
-    readonly property int barCellPx:       barIconPx + 2
-    readonly property int trayIconPx:      barIconPx
-    readonly property int trayItemSpacing: barItemSpacing
-    // Horizontal padding inside that pill. A glyph is narrow, so 14px total
-    // made the highlight barely wider than the icon itself.
-    readonly property int barItemPad: 10
-    // every glyph on the bar renders at this size — no per-site literals
-    // The bar's status glyphs: the theme's icon size (density-driven, 16/18/20)
-    // nudged by Settings → Layout → Top bar. "small" is what the row looks
-    // best at next to its 11 px labels; the default stays the theme's own.
-    readonly property int barIconPx:     Globals.barIconSize === "small" ? _z("icon", 18) - 4
-                                       : Globals.barIconSize === "large" ? _z("icon", 18) + 2
-                                       : _z("icon", 18)
-
-    // Accent — whatever Settings → Theme wrote into user-theme.json. The
-    // user's in-shell pick always wins; until there is one this falls back to
-    // the accent in ewe.conf [desktop.theme], which is the same seed the
-    // whole token file above was derived from.
-    readonly property color accent:      (Globals.accentExplicit && !Globals.schemeActive) ? Globals.accentColor
-                                         : _f("brand-fg-1", Globals.accentColor)
-    // accentText auto-contrasts with the accent (white on dark accents, ink on
-    // light ones) so foreground text on accent fills stays legible at any hue.
-    // 0.55, not 0.6: mid-luminance accents (the system green) already lose
-    // white text — tip to ink earlier.
-    readonly property color accentText:  (0.299 * accent.r + 0.587 * accent.g + 0.114 * accent.b) > 0.55 ? "#1c1c1e" : "#ffffff"
-
-    // Fluent splits what ewe had fused. `accent` is one value doing two jobs —
-    // it marks text AND fills a button — and no single value is right for
-    // both: dark enough to fill is too dark to read, light enough to read is
-    // washed out as a fill. The two roles are published separately here, and
-    // components move onto them as they are migrated:
-    //
-    //   accentFill / accentOn   a FILLED control (button, active tile, switch)
-    //   accent                  the accent AS a mark (text, icon, indicator)
-    //
-    // Until a component is migrated it keeps using `accent`, which stays the
-    // legible-on-dark one — a washed fill is ugly, an unreadable label is not
-    // usable. Falls back to `accent` when the token file is missing.
-    readonly property color accentFill: _f("brand-bg", accent)
-    readonly property color accentOn:   _f("fg-on-brand", accentText)
-
-    // ── Status cues (battery / vpn / connectivity / profile) ──────────────
-    // Fluent's shared status hues at its dark-theme tints. NOT accent-derived
-    // — "this failed" must not change meaning because you picked a red
-    // accent. For a tinted ground rather than coloured text, use the
-    // successBg / warningBorder / … roles above.
-    readonly property color success:     _f("success", "#54b054")  // charging · connected
-    readonly property color warning:     _f("warning", "#fdea3d")  // low-ish · performance
-    readonly property color danger:      _f("danger", "#f1707b")  // critical / destructive
-    // interactive: `link` reads on the ground, `linkSolid` is a fill
-    readonly property color link:        _f("brand-fg-link", "#82aeff")
-    readonly property color linkSolid:   _f("brand-bg", "#1b559c")
+    // The accent is the person's pick. It normally arrives in the tokens (the
+    // whole ramp is derived from it); an in-shell pick from Settings → Theme
+    // wins until a palette scheme is active, which carries its own accent.
+    readonly property color accent: (Globals.accentExplicit && !Globals.schemeActive)
+                                    ? Globals.accentColor : _f("accent", "#eeb407")
 
     // ── Type ──────────────────────────────────────────────────────────────
-    // Inter for body AND titles (the spec's --font-sans). Georgian falls
-    // back to Noto Sans Georgian through dotfiles/fontconfig/, so it sets in
-    // the same optical weight rather than through whatever fc-match picked.
-    // Weights in use: 400 body, 500 rail items, 600 labels, 700 the
-    // control-centre date and slider values.
-    readonly property string fontText:    "Inter"
-    readonly property string fontDisplay: "Inter"
-    // real monospace TEXT (clipboard entries, kb hints) — ttf-jetbrains-mono-nerd
-    readonly property string fontMono:    "JetBrainsMono Nerd Font"
-    // icon glyphs — Lucide (vendored in fonts/, ISC). Icons are ALWAYS
-    // rendered with fontIcons, never fontMono: the codepoints are private-use
-    // and only exist in this face.
+    // Geist for the interface, Geist Mono for code and for values that change
+    // in place; both fall back to Noto Sans Georgian (Geist has no Georgian
+    // glyphs) through dotfiles/fontconfig. Lucide stays the icon face.
+    readonly property var _sansStack: (_ft && _ft.sans) || ["Geist", "Noto Sans Georgian"]
+    readonly property var _monoStack: (_ft && _ft.mono) || ["Geist Mono", "Noto Sans Georgian"]
+    readonly property string fontSans: _sansStack[0]
+    readonly property string fontMono: _monoStack[0]
     readonly property FontLoader _icons: FontLoader { source: Qt.resolvedUrl("fonts/Lucide.ttf") }
-    readonly property string fontIcons:   _icons.status === FontLoader.Ready ? _icons.name : "lucide"
+    readonly property string fontIcons: _icons.status === FontLoader.Ready ? _icons.name : "lucide"
 
-    // The type ladder is a SIZE decision, so it comes from [<theme>.size] and
-    // a look can breathe more without touching a single component.
-    readonly property int fsSmall:  _z("fs-small", 12)
-    readonly property int fsBody:   _z("fs-body", 14)
-    readonly property int fsLarge:  _z("fs-large", 16)
-    readonly property int fsTitle:  _z("fs-title", 24)
+    // The type styles. `Theme.type.<style>` carries size, lineHeight, weight,
+    // family, italic and tracking (em, as the token is written) plus
+    // letterSpacing (the same tracking in px, what font.letterSpacing wants).
+    // Both spellings resolve: type["body-strong"] and type.bodyStrong.
+    //     Text { font.family: Theme.type.label.family
+    //            font.pixelSize: Theme.type.label.size
+    //            font.weight: Theme.type.label.weight }
+    // Text size (accessibility) has already scaled size and lineHeight.
+    readonly property var type: _styles(_ft, fontSans, fontMono)
+    function _styles(ft, sans, mono) {
+        var fb = {
+        "display-xl": ["sans", 64, 72, 300, -0.03, false],
+        "display-lg": ["sans", 48, 56, 400, -0.025, false],
+        "display": ["sans", 36, 44, 500, -0.02, false],
+        "h1": ["sans", 28, 34, 600, -0.02, false],
+        "h2": ["sans", 22, 28, 600, -0.015, false],
+        "h3": ["sans", 18, 24, 600, -0.01, false],
+        "h4": ["sans", 15, 20, 600, 0, false],
+        "h4-italic": ["sans", 15, 20, 600, 0, true],
+        "body-lg": ["sans", 15, 22, 400, 0, false],
+        "body": ["sans", 13, 18, 400, 0, false],
+        "body-strong": ["sans", 13, 18, 500, 0, false],
+        "body-italic": ["sans", 13, 18, 400, 0, true],
+        "body-strong-italic": ["sans", 13, 18, 500, 0, true],
+        "label": ["sans", 12, 16, 500, 0, false],
+        "label-italic": ["sans", 12, 16, 500, 0, true],
+        "caption": ["sans", 11, 14, 400, 0, false],
+        "caption-italic": ["sans", 11, 14, 400, 0, true],
+        "overline": ["sans", 11, 14, 600, 0.06, false],
+        "mono": ["mono", 12, 16, 400, 0, false],
+        "mono-strong": ["mono", 12, 16, 600, 0, false],
+        "mono-italic": ["mono", 12, 16, 400, 0, true],
+        "mono-numeric": ["mono", 12, 16, 500, 0, false],
+        }
+        var src = (ft && ft.styles) || {}
+        var out = {}
+        for (var k in fb) {
+            var d = fb[k], j = src[k] || {}
+            var fam = (j.family !== undefined ? j.family : d[0]) === "mono" ? mono : sans
+            var size = j.size !== undefined ? j.size : d[1]
+            var track = j.tracking !== undefined ? j.tracking : d[4]
+            var o = { family: fam, size: size,
+                      lineHeight: j.lineHeight !== undefined ? j.lineHeight : d[2],
+                      weight: j.weight !== undefined ? j.weight : d[3],
+                      tracking: track, letterSpacing: track * size,
+                      italic: j.italic !== undefined ? j.italic : d[5] }
+            out[k] = o
+            out[k.replace(/-([a-z0-9])/g, function (m, c) { return c.toUpperCase() })] = o
+        }
+        return out
+    }
 
-    // ── Metrics & shape ───────────────────────────────────────────────────
-    // Radius is pitched by ROLE (rule 10), and it is a THEME decision: the
-    // `corner` preset in ewe.conf moves the whole ramp (none zeroes it).
-    //   radiusControl  a button, a list row, an input, a rail item
-    //   radiusInner    a card, a tile, a well
-    //   radius         a panel, the dock, a popover
-    //   radiusPill     a capsule — Qt clamps it to half the shorter side
-    readonly property int radius:        _s("radius-panel", 26)
-    readonly property int radiusInner:   _s("radius-card", 20)
-    readonly property int radiusControl: _s("radius-control", 12)
-    readonly property int radiusPill:    _s("radius-pill", 999)
+    // ── Font size and line height (pair a size with its own step) ─────────
+    readonly property int fontSizeXs:              _z("font-size-xs", 11)
+    readonly property int fontSizeS:               _z("font-size-s", 12)
+    readonly property int fontSizeMd:              _z("font-size-md", 13)
+    readonly property int fontSizeLg:              _z("font-size-lg", 15)
+    readonly property int fontSizeXl:              _z("font-size-xl", 18)
+    readonly property int fontSize2xl:             _z("font-size-2xl", 22)
+    readonly property int fontSize3xl:             _z("font-size-3xl", 28)
+    readonly property int fontSize4xl:             _z("font-size-4xl", 36)
+    readonly property int fontSize5xl:             _z("font-size-5xl", 48)
+    readonly property int fontSize6xl:             _z("font-size-6xl", 64)
+    readonly property int lineHeightXs:            _z("line-height-xs", 14)
+    readonly property int lineHeightS:             _z("line-height-s", 16)
+    readonly property int lineHeightMd:            _z("line-height-md", 18)
+    readonly property int lineHeightLg:            _z("line-height-lg", 20)
+    readonly property int lineHeightLgRelaxed:     _z("line-height-lg-relaxed", 22)
+    readonly property int lineHeightXl:            _z("line-height-xl", 24)
+    readonly property int lineHeight2xl:           _z("line-height-2xl", 28)
+    readonly property int lineHeight3xl:           _z("line-height-3xl", 34)
+    readonly property int lineHeight4xl:           _z("line-height-4xl", 44)
+    readonly property int lineHeight5xl:           _z("line-height-5xl", 56)
+    readonly property int lineHeight6xl:           _z("line-height-6xl", 72)
 
-    // A component's OWN edge (rule 09). `outline-width` is 0 unless the user
-    // sets stroke = thin | thick in ewe.conf, so every card / input / button
-    // / tile / panel in the tree has no border by default. `border` and
-    // `borderThin` are the legacy names for the same value — kept so an
-    // unmigrated site degrades to "no outline" rather than to a stale 1 px.
-    readonly property int outline:      _s("outline-width", 0)
-    readonly property int border:       _s("outline-width", 0)
-    readonly property int borderThin:   _s("outline-width", 0)
-    // A hairline that is NOT an outline: a divider between rows, the seam
-    // in a split tile, a status banner's ring. Stays 1 under every preset.
-    readonly property int hairline:     _s("stroke-width", 1)
+    // ── Font weight ───────────────────────────────────────────────────────
+    // Interface text uses regular, medium and semibold; bold and heavier are
+    // for branding and artwork only — hierarchy comes from size and colour.
+    readonly property int fontWeightThin:          _w("font-weight-thin", 100)
+    readonly property int fontWeightExtralight:    _w("font-weight-extralight", 200)
+    readonly property int fontWeightLight:         _w("font-weight-light", 300)
+    readonly property int fontWeightRegular:       _w("font-weight-regular", 400)
+    readonly property int fontWeightMedium:        _w("font-weight-medium", 500)
+    readonly property int fontWeightSemibold:      _w("font-weight-semibold", 600)
+    readonly property int fontWeightBold:          _w("font-weight-bold", 700)
+    readonly property int fontWeightExtrabold:     _w("font-weight-extrabold", 800)
+    readonly property int fontWeightBlack:         _w("font-weight-black", 900)
 
-    // Depth. Bauhaus forbids soft shadows — depth is a solid block offset
-    // down-right ("offset shadows: 4-6px"). Zero here means "use the blurred
-    // Elevation effect instead", which is what Alexandria wants.
-    readonly property int shadowOffset: 0
+    // ── Letter spacing (em; multiply by the size for font.letterSpacing) ──
+    readonly property real trackingTightest:    _tr("tracking-tightest", -0.03)
+    readonly property real trackingTighter:     _tr("tracking-tighter", -0.02)
+    readonly property real trackingTight:       _tr("tracking-tight", -0.015)
+    readonly property real trackingSnug:        _tr("tracking-snug", -0.01)
+    readonly property real trackingNormal:      _tr("tracking-normal", 0)
+    readonly property real trackingWide:        _tr("tracking-wide", 0.06)
 
-    // Typographic voice — "uppercase buttons" is a Bauhaus rule about the
-    // whole system, not a decision per control. Mirrors --label-* in
-    // design/tokens.css.
-    readonly property int labelCaps:     Font.MixedCase
-                                             ? Font.AllUppercase : Font.MixedCase
-    readonly property real labelTracking: 0
-    readonly property int labelWeight:   Font.Medium
+    // ── Spacing ───────────────────────────────────────────────────────────
+    readonly property int spaceXxs:                _z("space-xxs", 2)
+    readonly property int spaceXs:                 _z("space-xs", 4)
+    readonly property int spaceS:                  _z("space-s", 8)
+    readonly property int spaceMd:                 _z("space-md", 16)
+    readonly property int spaceLg:                 _z("space-lg", 32)
+    readonly property int spaceXl:                 _z("space-xl", 64)
 
-    // Corner scaler for the many one-off radii components carry (a 7px chip, a
-    // 9px thumbnail). Bauhaus is square with NO exceptions, so flock collapses
-    // every one of them to 0; Alexandria keeps the value it was given, so its
-    // geometry is unchanged. Use it instead of a literal:  radius: Theme.r(8)
-    //
-    // TRUE CIRCLES are not radii in this sense — an avatar written as
-    // `width: 38; height: 38; radius: 19` is geometry, and squaring it would
-    // fight the user's own avatarShape preference. Those keep their literal.
+    // ── Radius ────────────────────────────────────────────────────────────
+    //   radiusPrimary  buttons, inputs, switches, list rows, bar modules
+    //   radiusRounded  panels, popups, cards, the dock
+    //   radiusFull     badges, tags and switch tracks — nothing else
+    readonly property int radiusSlight:      _s("slight", 4)
+    readonly property int radiusSecondary:   _s("secondary", 6)
+    readonly property int radiusPrimary:     _s("primary", 8)
+    readonly property int radiusRounded:     _s("rounded", 10)
+    readonly property int radiusFull:        _s("fully-rounded", 9999)
+
+    // ── Border and focus width (two weights, nothing else) ────────────────
+    readonly property int borderWidth1:      _s("border-width-1", 1)
+    readonly property int borderWidth2:      _s("border-width-2", 2)
+    readonly property int focusWidth:        _s("focus-width", 1)
+
+    // ── Control, icon and panel sizes ─────────────────────────────────────
+    readonly property int controlSm:               _z("control-sm", 24)
+    readonly property int controlMd:               _z("control-md", 28)
+    readonly property int controlLg:               _z("control-lg", 32)
+    readonly property int controlXl:               _z("control-xl", 40)
+    readonly property int control2xl:              _z("control-2xl", 48)
+    readonly property int barHeightLg:             _z("bar-height-lg", 64)
+    readonly property int iconXs:                  _z("icon-xs", 12)
+    readonly property int iconSm:                  _z("icon-sm", 14)
+    readonly property int iconMd:                  _z("icon-md", 16)
+    readonly property int iconLg:                  _z("icon-lg", 20)
+    readonly property int iconXl:                  _z("icon-xl", 24)
+    readonly property int icon2xl:                 _z("icon-2xl", 32)
+    readonly property int icon3xl:                 _z("icon-3xl", 48)
+    readonly property int icon4xl:                 _z("icon-4xl", 64)
+    readonly property int panelSm:                 _z("panel-sm", 360)
+    readonly property int panelMd:                 _z("panel-md", 400)
+    readonly property int panelLg:                 _z("panel-lg", 560)
+    readonly property int windowGap:               _z("window-gap", 8)
+    readonly property int blurGlass:               _z("blur-glass", 24)
+
+    // ── Opacity ───────────────────────────────────────────────────────────
+    readonly property real opacitySolid:      _o("opacity-solid", 1)
+    readonly property real opacityGlass:      _o("opacity-glass", 0.8)
+    readonly property real opacityApp:        _o("opacity-app", 0.85)
+    readonly property real opacityInactive:   _o("opacity-inactive", 0.97)
+
+    // ── Shadow ────────────────────────────────────────────────────────────
+    // Short and tight: shadowSm for tooltips, shadowFloat for layers floating
+    // above other windows. Everything else is flat (shadowNone). Each is
+    // {x, y, blur, color} — MultiEffect wants the parts, not a CSS string.
+    readonly property var shadowNone:  null
+    readonly property var shadowSm:    _d("shadow-sm", { x: 0, y: 1, blur: 2, color: "#66000000" })
+    readonly property var shadowFloat: _d("shadow-float", { x: 0, y: 2, blur: 6, color: "#59000000" })
+
+    // ── Gradient ──────────────────────────────────────────────────────────
+    // Two close tones, never a blend; never on text or small controls.
+    // {kind, angle|at, stops: [[colour, alpha, stop%], …], css}.
+    readonly property var gradientEwellow: _gr("gradient-ewellow", { kind: "linear", angle: 135, stops: [["#f4bd28", 1, 0], ["#e6ab09", 1, 100]] })
+    readonly property var gradientEmber:   _gr("gradient-ember",   { kind: "linear", angle: 160, stops: [["#1b150b", 1, 0], ["#0b0a08", 1, 100]] })
+    readonly property var gradientNight:   _gr("gradient-night",   { kind: "linear", angle: 180, stops: [["#151411", 1, 0], ["#0b0a08", 1, 100]] })
+    readonly property var gradientGlow:    _gr("gradient-glow",    { kind: "radial", at: "50% 0%", stops: [["#eeb407", 0.08, 0], ["#eeb407", 0, 60]] })
+
+    // ── Motion (ms) ───────────────────────────────────────────────────────
+    // The four durations of the README's motion table, already divided by
+    // [desktop.animations] speed by the generator (speed 0 = off, so they
+    // arrive as 0). Reduce motion has already collapsed base and slow onto
+    // fast and zeroed the slide, so a component animates the same way in
+    // every mode and only the numbers change.
+    //   durFast  hover, pressed, focus, colour changes; menus/toasts closing
+    //   durBase  panels, popups, launcher, toasts opening; the dock hiding
+    //   durSlow  workspace switches, the Overview zoom, Welcome
+    //   durDim   the pre-lock dim
+    // The Animations pane (animations.json) can still switch the shell's
+    // motion off; its per-layer ms and curve belong to Hyprland's windows —
+    // shell surfaces follow the design system's table.
+    readonly property var _aj: Globals.animPrefs
+    readonly property var _ajLayers: _aj && _aj.anims ? _aj.anims.layers : null
+    readonly property real _speed: _m("speed", Math.max(Globals.animationSpeed, 0))
+    readonly property bool _animOff: (_speed <= 0)
+                                     || (_aj ? (_aj.enabled === false || (_ajLayers && _ajLayers.on === false)) : false)
+    function _dur(k, ms) { return _animOff ? 0 : _m(k, Math.round(ms / Math.max(_speed, 0.001))) }
+    readonly property int durFast: _dur("durFast", 150)
+    readonly property int durBase: _dur("durBase", 200)
+    readonly property int durSlow: _dur("durSlow", 250)
+    readonly property int durDim:  _dur("durDim", 1500)
+    // A panel opens with a fade plus a slide of this many px from its edge;
+    // Reduce motion makes it 0, i.e. a plain fade.
+    readonly property int slideOffset: _m("slideOffset", 4)
+
+    // Easing. OutCubic everywhere, InOutCubic for the slow ones, linear for
+    // the dim. Nothing overshoots — OutBack is gone from the shell.
+    function _ease(name, fb) {
+        var e = _get(_fm && _fm.easing, name, fb)
+        return e === "InOutCubic" ? Easing.InOutCubic
+             : e === "Linear"     ? Easing.Linear
+             : e === "OutCubic"   ? Easing.OutCubic
+             : fb === "InOutCubic" ? Easing.InOutCubic
+             : fb === "Linear"     ? Easing.Linear : Easing.OutCubic
+    }
+    readonly property int ease:     _ease("base", "OutCubic")
+    readonly property int easeFast: _ease("fast", "OutCubic")
+    readonly property int easeSlow: _ease("slow", "InOutCubic")
+    readonly property int easeDim:  _ease("dim", "Linear")
+
+    // ── Bar ───────────────────────────────────────────────────────────────
+    // [desktop.bar] size: normal = 48px bar, 32px modules, 20px glyphs;
+    // large = 64 / 40 / 24. Text size 130% moves the bar to large as well.
+    readonly property int barHeight:   _bz("height", _z("bar-height", 48))
+    readonly property int barModule:   _bz("module", controlLg)
+    readonly property int barIcon:     _bz("icon", iconLg)
+    readonly property bool barLarge:   _bz("size", "normal") === "large"
+
+    // ── Glass and the accessibility modes ─────────────────────────────────
+    // bar_opacity (0-100) drives Glass on the bar, the dock and the lock
+    // card: `glass` says the glass roles are in use, `barAlpha` is the fill
+    // opacity the generator resolved (the glass* colours already carry it),
+    // and `glassBlur` says the compositor blurs behind them — false on the
+    // machines that export EWE_NO_BLUR=1 (VMs, NVIDIA), where Glass still
+    // applies, just without the blur. Reduce transparency and Increase
+    // contrast make the generator hand back solid roles.
+    readonly property var _surf: Globals.tokSurface
+    readonly property real barAlpha:  _get(_surf, "bar_alpha", 1)
+    readonly property bool glass:     _get(_surf, "glass", false)
+    readonly property bool glassBlur: _get(_surf, "blur", false) && !Globals.noBlur
+    readonly property real appAlpha:      _get(_surf, "app_alpha", 1)
+    readonly property real inactiveAlpha: _get(_surf, "inactive_alpha", 1)
+    // The four modes, for the components that must behave differently rather
+    // than just look different (Phase 4).
+    readonly property bool reduceMotion:      _ax("reduce_motion", false)
+    readonly property bool reduceTransparency: _ax("reduce_transparency", false)
+    readonly property bool increaseContrast:  _ax("increase_contrast", false)
+    readonly property int  textScale:         _ax("text_scale", 100)
+
+    function withAlpha(c, a) { return Qt.rgba(c.r, c.g, c.b, a) }
+
+    // Corner scaler for the one-off radii components still carry (a 7px chip,
+    // a 9px thumbnail): `corner = "none"` collapses them all. Use it instead
+    // of a literal:  radius: Theme.r(8). TRUE CIRCLES are geometry, not radii
+    // — an avatar written as `width: 38; height: 38; radius: 19` keeps its
+    // literal, or it would fight the user's avatarShape preference.
     function r(n) { return brutalist ? 0 : n }
-
-    // ── Overlays that sit inside something else ───────────────────────────
-    // A hover or selection fill anchored flush to its container paints OVER
-    // that container's own rule, so the card loses its outline exactly while
-    // you point at it — and if the fill carries a smaller radius than the
-    // container, the corners read as square inside a rounded box. Both are the
-    // same mistake: an overlay must be inset by the rule it must not cover,
-    // and carry the radius that inset leaves behind.
-    //
-    //   Rectangle {                       // the hovered fill
-    //       anchors.fill: parent; anchors.margins: Theme.hoverInset
-    //       radius: Theme.rIn(Theme.radiusInner)
-    //   }
-    //
-    // hoverInset is the hairline width — the value that makes a rule
-    // survive under an overlay by definition (it does NOT follow `outline`,
-    // which is 0: an inset of 0 would let a hover fill kiss a divider).
-    readonly property int hoverInset: _s("stroke-width", 1)
     // The radius an overlay needs to stay concentric with a container of
-    // radius n once it has been inset. Concentric, not equal: an inset shape
-    // that keeps the outer radius bulges at the corners.
-    // Pass an explicit inset when the overlay sits inside something other than
-    // a hover fill — a rail inside a panel is inset by the PANEL's border.
+    // radius n once it has been inset by the rule it must not cover.
     function rIn(n, inset) {
         var i = (inset === undefined) ? hoverInset : inset
         return brutalist ? 0 : Math.max(0, r(n) - i)
     }
 
-    // ── How a surface announces itself ────────────────────────────────────
-    // By its LAYER: a card is `card` on a `bg1` panel on the `bg3` base, and
-    // the lightness step is the whole signal. Components ask for cardStroke /
-    // cardBorder so a user who turns outlines on gets one consistent answer.
-    // A card's outline — stroke-2 at `outline`, i.e. NOT drawn by default
-    // (rule 09). One name so every container in the shell agrees when a user
-    // does turn outlines on.
-    readonly property color cardStroke: stroke2
-    readonly property int cardBorder:   outline
+    // ══ FLUENT NAMES (Migration guide) ════════════════════════════════════
+    // Every name the components used before the design system, pointing at
+    // its Ewe role so the shell keeps working while Phase 4 restyles it file
+    // by file. Phase 6 deletes this whole block — add nothing here.
 
-    // Focus ring width — one value, so every focusable control rings alike.
-    readonly property int focusWidth: _s("focus-width", 2)
+    // Backgrounds: six levels collapse onto four surfaces.
+    readonly property color bg1:         surfaceRaised
+    readonly property color bg1Hover:    surfaceHover
+    readonly property color bg1Pressed:  surfacePressed
+    readonly property color bg1Selected: accentSubtle
+    readonly property color bg2:         surfaceBase
+    readonly property color bg2Hover:    surfaceHover
+    readonly property color bg2Pressed:  surfacePressed
+    readonly property color bg2Selected: accentSubtle
+    readonly property color bg3:         surfaceBase
+    readonly property color bg3Hover:    surfaceHover
+    readonly property color bg3Pressed:  surfacePressed
+    readonly property color bg3Selected: accentSubtle
+    readonly property color bg4:         surfaceSunken
+    readonly property color bg4Hover:    surfaceHover
+    readonly property color bg4Pressed:  surfacePressed
+    readonly property color bg4Selected: accentSubtle
+    readonly property color bg5:         surfaceSunken
+    readonly property color bg5Hover:    surfaceHover
+    readonly property color bg5Pressed:  surfacePressed
+    readonly property color bg5Selected: accentSubtle
+    readonly property color bg6:         surfaceOverlay
+    readonly property color bgDisabled:  surfaceRaised
 
-    readonly property int pad:          _z("pad", 12)
-    readonly property int gap:          _z("gap", 8)
-    readonly property int rowHeight:    _z("row", 36)      // list row / menu item
-    readonly property int controlHeight: _z("control", 32) // button / input / chip
-    readonly property int barHeight:    _z("bar-height", 30)
+    readonly property color card:         surfaceRaised
+    readonly property color cardHover:    surfaceHover
+    readonly property color cardPressed:  surfacePressed
+    readonly property color cardSelected: accentSubtle
 
-    // ── Motion (ms) — follows the Animations pane (animations.json, written
-    //    by ewe-settings) when that file exists: every shell surface is a
-    //    layershell layer, so the pane's "layers" leaf (global as fallback)
-    //    sets the base duration and curve here, exactly as
-    //    generated/animations.lua does for Hyprland — one pane, both halves.
-    //    Without the file, the legacy Settings → Theme speed multiplier
-    //    applies (Off/Fast/Normal/Slow = m 0/2/1/0.6 → durBase 0/150/300/500).
-    readonly property var _aj: Globals.animPrefs
-    readonly property var _ajLayers: _aj && _aj.anims ? _aj.anims.layers : null
-    readonly property bool _animOff: _aj ? (_aj.enabled === false || (_ajLayers && _ajLayers.on === false))
-                                         : Globals.animationSpeed <= 0
-    readonly property int _msBase: _aj ? ((_ajLayers && _ajLayers.ms) || (_aj.global && _aj.global.ms) || 300)
-                                       : Math.round(300 / Math.max(Globals.animationSpeed, 0.001))
-    readonly property int durFast:   _animOff ? 0 : Math.max(1, Math.round(_msBase * 0.5))
-    readonly property int durBase:   _animOff ? 0 : _msBase
-    readonly property int durSlow:   _animOff ? 0 : Math.round(_msBase * 1.4)
+    readonly property color subtle:         "transparent"
+    readonly property color subtleHover:    surfaceHover
+    readonly property color subtlePressed:  surfacePressed
+    readonly property color subtleSelected: accentSubtle
 
-    // The pane's Hyprland curve mapped to its closest stock QML easing — used
-    // by every `easing.type: Theme.ease` Behavior so the shell's motion FEEL
-    // matches the compositor's. Unset/unknown curve = the old OutCubic.
-    readonly property string _curve: _aj ? String((_ajLayers && _ajLayers.curve) || (_aj.global && _aj.global.curve) || "") : ""
-    readonly property int ease: _curve === "snap"           ? Easing.OutExpo
-                              : _curve === "quick"          ? Easing.OutQuart
-                              : _curve === "easeOutQuint"   ? Easing.OutQuint
-                              : _curve === "easeInOutCubic" ? Easing.InOutCubic
-                              : _curve === "overshoot"      ? Easing.OutBack
-                              : _curve === "linear"         ? Easing.Linear
-                              : _curve === "spring"         ? Easing.OutBack
-                              : Easing.OutCubic
+    readonly property color stroke1:          borderStrong
+    readonly property color stroke1Hover:     textMuted
+    readonly property color stroke1Pressed:   borderStrong
+    readonly property color stroke1Selected:  accentText
+    readonly property color stroke2:          borderSubtle
+    readonly property color stroke3:          borderSubtle
+    readonly property color strokeAccessible: borderStrong
+    readonly property color strokeDisabled:   borderSubtle
+    readonly property color strokeFocus1:     "transparent"   // removed: one ring, focusRing
+    readonly property color strokeFocus2:     focusRing
+
+    readonly property color fg1:        textPrimary
+    readonly property color fg2:        textSecondary
+    readonly property color fg2Hover:   textPrimary
+    readonly property color fg3:        textMuted
+    readonly property color fg3Hover:   textPrimary
+    readonly property color fg4:        textMuted
+    readonly property color fgDisabled: textDisabled
+    readonly property color fgInverted: onAccent
+    readonly property color fgOnBrand:  onAccent
+
+    readonly property color brandBg:                accent
+    readonly property color brandBgHover:           accentHover
+    readonly property color brandBgPressed:         accentPressed
+    readonly property color brandBgSelected:        accentPressed
+    readonly property color brandFg1:               accentText
+    readonly property color brandFg2:               accentText
+    readonly property color brandFgLink:            accentText
+    readonly property color brandFgLinkHover:       accentText
+    readonly property color brandStroke1:           focusRing
+    readonly property color brandStroke2:           ewellow900
+    readonly property color compoundBrandBg:        accent
+    readonly property color compoundBrandBgHover:   accentHover
+    readonly property color compoundBrandBgPressed: accentPressed
+    readonly property color compoundBrandFg:        accentText
+    readonly property color compoundBrandStroke:    focusRing
+    // a FILLED accent control and the ink on it
+    readonly property color accentFill: accent
+    readonly property color accentOn:   onAccent
+    // interactive: `link` reads on the ground, `linkSolid` is a fill
+    readonly property color link:      accentText
+    readonly property color linkSolid: accent
+
+    readonly property color successBg:     successSubtle
+    readonly property color successBorder: success
+    readonly property color warningBg:     warningSubtle
+    readonly property color warningBorder: warning
+    readonly property color dangerBg:      dangerSubtle
+    readonly property color dangerBorder:  danger
+    readonly property color infoBg:        infoSubtle
+    readonly property color infoBorder:    info
+
+    // Elevation's colour. A dim backdrop behind a dialog wants `scrim`
+    // instead — Phase 4 moves those call sites.
+    readonly property color shadow: _get(shadowFloat, "color", "#59000000")
+
+    // ── Bar & dock surfaces ───────────────────────────────────────────────
+    // Glass applies to the bar, the dock and the lock card only; every other
+    // panel stays solid, which is what keeps Quick settings and the launcher
+    // legible over a bright wallpaper.
+    readonly property color panel:       surfaceRaised
+    readonly property color barTop:      glass ? glassBase : surfaceBase
+    readonly property color barBottom:   barTop
+    readonly property color barFill:     barTop
+    readonly property color barBorder:   glass ? glassBorder : borderSubtle
+    readonly property color dockFill:    glass ? glassRaised : surfaceRaised
+    readonly property color dockStroke:  glass ? glassBorder : borderSubtle
+    // A bar module has no fill until you point at it; an OPEN one reads as
+    // pressed (the Bar card), not as selected.
+    readonly property color barHover:    glass ? glassHover : surfaceHover
+    readonly property color barActive:   glass ? glassPressed : surfacePressed
+    readonly property int barItemRadius: radiusPrimary
+    readonly property int barItemHeight: barModule
+    // ONE rhythm for every glyph on the bar — status, tray apps, the tiling
+    // switch, Komble, plugin widgets: a barIconPx glyph centred in a
+    // barCellPx cell, barItemSpacing between cells. trayIconPx /
+    // trayItemSpacing are the same numbers under the names the plugin
+    // contract uses.
+    readonly property int barIconPx:       barIcon
+    readonly property int barCellPx:       barIconPx + spaceXxs
+    readonly property int trayIconPx:      barIconPx
+    readonly property int barItemSpacing:  spaceXs
+    readonly property int trayItemSpacing: spaceXs
+    readonly property int barItemPad:      spaceS
+
+    // ── Type (legacy names) ───────────────────────────────────────────────
+    readonly property string fontText:    fontSans
+    readonly property string fontDisplay: fontSans
+    readonly property int fsSmall: fontSizeS
+    readonly property int fsBody:  fontSizeMd
+    readonly property int fsLarge: fontSizeLg
+    readonly property int fsTitle: fontSize2xl
+    // NEVER uppercase: Qt would turn Georgian Mkhedruli into Mtavruli. Small
+    // capitalised group headers are the `overline` style, which carries the
+    // letter spacing and leaves the letters alone.
+    readonly property int labelCaps:      Font.MixedCase
+    readonly property real labelTracking: type.overline.letterSpacing
+    readonly property int labelWeight:    fontWeightMedium
+
+    // ── Metrics (legacy names) ────────────────────────────────────────────
+    readonly property int radius:        radiusRounded
+    readonly property int radiusInner:   radiusPrimary
+    readonly property int radiusControl: radiusPrimary
+    readonly property int radiusPill:    radiusFull
+    readonly property int outline:     borderWidth1
+    readonly property int border:      borderWidth1
+    readonly property int borderThin:  borderWidth1
+    readonly property int hairline:    borderWidth1
+    readonly property color cardStroke: borderSubtle
+    readonly property int cardBorder:   borderWidth1
+    // An overlay is inset by the rule it must not cover; the inset is a
+    // border width, never 0, or a hover fill kisses a divider.
+    readonly property int hoverInset:   Math.max(1, borderWidth1)
+    readonly property int shadowOffset: 0                      // removed: no offset shadows
+    readonly property int pad:           spaceS + spaceXs      // 12
+    readonly property int gap:           spaceS
+    readonly property int rowHeight:     controlMd
+    readonly property int controlHeight: controlMd
 
     // ── Icons — the SINGLE glyph table. Every component
     //    pulls its glyphs from here with font.family: Theme.fontIcons, so the

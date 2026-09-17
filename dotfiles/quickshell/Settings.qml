@@ -2094,10 +2094,10 @@ Scope {
                                     width: 46; height: 46; radius: 23; color: modelData.hex
                                     readonly property bool sel: root.hex6(Globals.accentColor).toLowerCase() === root.hex6(modelData.hex).toLowerCase()
                                     border.color: sel ? Theme.fg1 : Qt.rgba(1, 1, 1, 0.15); border.width: sel ? 3 : 1
-                                    // accentText, not accentOn: the swatch paints an ARBITRARY colour, not the
-                                    // theme accent, so the tick contrasts against THAT (a white check
-                                    // vanishes on the yellow and light swatches).
-                                    Text { anchors.centerIn: parent; visible: parent.sel; text: Theme.icCheck; font.family: Theme.fontIcons; font.pixelSize: 18; color: Theme.accentText }
+                                    // onAccent, the ink the generator measured for the ACTIVE accent:
+                                    // the tick only shows on the selected swatch, which is that accent
+                                    // (a white check vanishes on the yellow and light ones).
+                                    Text { anchors.centerIn: parent; visible: parent.sel; text: Theme.icCheck; font.family: Theme.fontIcons; font.pixelSize: 18; color: Theme.onAccent }
                                     MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.setAccent(modelData.hex) }
                                 }
                             }

@@ -56,7 +56,8 @@ fontconfig (so the shipped Geist fonts resolve). The live `~/.config` is
 never read or written, and `ewe-conf` is unreachable, so no sync hook can
 push. `HS_SCHEME=ewe-light driver.sh up` picks a scheme; `HS_CONF=<file>`
 uses a whole ewe.conf (accessibility modes, bar opacity…); `HS_SANDBOX=0`
-restores the old live-config behaviour. A sandboxed first run shows Welcome.
+restores the old live-config behaviour. Welcome is stamped as seen so it
+does not cover every screenshot; `HS_WELCOME=1` brings it back.
 **Read the PNG** to confirm the change — a blank/bar-only shot (~15 KB) means the
 surface didn't open; a real window is 40–57 KB at 1280×800.
 
