@@ -154,13 +154,17 @@ qt6ct
 librsvg                  # rsvg-convert — builds the Mocu cursor (phase 20 source step)
 xorg-xcursorgen          # xcursorgen — builds the Mocu cursor
 xmlstarlet               # cursor hotspot extraction for the Mocu build
-noto-fonts
+noto-fonts               # includes Noto Sans Georgian — the Georgian fallback of both
+                         # design-system stacks (Geist and Geist Mono have no Georgian)
 noto-fonts-emoji
 ttf-jetbrains-mono-nerd
-ttf-nerd-fonts-symbols-mono
-inter-font              # THE DE face (Theme.fontText/Display, GTK font, groupbar, Zed,
-                        # mpv OSD); Georgian falls back to Noto Sans Georgian via
-                        # dotfiles/fontconfig
+ttf-nerd-fonts-symbols-mono  # Nerd glyphs for the prompt, now that kitty sets Geist Mono
+# The DE faces, Geist and Geist Mono (OFL), are NOT in the Arch repos: the
+# variable fonts ship in dotfiles/quickshell/fonts/geist/ and dotfiles/fontconfig
+# adds that folder to the font path.
+inter-font              # the pre-v3 DE face; kept installed until the design-system
+                        # clean-up (Phase 6) decides, so anything still naming Inter
+                        # renders (the greeter does)
 sound-theme-freedesktop  # event chimes (notifications, volume, shutter) — Globals.playSound
 ttf-ubuntu-font-family  # the pre-2026-09 DE face; kept installed for now so documents
                         # and configs that still name Ubuntu keep rendering
