@@ -13,8 +13,8 @@ import Quickshell
 // the same Settings → Top bar map the built-ins use (key `plugin:<id>`,
 // absent = shown), so a widget can be hidden without disabling the plugin.
 // The entry point's root must be an Item with an implicit size; the Row
-// packs it like any other indicator (Theme.barItemHeight / barIconPx /
-// barItemPad are the conventions to follow). A widget that fails to load is
+// packs it like any other indicator (Theme.barModule / barIcon / spaceS
+// are the conventions to follow). A widget that fails to load is
 // logged by Qt and takes no space.
 Row {
     id: slots
@@ -23,7 +23,7 @@ Row {
     // narrow output the right cluster can reach the middle, and the centre
     // yields rather than draw over it
     property bool fits: true
-    spacing: Theme.barItemSpacing
+    spacing: Theme.spaceXs
     // an empty visible Row would still cost the parent Row one `spacing`
     visible: fits && rep.count > 0 && implicitWidth > 0
 

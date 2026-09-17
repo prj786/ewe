@@ -9,12 +9,12 @@ import qs
 // is monochrome and is drawn through a colorization to the bar's own icon
 // colour, in both themes — same weight as the Fluent glyphs beside it. A
 // coloured icon (1Password, Slack, Telegram) is left exactly as the app
-// drew it.
+// drew it. Icons are iconLg (iconXl on the large bar) — Theme.barIcon.
 Item {
     id: root
     property url source
-    property int px: 16
-    property color tint: Theme.fg2
+    property int px: Theme.iconLg
+    property color tint: Theme.textSecondary
     // "mono" is decided per source; until the probe returns the icon shows
     // untinted so nothing flashes
     property bool mono: false
