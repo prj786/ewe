@@ -19,7 +19,8 @@ Scope {
 
     property string home: ""
     property string cwd: ""            // directory currently being browsed
-    property var entries: []           // [{ name, path, isDir }] of cwd
+    property var entries: []           // [{ name, path, isDir, size }] of cwd
+    property int sel: -1               // keyboard selection into rowsFlat
     property var pinTypes: ({})        // pinned path -> isDir (for icon + click)
 
     function tilde(p) { return (root.home && String(p).indexOf(root.home) === 0) ? "~" + String(p).slice(root.home.length) : p }
@@ -27,8 +28,42 @@ Scope {
     function parentOf(p) { var s = String(p).replace(/\/+$/, ""); var i = s.lastIndexOf("/"); return i > 0 ? s.slice(0, i) : "/" }
     function uriToPath(u) { var s = String(u).trim(); if (s.indexOf("file://") === 0) s = s.slice(7); try { s = decodeURIComponent(s) } catch (e) {} return s.replace(/\/+$/, "") }
     function fileUri(p) { return "file://" + p + "\r\n" }
+    // Sizes the way the Writing guide wants them: decimal units, one decimal
+    // below 10, a space before the unit. Folders show nothing.
+    function humanSize(bytes) {
+        var b = Number(bytes)
+        if (!isFinite(b) || b < 0) return ""
+        var units = ["B", "KB", "MB", "GB", "TB"], i = 0
+        while (b >= 1000 && i < units.length - 1) { b /= 1000; i++ }
+        var n = (i === 0) ? String(Math.round(b))
+              : (b < 10) ? b.toFixed(1) : String(Math.round(b))
+        return n + " " + units[i]
+    }
 
-    function enter(path) { root.cwd = path }                 // changing cwd re-lists
+    // ── keyboard navigation (new, per the card): one flat list of the rows
+    //    on screen — the pinned strip, then the folder — so Up/Down walk
+    //    both, Enter opens the selection and Backspace goes back. ──
+    readonly property var rowsFlat: {
+        var out = [], p = Globals.pinnedPlaces || []
+        for (var i = 0; i < p.length; i++)
+            out.push({ name: root.baseName(p[i]), path: p[i], isDir: root.pinTypes[p[i]] === true, pinned: true, size: -1 })
+        for (var j = 0; j < root.entries.length; j++) {
+            var e = root.entries[j]
+            out.push({ name: e.name, path: e.path, isDir: e.isDir, pinned: false, size: e.size })
+        }
+        return out
+    }
+    function moveSel(d) {
+        var n = root.rowsFlat.length
+        if (n === 0) { root.sel = -1; return }
+        root.sel = Math.max(0, Math.min(n - 1, (root.sel < 0 ? (d > 0 ? -1 : n) : root.sel) + d))
+    }
+    function activateSel() {
+        var r = root.rowsFlat[root.sel]
+        if (r) root.activate(r.path, r.isDir)
+    }
+
+    function enter(path) { root.cwd = path; root.sel = -1 }  // changing cwd re-lists
     function openFile(path) { Quickshell.execDetached(["xdg-open", path]) }
     function activate(path, isDir) { if (isDir) root.enter(path); else root.openFile(path) }
     function pinDrop(uris) {
@@ -39,14 +74,15 @@ Scope {
     Process {
         id: lister
         running: false
-        command: ["sh", "-c", 'D="$1"; [ -d "$D" ] || exit 0; find "$D" -maxdepth 1 -mindepth 1 -not -name ".*" -printf "%Y\\t%f\\n" 2>/dev/null', "sh", root.cwd]
+        command: ["sh", "-c", 'D="$1"; [ -d "$D" ] || exit 0; find "$D" -maxdepth 1 -mindepth 1 -not -name ".*" -printf "%Y\\t%s\\t%f\\n" 2>/dev/null', "sh", root.cwd]
         stdout: StdioCollector { onStreamFinished: {
             var dirs = [], files = [], ls = this.text.split("\n")
             for (var i = 0; i < ls.length; i++) {
-                var t = ls[i].indexOf("\t"); if (t < 0) continue
-                var ty = ls[i].slice(0, t), nm = ls[i].slice(t + 1)
+                var parts = ls[i].split("\t"); if (parts.length < 3) continue
+                var ty = parts[0], sz = parts[1], nm = parts.slice(2).join("\t")
                 if (!nm) continue
-                var e = { name: nm, path: (root.cwd === "/" ? "" : root.cwd) + "/" + nm, isDir: (ty === "d") }
+                var e = { name: nm, path: (root.cwd === "/" ? "" : root.cwd) + "/" + nm,
+                          isDir: (ty === "d"), size: Number(sz) }
                 ;(e.isDir ? dirs : files).push(e)
             }
             var byName = function (a, b) { return a.name.toLowerCase().localeCompare(b.name.toLowerCase()) }
@@ -54,7 +90,7 @@ Scope {
             root.entries = dirs.concat(files)
         } }
     }
-    onCwdChanged: if (root.cwd) { lister.command = ["sh", "-c", 'D="$1"; [ -d "$D" ] || exit 0; find "$D" -maxdepth 1 -mindepth 1 -not -name ".*" -printf "%Y\\t%f\\n" 2>/dev/null', "sh", root.cwd]; lister.running = false; lister.running = true }
+    onCwdChanged: if (root.cwd) { lister.command = ["sh", "-c", 'D="$1"; [ -d "$D" ] || exit 0; find "$D" -maxdepth 1 -mindepth 1 -not -name ".*" -printf "%Y\\t%s\\t%f\\n" 2>/dev/null', "sh", root.cwd]; lister.running = false; lister.running = true }
 
     Process {
         id: initProc; running: false
@@ -124,24 +160,43 @@ Scope {
         Rectangle {
             id: box
             focus: true
-            x: Math.max(12, Math.min(parent.width - width - 12, Globals.placesAnchorX - width / 2))
-            y: parent.height - height - 90
-            width: 400; height: 470
-            radius: Theme.radius; color: Theme.panel
-            border.color: Theme.stroke2; border.width: Theme.borderThin
-            Sheen { radius: parent.radius }
+            readonly property int edgeGap: Theme.spaceS + Theme.spaceXs
+            readonly property int dockGap: 90
+            x: Math.max(edgeGap, Math.min(parent.width - width - edgeGap, Globals.placesAnchorX - width / 2))
+            width: Theme.panelMd
+            height: Math.min(470, parent.height - dockGap - 2 * edgeGap)
+            // a fade plus a short rise from its own edge; Reduce motion zeroes
+            // the offset through Theme.slideOffset, leaving the fade
+            y: Math.max(edgeGap, parent.height - height - dockGap)
+               + (Globals.placesOpen ? 0 : Theme.slideOffset)
+            radius: Theme.radiusRounded
+            color: Theme.surfaceRaised
+            // an accent outline while something is being dropped on the panel
+            border.color: dropArea.containsDrag ? Theme.accent : Theme.borderSubtle
+            border.width: Theme.borderWidth1
             opacity: Globals.placesOpen ? 1 : 0
-            scale: Globals.placesOpen ? 1 : 0.96
-            transformOrigin: Item.BottomLeft
             Behavior on opacity { NumberAnimation { duration: Theme.durBase; easing.type: Theme.ease } }
-            Behavior on scale { NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutBack; easing.overshoot: 1.2 } }
+            Behavior on y { NumberAnimation { duration: Theme.durBase; easing.type: Theme.ease } }
+            Behavior on border.color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
             layer.enabled: true
             layer.effect: Elevation {}
 
+            // ── keyboard navigation (new, per the card) ──
             Keys.onEscapePressed: Globals.placesOpen = false
+            Keys.onUpPressed: root.moveSel(-1)
+            Keys.onDownPressed: root.moveSel(1)
+            Keys.onReturnPressed: root.activateSel()
+            Keys.onEnterPressed: root.activateSel()
+            Keys.onPressed: function (ev) {
+                if (ev.key === Qt.Key_Backspace) {
+                    if (root.cwd !== "/" && root.cwd !== "") root.enter(root.parentOf(root.cwd))
+                    ev.accepted = true
+                }
+            }
 
             // drop a file/folder onto the panel → pin it
             DropArea {
+                id: dropArea
                 anchors.fill: parent
                 onEntered: function (d) { d.accept(Qt.CopyAction) }
                 onDropped: function (d) {
@@ -150,37 +205,66 @@ Scope {
                 }
             }
 
-            // ── a small round icon button (back / home / pin) ──
+            // ── a md ghost Icon button (back / home / pin) ──
             component IconBtn: Rectangle {
                 property string glyph: ""
                 property bool enabledState: true
                 signal act()
-                width: 28; height: 28; radius: Theme.r(8)
-                color: ibMa.containsMouse && enabledState ? Theme.subtleHover : Theme.subtle
-                opacity: enabledState ? 1 : 0.35
-                Text { anchors.centerIn: parent; text: parent.glyph; font.family: Theme.fontIcons; font.pixelSize: 15; color: Theme.fg1 }
+                width: Theme.controlMd; height: Theme.controlMd
+                radius: Theme.radiusPrimary
+                color: !enabledState ? "transparent"
+                     : ibMa.pressed ? Theme.surfacePressed
+                     : ibMa.containsMouse ? Theme.surfaceHover : "transparent"
+                Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
+                Text {
+                    anchors.centerIn: parent; text: parent.glyph
+                    font.family: Theme.fontIcons; font.pixelSize: Theme.iconMd
+                    color: parent.enabledState ? Theme.textPrimary : Theme.textDisabled
+                }
                 MouseArea { id: ibMa; anchors.fill: parent; hoverEnabled: true; enabled: parent.enabledState; cursorShape: Qt.PointingHandCursor; onClicked: parent.act() }
             }
 
             // ── one filesystem row (browse entry OR pinned item) ──
+            // controlLg tall, radiusPrimary, an iconLg glyph (folders in
+            // accentText), the name at body size, a file's size as a caption,
+            // and a chevron on folders (Places card #4).
             component FsRow: Rectangle {
                 id: fr
                 property string rName: ""
                 property string rPath: ""
                 property bool rIsDir: false
                 property bool rPinned: false
-                width: parent ? parent.width : 100
-                height: 34; radius: Theme.r(8)
-                color: frMa.containsMouse ? Theme.subtleHover : Theme.subtle
+                property real rSize: -1
+                property bool rSelected: false
+                width: parent ? parent.width : Theme.panelMd
+                height: Theme.controlLg; radius: Theme.radiusPrimary
+                color: frMa.drag.active ? Theme.surfaceOverlay
+                     : frMa.containsMouse ? Theme.surfaceHover : "transparent"
+                // the focus ring rides the row's own edge, inside it
+                border.color: fr.rSelected ? Theme.focusRing : "transparent"
+                border.width: fr.rSelected ? Theme.focusWidth : 0
+                Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
+                layer.enabled: frMa.drag.active
+                layer.effect: Elevation {}
 
                 Row {
-                    anchors.left: parent.left; anchors.leftMargin: 8; anchors.right: rightBtns.left; anchors.rightMargin: 6
-                    anchors.verticalCenter: parent.verticalCenter; spacing: 9
-                    Image {
-                        anchors.verticalCenter: parent.verticalCenter; width: 22; height: 22; sourceSize.width: 44; sourceSize.height: 44; mipmap: true
-                        source: Quickshell.iconPath(fr.rIsDir ? "folder" : "text-x-generic", fr.rIsDir ? "folder" : "application-x-zerosize")
+                    anchors.left: parent.left; anchors.leftMargin: Theme.spaceS
+                    anchors.right: rightBtns.left; anchors.rightMargin: Theme.spaceS
+                    anchors.verticalCenter: parent.verticalCenter; spacing: Theme.spaceS
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: fr.rIsDir ? Theme.icFolder : Theme.icFile
+                        font.family: Theme.fontIcons; font.pixelSize: Theme.iconLg
+                        color: fr.rIsDir ? Theme.accentText : Theme.textSecondary
                     }
-                    Text { anchors.verticalCenter: parent.verticalCenter; text: fr.rName; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsBody; elide: Text.ElideRight; width: Math.min(implicitWidth, fr.width - 90) }
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: fr.rName; color: Theme.textPrimary
+                        font.family: Theme.type.body.family
+                        font.pixelSize: Theme.type.body.size
+                        elide: Text.ElideRight
+                        width: Math.min(implicitWidth, fr.width - 5 * Theme.spaceMd)
+                    }
                 }
 
                 // drag OUT → file URI (drop into another app)
@@ -200,32 +284,61 @@ Scope {
 
                 Row {
                     id: rightBtns
-                    anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter; spacing: 4
+                    anchors.right: parent.right; anchors.rightMargin: Theme.spaceS
+                    anchors.verticalCenter: parent.verticalCenter; spacing: Theme.spaceXs
+                    // a file's size (new, per the card)
+                    Text {
+                        visible: !fr.rIsDir && fr.rSize >= 0
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: root.humanSize(fr.rSize)
+                        color: Theme.textMuted
+                        font.family: Theme.type.caption.family
+                        font.pixelSize: Theme.type.caption.size
+                        font.features: ({ "tnum": 1 })
+                    }
                     // folder hint chevron (browse entries)
-                    Text { visible: fr.rIsDir && !fr.rPinned; anchors.verticalCenter: parent.verticalCenter; text: Theme.icChevronRight; font.family: Theme.fontIcons; font.pixelSize: 13; color: Theme.fg3 }
+                    Text { visible: fr.rIsDir && !fr.rPinned; anchors.verticalCenter: parent.verticalCenter; text: Theme.icChevronRight; font.family: Theme.fontIcons; font.pixelSize: Theme.iconSm; color: Theme.textMuted }
                     // unpin ✕ (pinned items)
-                    Rectangle { visible: fr.rPinned; width: 20; height: 20; radius: 10; anchors.verticalCenter: parent.verticalCenter
-                        color: upMa.containsMouse ? Theme.danger : Qt.rgba(0, 0, 0, 0.35)
-                        Text { anchors.centerIn: parent; text: Theme.icClose; font.family: Theme.fontIcons; font.pixelSize: 12; color: Theme.fg1 }
+                    Rectangle {
+                        visible: fr.rPinned
+                        width: Theme.controlSm; height: Theme.controlSm
+                        radius: Theme.radiusSecondary
+                        anchors.verticalCenter: parent.verticalCenter
+                        color: upMa.containsMouse ? Theme.dangerSubtle : "transparent"
+                        Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
+                        Text { anchors.centerIn: parent; text: Theme.icClose; font.family: Theme.fontIcons; font.pixelSize: Theme.iconSm; color: upMa.containsMouse ? Theme.danger : Theme.textSecondary }
                         MouseArea { id: upMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: Globals.togglePinPlace(fr.rPath) }
                     }
                 }
             }
 
             Column {
-                anchors.fill: parent; anchors.margins: 12; spacing: 8
+                anchors.fill: parent
+                anchors.margins: Theme.spaceS + Theme.spaceXs
+                spacing: Theme.spaceS
 
-                // ── address bar: back · home · path · pin-current ──
+                // ── address row: back · home · path · pin-current ──
                 Row {
-                    width: parent.width; height: 30; spacing: 4
+                    id: addressRow
+                    width: parent.width; height: Theme.controlMd; spacing: Theme.spaceXs
                     IconBtn { glyph: Theme.icBack; enabledState: root.cwd !== "/" && root.cwd !== ""; anchors.verticalCenter: parent.verticalCenter; onAct: root.enter(root.parentOf(root.cwd)) }
                     IconBtn { glyph: Theme.icHome; anchors.verticalCenter: parent.verticalCenter; onAct: root.enter(root.home) }
+                    // the path, read-only: transparent fill, borderSubtle
                     Rectangle {
-                        width: parent.width - 28*3 - 4*3; height: 30; radius: Theme.radiusInner
+                        width: parent.width - 3 * Theme.controlMd - 3 * Theme.spaceXs
+                        height: Theme.controlMd; radius: Theme.radiusPrimary
                         anchors.verticalCenter: parent.verticalCenter
-                        color: Theme.bg3; border.color: Theme.stroke2; border.width: Theme.borderThin
-                        Text { anchors.left: parent.left; anchors.right: parent.right; anchors.leftMargin: 10; anchors.rightMargin: 10; anchors.verticalCenter: parent.verticalCenter
-                            text: root.tilde(root.cwd); color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; elide: Text.ElideLeft }
+                        color: Theme.surfaceSunken
+                        border.color: Theme.borderSubtle; border.width: Theme.fieldBorderWidth
+                        Text {
+                            anchors.left: parent.left; anchors.right: parent.right
+                            anchors.leftMargin: Theme.spaceS; anchors.rightMargin: Theme.spaceS
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: root.tilde(root.cwd); color: Theme.textPrimary
+                            font.family: Theme.type.mono.family
+                            font.pixelSize: Theme.type.mono.size
+                            elide: Text.ElideLeft
+                        }
                     }
                     IconBtn { glyph: (Globals.isPinnedPlace(root.cwd) ? Theme.icStar : Theme.icPin); enabledState: root.cwd !== ""; anchors.verticalCenter: parent.verticalCenter; onAct: Globals.togglePinPlace(root.cwd) }
                 }
@@ -235,23 +348,45 @@ Scope {
                     contentHeight: col.implicitHeight; clip: true; boundsBehavior: Flickable.StopAtBounds
                     Column {
                         id: col
-                        width: parent.width; spacing: 2
+                        width: parent.width; spacing: Theme.spaceXxs
 
                         // pinned strip
-                        Text { width: parent.width; visible: (Globals.pinnedPlaces || []).length > 0; text: "PINNED"; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11; font.weight: Font.DemiBold; bottomPadding: 2 }
+                        SectionTitle { width: parent.width; first: true; visible: (Globals.pinnedPlaces || []).length > 0; text: "Pinned" }
                         Repeater {
                             model: (Globals.pinnedPlaces || [])
-                            delegate: FsRow { required property var modelData; width: col.width; rName: root.baseName(modelData); rPath: modelData; rIsDir: root.pinTypes[modelData] === true; rPinned: true }
+                            delegate: FsRow {
+                                required property var modelData
+                                required property int index
+                                width: col.width
+                                rName: root.baseName(modelData); rPath: modelData
+                                rIsDir: root.pinTypes[modelData] === true; rPinned: true
+                                rSelected: root.sel === index
+                            }
                         }
-                        Rectangle { visible: (Globals.pinnedPlaces || []).length > 0; width: parent.width; height: 1; color: Theme.stroke3 }
+                        Rectangle { visible: (Globals.pinnedPlaces || []).length > 0; width: parent.width; height: Theme.borderWidth1; color: Theme.borderSubtle }
 
                         // current directory
-                        Text { width: parent.width; visible: root.entries.length > 0; text: "FOLDER"; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11; font.weight: Font.DemiBold; topPadding: 4; bottomPadding: 2 }
+                        SectionTitle { width: parent.width; visible: root.entries.length > 0; text: "Folder" }
                         Repeater {
                             model: root.entries
-                            delegate: FsRow { required property var modelData; width: col.width; rName: modelData.name; rPath: modelData.path; rIsDir: modelData.isDir }
+                            delegate: FsRow {
+                                required property var modelData
+                                required property int index
+                                width: col.width
+                                rName: modelData.name; rPath: modelData.path
+                                rIsDir: modelData.isDir; rSize: modelData.isDir ? -1 : modelData.size
+                                rSelected: root.sel === (Globals.pinnedPlaces || []).length + index
+                            }
                         }
-                        Text { width: parent.width; visible: root.entries.length === 0; text: "Empty folder"; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; topPadding: 10 }
+                        Text {
+                            width: parent.width; visible: root.entries.length === 0
+                            text: "This folder is empty"
+                            horizontalAlignment: Text.AlignHCenter
+                            color: Theme.textMuted
+                            font.family: Theme.type.label.family
+                            font.pixelSize: Theme.type.label.size
+                            topPadding: Theme.spaceMd
+                        }
                     }
                 }
             }

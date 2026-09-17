@@ -196,31 +196,53 @@ Scope {
             onClicked: root.hide()
         }
 
+        // ── a keyboard key, for the search hint and the footer ──
+        component Kbd: Rectangle {
+            property string key: ""
+            implicitWidth: Math.max(Theme.lineHeightS + 3 * Theme.borderWidth1,
+                                    kt.implicitWidth + 2 * Theme.spaceXs)
+            implicitHeight: kt.implicitHeight + 2 * Theme.borderWidth2
+            radius: Theme.radiusSlight
+            color: Theme.surfaceRaised
+            border.color: Theme.borderStrong
+            border.width: Theme.borderWidth1
+            Text {
+                id: kt
+                anchors.centerIn: parent
+                text: parent.key
+                color: Theme.textSecondary
+                font.family: Theme.type.mono.family
+                font.pixelSize: Theme.type.caption.size
+                font.weight: Theme.fontWeightMedium
+            }
+        }
+
         // ── centered panel (sits in the upper third) ──
         Item {
             id: panelWrap
-            width: 640
+            width: Theme.panelLg
             height: panel.height
             anchors.horizontalCenter: parent.horizontalCenter
-            y: parent.height * 0.20
+            y: parent.height * 0.20 + (root.opened ? 0 : Theme.slideOffset)
 
             opacity: root.opened ? 1 : 0
-            scale: root.opened ? 1 : 0.97
             Behavior on opacity { NumberAnimation { duration: Theme.durBase; easing.type: Theme.ease } }
-            Behavior on scale   { NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutBack; easing.overshoot: 1.2 } }
+            Behavior on y { NumberAnimation { duration: Theme.durBase; easing.type: Theme.ease } }
 
 
             Rectangle {
                 id: panel
                 width: parent.width
                 height: content.implicitHeight
-                radius: Theme.radius
-                color: Theme.panel
-                border.color: Theme.stroke2
-                border.width: Theme.borderThin
+                // the panel radius plus a step, so the rows inside stay
+                // concentric with it (Launcher card #1)
+                radius: Theme.r(Theme.radiusRounded + Theme.spaceXs)
+                color: Theme.surfaceRaised
+                border.color: Theme.borderSubtle
+                border.width: Theme.borderWidth1
+                clip: true
                 layer.enabled: true
                 layer.effect: Elevation {}
-                Sheen { radius: parent.radius }
 
                 // swallow clicks inside the panel so they don't dismiss it
                 MouseArea { anchors.fill: parent }
@@ -229,29 +251,31 @@ Scope {
                     id: content
                     width: parent.width
 
-                    // ── search row ──
+                    // ── search row: the xl Search field, borderless inside
+                    //    the panel, with Esc as its hint (Launcher card #2) ──
                     Item {
+                        id: searchRow
                         width: parent.width
-                        height: 58
+                        height: Theme.controlXl + 2 * Theme.spaceS
                         Row {
                             anchors.fill: parent
-                            anchors.leftMargin: 20
-                            anchors.rightMargin: 20
-                            spacing: 14
+                            anchors.leftMargin: Theme.spaceMd
+                            anchors.rightMargin: Theme.spaceMd
+                            spacing: Theme.spaceS
                             Text {
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: Theme.icSearch
                                 font.family: Theme.fontIcons
-                                font.pixelSize: 18
-                                color: Theme.fg3
+                                font.pixelSize: Theme.iconLg
+                                color: Theme.textMuted
                             }
                             TextInput {
                                 id: input
-                                width: parent.width - 40
+                                width: parent.width - Theme.iconLg - escHint.width - 2 * Theme.spaceS
                                 anchors.verticalCenter: parent.verticalCenter
-                                color: Theme.fg1
-                                font.family: Theme.fontDisplay
-                                font.pixelSize: Theme.fsTitle
+                                color: Theme.textPrimary
+                                font.family: Theme.type.bodyLg.family
+                                font.pixelSize: Theme.type.bodyLg.size
                                 selectionColor: Theme.accent
                                 selectByMouse: true
                                 clip: true
@@ -259,31 +283,45 @@ Scope {
                                 Text {
                                     visible: input.text.length === 0
                                     anchors.verticalCenter: parent.verticalCenter
-                                    text: "Search apps, files & folders…"
-                                    color: Theme.fg3
+                                    text: "Search apps, settings and files"
+                                    color: Theme.textMuted
                                     font: input.font
                                 }
                                 Keys.onPressed: function (ev) {
-                                    if (ev.key === Qt.Key_Escape) { root.hide(); ev.accepted = true }
+                                    // Esc clears the query, a second Esc closes
+                                    if (ev.key === Qt.Key_Escape) {
+                                        if (input.text !== "") input.text = ""; else root.hide()
+                                        ev.accepted = true
+                                    }
                                     else if (ev.key === Qt.Key_Down) { root.selected = Math.min(root.selected + 1, root.results.length - 1); ev.accepted = true }
                                     else if (ev.key === Qt.Key_Up)   { root.selected = Math.max(root.selected - 1, 0); ev.accepted = true }
                                     else if (ev.key === Qt.Key_Return || ev.key === Qt.Key_Enter) { root.launch(root.results[root.selected]); ev.accepted = true }
                                 }
                             }
+                            Kbd { id: escHint; anchors.verticalCenter: parent.verticalCenter; key: "Esc" }
                         }
                     }
 
                     Rectangle {
-                        width: parent.width; height: 1
-                        color: Theme.stroke3
+                        width: parent.width; height: Theme.borderWidth1
+                        color: Theme.borderSubtle
                         visible: root.results.length > 0
                     }
 
-                    // ── results ──
+                    // ── results: control2xl rows with an icon2xl icon, the
+                    //    title at body weight medium, the folder or generic
+                    //    name as a caption, and the running key as the hint ──
                     ListView {
                         id: list
                         width: parent.width
-                        height: Math.min(root.results.length, 8) * 54
+                        // at most 8 rows, and never past the bottom of the
+                        // screen — the footer's hints must stay visible
+                        height: Math.min(Math.min(root.results.length, 8) * Theme.control2xl,
+                                         Math.max(Theme.control2xl,
+                                                  win.height - panelWrap.y - searchRow.height
+                                                  - foot.height - Theme.spaceLg))
+                        topMargin: root.results.length > 0 ? Theme.spaceXs : 0
+                        bottomMargin: root.results.length > 0 ? Theme.spaceXs : 0
                         clip: true
                         model: root.results
                         currentIndex: root.selected
@@ -292,55 +330,119 @@ Scope {
                         delegate: Item {
                             id: row
                             width: list.width
-                            height: 54
+                            height: Theme.control2xl
                             required property var modelData
                             required property int index
                             readonly property bool sel: index === root.selected
 
                             Rectangle {
                                 anchors.fill: parent
-                                anchors.margins: 6
-                                radius: Theme.radiusInner
-                                color: row.sel ? Theme.accent : "transparent"
+                                anchors.leftMargin: Theme.spaceS
+                                anchors.rightMargin: Theme.spaceS
+                                radius: Theme.radiusPrimary
+                                // selection is a surface step, never an accent
+                                // fill: the row's own text has to stay readable
+                                color: row.sel ? Theme.surfaceHover
+                                     : rowMa.containsMouse ? Theme.surfaceHover : "transparent"
+                                opacity: row.sel ? 1 : (rowMa.containsMouse ? 0.55 : 1)
+                                Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
                             }
                             Row {
                                 anchors.fill: parent
-                                anchors.leftMargin: 20
-                                anchors.rightMargin: 20
-                                spacing: 14
+                                anchors.leftMargin: Theme.spaceMd
+                                anchors.rightMargin: Theme.spaceMd
+                                spacing: Theme.spaceS + Theme.spaceXs
                                 Image {
                                     anchors.verticalCenter: parent.verticalCenter
-                                    width: 34; height: 34
-                                    sourceSize.width: 68; sourceSize.height: 68; mipmap: true
+                                    width: Theme.icon2xl; height: Theme.icon2xl
+                                    sourceSize.width: 2 * Theme.icon2xl; sourceSize.height: 2 * Theme.icon2xl
+                                    mipmap: true
                                     source: row.modelData.iconSource || Quickshell.iconPath("application-x-executable")
                                 }
                                 Column {
                                     anchors.verticalCenter: parent.verticalCenter
-                                    spacing: 1
                                     Text {
                                         text: row.modelData.name || ""
-                                        color: row.sel ? Theme.accentOn : Theme.fg1
-                                        font.family: Theme.fontText
-                                        font.pixelSize: Theme.fsBody
-                                        font.weight: Font.Medium
+                                        color: Theme.textPrimary
+                                        font.family: Theme.type.bodyStrong.family
+                                        font.pixelSize: Theme.type.bodyStrong.size
+                                        font.weight: Theme.fontWeightMedium
                                     }
                                     Text {
                                         text: row.modelData.sub || ""
                                         visible: text.length > 0
-                                        color: row.sel ? Theme.accentOn : Theme.fg3
-                                        font.family: Theme.fontText
-                                        font.pixelSize: Theme.fsSmall
+                                        color: Theme.textMuted
+                                        font.family: Theme.type.caption.family
+                                        font.pixelSize: Theme.type.caption.size
                                         elide: Text.ElideRight
-                                        width: list.width - 120
+                                        width: list.width - Theme.icon2xl - 4 * Theme.spaceMd
                                     }
                                 }
                             }
+                            // the trailing hint: the key that runs the selection
+                            Kbd {
+                                anchors.right: parent.right; anchors.rightMargin: Theme.spaceMd
+                                anchors.verticalCenter: parent.verticalCenter
+                                visible: row.sel
+                                key: "Enter"
+                            }
                             MouseArea {
+                                id: rowMa
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 acceptedButtons: Qt.LeftButton | Qt.MiddleButton
                                 onPositionChanged: root.selected = row.index
                                 onClicked: function (mouse) { root.launch(row.modelData, mouse.button === Qt.MiddleButton) }
+                            }
+                        }
+                    }
+
+                    // ── footer: what the keyboard does, on surfaceBase ──
+                    Rectangle {
+                        id: foot
+                        width: parent.width
+                        height: hints.implicitHeight + 2 * Theme.spaceS
+                        color: Theme.surfaceBase
+                        Rectangle {
+                            anchors { left: parent.left; right: parent.right; top: parent.top }
+                            height: Theme.borderWidth1; color: Theme.borderSubtle
+                        }
+                        Row {
+                            id: hints
+                            anchors.verticalCenter: parent.verticalCenter
+                            anchors.left: parent.left
+                            anchors.leftMargin: Theme.spaceS + Theme.spaceXs
+                            spacing: Theme.spaceMd
+                            Row {
+                                spacing: Theme.spaceXs
+                                Kbd { anchors.verticalCenter: parent.verticalCenter; key: "↑" }
+                                Kbd { anchors.verticalCenter: parent.verticalCenter; key: "↓" }
+                                Text {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: "Move"; color: Theme.textMuted
+                                    font.family: Theme.type.caption.family
+                                    font.pixelSize: Theme.type.caption.size
+                                }
+                            }
+                            Row {
+                                spacing: Theme.spaceXs
+                                Kbd { anchors.verticalCenter: parent.verticalCenter; key: "Enter" }
+                                Text {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: "Open"; color: Theme.textMuted
+                                    font.family: Theme.type.caption.family
+                                    font.pixelSize: Theme.type.caption.size
+                                }
+                            }
+                            Row {
+                                spacing: Theme.spaceXs
+                                Kbd { anchors.verticalCenter: parent.verticalCenter; key: "Esc" }
+                                Text {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: "Close"; color: Theme.textMuted
+                                    font.family: Theme.type.caption.family
+                                    font.pixelSize: Theme.type.caption.size
+                                }
                             }
                         }
                     }
