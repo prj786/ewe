@@ -185,6 +185,52 @@ QtObject {
         return true
     }
 
+    // ── Focus the window a notification came from ─────────────────────────
+    // `names` are the notification's desktop entry and app name. A client
+    // matches when its class (or Wayland app id) is one of them, their last
+    // dotted segment ("org.kde.kdeconnect" → "kdeconnect"), or resolves to
+    // the same desktop entry — all case-insensitive. The most recently
+    // focused match wins, and focusing it by address switches to its
+    // workspace. (This used to be `hyprctl dispatch focuswindow class:…`,
+    // the pre-Lua dispatcher syntax, which the Lua config rejects — so a
+    // click on a notification from another workspace did nothing.)
+    function focusAppWindow(names) {
+        var want = [], ids = []
+        for (var i = 0; i < names.length; i++) {
+            var n = String(names[i] || "").toLowerCase()
+            if (n === "") continue
+            want.push(n)
+            var seg = n.split(".").pop().replace(/[^a-z0-9_-]/g, "")
+            if (seg !== "" && seg !== n) want.push(seg)
+            var de = DesktopEntries.heuristicLookup(names[i])
+            if (de && de.id) ids.push(String(de.id).toLowerCase())
+        }
+        if (want.length === 0) return false
+        var tls = Hyprland.toplevels ? Hyprland.toplevels.values : []
+        var best = null, bestRank = 1e9
+        for (var j = 0; j < tls.length; j++) {
+            var t = tls[j], o = t.lastIpcObject
+            var c = String((o && (o.class || o.initialClass)) || (t.wayland && t.wayland.appId) || "").toLowerCase()
+            if (c === "") continue
+            var hit = want.indexOf(c) >= 0 || want.indexOf(c.split(".").pop()) >= 0
+            if (!hit && ids.length) {
+                var ce = DesktopEntries.heuristicLookup(c)
+                hit = !!(ce && ce.id && ids.indexOf(String(ce.id).toLowerCase()) >= 0)
+            }
+            if (!hit) continue
+            // focusHistoryID: 0 is the window focused last
+            var rank = (o && o.focusHistoryID !== undefined) ? o.focusHistoryID : (t.activated ? -1 : 1e8)
+            if (!best || rank < bestRank) { best = t; bestRank = rank }
+        }
+        if (!best) return false
+        var addr = String((best.lastIpcObject && best.lastIpcObject.address) || best.address || "")
+        if (addr !== "") {
+            if (addr.indexOf("0x") !== 0) addr = "0x" + addr
+            Hyprland.dispatch('hl.dsp.focus({ window = "address:' + addr + '" })')
+        } else if (best.wayland) best.wayland.activate()
+        return true
+    }
+
     property Process _standaloneProbe: Process {
         running: true
         command: ["sh", "-c", "command -v komble >/dev/null && printf k; command -v ewe-settings >/dev/null && printf s; command -v hypr-settings >/dev/null && printf o; command -v ewe-sync >/dev/null && printf y"]

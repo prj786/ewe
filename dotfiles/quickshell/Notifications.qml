@@ -67,18 +67,8 @@ Scope {
     // it. `hyprctl dispatch focuswindow` follows the match to whatever workspace the
     // window lives on, so this lands you on the right desktop with the window focused.
     function focusFrom(n) {
-        // Match a Hyprland window by class derived from the desktop-entry / app name.
-        // Try the desktop-entry first (most reliable: it's the app id), then appName.
-        var cands = []
-        if (n.desktopEntry && String(n.desktopEntry).length) cands.push(String(n.desktopEntry))
-        if (n.appName && String(n.appName).length) cands.push(String(n.appName))
-        for (var c = 0; c < cands.length; c++) {
-            var seg = cands[c].split(".").pop().replace(/[^A-Za-z0-9]/g, "")
-            if (seg.length) {
-                Quickshell.execDetached(["hyprctl", "dispatch", "focuswindow", "class:(?i).*" + seg + ".*"])
-                break
-            }
-        }
+        // the most recent window of the app, on whatever workspace it is
+        Globals.focusAppWindow([n.desktopEntry, n.appName])
         // Also fire the app's "default" action (opens the relevant message/thread)
         // — after the focus dispatch, so the app acts on the now-current window.
         try {

@@ -290,13 +290,7 @@ Scope {
     // Focus the window a notification came from (same matching Notifications.qml
     // uses for toasts), fire its default action, close the panel.
     function noteFocus(n) {
-        var cands = []
-        if (n.desktopEntry && String(n.desktopEntry).length) cands.push(String(n.desktopEntry))
-        if (n.appName && String(n.appName).length) cands.push(String(n.appName))
-        for (var c = 0; c < cands.length; c++) {
-            var seg = cands[c].split(".").pop().replace(/[^A-Za-z0-9]/g, "")
-            if (seg.length) { Quickshell.execDetached(["hyprctl", "dispatch", "focuswindow", "class:(?i).*" + seg + ".*"]); break }
-        }
+        Globals.focusAppWindow([n.desktopEntry, n.appName])
         try { if (n.actions) for (var i = 0; i < n.actions.length; i++) if (n.actions[i].identifier === "default") { n.actions[i].invoke(); break } } catch (e) {}
         Globals.quickSettingsOpen = false
     }
