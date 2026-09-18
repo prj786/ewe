@@ -18,6 +18,15 @@ Scope {
 
     // Colours & fonts come entirely from Theme.qml (single source of truth).
     function g(code) { return String.fromCodePoint(code) }   // Nerd Font glyph (handles MDI > U+FFFF)
+
+    // ── inks inside Glass (Glass card, "Roles inside glass") ──────────────
+    // The bar is a glass surface once bar opacity drops below 100: its
+    // accent text deepens to glassAccent (so it keeps 4.5:1 in Ewe Light
+    // over a bright wallpaper) and muted text rises to textSecondary. This is
+    // the reference CSS's `.ewe-glass` remap, done once at the surface; the
+    // modules below read these instead of the plain roles.
+    readonly property color inkAccent: Theme.glass ? Theme.glassAccent : Theme.accentText
+    readonly property color inkMuted:  Theme.glass ? Theme.textSecondary : Theme.textMuted
     function appClass() {
         var t = Hyprland.activeToplevel
         // lastIpcObject.class is the richest source but can lag a focus change /
@@ -66,8 +75,8 @@ Scope {
         function hide(): void { Globals.barVisible = false }
     }
 
-    // ── clock: date and time as two fields spaceS apart (Bar card #11),
-    //    following the locale's 12/24-hour setting ─────────────────────────
+    // ── clock: date and time as two fields spaceS apart (Bar card #11).
+    //    12-hour, as before: the shell has no 12/24-hour setting yet ────────
     property string clockDate: ""
     property string clockTime: ""
     readonly property string clockText: bar.clockDate + "  " + bar.clockTime
@@ -214,12 +223,18 @@ Scope {
         property color fg: Theme.textSecondary
         property int fontPx: Theme.barIcon
         property bool active: false      // its popup is open
-        property int padH: Theme.spaceS
+        // .ewe-barmod: spaceS of side padding (spaceS + spaceXs on the large
+        // bar); a glyph-only module has none and is just barModule square
+        property int padH: si.glyph !== "" ? 0 : Theme.barLarge ? Theme.spaceS + Theme.spaceXs : Theme.spaceS
         // the workspace chip's mark: a spaceMd × borderWidth2 accent rule
         // spaceXs above the chip's bottom edge, always on
         property bool underline: false
         default property alias content: inner.data
         readonly property alias hovered: ma.containsMouse
+        // each module is a button named with its state (Bar card, Accessibility)
+        property string a11yName: ""
+        Accessible.role: Accessible.Button
+        Accessible.name: si.a11yName
         signal activated()
         signal secondary()
         signal tertiary()
@@ -338,7 +353,7 @@ Scope {
                 Row {
                     id: leftRow
                     anchors.left: parent.left
-                    anchors.leftMargin: Theme.spaceS
+                    anchors.leftMargin: Theme.barLarge ? Theme.spaceS + Theme.spaceXs : Theme.spaceS
                     anchors.verticalCenter: parent.verticalCenter
                     spacing: Theme.spaceS
 
@@ -353,6 +368,7 @@ Scope {
                         anchors.verticalCenter: parent.verticalCenter
                         active: Globals.overviewOpen
                         underline: true
+                        a11yName: "Workspace " + (Hyprland.focusedWorkspace ? Hyprland.focusedWorkspace.id : 1) + ", open Overview"
                         onActivated: Globals.overviewOpen = !Globals.overviewOpen
                         Text {
                             anchors.verticalCenter: parent.verticalCenter
@@ -383,7 +399,7 @@ Scope {
                         Text {
                             anchors.verticalCenter: parent.verticalCenter
                             text: bar.appName()
-                            color: Theme.accentText
+                            color: bar.inkAccent
                             font.family: Theme.type.bodyStrong.family
                             font.pixelSize: Theme.barLarge ? Theme.fontSizeLg : Theme.fontSizeMd
                             font.weight: Theme.fontWeightSemibold
@@ -410,7 +426,7 @@ Scope {
                 Row {
                     id: rightRow
                     anchors.right: parent.right
-                    anchors.rightMargin: Theme.spaceS
+                    anchors.rightMargin: Theme.barLarge ? Theme.spaceS + Theme.spaceXs : Theme.spaceS
                     anchors.verticalCenter: parent.verticalCenter
                     spacing: Theme.spaceXs
 
@@ -484,6 +500,7 @@ Scope {
                         anchors.verticalCenter: parent.verticalCenter
                         visible: Globals.barShows("tiling")
                         glyph: Globals.tilingEnabled ? Theme.icTiling : Theme.icFloating
+                        a11yName: Globals.tilingEnabled ? "Tiling, on" : "Tiling, off"
                         onActivated: Globals.setTiling(!Globals.tilingEnabled)
                     }
 
@@ -496,6 +513,9 @@ Scope {
                     // middle-click re-checks.
                     BarModule {
                         id: updItem
+                        padH: 0            // an icon module (.ewe-barmod--icon)
+                        a11yName: updItem.updating ? "Updates, updating"
+                                : Globals.updatesTotal > 0 ? "Updates, " + Globals.updatesTotal + " available" : "Updates, up to date"
                         readonly property bool updating: Globals.updatesBusy || Globals.updatesWorking
                         anchors.verticalCenter: parent.verticalCenter
                         onActivated: {
@@ -509,9 +529,9 @@ Scope {
                             text: Theme.icRefresh
                             font.family: Theme.fontIcons
                             font.pixelSize: Theme.barIcon
-                            color: Theme.accentText
+                            color: bar.inkAccent
                             RotationAnimation on rotation {
-                                running: updItem.updating && !Theme.reduceMotion
+                                running: updItem.updating
                                 loops: Animation.Infinite
                                 from: 0; to: 360
                                 duration: 1400
@@ -523,20 +543,22 @@ Scope {
                             // `download` + a count while updates wait, `check`
                             // in textMuted once everything is current
                             glyph: Globals.updatesTotal > 0 ? Theme.icDownload : Theme.icCheck
-                            color: Globals.updatesTotal > 0 ? Theme.accentText : Theme.textMuted
+                            color: Globals.updatesTotal > 0 ? bar.inkAccent : bar.inkMuted
                             count: Globals.updatesTotal
                         }
                     }
 
                     // keyboard layout — two capitals (US / GE); click cycles it
                     BarModule {
+                        id: kbMod
+                        a11yName: "Keyboard layout, " + bar.kbLayout
                         anchors.verticalCenter: parent.verticalCenter
                         visible: Globals.barShows("keyboard")
                         onActivated: Quickshell.execDetached(["hyprctl", "switchxkblayout", bar.kbDevice || "current", "next"])
                         Text {
                             anchors.verticalCenter: parent.verticalCenter
                             text: bar.kbLayout
-                            color: Theme.textSecondary
+                            color: kbMod.hovered ? Theme.textPrimary : Theme.textSecondary
                             font.family: Theme.type.label.family
                             font.pixelSize: Theme.barLarge ? Theme.fontSizeMd : Theme.fontSizeS
                             font.weight: Theme.fontWeightSemibold
@@ -557,6 +579,10 @@ Scope {
                     // Click opens Quick settings; scrolling changes the volume.
                     BarModule {
                         id: ctlGroup
+                        // Module states: textSecondary, textPrimary on hover
+                        // or while Quick settings is open
+                        a11yName: "Quick settings"
+                        readonly property color ink: ctlGroup.hovered || ctlGroup.active ? Theme.textPrimary : Theme.textSecondary
                         anchors.verticalCenter: parent.verticalCenter
                         padH: Theme.spaceS + Theme.spaceXs
                         active: Globals.quickSettingsOpen
@@ -598,7 +624,7 @@ Scope {
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: Theme.icEye
                                 font.family: Theme.fontIcons; font.pixelSize: Theme.barIcon
-                                color: Theme.textSecondary
+                                color: ctlGroup.ink
                             }
                             // Cast to TV — screencast glyph while a cast session exists;
                             // accent = picture on glass, dim = still handshaking
@@ -608,7 +634,7 @@ Scope {
                                 text: Theme.icCast
                                 font.family: Theme.fontIcons; font.pixelSize: Theme.barIcon
                                 color: Globals.castState === "streaming" || Globals.castLegacy
-                                       ? Theme.accentText : Theme.textSecondary
+                                       ? bar.inkAccent : ctlGroup.ink
                             }
                             // SSH tunnel (a Quick Settings port-forward is up)
                             Text {
@@ -616,7 +642,7 @@ Scope {
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: Theme.icSsh
                                 font.family: Theme.fontIcons; font.pixelSize: Theme.barIcon
-                                color: Theme.textSecondary
+                                color: ctlGroup.ink
                             }
                             // VPN (only when active)
                             Text {
@@ -624,7 +650,7 @@ Scope {
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: Theme.icVpn
                                 font.family: Theme.fontIcons; font.pixelSize: Theme.barIcon
-                                color: Theme.textSecondary
+                                color: ctlGroup.ink
                             }
 
                             // ewe-sync — the account app's state, so "is my
@@ -648,9 +674,9 @@ Scope {
                                         : Theme.icCloudOff
                                     font.family: Theme.fontIcons; font.pixelSize: Theme.barIcon
                                     color: syncItem.st === "conflict" ? Theme.danger
-                                         : syncItem.busy ? Theme.accentText : Theme.textMuted
+                                         : syncItem.busy ? bar.inkAccent : bar.inkMuted
                                     RotationAnimation on rotation {
-                                        running: syncItem.busy && !Theme.reduceMotion
+                                        running: syncItem.busy
                                         loops: Animation.Infinite
                                         from: 0; to: 360
                                         duration: 1400
@@ -669,7 +695,7 @@ Scope {
                                 visible: count > 0
                                 anchors.verticalCenter: parent.verticalCenter
                                 glyph: Theme.icBell
-                                color: Theme.accentText
+                                color: bar.inkAccent
                                 count: Globals.server ? Globals.server.trackedNotifications.values.length : 0
                             }
                             // Mail (IMAP or Gmail) — envelope + count, only when there is unread mail
@@ -677,6 +703,7 @@ Scope {
                                 visible: Mail.available && Mail.unread > 0
                                 anchors.verticalCenter: parent.verticalCenter
                                 glyph: Theme.icMail
+                                color: ctlGroup.ink
                                 count: Mail.unread
                             }
                             // Calendar — an event is running or starts within the hour
@@ -685,7 +712,7 @@ Scope {
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: Theme.icCalendar
                                 font.family: Theme.fontIcons; font.pixelSize: Theme.barIcon
-                                color: Theme.textSecondary
+                                color: ctlGroup.ink
                             }
                             // Phone (KDE Connect) — only when paired + reachable;
                             // battery % and an accent dot for unread phone notifications
@@ -696,6 +723,7 @@ Scope {
                                 BarIcon {
                                     anchors.verticalCenter: parent.verticalCenter
                                     glyph: Theme.icPhone
+                                    color: ctlGroup.ink
                                     // the phone's own count is already on the
                                     // phone — here it only has to say "unread"
                                     count: KdeConnect.unreadCount
@@ -708,7 +736,7 @@ Scope {
                                     font.family: Theme.type.label.family
                                     font.pixelSize: Theme.barLarge ? Theme.fontSizeMd : Theme.fontSizeS
                                     font.features: ({ "tnum": 1 })
-                                    color: Theme.textSecondary
+                                    color: ctlGroup.ink
                                 }
                             }
                             // Wired / ethernet (shown when a wired link is up and
@@ -717,7 +745,7 @@ Scope {
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: Theme.icEthernet
                                 font.family: Theme.fontIcons; font.pixelSize: Theme.barIcon
-                                color: Theme.textSecondary
+                                color: ctlGroup.ink
                                 visible: bar.wiredUp && !bar.wifiUp && Globals.barShows("wifi")
                             }
                             // Wi-Fi (only when connected)
@@ -725,7 +753,7 @@ Scope {
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: Theme.icWifi
                                 font.family: Theme.fontIcons; font.pixelSize: Theme.barIcon
-                                color: Theme.textSecondary
+                                color: ctlGroup.ink
                                 visible: bar.wifiUp && Globals.barShows("wifi")
                             }
                             // Sound — always there, between the radios: the level as
@@ -737,7 +765,7 @@ Scope {
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: AudioState.outputGlyph
                                 font.family: Theme.fontIcons; font.pixelSize: Theme.barIcon
-                                color: AudioState.muted && AudioState.outputKind === "internal" ? Theme.textMuted : Theme.textSecondary
+                                color: AudioState.muted && AudioState.outputKind === "internal" ? bar.inkMuted : ctlGroup.ink
                                 visible: AudioState.sink !== null && Globals.barShows("sound")
                             }
                             // Microphone open — an app has it (a link from the default
@@ -747,7 +775,7 @@ Scope {
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: Theme.icMic
                                 font.family: Theme.fontIcons; font.pixelSize: Theme.barIcon
-                                color: Theme.accentText
+                                color: bar.inkAccent
                                 visible: AudioState.micInUse && Globals.barShows("mic")
                             }
                             // Bluetooth (only when adapter on); filled glyph when a device is connected
@@ -762,7 +790,7 @@ Scope {
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: conn > 0 ? Theme.icBluetoothOn : Theme.icBluetooth
                                 font.family: Theme.fontIcons; font.pixelSize: Theme.barIcon
-                                color: Theme.textSecondary
+                                color: ctlGroup.ink
                                 visible: adapter && adapter.enabled && Globals.barShows("bluetooth")
                             }
                             // Power profile (leaf · balance · speedometer) — reflects tuned profile
@@ -773,7 +801,7 @@ Scope {
                                     : PowerProfiles.profile === PowerProfile.Performance ? Theme.icSpeed
                                     : Theme.icBalance
                                 font.family: Theme.fontIcons; font.pixelSize: Theme.barIcon
-                                color: Theme.textSecondary
+                                color: ctlGroup.ink
                             }
                             // Battery — icon + always-on percentage
                             Row {
@@ -796,7 +824,7 @@ Scope {
                                     // alone signals charging
                                     color: parent.pct <= 10 && !parent.charging ? Theme.danger
                                          : parent.pct <= 20 && !parent.charging ? Theme.warning
-                                         : Theme.textSecondary
+                                         : ctlGroup.ink
                                 }
                                 Text {
                                     anchors.verticalCenter: parent.verticalCenter
@@ -804,7 +832,7 @@ Scope {
                                     font.family: Theme.type.label.family
                                     font.pixelSize: Theme.barLarge ? Theme.fontSizeMd : Theme.fontSizeS
                                     font.features: ({ "tnum": 1 })
-                                    color: Theme.textSecondary
+                                    color: ctlGroup.ink
                                 }
                             }
                         }
@@ -813,12 +841,18 @@ Scope {
                     // divider, then the clock — its own module at the end of
                     // the bar (Bar card #11). Date and time are spaceS apart,
                     // with tabular figures so the digits never shift; clicking
-                    // it opens Quick settings, as it always has.
+                    // it opens Quick settings and the wheel changes the volume,
+                    // as they did while the clock sat inside that button.
                     BarSep { anchors.verticalCenter: parent.verticalCenter }
 
                     BarModule {
                         anchors.verticalCenter: parent.verticalCenter
+                        a11yName: bar.clockText
                         onActivated: Globals.quickSettingsOpen = !Globals.quickSettingsOpen
+                        onScrolled: function (dy) {
+                            Quickshell.execDetached(["wpctl", "set-volume", "-l", "1.0",
+                                                     "@DEFAULT_AUDIO_SINK@", dy > 0 ? "3%+" : "3%-"])
+                        }
                         Row {
                             anchors.verticalCenter: parent.verticalCenter
                             spacing: Theme.spaceS

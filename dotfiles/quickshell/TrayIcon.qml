@@ -24,7 +24,7 @@ Item {
         id: img
         anchors.fill: parent
         source: root.source
-        sourceSize.width: 32; sourceSize.height: 32; mipmap: true
+        sourceSize.width: 2 * root.px; sourceSize.height: 2 * root.px; mipmap: true
         visible: !root.mono
         onSourceChanged: { root.mono = false; probe.reprobe() }
         onStatusChanged: if (status === Image.Ready) probe.reprobe()
@@ -38,17 +38,17 @@ Item {
     }
     Canvas {
         id: probe
-        width: 16; height: 16
+        width: Theme.iconMd; height: Theme.iconMd   // the sampling grid
         visible: false
         renderStrategy: Canvas.Immediate
         property url loaded
         function reprobe() {
             if (String(root.source) === "") return
-            if (isImageLoaded(root.source)) { paint(); return }
+            if (isImageLoaded(root.source)) { probeIcon(); return }
             unloadImage(loaded); loaded = root.source; loadImage(root.source)
         }
-        onImageLoaded: paint()
-        function paint() {
+        onImageLoaded: probeIcon()
+        function probeIcon() {
             if (!isImageLoaded(root.source)) return
             var ctx = getContext("2d")
             ctx.clearRect(0, 0, width, height)
