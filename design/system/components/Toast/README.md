@@ -26,7 +26,7 @@ A toast confirms something that just happened and offers one quick way back, suc
 
 ## Behavior
 - Stays 5 seconds, or 8 seconds when it has an action. Hovering or focusing it pauses the timer.
-- Esc closes it when it has focus. Super+Z runs its action while it is shown.
+- Esc closes it when it has focus. The action runs from its button only: there is no shortcut (Super+Z is the pinned workspace).
 - Undo restores exactly what was changed and then shows "Restored".
 
 ## Accessibility
