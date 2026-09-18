@@ -300,16 +300,18 @@ end
 
 
 -- ── Animations: short and sharp (the "Snappy" preset's values) ───────────────
--- The old springy feel lives on as the "Smooth" preset in Settings → Animations
+-- The slower feel lives on as the "Smooth" preset in Settings → Animations
 -- (ewe-settings), which overrides all of this via generated/animations.lua.
 -- Mirrored by ANIM_BASE (hypr.js) and animBase (Settings.qml) — change together.
+-- Nothing overshoots (design system, Motion): the spring is critically damped,
+-- dampening = 2 * sqrt(mass * stiffness), the same as ewe-conf's and hypr.js's.
 hl.curve("easeOutQuint",   { type = "bezier", points = { {0.23, 1},    {0.32, 1} } })
 hl.curve("easeInOutCubic", { type = "bezier", points = { {0.65, 0.05}, {0.36, 1} } })
 hl.curve("linear",         { type = "bezier", points = { {0, 0},       {1, 1} } })
 hl.curve("almostLinear",   { type = "bezier", points = { {0.5, 0.5},   {0.75, 1} } })
 hl.curve("quick",          { type = "bezier", points = { {0.15, 0},    {0.1, 1} } })
 hl.curve("snap",           { type = "bezier", points = { {0.16, 1},    {0.3, 1} } })
-hl.curve("easy",           { type = "spring", mass = 1, stiffness = 71.2633, dampening = 15.8273644 })
+hl.curve("easy",           { type = "spring", mass = 1, stiffness = 71.2633, dampening = 16.8835186 })
 
 hl.config({ animations = { enabled = true } })
 

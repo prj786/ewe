@@ -599,14 +599,17 @@ def do_apply(doc, only=None, hooks=True):
 HYPR_GEN = os.path.join(CFG_DIR, "hypr", "generated")
 
 # The design system has no overshoot (no OutBack anywhere, 2026-09-18):
-# the `overshoot` curve and the Bouncy preset built on it are gone.
+# the `overshoot` curve and the Bouncy preset built on it are gone, and the
+# spring is critically damped (dampening = 2*sqrt(mass*stiffness)), so the
+# Smooth preset's windows settle without passing their target. The same
+# spring is hyprland.lua's "easy" curve.
 ANIM_CURVES = [  # ported from ewe-settings hypr.js — keep in lockstep
     ("snap", [[0.16, 1], [0.3, 1]], None),
     ("easeOutQuint", [[0.23, 1], [0.32, 1]], None),
     ("quick", [[0.15, 0], [0.1, 1]], None),
     ("easeInOutCubic", [[0.65, 0.05], [0.36, 1]], None),
     ("linear", [[0, 0], [1, 1]], None),
-    ("spring", None, {"mass": 1, "stiffness": 71.2633, "dampening": 15.8273644}),
+    ("spring", None, {"mass": 1, "stiffness": 71.2633, "dampening": 16.8835186}),
 ]
 ANIM_LEAVES = ["windows", "windowsOut", "fade", "workspaces", "layers", "border"]
 _SPRING = {c[0] for c in ANIM_CURVES if c[2]}
