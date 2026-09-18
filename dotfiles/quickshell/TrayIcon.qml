@@ -9,12 +9,12 @@ import qs
 // is monochrome and is drawn through a colorization to the bar's own icon
 // colour, in both themes — same weight as the Fluent glyphs beside it. A
 // coloured icon (1Password, Slack, Telegram) is left exactly as the app
-// drew it.
+// drew it. Icons are iconLg (iconXl on the large bar) — Theme.barIcon.
 Item {
     id: root
     property url source
-    property int px: 16
-    property color tint: Theme.fg2
+    property int px: Theme.iconLg
+    property color tint: Theme.textSecondary
     // "mono" is decided per source; until the probe returns the icon shows
     // untinted so nothing flashes
     property bool mono: false
@@ -24,7 +24,7 @@ Item {
         id: img
         anchors.fill: parent
         source: root.source
-        sourceSize.width: 32; sourceSize.height: 32; mipmap: true
+        sourceSize.width: 2 * root.px; sourceSize.height: 2 * root.px; mipmap: true
         visible: !root.mono
         onSourceChanged: { root.mono = false; probe.reprobe() }
         onStatusChanged: if (status === Image.Ready) probe.reprobe()
@@ -38,19 +38,25 @@ Item {
     }
     Canvas {
         id: probe
-        width: 16; height: 16
+        width: Theme.iconMd; height: Theme.iconMd   // the sampling grid
         visible: false
         renderStrategy: Canvas.Immediate
         property url loaded
         function reprobe() {
             if (String(root.source) === "") return
-            if (isImageLoaded(root.source)) { paint(); return }
+            if (isImageLoaded(root.source)) { probeIcon(); return }
             unloadImage(loaded); loaded = root.source; loadImage(root.source)
         }
-        onImageLoaded: paint()
-        function paint() {
-            if (!isImageLoaded(root.source)) return
+        onImageLoaded: probeIcon()
+        // A Canvas has no 2D context until its scene graph is up (a headless
+        // or not-yet-exposed output hands back null — `getContext`/`clearRect`
+        // TypeErrors). Wait for it, then probe; the icon shows untinted
+        // meanwhile, which is the safe default.
+        onAvailableChanged: if (available) reprobe()
+        function probeIcon() {
+            if (!available || !isImageLoaded(root.source)) return
             var ctx = getContext("2d")
+            if (!ctx) return
             ctx.clearRect(0, 0, width, height)
             ctx.drawImage(root.source, 0, 0, width, height)
             var d = ctx.getImageData(0, 0, width, height).data

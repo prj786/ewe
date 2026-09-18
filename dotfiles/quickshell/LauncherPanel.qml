@@ -81,17 +81,33 @@ Scope {
 
         Rectangle {
             id: box
-            x: Math.max(12, Math.min(parent.width - width - 12, Globals.launcherAnchorX - width / 2))   // centered above the launcher button
-            y: parent.height - height - 90        // float above the dock
-            width: 380; height: 440
-            radius: Theme.radius
-            color: Theme.panel
-            border.color: Theme.stroke2; border.width: Theme.borderThin
+            // kept spaceS + spaceXs from the screen edges, centred over the
+            // dock's sheep button (Launcher panel card, "Placement")
+            readonly property int edgeGap: Theme.spaceS + Theme.spaceXs
+            x: Math.max(edgeGap, Math.min(parent.width - width - edgeGap, Globals.launcherAnchorX - width / 2))
+            // the dock's own strip (its items + spaceS padding each side,
+            // windowGap above the edge) plus the card's spaceS + spaceXs gap
+            // above it — follows the dock's size instead of a fixed 90
+            readonly property int dockGap: (Globals.dockIconSize === "small" ? Theme.controlXl
+                                          : Globals.dockIconSize === "large" ? Theme.barHeightLg : Theme.control2xl)
+                                         + 2 * Theme.spaceS + Theme.windowGap + edgeGap
+            // one grid tile, and a panel five rows tall, so the search field
+            // stays put while results come and go (the grid scrolls past it)
+            readonly property int tileH: Theme.controlXl + Theme.lineHeightXs + 2 * Theme.spaceS + Theme.spaceXs
+            readonly property int fullH: 2 * edgeGap + Theme.controlMd + 2 * edgeGap
+                                         + sectionTitle.implicitHeight + 5 * tileH + 4 * Theme.spaceXxs
+            width: Theme.panelSm
+            height: Math.min(fullH, parent.height - dockGap - 2 * edgeGap)
+            radius: Theme.radiusRounded
+            color: Theme.surfaceRaised
+            border.color: Theme.borderSubtle; border.width: Theme.borderWidth1
             opacity: Globals.launcherOpen ? 1 : 0
-            scale: Globals.launcherOpen ? 1 : 0.96
-            transformOrigin: Item.BottomLeft
+            // a panel opens with a fade plus a short rise from its own edge;
+            // Reduce motion zeroes the offset, leaving the fade (Theme)
+            y: Math.max(edgeGap, parent.height - height - dockGap)
+               + (Globals.launcherOpen ? 0 : Theme.slideOffset)
             Behavior on opacity { NumberAnimation { duration: Theme.durBase; easing.type: Theme.ease } }
-            Behavior on scale { NumberAnimation { duration: Theme.durBase; easing.type: Theme.ease } }
+            Behavior on y { NumberAnimation { duration: Theme.durBase; easing.type: Theme.ease } }
             layer.enabled: true
             layer.effect: Elevation {}
 
@@ -99,38 +115,121 @@ Scope {
             Keys.onEscapePressed: Globals.launcherOpen = false
 
             Column {
-                anchors.fill: parent; anchors.margins: 14; spacing: 12
+                anchors.fill: parent
+                anchors.margins: Theme.spaceS + Theme.spaceXs
+                spacing: Theme.spaceS + Theme.spaceXs
 
-                // search
+                // ── Search field (design system: Search field, md) ──
                 Rectangle {
-                    width: parent.width; height: 36; radius: Theme.radiusInner
-                    color: Theme.bg3; border.color: searchIn.activeFocus ? Theme.accent : Theme.stroke1; border.width: Theme.borderThin
-                    Text { anchors.left: parent.left; anchors.leftMargin: 11; anchors.verticalCenter: parent.verticalCenter; text: Theme.icSearch; font.family: Theme.fontIcons; font.pixelSize: 14; color: Theme.fg3 }
+                    width: parent.width; height: Theme.controlMd
+                    radius: Theme.radiusPrimary
+                    color: Theme.surfaceSunken
+                    border.width: Theme.fieldBorderWidth
+                    border.color: searchIn.activeFocus ? Theme.focusRing
+                                : fieldHov.hovered ? Theme.textMuted : Theme.borderStrong
+                    Behavior on border.color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
+                    HoverHandler { id: fieldHov }
+                    Text {
+                        id: searchGlyph
+                        anchors.left: parent.left; anchors.leftMargin: Theme.spaceS
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: Theme.icSearch
+                        font.family: Theme.fontIcons; font.pixelSize: Theme.iconMd
+                        color: Theme.textMuted
+                    }
                     TextInput {
                         id: searchIn
-                        anchors.fill: parent; anchors.leftMargin: 34; anchors.rightMargin: 12; verticalAlignment: TextInput.AlignVCenter
-                        color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsBody; clip: true
+                        anchors.fill: parent
+                        anchors.leftMargin: Theme.spaceS + Theme.iconMd + Theme.spaceXs
+                        anchors.rightMargin: Theme.spaceS
+                        verticalAlignment: TextInput.AlignVCenter
+                        color: Theme.textPrimary
+                        font.family: Theme.type.body.family
+                        font.pixelSize: Theme.type.body.size
+                        clip: true
+                        selectionColor: Theme.accent
                         onTextChanged: root.query = text
-                        Keys.onEscapePressed: Globals.launcherOpen = false
+                        // Esc clears the query, a second Esc closes the panel
+                        Keys.onEscapePressed: { if (searchIn.text !== "") searchIn.text = ""; else Globals.launcherOpen = false }
                         onAccepted: { var a = root.shownApps(); if (a.length > 0) root.launch(a[0]) }
-                        Text { anchors.verticalCenter: parent.verticalCenter; visible: searchIn.text.length === 0; text: "Search apps…"; color: Theme.fg3; font: searchIn.font }
+                        Text {
+                            anchors.verticalCenter: parent.verticalCenter
+                            visible: searchIn.text.length === 0
+                            text: "Search apps"
+                            color: Theme.textMuted; font: searchIn.font
+                        }
                     }
                 }
 
-                Text {
+                // the card's own 12px gap, so the heading keeps no extra lead-in
+                SectionTitle { id: sectionTitle; width: parent.width; first: true; text: root.query.trim() === "" ? "Pinned" : "Results" }
+
+                // ── empty states (design system: Empty state, compact) ──
+                Column {
                     width: parent.width
-                    text: root.query.trim() === "" ? "PINNED" : "RESULTS"
-                    color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11; font.weight: Font.DemiBold
+                    visible: root.shownApps().length === 0
+                    spacing: Theme.spaceXs
+                    topPadding: Theme.spaceMd
+                    readonly property bool searching: root.query.trim() !== ""
+                    Rectangle {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        width: Theme.controlLg; height: Theme.controlLg
+                        radius: Theme.radiusFull
+                        color: Theme.surfaceHover
+                        Text {
+                            anchors.centerIn: parent
+                            text: parent.parent.searching ? Theme.icSearchOff : Theme.icPin
+                            font.family: Theme.fontIcons; font.pixelSize: Theme.iconMd
+                            color: Theme.textSecondary
+                        }
+                    }
+                    Text {
+                        width: parent.width; horizontalAlignment: Text.AlignHCenter
+                        text: parent.searching ? "No apps match “" + root.query.trim() + "”" : "No pinned apps yet"
+                        color: Theme.textPrimary
+                        font.family: Theme.type.bodyStrong.family
+                        font.pixelSize: Theme.type.bodyStrong.size
+                        font.weight: Theme.fontWeightSemibold
+                        elide: Text.ElideRight
+                    }
+                    Text {
+                        width: parent.width; horizontalAlignment: Text.AlignHCenter
+                        wrapMode: Text.Wrap
+                        text: parent.searching ? "Check the spelling, or find more apps in Komble."
+                                               : "Search for an app and use its pin to keep it here."
+                        color: Theme.textSecondary
+                        font.family: Theme.type.body.family
+                        font.pixelSize: Theme.type.body.size
+                    }
+                    // secondary button — the one way on from a dead end
+                    Rectangle {
+                        visible: parent.searching
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        width: kombleLbl.implicitWidth + 2 * (Theme.spaceS + Theme.spaceXs)
+                        height: Theme.controlMd
+                        radius: Theme.radiusPrimary
+                        color: kombleMa.pressed ? Theme.surfacePressed
+                             : kombleMa.containsMouse ? Theme.surfaceHover : Theme.surfaceRaised
+                        border.color: Theme.borderStrong; border.width: Theme.borderWidth1
+                        Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
+                        Text {
+                            id: kombleLbl
+                            anchors.centerIn: parent
+                            text: "Open Komble"
+                            color: Theme.textPrimary
+                            font.family: Theme.type.body.family
+                            font.pixelSize: Theme.type.body.size
+                            font.weight: Theme.fontWeightMedium
+                        }
+                        MouseArea {
+                            id: kombleMa
+                            anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                            onClicked: { Globals.launcherOpen = false; Globals.openStore() }
+                        }
+                    }
                 }
 
-                // empty-pinned hint
-                Text {
-                    width: parent.width; visible: root.query.trim() === "" && root.shownApps().length === 0
-                    text: "No pinned apps yet. Search for an app and tap its pin badge to add it here."
-                    color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; wrapMode: Text.Wrap
-                }
-
-                // app grid
+                // ── app grid: 4 columns of grid app tiles ──
                 Flickable {
                     width: parent.width
                     height: parent.height - y
@@ -138,28 +237,65 @@ Scope {
                     clip: true; boundsBehavior: Flickable.StopAtBounds
                     Grid {
                         id: grid
-                        width: parent.width; columns: 4; rowSpacing: 6; columnSpacing: 0
+                        width: parent.width; columns: 4
+                        rowSpacing: Theme.spaceXxs; columnSpacing: 0
                         Repeater {
                             model: root.shownApps()
                             delegate: Item {
                                 id: tile
                                 required property var modelData
-                                width: grid.width / 4; height: 86
+                                width: grid.width / 4
+                                height: box.tileH
                                 readonly property string did: (modelData.id || "") + (String(modelData.id).match(/\.desktop$/) ? "" : ".desktop")
-                                Rectangle { anchors.fill: parent; anchors.margins: 3; radius: Theme.r(12); color: tMa.containsMouse ? Theme.subtleHover : Theme.subtle }
+                                readonly property bool pinned: Globals.isPinned(tile.did)
+                                Rectangle {
+                                    anchors.fill: parent; anchors.margins: Theme.spaceXxs
+                                    radius: Theme.radiusPrimary
+                                    color: tMa.containsMouse ? Theme.surfaceHover : "transparent"
+                                    Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
+                                }
                                 Column {
-                                    anchors.centerIn: parent; spacing: 6
-                                    Image { anchors.horizontalCenter: parent.horizontalCenter; width: 40; height: 40; sourceSize.width: 64; sourceSize.height: 64; mipmap: true; source: modelData.icon ? Quickshell.iconPath(modelData.icon, "application-x-executable") : "" }
-                                    Text { width: tile.width - 10; horizontalAlignment: Text.AlignHCenter; text: modelData.name || ""; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: 11; elide: Text.ElideRight; maximumLineCount: 1 }
+                                    anchors.centerIn: parent; spacing: Theme.spaceXs
+                                    Image {
+                                        anchors.horizontalCenter: parent.horizontalCenter
+                                        width: Theme.controlXl; height: Theme.controlXl
+                                        sourceSize.width: 2 * Theme.controlXl; sourceSize.height: 2 * Theme.controlXl
+                                        mipmap: true
+                                        source: modelData.icon ? Quickshell.iconPath(modelData.icon, "application-x-executable") : ""
+                                    }
+                                    Text {
+                                        width: tile.width - 2 * Theme.spaceS
+                                        horizontalAlignment: Text.AlignHCenter
+                                        text: modelData.name || ""
+                                        color: Theme.textSecondary
+                                        font.family: Theme.type.caption.family
+                                        font.pixelSize: Theme.type.caption.size
+                                        elide: Text.ElideRight; maximumLineCount: 1
+                                    }
                                 }
                                 MouseArea { id: tMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; acceptedButtons: Qt.LeftButton | Qt.MiddleButton; onClicked: function (mouse) { root.launch(tile.modelData, mouse.button === Qt.MiddleButton) } }
-                                // pin badge (top-right)
+                                // pin badge — top right, on hover; always on (and
+                                // accent) for a pinned app only while searching,
+                                // since every tile of the Pinned view is pinned
                                 Rectangle {
-                                    anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 5
-                                    width: 20; height: 20; radius: 10
-                                    visible: tMa.containsMouse || pMa.containsMouse || Globals.isPinned(tile.did)
-                                    color: Globals.isPinned(tile.did) ? Theme.accentFill : Qt.rgba(0, 0, 0, 0.35)
-                                    Text { anchors.centerIn: parent; text: Theme.icPin; font.family: Theme.fontIcons; font.pixelSize: 11; color: Globals.isPinned(tile.did) ? Theme.accentOn : Theme.fg1 }
+                                    anchors.right: parent.right; anchors.rightMargin: Theme.spaceS
+                                    anchors.top: parent.top; anchors.topMargin: Theme.spaceXxs
+                                    width: Theme.iconLg + Theme.spaceXxs; height: width
+                                    radius: Theme.radiusFull
+                                    visible: tMa.containsMouse || pMa.containsMouse
+                                             || (tile.pinned && root.query.trim() !== "")
+                                    color: tile.pinned ? Theme.accent : Theme.surfaceOverlay
+                                    border.width: Theme.borderWidth1
+                                    border.color: tile.pinned ? Theme.accent
+                                                : pMa.containsMouse ? Theme.borderStrong : Theme.borderSubtle
+                                    Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: Theme.icPin
+                                        font.family: Theme.fontIcons; font.pixelSize: Theme.iconXs
+                                        color: tile.pinned ? Theme.onAccent
+                                             : pMa.containsMouse ? Theme.textPrimary : Theme.textSecondary
+                                    }
                                     MouseArea { id: pMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: Globals.togglePin(tile.did) }
                                 }
                             }

@@ -15,9 +15,36 @@ Scope {
     id: root
 
     function g(c) { return String.fromCodePoint(c) }
+
+    // ── roles inside Glass (Glass card): once bar opacity drops below 100
+    //    the dock is a glass surface, so hover/pressed tint the glass, accent
+    //    text deepens to glassAccent and muted text rises to textSecondary ──
+    readonly property color hoverFill:   Theme.glass ? Theme.glassHover : Theme.surfaceHover
+    readonly property color pressedFill: Theme.glass ? Theme.glassPressed : Theme.surfacePressed
+    readonly property color inkAccent:   Theme.glass ? Theme.glassAccent : Theme.accentText
+    readonly property color inkMuted:    Theme.glass ? Theme.textSecondary : Theme.textMuted
     function clsOf(t) { return (t && t.lastIpcObject && t.lastIpcObject.class) ? t.lastIpcObject.class : (t && t.wayland ? (t.wayland.appId || "") : "") }
     function iconFor(t) { var e = DesktopEntries.heuristicLookup(root.clsOf(t)); return Quickshell.iconPath(e && e.icon ? e.icon : root.clsOf(t), "application-x-executable") }
     function goWorkspace(id) { Hyprland.dispatch("hl.dsp.focus({workspace=" + id + "})") }
+    // Focus a window by ADDRESS, which also switches to its workspace. The
+    // foreign-toplevel activate (t.wayland.activate()) does not under
+    // Hyprland 0.56: a tile for a window on another workspace did nothing.
+    function focusToplevel(t) {
+        var a = t ? String(t.address || (t.lastIpcObject && t.lastIpcObject.address) || "") : ""
+        if (a === "") { if (t && t.wayland) t.wayland.activate(); return false }
+        if (a.indexOf("0x") !== 0) a = "0x" + a
+        Hyprland.dispatch('hl.dsp.focus({ window = "address:' + a + '" })')
+        return true
+    }
+    function focusClass(klass) {
+        var tls = Hyprland.toplevels ? Hyprland.toplevels.values : []
+        for (var i = 0; i < tls.length; i++) {
+            var o = tls[i].lastIpcObject
+            var c = String((o && (o.class || o.initialClass)) || (tls[i].wayland && tls[i].wayland.appId) || "").toLowerCase()
+            if (c === klass) return root.focusToplevel(tls[i])
+        }
+        return false
+    }
 
     // the Pen: windows stashed on the special workspace (id < 0) — Super+Z
     readonly property var penWins: {
@@ -94,7 +121,7 @@ Scope {
         // exclusionMode at runtime — a live Normal→Ignore switch was not always
         // recommitted to the compositor, leaving a ghost strip that windows
         // refused to use until the dock was toggled off and on.
-        exclusiveZone: (Globals.dockEnabled && !Globals.dockAutohide) ? dockH + 8 : 0
+        exclusiveZone: (Globals.dockEnabled && !Globals.dockAutohide) ? dockH + Theme.windowGap : 0
         // Jump to the Overlay layer while the Overview is open so the dock floats ABOVE
         // the Overview's dim scrim (which is itself on the Overlay layer); otherwise it
         // would be dimmed underneath. Back to Top the rest of the time.
@@ -102,14 +129,24 @@ Scope {
         WlrLayershell.namespace: "quickshell:dock"
         anchors { bottom: true; left: true; right: true }
 
-        // Settings → Dock → Icon size. `cell` is the button/box edge; everything
-        // else scales off `k` so the three sizes keep the same proportions.
-        readonly property int cell: Globals.dockIconSize === "small" ? 38
-                                  : Globals.dockIconSize === "large" ? 54 : 46
-        readonly property real k: cell / 46
-        readonly property int dockH: cell + 16
-        readonly property int peek: 6
-        implicitHeight: dockH + 18
+        // Settings → Dock → Icon size (Dock card, "Sizes"): the cell is the
+        // button/box edge, and every other figure is its own token per size
+        // rather than a multiplier — 40/20/32x28/16, 48/24/36x32/20,
+        // 64/32/48x40/24.
+        readonly property bool small: Globals.dockIconSize === "small"
+        readonly property bool large: Globals.dockIconSize === "large"
+        readonly property int cell:      win.small ? Theme.controlXl : win.large ? Theme.barHeightLg : Theme.control2xl
+        readonly property int glyphPx:   win.small ? Theme.iconLg : win.large ? Theme.icon2xl : Theme.iconXl
+        readonly property int tileW:     win.small ? Theme.controlLg : win.large ? Theme.control2xl : Theme.controlLg + Theme.spaceXs
+        readonly property int tileH:     win.small ? Theme.controlMd : win.large ? Theme.controlXl : Theme.controlLg
+        readonly property int appPx:     win.small ? Theme.iconMd : win.large ? Theme.iconXl : Theme.iconLg
+        // the container: spaceS of padding all round, and a radius that stays
+        // concentric with the radiusPrimary items inside it
+        readonly property int dockH: cell + 2 * Theme.spaceS
+        readonly property int dockR: Theme.r(Theme.radiusPrimary + Theme.spaceS)
+        // the sliver left on screen while hidden (Dock card: auto-hide)
+        readonly property int peek: Theme.spaceXs + Theme.spaceXxs
+        implicitHeight: dockH + 2 * Theme.windowGap + Theme.spaceXxs
 
         // Intelligent hide, made intelligent: the dock ducks only when this
         // screen's active workspace has a window that actually claims the
@@ -155,7 +192,7 @@ Scope {
         // input region: a fixed bottom-edge trigger strip (always) ∪ the dock pill
         mask: Region {
             Region { x: edge.x; y: win.height - win.peek; width: edge.width; height: win.peek }
-            Region { x: Math.max(0, dock.x - 8); y: dock.y; width: dock.width + 16; height: win.height - dock.y }
+            Region { x: Math.max(0, dock.x - Theme.spaceS); y: dock.y; width: dock.width + 2 * Theme.spaceS; height: win.height - dock.y }
         }
 
         // fixed bottom-edge hover trigger (does not move when the dock slides)
@@ -165,57 +202,73 @@ Scope {
         Rectangle {
             id: dock
             anchors.horizontalCenter: parent.horizontalCenter
-            y: win.revealed ? (parent.height - height - 8) : (parent.height - win.peek)
-            Behavior on y { NumberAnimation { duration: Theme.durBase; easing.type: Theme.ease } }
+            // windowGap above the bottom edge (Dock card, "Placement")
+            y: win.revealed ? (parent.height - height - Theme.windowGap) : (parent.height - win.peek)
+            Behavior on y { enabled: !Theme.reduceMotion; NumberAnimation { duration: Theme.durBase; easing.type: Theme.ease } }
             // Entrance: slide up from below the screen edge once the shell is
             // up (mirrors the bar's slide-down; also plays on hotplug). Runs
             // on a Translate so it never fights the revealed/peek y binding.
+            // Reduce motion drops the slide; the pill just fades in.
             transform: Translate {
                 NumberAnimation on y {
+                    running: !Theme.reduceMotion
                     from: win.implicitHeight; to: 0
-                    duration: Theme.durSlow; easing.type: Theme.ease
+                    duration: Theme.durSlow; easing.type: Theme.easeSlow
                 }
             }
+            // Reduce motion: no slides. The pill fades in at start, and
+            // auto-hide jumps to the peek and back while the pill fades out
+            // and in at durFast, so it still says where it went.
+            property bool entered: false
+            Component.onCompleted: dock.entered = true
+            opacity: !dock.entered ? 0
+                   : (Theme.reduceMotion && !win.revealed) ? 0 : 1
+            Behavior on opacity { enabled: Theme.reduceMotion; NumberAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
             height: win.dockH
-            width: row.implicitWidth + 16
-            radius: Theme.radius
-            // dockFill = bg-1 at the bar/dock opacity; no stroke (rule 09)
+            width: row.implicitWidth + 2 * Theme.spaceS
+            radius: win.dockR
+            // surfaceRaised, or glassRaised once bar opacity drops below 100
             color: Theme.dockFill
-            border.width: 0
+            border.color: Theme.dockStroke
+            border.width: Theme.borderWidth1
             HoverHandler { id: dockHov }
             layer.enabled: true
             layer.effect: Elevation {}
-            Sheen { radius: parent.radius }
 
-            // a square dock button — icon glyph, the same quiet hover as the
-            // bar's StatusItems (no hover box: the glyph brightens and grows,
-            // nothing is painted behind it) so bar and dock read as one system.
-            // Only the ACTIVE app carries a fill, the accent tint.
+            // a square dock launcher (Dock card, "States"): radiusPrimary, no
+            // fill by default, surfaceHover on hover, surfacePressed while
+            // pressed, and accentSubtle with an accentText glyph while its
+            // panel is open. Inside Glass those become the glass tints.
             component DockBtn: Rectangle {
                 id: db
                 property string glyph: ""
                 property string image: ""          // an SVG instead of a glyph (the ewe sheep), tinted like one
                 property bool activeState: false
+                // a toolbar button named by what it opens (Dock card, Accessibility)
+                property string a11yName: ""
+                Accessible.role: Accessible.Button
+                Accessible.name: db.a11yName
                 signal go()
-                width: win.cell; height: win.cell; radius: Theme.radiusControl
-                color: activeState ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.16) : "transparent"
-                Behavior on color { ColorAnimation { duration: Theme.durFast } }
-                scale: dbMa.pressed ? 0.9 : (dbMa.containsMouse ? 1.08 : 1.0)
-                Behavior on scale { NumberAnimation { duration: Theme.durFast; easing.type: Easing.OutBack; easing.overshoot: 2 } }
-                readonly property color tint: db.activeState ? Theme.accent : (dbMa.containsMouse ? Theme.fg1 : Theme.fg2)
+                width: win.cell; height: win.cell; radius: Theme.radiusPrimary
+                color: db.activeState ? (Theme.glass ? Theme.glassPressed : Theme.accentSubtle)
+                     : dbMa.pressed ? root.pressedFill
+                     : dbMa.containsMouse ? root.hoverFill : "transparent"
+                Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
+                readonly property color tint: db.activeState ? root.inkAccent
+                                            : dbMa.containsMouse ? Theme.textPrimary : Theme.textSecondary
                 Text {
                     visible: db.image === ""
                     anchors.centerIn: parent
                     text: db.glyph
-                    font.family: Theme.fontIcons; font.pixelSize: Math.round(22 * win.k)
+                    font.family: Theme.fontIcons; font.pixelSize: win.glyphPx
                     color: db.tint
-                    Behavior on color { ColorAnimation { duration: Theme.durFast } }
+                    Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
                 }
                 Image {
                     id: dbImg
                     visible: false
                     source: db.image
-                    width: Math.round(24 * win.k); height: width
+                    width: win.glyphPx; height: width
                     sourceSize: Qt.size(width * 2, height * 2)
                     fillMode: Image.PreserveAspectFit
                 }
@@ -226,7 +279,7 @@ Scope {
                     source: dbImg
                     colorization: 1.0
                     colorizationColor: db.tint
-                    Behavior on colorizationColor { ColorAnimation { duration: Theme.durFast } }
+                    Behavior on colorizationColor { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
                 }
                 MouseArea { id: dbMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: db.go() }
             }
@@ -234,18 +287,19 @@ Scope {
             Row {
                 id: row
                 anchors.centerIn: parent
-                spacing: 8
+                spacing: Theme.spaceS
 
-                DockBtn { id: launchBtn; image: Qt.resolvedUrl("assets/sheep.svg"); activeState: Globals.launcherOpen; anchors.verticalCenter: parent.verticalCenter; onGo: { Globals.launcherAnchorX = launchBtn.mapToItem(null, launchBtn.width / 2, 0).x; Globals.storeOpen = false; Globals.placesOpen = false; Globals.mediaOpen = false; Globals.launcherOpen = !Globals.launcherOpen } }
-                DockBtn { glyph: Theme.icStack; anchors.verticalCenter: parent.verticalCenter; onGo: Quickshell.execDetached(["qs", "ipc", "call", "overview", "toggle"]) }
+                DockBtn { id: launchBtn; a11yName: "Apps"; image: Qt.resolvedUrl("assets/sheep.svg"); activeState: Globals.launcherOpen; anchors.verticalCenter: parent.verticalCenter; onGo: { Globals.launcherAnchorX = launchBtn.mapToItem(null, launchBtn.width / 2, 0).x; Globals.storeOpen = false; Globals.placesOpen = false; Globals.mediaOpen = false; Globals.launcherOpen = !Globals.launcherOpen } }
+                DockBtn { a11yName: "Overview"; glyph: Theme.icStack; anchors.verticalCenter: parent.verticalCenter; onGo: Quickshell.execDetached(["qs", "ipc", "call", "overview", "toggle"]) }
                 // store button → Komble (the software manager) when installed;
                 // the in-shell quick-installer panel is only the fallback.
-                DockBtn { id: storeBtn; glyph: Theme.icStore; activeState: Globals.storeOpen; anchors.verticalCenter: parent.verticalCenter; onGo: { if (Globals.kombleInstalled) { Quickshell.execDetached(["komble"]) } else { Globals.storeAnchorX = storeBtn.mapToItem(null, storeBtn.width / 2, 0).x; Globals.launcherOpen = false; Globals.placesOpen = false; Globals.mediaOpen = false; Globals.storeOpen = !Globals.storeOpen } } }
-                DockBtn { id: placesBtn; glyph: Theme.icFolder; activeState: Globals.placesOpen; anchors.verticalCenter: parent.verticalCenter; onGo: { Globals.placesAnchorX = placesBtn.mapToItem(null, placesBtn.width / 2, 0).x; Globals.launcherOpen = false; Globals.storeOpen = false; Globals.mediaOpen = false; Globals.placesOpen = !Globals.placesOpen } }
+                DockBtn { id: storeBtn; a11yName: "Komble"; glyph: Theme.icStore; activeState: Globals.storeOpen; anchors.verticalCenter: parent.verticalCenter; onGo: { if (Globals.kombleInstalled) { if (!root.focusClass("komble")) Quickshell.execDetached(["komble"]) } else { Globals.storeAnchorX = storeBtn.mapToItem(null, storeBtn.width / 2, 0).x; Globals.launcherOpen = false; Globals.placesOpen = false; Globals.mediaOpen = false; Globals.storeOpen = !Globals.storeOpen } } }
+                DockBtn { id: placesBtn; a11yName: "Places"; glyph: Theme.icFolder; activeState: Globals.placesOpen; anchors.verticalCenter: parent.verticalCenter; onGo: { Globals.placesAnchorX = placesBtn.mapToItem(null, placesBtn.width / 2, 0).x; Globals.launcherOpen = false; Globals.storeOpen = false; Globals.mediaOpen = false; Globals.placesOpen = !Globals.placesOpen } }
                 // now-playing — only exists while an MPRIS player does (MediaPlayer.qml resolves it)
-                DockBtn { id: mediaBtn; visible: Globals.mediaPlayer !== null; glyph: Theme.icMusic; activeState: Globals.mediaOpen; anchors.verticalCenter: parent.verticalCenter; onGo: { Globals.mediaAnchorX = mediaBtn.mapToItem(null, mediaBtn.width / 2, 0).x; Globals.launcherOpen = false; Globals.storeOpen = false; Globals.placesOpen = false; Globals.mediaOpen = !Globals.mediaOpen } }
+                DockBtn { id: mediaBtn; a11yName: "Media player"; visible: Globals.mediaPlayer !== null; glyph: Theme.icMusic; activeState: Globals.mediaOpen; anchors.verticalCenter: parent.verticalCenter; onGo: { Globals.mediaAnchorX = mediaBtn.mapToItem(null, mediaBtn.width / 2, 0).x; Globals.launcherOpen = false; Globals.storeOpen = false; Globals.placesOpen = false; Globals.mediaOpen = !Globals.mediaOpen } }
 
-                Rectangle { anchors.verticalCenter: parent.verticalCenter; width: 1; height: Math.round(40 * win.k); color: Theme.stroke3 }
+                // spaceS shorter than the items beside it (Dock card #3)
+                Rectangle { anchors.verticalCenter: parent.verticalCenter; width: Theme.borderWidth1; height: win.cell - Theme.spaceS; color: Theme.dockStroke }
 
                 // ── the Pen — ewe's hidden workspace (special:pen). Appears
                 //    only while something is stashed: package glyph + a tile
@@ -255,38 +309,40 @@ Scope {
                     id: penBox
                     visible: root.penWins.length > 0 || win.penOpen
                     anchors.verticalCenter: parent.verticalCenter
-                    height: win.cell; radius: Theme.radiusControl
-                    width: Math.max(win.cell, penRow.implicitWidth + 16)
-                    // no hover fill (same rule as DockBtn); open = the accent tint
-                    color: win.penOpen ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.16)
-                         : Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.07)
-                    border.color: win.penOpen ? Theme.accent : Theme.stroke1; border.width: Theme.borderThin
-                    Behavior on color { ColorAnimation { duration: 150 } }
+                    height: win.cell; radius: Theme.radiusPrimary
+                    width: Math.max(win.cell, penRow.implicitWidth + 2 * Theme.spaceS)
+                    // open = accentSubtle with an accent border (Dock card)
+                    color: win.penOpen ? (Theme.glass ? Theme.glassHover : Theme.accentSubtle)
+                         : penMa.hovered ? root.hoverFill : "transparent"
+                    border.color: win.penOpen ? Theme.accent : Theme.dockStroke
+                    border.width: Theme.borderWidth1
+                    Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
                     MouseArea { id: penMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                        readonly property bool hovered: containsMouse
                         onClicked: Hyprland.dispatch('hl.dsp.workspace.toggle_special("pen")') }
                     Row {
                         id: penRow
                         anchors.centerIn: parent
-                        spacing: 5
+                        spacing: Theme.spaceXs
                         Text {
                             anchors.verticalCenter: parent.verticalCenter
                             text: Theme.icPen
-                            color: win.penOpen ? Theme.accent : Theme.fg3
-                            font.family: Theme.fontIcons; font.pixelSize: Math.round(14 * win.k)
+                            color: win.penOpen ? root.inkAccent : root.inkMuted
+                            font.family: Theme.fontIcons; font.pixelSize: Theme.iconSm
                         }
                         Repeater {
                             model: root.penWins
                             delegate: Rectangle {
                                 required property var modelData
                                 anchors.verticalCenter: parent.verticalCenter
-                                width: Math.round(34 * win.k); height: Math.round(30 * win.k); radius: Theme.r(8)
-                                color: modelData.activated && win.penOpen ? Theme.accent : Theme.card
-                                opacity: win.penOpen || penTileMa.containsMouse ? 1 : 0.75
-                                scale: penTileMa.containsMouse ? 1.1 : 1.0
-                                Behavior on scale { NumberAnimation { duration: Theme.durFast; easing.type: Easing.OutBack; easing.overshoot: 2 } }
+                                width: win.tileW; height: win.tileH; radius: Theme.radiusSecondary
+                                color: modelData.activated && win.penOpen ? Theme.accent
+                                     : penTileMa.containsMouse ? root.hoverFill : "transparent"
+                                Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
                                 Image {
                                     anchors.centerIn: parent
-                                    width: Math.round(20 * win.k); height: Math.round(20 * win.k); sourceSize.width: 40; sourceSize.height: 40; mipmap: true
+                                    width: win.appPx; height: win.appPx
+                                    sourceSize.width: 2 * win.appPx; sourceSize.height: 2 * win.appPx; mipmap: true
                                     source: root.iconFor(modelData)
                                 }
                                 MouseArea {
@@ -297,10 +353,14 @@ Scope {
                                     // middle: send it home to the normal flow
                                     onClicked: function (m) {
                                         if (m.button === Qt.MiddleButton) {
+                                            // move THAT window (by address, not "the
+                                            // active one"), then focus it where it lands
                                             var ws = Hyprland.focusedWorkspace ? Hyprland.focusedWorkspace.id : 1
-                                            if (modelData.wayland) modelData.wayland.activate()
-                                            Hyprland.dispatch('hl.dsp.window.move({ workspace = ' + ws + ' })')
-                                        } else if (modelData.wayland) modelData.wayland.activate()
+                                            var a = String(modelData.address || "")
+                                            if (a !== "" && a.indexOf("0x") !== 0) a = "0x" + a
+                                            if (a !== "") Hyprland.dispatch('hl.dsp.window.move({ workspace = ' + ws + ', window = "address:' + a + '", follow = false })')
+                                            root.focusToplevel(modelData)
+                                        } else root.focusToplevel(modelData)
                                     }
                                 }
                             }
@@ -317,12 +377,13 @@ Scope {
                         required property var modelData
                         readonly property bool focused: Hyprland.focusedWorkspace && Hyprland.focusedWorkspace.id === modelData.id
                         anchors.verticalCenter: parent.verticalCenter
-                        height: win.cell; radius: Theme.radiusControl
-                        width: Math.max(win.cell, wsRow.implicitWidth + 16)
-                        color: focused ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.16)
-                             : wsMa.containsMouse ? Theme.cardHover : Theme.card
-                        border.color: focused ? Theme.accent : Theme.stroke1; border.width: Theme.borderThin
-                        Behavior on color { ColorAnimation { duration: 150 } }
+                        height: win.cell; radius: Theme.radiusPrimary
+                        width: Math.max(win.cell, wsRow.implicitWidth + 2 * Theme.spaceS)
+                        color: focused ? (Theme.glass ? Theme.glassHover : Theme.accentSubtle)
+                             : wsMa.containsMouse ? root.hoverFill : "transparent"
+                        border.color: focused ? Theme.accent : Theme.dockStroke
+                        border.width: Theme.borderWidth1
+                        Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
 
                         // background click → switch workspace (window tiles sit on top)
                         MouseArea { id: wsMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.goWorkspace(wsBox.modelData.id) }
@@ -330,18 +391,23 @@ Scope {
                         Row {
                             id: wsRow
                             anchors.centerIn: parent
-                            spacing: 5
+                            spacing: Theme.spaceXs
                             Text {
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: wsBox.modelData.id + ":"
-                                color: wsBox.focused ? Theme.accent : Theme.fg3
-                                font.family: Theme.fontText; font.pixelSize: 12; font.weight: Font.DemiBold
+                                color: wsBox.focused ? root.inkAccent : root.inkMuted
+                                font.family: Theme.type.label.family
+                                font.pixelSize: Theme.type.label.size
+                                font.weight: Theme.fontWeightSemibold
+                                font.features: ({ "tnum": 1 })
                             }
                             // empty-workspace hint
                             Text {
                                 visible: wsBox.modelData.wins.length === 0
                                 anchors.verticalCenter: parent.verticalCenter
-                                text: "empty"; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11
+                                text: "empty"; color: Theme.textSecondary
+                                font.family: Theme.type.label.family
+                                font.pixelSize: Theme.type.label.size
                             }
                             // window tiles
                             Repeater {
@@ -349,20 +415,20 @@ Scope {
                                 delegate: Rectangle {
                                     required property var modelData
                                     anchors.verticalCenter: parent.verticalCenter
-                                    width: Math.round(34 * win.k); height: Math.round(30 * win.k); radius: Theme.r(8)
-                                    color: modelData.activated ? Theme.accent : Theme.card
-                                    Behavior on color { ColorAnimation { duration: 120 } }
-                                    scale: tileMa.containsMouse ? 1.1 : 1.0
-                                    Behavior on scale { NumberAnimation { duration: Theme.durFast; easing.type: Easing.OutBack; easing.overshoot: 2 } }
+                                    width: win.tileW; height: win.tileH; radius: Theme.radiusSecondary
+                                    color: modelData.activated ? Theme.accent
+                                         : tileMa.containsMouse ? root.hoverFill : "transparent"
+                                    Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
                                     Image {
                                         anchors.centerIn: parent
-                                        width: Math.round(20 * win.k); height: Math.round(20 * win.k); sourceSize.width: 40; sourceSize.height: 40; mipmap: true
+                                        width: win.appPx; height: win.appPx
+                                        sourceSize.width: 2 * win.appPx; sourceSize.height: 2 * win.appPx; mipmap: true
                                         source: root.iconFor(modelData)
                                     }
                                     MouseArea {
                                         id: tileMa
                                         anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                                        onClicked: { if (modelData.wayland) modelData.wayland.activate() }
+                                        onClicked: root.focusToplevel(modelData)
                                     }
                                 }
                             }
