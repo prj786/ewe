@@ -896,9 +896,7 @@ Scope {
                 // layer: its items + spaceS padding, windowGap above the edge,
                 // then spaceMd of breathing room — at every dock size
                 anchors.bottom: parent.bottom
-                anchors.bottomMargin: (Globals.dockIconSize === "small" ? Theme.controlXl
-                                     : Globals.dockIconSize === "large" ? Theme.barHeightLg : Theme.control2xl)
-                                    + 2 * Theme.spaceS + Theme.windowGap + Theme.spaceMd
+                anchors.bottomMargin: Theme.dockClearance + Theme.spaceMd
                 spacing: Theme.spaceS + Theme.spaceXs
                 opacity: root.searching ? 0.35 : 1
                 Behavior on opacity { NumberAnimation { duration: Theme.durBase; easing.type: Theme.ease } }

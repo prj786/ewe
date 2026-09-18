@@ -19,14 +19,9 @@ Scope {
     // Colours & fonts come entirely from Theme.qml (single source of truth).
     function g(code) { return String.fromCodePoint(code) }   // Nerd Font glyph (handles MDI > U+FFFF)
 
-    // ── inks inside Glass (Glass card, "Roles inside glass") ──────────────
-    // The bar is a glass surface once bar opacity drops below 100: its
-    // accent text deepens to glassAccent (so it keeps 4.5:1 in Ewe Light
-    // over a bright wallpaper) and muted text rises to textSecondary. This is
-    // the reference CSS's `.ewe-glass` remap, done once at the surface; the
-    // modules below read these instead of the plain roles.
-    readonly property color inkAccent: Theme.glass ? Theme.glassAccent : Theme.accentText
-    readonly property color inkMuted:  Theme.glass ? Theme.textSecondary : Theme.textMuted
+    // Inside Glass the bar's modules read Theme.bar* (barAccentText,
+    // barTextMuted, barHoverFill, barPressedFill): the Glass card's role
+    // remap, made once in Theme.
     // ── tray left-click: activate, then bring the app's window forward ─────
     // SNI Activate alone reaches the app, which then asks the compositor to
     // raise its window — and Hyprland ignores that request for a window on
@@ -234,7 +229,7 @@ Scope {
     // side padding, no fill until you point at it. Default glyphs are
     // textSecondary; hover takes surfaceHover and textPrimary, an open popup
     // surfacePressed — inside Glass those are the glass tints, which
-    // Theme.barHover / barActive already resolve.
+    // Theme.barHoverFill / barActive already resolve.
     //
     // Declare content as children (they land centred in a Row, spaceXs
     // apart); `glyph` alone draws one icon and is the common case.
@@ -266,8 +261,8 @@ Scope {
         Rectangle {
             anchors.fill: parent
             radius: Theme.radiusPrimary
-            color: si.active ? Theme.barActive
-                 : ma.containsMouse ? Theme.barHover : "transparent"
+            color: si.active ? Theme.barPressedFill
+                 : ma.containsMouse ? Theme.barHoverFill : "transparent"
             Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
         }
         Row {
@@ -319,7 +314,7 @@ Scope {
         Rectangle {
             anchors.centerIn: parent
             width: Theme.borderWidth1; height: parent.height
-            color: Theme.barBorder
+            color: Theme.barOutline
         }
     }
 
@@ -359,13 +354,13 @@ Scope {
                     duration: Theme.durFast; easing.type: Theme.easeFast
                 }
                 // surfaceBase, or glassBase once bar opacity drops below 100
-                color: Theme.barFill
+                color: Theme.barGround
                 // the bar's edge: a borderWidth1 rule below it (Bar card #1),
                 // glassBorder inside Glass so it reads over any wallpaper
                 Rectangle {
                     anchors { left: parent.left; right: parent.right; top: parent.bottom }
                     height: Theme.borderWidth1
-                    color: Theme.barBorder
+                    color: Theme.barOutline
                 }
 
                 // ── LEFT: workspace chip, then the focused app's icon + name —
@@ -420,7 +415,7 @@ Scope {
                         Text {
                             anchors.verticalCenter: parent.verticalCenter
                             text: bar.appName()
-                            color: bar.inkAccent
+                            color: Theme.barAccentText
                             font.family: Theme.type.bodyStrong.family
                             font.pixelSize: Theme.barLarge ? Theme.fontSizeLg : Theme.fontSizeMd
                             font.weight: Theme.fontWeightSemibold
@@ -547,7 +542,7 @@ Scope {
                             text: Theme.icRefresh
                             font.family: Theme.fontIcons
                             font.pixelSize: Theme.barIcon
-                            color: bar.inkAccent
+                            color: Theme.barAccentText
                             RotationAnimation on rotation {
                                 running: updItem.updating
                                 loops: Animation.Infinite
@@ -561,7 +556,7 @@ Scope {
                             // `download` + a count while updates wait, `check`
                             // in textMuted once everything is current
                             glyph: Globals.updatesTotal > 0 ? Theme.icDownload : Theme.icCheck
-                            color: Globals.updatesTotal > 0 ? bar.inkAccent : bar.inkMuted
+                            color: Globals.updatesTotal > 0 ? Theme.barAccentText : Theme.barTextMuted
                             count: Globals.updatesTotal
                         }
                     }
@@ -652,7 +647,7 @@ Scope {
                                 text: Theme.icCast
                                 font.family: Theme.fontIcons; font.pixelSize: Theme.barIcon
                                 color: Globals.castState === "streaming" || Globals.castLegacy
-                                       ? bar.inkAccent : ctlGroup.ink
+                                       ? Theme.barAccentText : ctlGroup.ink
                             }
                             // SSH tunnel (a Quick Settings port-forward is up)
                             Text {
@@ -692,7 +687,7 @@ Scope {
                                         : Theme.icCloudOff
                                     font.family: Theme.fontIcons; font.pixelSize: Theme.barIcon
                                     color: syncItem.st === "conflict" ? Theme.danger
-                                         : syncItem.busy ? bar.inkAccent : bar.inkMuted
+                                         : syncItem.busy ? Theme.barAccentText : Theme.barTextMuted
                                     RotationAnimation on rotation {
                                         running: syncItem.busy
                                         loops: Animation.Infinite
@@ -713,7 +708,7 @@ Scope {
                                 visible: count > 0
                                 anchors.verticalCenter: parent.verticalCenter
                                 glyph: Theme.icBell
-                                color: bar.inkAccent
+                                color: Theme.barAccentText
                                 count: Globals.server ? Globals.server.trackedNotifications.values.length : 0
                             }
                             // Mail (IMAP or Gmail) — envelope + count, only when there is unread mail
@@ -783,7 +778,7 @@ Scope {
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: AudioState.outputGlyph
                                 font.family: Theme.fontIcons; font.pixelSize: Theme.barIcon
-                                color: AudioState.muted && AudioState.outputKind === "internal" ? bar.inkMuted : ctlGroup.ink
+                                color: AudioState.muted && AudioState.outputKind === "internal" ? Theme.barTextMuted : ctlGroup.ink
                                 visible: AudioState.sink !== null && Globals.barShows("sound")
                             }
                             // Microphone open — an app has it (a link from the default
@@ -793,7 +788,7 @@ Scope {
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: Theme.icMic
                                 font.family: Theme.fontIcons; font.pixelSize: Theme.barIcon
-                                color: bar.inkAccent
+                                color: Theme.barAccentText
                                 visible: AudioState.micInUse && Globals.barShows("mic")
                             }
                             // Bluetooth (only when adapter on); filled glyph when a device is connected

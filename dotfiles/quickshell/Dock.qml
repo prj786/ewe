@@ -16,13 +16,9 @@ Scope {
 
     function g(c) { return String.fromCodePoint(c) }
 
-    // ── roles inside Glass (Glass card): once bar opacity drops below 100
-    //    the dock is a glass surface, so hover/pressed tint the glass, accent
-    //    text deepens to glassAccent and muted text rises to textSecondary ──
-    readonly property color hoverFill:   Theme.glass ? Theme.glassHover : Theme.surfaceHover
-    readonly property color pressedFill: Theme.glass ? Theme.glassPressed : Theme.surfacePressed
-    readonly property color inkAccent:   Theme.glass ? Theme.glassAccent : Theme.accentText
-    readonly property color inkMuted:    Theme.glass ? Theme.textSecondary : Theme.textMuted
+    // Inside Glass the dock reads Theme.bar*/dock* (hover and pressed tint
+    // the glass, accent text deepens, muted text rises): the Glass card's
+    // role remap, made once in Theme.
     function clsOf(t) { return (t && t.lastIpcObject && t.lastIpcObject.class) ? t.lastIpcObject.class : (t && t.wayland ? (t.wayland.appId || "") : "") }
     function iconFor(t) { var e = DesktopEntries.heuristicLookup(root.clsOf(t)); return Quickshell.iconPath(e && e.icon ? e.icon : root.clsOf(t), "application-x-executable") }
     function goWorkspace(id) { Hyprland.dispatch("hl.dsp.focus({workspace=" + id + "})") }
@@ -116,14 +112,14 @@ Scope {
         // 64/32/48x40/24.
         readonly property bool small: Globals.dockIconSize === "small"
         readonly property bool large: Globals.dockIconSize === "large"
-        readonly property int cell:      win.small ? Theme.controlXl : win.large ? Theme.barHeightLg : Theme.control2xl
+        readonly property int cell:      Theme.dockCell
         readonly property int glyphPx:   win.small ? Theme.iconLg : win.large ? Theme.icon2xl : Theme.iconXl
         readonly property int tileW:     win.small ? Theme.controlLg : win.large ? Theme.control2xl : Theme.controlLg + Theme.spaceXs
         readonly property int tileH:     win.small ? Theme.controlMd : win.large ? Theme.controlXl : Theme.controlLg
         readonly property int appPx:     win.small ? Theme.iconMd : win.large ? Theme.iconXl : Theme.iconLg
         // the container: spaceS of padding all round, and a radius that stays
         // concentric with the radiusPrimary items inside it
-        readonly property int dockH: cell + 2 * Theme.spaceS
+        readonly property int dockH: Theme.dockHeight
         readonly property int dockR: Theme.r(Theme.radiusPrimary + Theme.spaceS)
         // the sliver left on screen while hidden (Dock card: auto-hide)
         readonly property int peek: Theme.spaceXs + Theme.spaceXxs
@@ -209,8 +205,8 @@ Scope {
             width: row.implicitWidth + 2 * Theme.spaceS
             radius: win.dockR
             // surfaceRaised, or glassRaised once bar opacity drops below 100
-            color: Theme.dockFill
-            border.color: Theme.dockStroke
+            color: Theme.dockGround
+            border.color: Theme.dockOutline
             border.width: Theme.borderWidth1
             HoverHandler { id: dockHov }
             layer.enabled: true
@@ -231,11 +227,11 @@ Scope {
                 Accessible.name: db.a11yName
                 signal go()
                 width: win.cell; height: win.cell; radius: Theme.radiusPrimary
-                color: db.activeState ? (Theme.glass ? Theme.glassPressed : Theme.accentSubtle)
-                     : dbMa.pressed ? root.pressedFill
-                     : dbMa.containsMouse ? root.hoverFill : "transparent"
+                color: db.activeState ? Theme.dockOpenFill
+                     : dbMa.pressed ? Theme.barPressedFill
+                     : dbMa.containsMouse ? Theme.barHoverFill : "transparent"
                 Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
-                readonly property color tint: db.activeState ? root.inkAccent
+                readonly property color tint: db.activeState ? Theme.barAccentText
                                             : dbMa.containsMouse ? Theme.textPrimary : Theme.textSecondary
                 Text {
                     visible: db.image === ""
@@ -280,7 +276,7 @@ Scope {
                 DockBtn { id: mediaBtn; a11yName: "Media player"; visible: Globals.mediaPlayer !== null; glyph: Theme.icMusic; activeState: Globals.mediaOpen; anchors.verticalCenter: parent.verticalCenter; onGo: { Globals.mediaAnchorX = mediaBtn.mapToItem(null, mediaBtn.width / 2, 0).x; Globals.launcherOpen = false; Globals.storeOpen = false; Globals.placesOpen = false; Globals.mediaOpen = !Globals.mediaOpen } }
 
                 // spaceS shorter than the items beside it (Dock card #3)
-                Rectangle { anchors.verticalCenter: parent.verticalCenter; width: Theme.borderWidth1; height: win.cell - Theme.spaceS; color: Theme.dockStroke }
+                Rectangle { anchors.verticalCenter: parent.verticalCenter; width: Theme.borderWidth1; height: win.cell - Theme.spaceS; color: Theme.dockOutline }
 
                 // ── the Pen — ewe's hidden workspace (special:pen). Appears
                 //    only while something is stashed: package glyph + a tile
@@ -293,9 +289,9 @@ Scope {
                     height: win.cell; radius: Theme.radiusPrimary
                     width: Math.max(win.cell, penRow.implicitWidth + 2 * Theme.spaceS)
                     // open = accentSubtle with an accent border (Dock card)
-                    color: win.penOpen ? (Theme.glass ? Theme.glassHover : Theme.accentSubtle)
-                         : penMa.hovered ? root.hoverFill : "transparent"
-                    border.color: win.penOpen ? Theme.accent : Theme.dockStroke
+                    color: win.penOpen ? Theme.dockSelectedFill
+                         : penMa.hovered ? Theme.barHoverFill : "transparent"
+                    border.color: win.penOpen ? Theme.accent : Theme.dockOutline
                     border.width: Theme.borderWidth1
                     Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
                     MouseArea { id: penMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
@@ -308,7 +304,7 @@ Scope {
                         Text {
                             anchors.verticalCenter: parent.verticalCenter
                             text: Theme.icPen
-                            color: win.penOpen ? root.inkAccent : root.inkMuted
+                            color: win.penOpen ? Theme.barAccentText : Theme.barTextMuted
                             font.family: Theme.fontIcons; font.pixelSize: Theme.iconSm
                         }
                         Repeater {
@@ -318,7 +314,7 @@ Scope {
                                 anchors.verticalCenter: parent.verticalCenter
                                 width: win.tileW; height: win.tileH; radius: Theme.radiusSecondary
                                 color: modelData.activated && win.penOpen ? Theme.accent
-                                     : penTileMa.containsMouse ? root.hoverFill : "transparent"
+                                     : penTileMa.containsMouse ? Theme.barHoverFill : "transparent"
                                 Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
                                 Image {
                                     anchors.centerIn: parent
@@ -360,9 +356,9 @@ Scope {
                         anchors.verticalCenter: parent.verticalCenter
                         height: win.cell; radius: Theme.radiusPrimary
                         width: Math.max(win.cell, wsRow.implicitWidth + 2 * Theme.spaceS)
-                        color: focused ? (Theme.glass ? Theme.glassHover : Theme.accentSubtle)
-                             : wsMa.containsMouse ? root.hoverFill : "transparent"
-                        border.color: focused ? Theme.accent : Theme.dockStroke
+                        color: focused ? Theme.dockSelectedFill
+                             : wsMa.containsMouse ? Theme.barHoverFill : "transparent"
+                        border.color: focused ? Theme.accent : Theme.dockOutline
                         border.width: Theme.borderWidth1
                         Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
 
@@ -376,7 +372,7 @@ Scope {
                             Text {
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: wsBox.modelData.id + ":"
-                                color: wsBox.focused ? root.inkAccent : root.inkMuted
+                                color: wsBox.focused ? Theme.barAccentText : Theme.barTextMuted
                                 font.family: Theme.type.label.family
                                 font.pixelSize: Theme.type.label.size
                                 font.weight: Theme.fontWeightSemibold
@@ -398,7 +394,7 @@ Scope {
                                     anchors.verticalCenter: parent.verticalCenter
                                     width: win.tileW; height: win.tileH; radius: Theme.radiusSecondary
                                     color: modelData.activated ? Theme.accent
-                                         : tileMa.containsMouse ? root.hoverFill : "transparent"
+                                         : tileMa.containsMouse ? Theme.barHoverFill : "transparent"
                                     Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
                                     Image {
                                         anchors.centerIn: parent

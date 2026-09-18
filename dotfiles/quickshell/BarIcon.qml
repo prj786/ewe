@@ -24,7 +24,7 @@ Item {
     property int pixelSize: Theme.barIcon
     property bool dotOnly: false
     // what the badge is sitting on — the ring colour (Glass drops the ring)
-    property color ringColor: Theme.barFill
+    property color ringColor: Theme.barGround
 
     readonly property bool showBadge: root.count > 0
 

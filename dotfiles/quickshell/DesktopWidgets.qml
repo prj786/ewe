@@ -281,9 +281,7 @@ Scope {
                             visible: Globals.widgetsArrange && win.layerName === "desktop"
                             anchors.horizontalCenter: parent.horizontalCenter
                             anchors.bottom: parent.bottom
-                            anchors.bottomMargin: (Globals.dockIconSize === "small" ? Theme.controlXl
-                                                 : Globals.dockIconSize === "large" ? Theme.barHeightLg : Theme.control2xl)
-                                                + 2 * Theme.spaceS + Theme.windowGap + Theme.spaceMd
+                            anchors.bottomMargin: Theme.dockClearance + Theme.spaceMd
                             width: pill.width; height: pill.height
                             // shadowFloat under the pill (.ewe-hintpill)
                             Rectangle { id: pillShadow; anchors.fill: parent; radius: Theme.radiusFull; color: Theme.black; visible: false }

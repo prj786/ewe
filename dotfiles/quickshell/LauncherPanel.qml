@@ -88,9 +88,7 @@ Scope {
             // the dock's own strip (its items + spaceS padding each side,
             // windowGap above the edge) plus the card's spaceS + spaceXs gap
             // above it — follows the dock's size instead of a fixed 90
-            readonly property int dockGap: (Globals.dockIconSize === "small" ? Theme.controlXl
-                                          : Globals.dockIconSize === "large" ? Theme.barHeightLg : Theme.control2xl)
-                                         + 2 * Theme.spaceS + Theme.windowGap + edgeGap
+            readonly property int dockGap: Theme.dockClearance + edgeGap
             // one grid tile, and a panel five rows tall, so the search field
             // stays put while results come and go (the grid scrolls past it)
             readonly property int tileH: Theme.controlXl + Theme.lineHeightXs + 2 * Theme.spaceS + Theme.spaceXs

@@ -406,6 +406,37 @@ QtObject {
     readonly property int barIcon:     _bz("icon", iconLg)
     readonly property bool barLarge:   _bz("size", "normal") === "large"
 
+    // ── Bar and dock roles (Glass card, "Roles inside glass") ─────────────
+    // The bar and the dock are the two glass surfaces: while Glass is on
+    // (bar_opacity < 100, and neither Reduce transparency nor Increase
+    // contrast) their fill, outline, hover and pressed tint the glass, accent
+    // text deepens to glassAccent and muted text rises to textSecondary.
+    // The remap is made ONCE here; the bar, the dock and whatever sits in
+    // them (plugin widgets included) read these instead of the plain roles.
+    readonly property color barGround:      glass ? glassBase : surfaceBase
+    readonly property color dockGround:     glass ? glassRaised : surfaceRaised
+    readonly property color barOutline:     glass ? glassBorder : borderSubtle
+    readonly property color dockOutline:    barOutline
+    readonly property color barHoverFill:   glass ? glassHover : surfaceHover
+    readonly property color barPressedFill: glass ? glassPressed : surfacePressed
+    readonly property color barAccentText:  glass ? glassAccent : accentText
+    readonly property color barTextMuted:   glass ? textSecondary : textMuted
+    // the dock's selected item (the focused window, the open Pen) and an open
+    // dock panel: accentSubtle when solid; on glass the tint of hover/pressed
+    readonly property color dockSelectedFill: glass ? glassHover : accentSubtle
+    readonly property color dockOpenFill:     glass ? glassPressed : accentSubtle
+
+    // ── Dock size ([desktop.dock] icon_size, Dock card "Sizes") ───────────
+    // dockCell is a button/workspace box edge: small 40 · medium 48 · large
+    // 64. The dock is that plus spaceS of padding above and below, and sits
+    // windowGap above the screen edge — dockClearance is everything it takes
+    // from the bottom of the screen, what the panels that open above it and
+    // the Overview pager keep clear of.
+    readonly property int dockCell: Globals.dockIconSize === "small" ? controlXl
+                                  : Globals.dockIconSize === "large" ? barHeightLg : control2xl
+    readonly property int dockHeight: dockCell + 2 * spaceS
+    readonly property int dockClearance: dockHeight + windowGap
+
     // ── Glass and the accessibility modes ─────────────────────────────────
     // bar_opacity (0-100) drives Glass on the bar, the dock and the lock
     // card: `glass` says the glass roles are in use, `barAlpha` is the fill
@@ -542,16 +573,16 @@ QtObject {
     // panel stays solid, which is what keeps Quick settings and the launcher
     // legible over a bright wallpaper.
     readonly property color panel:       surfaceRaised
-    readonly property color barTop:      glass ? glassBase : surfaceBase
-    readonly property color barBottom:   barTop
-    readonly property color barFill:     barTop
-    readonly property color barBorder:   glass ? glassBorder : borderSubtle
-    readonly property color dockFill:    glass ? glassRaised : surfaceRaised
-    readonly property color dockStroke:  glass ? glassBorder : borderSubtle
+    readonly property color barTop:      barGround
+    readonly property color barBottom:   barGround
+    readonly property color barFill:     barGround
+    readonly property color barBorder:   barOutline
+    readonly property color dockFill:    dockGround
+    readonly property color dockStroke:  dockOutline
     // A bar module has no fill until you point at it; an OPEN one reads as
     // pressed (the Bar card), not as selected.
-    readonly property color barHover:    glass ? glassHover : surfaceHover
-    readonly property color barActive:   glass ? glassPressed : surfacePressed
+    readonly property color barHover:    barHoverFill
+    readonly property color barActive:   barPressedFill
     readonly property int barItemRadius: radiusPrimary
     readonly property int barItemHeight: barModule
     // ONE rhythm for every glyph on the bar — status, tray apps, the tiling
