@@ -6,9 +6,25 @@ import Quickshell.Hyprland
 import Quickshell.Services.SystemTray
 
 // TrayMenu — a THEMED popup that renders a system-tray item's context menu
-// (SNI DBusMenu) via QsMenuOpener, styled entirely from Theme.qml and anchored
-// under the icon that was clicked. Replaces the native (white, unthemed)
-// QsMenuAnchor menu. Driven by Globals.trayMenu{Handle,AnchorX,Open}, set by Bar.
+// (SNI DBusMenu) via QsMenuOpener (design system: Menu). It replaces the
+// native, unthemed QsMenuAnchor menu and is anchored under the icon that was
+// clicked. Driven by Globals.trayMenu{Handle,AnchorX,Open}, set by Bar.
+//
+//   container  surfaceOverlay with a borderWidth1 borderSubtle outline, the
+//              radiusRounded corner, the shadowFloat elevation and spaceXs of
+//              padding; at least 6 × controlMd + spaceS (176) and at most
+//              10 × controlLg (320) wide
+//   item       controlMd tall, spaceS of side padding, the radiusSecondary
+//              corner so it nests evenly inside the container
+//   check      an iconMd tick in accentText at the leading edge; items
+//              without one keep the space, so every label lines up
+//   submenu    an iconMd chevron at the trailing edge, flown out to the right
+//   divider    a borderWidth1 borderSubtle line with spaceXs above and below
+//
+//   hover     surfaceHover · disabled textDisabled, no hover
+//
+// One submenu level, opened on hover — DBusMenu items carry no shortcuts or
+// tones, so the card's Kbd and danger forms have nothing to render here.
 Scope {
     id: root
     function glyph(c) { return String.fromCodePoint(c) }
@@ -20,6 +36,12 @@ Scope {
     property real subY: 0
     QsMenuOpener { id: subOpener; menu: root.subEntry }
 
+    readonly property int menuMin: 6 * Theme.controlMd + Theme.spaceS
+    readonly property int menuMax: 10 * Theme.controlLg
+    // the leading check column, both gaps and the trailing chevron
+    readonly property int menuChrome: 2 * Theme.spaceXs + 2 * Theme.spaceS
+                                      + 2 * (Theme.iconMd + Theme.spaceS)
+
     // latch the monitor on open (avoid focus-follows-mouse surface-remap blink)
     property var openScreen: null
     function focusedScreen() {
@@ -29,58 +51,93 @@ Scope {
     }
     Component.onCompleted: root.openScreen = root.focusedScreen()
 
+    // A menu sizes itself to its longest label, between the card's two
+    // bounds. These Texts are never shown; they only carry their natural
+    // width, which a Column reports as its own (the rows themselves follow
+    // the box, so they cannot be asked).
+    component MenuSizer: Column {
+        id: sizer
+        property var entries: []
+        visible: false
+        Repeater {
+            model: sizer.entries
+            delegate: Text {
+                required property var modelData
+                text: (modelData && !modelData.isSeparator) ? modelData.text : ""
+                font.family: Theme.type.body.family
+                font.pixelSize: Theme.type.body.size
+            }
+        }
+    }
+
     // a single menu row, shared by the main menu and the submenu
     component MenuRow: Item {
         id: row
         required property var entry
         property bool sub: false
-        width: parent ? parent.width : 220
-        height: (entry && entry.isSeparator) ? 7 : 26
+        readonly property bool separator: row.entry !== null && row.entry.isSeparator
+        readonly property bool usable: row.entry !== null && row.entry.enabled && !row.separator
+        width: parent ? parent.width : Theme.panelSm / 2
+        height: row.separator ? Theme.borderWidth1 + 2 * Theme.spaceXs : Theme.controlMd
 
-        // separator
+        // divider: one line, spaceXs of air above and below
         Rectangle {
-            visible: row.entry && row.entry.isSeparator
+            visible: row.separator
             anchors.verticalCenter: parent.verticalCenter
             anchors.left: parent.left; anchors.right: parent.right
-            anchors.leftMargin: 10; anchors.rightMargin: 10
-            height: 1; color: Theme.stroke3
+            height: Theme.borderWidth1; color: Theme.borderSubtle
         }
 
         Rectangle {
-            visible: !(row.entry && row.entry.isSeparator)
-            anchors.fill: parent; anchors.leftMargin: 4; anchors.rightMargin: 4
-            radius: Theme.radiusInner
-            color: (rowMa.containsMouse && row.entry && row.entry.enabled) ? Theme.subtleHover : Theme.subtle
+            visible: !row.separator
+            anchors.fill: parent
+            radius: Theme.radiusSecondary
+            color: (rowMa.containsMouse && row.usable) ? Theme.surfaceHover : "transparent"
+            Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
 
-            // check / radio indicator
+            // check / radio indicator — the column is kept whether or not the
+            // item has one, so every label starts at the same x
             Text {
-                anchors.left: parent.left; anchors.leftMargin: 8; anchors.verticalCenter: parent.verticalCenter
-                visible: row.entry && row.entry.checkState === Qt.Checked
+                id: tick
+                anchors.left: parent.left; anchors.leftMargin: Theme.spaceS
+                anchors.verticalCenter: parent.verticalCenter
+                width: Theme.iconMd
+                horizontalAlignment: Text.AlignHCenter
+                visible: row.entry !== null && row.entry.checkState === Qt.Checked
                 text: Theme.icCheck
-                font.family: Theme.fontIcons; font.pixelSize: 13; color: Theme.accent
+                font.family: Theme.fontIcons; font.pixelSize: Theme.iconMd
+                color: Theme.accentText
             }
             Text {
-                anchors.left: parent.left; anchors.leftMargin: 26
-                anchors.right: parent.right; anchors.rightMargin: 22
+                anchors.left: parent.left
+                anchors.leftMargin: Theme.spaceS + Theme.iconMd + Theme.spaceS
+                anchors.right: parent.right
+                anchors.rightMargin: Theme.spaceS + (chev.visible ? Theme.iconMd + Theme.spaceS : 0)
                 anchors.verticalCenter: parent.verticalCenter
                 text: row.entry ? row.entry.text : ""
-                color: (row.entry && row.entry.enabled) ? Theme.fg1 : Theme.fg3
-                font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
+                color: (row.entry && row.entry.enabled) ? Theme.textPrimary : Theme.textDisabled
+                font.family: Theme.type.body.family
+                font.pixelSize: Theme.type.body.size
+                font.weight: (row.entry && row.entry.checkState === Qt.Checked)
+                             ? Theme.fontWeightMedium : Theme.type.body.weight
                 elide: Text.ElideRight
             }
             // submenu arrow
             Text {
-                anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter
-                visible: row.entry && row.entry.hasChildren
+                id: chev
+                anchors.right: parent.right; anchors.rightMargin: Theme.spaceS
+                anchors.verticalCenter: parent.verticalCenter
+                visible: row.entry !== null && row.entry.hasChildren
                 text: Theme.icChevronRight
-                font.family: Theme.fontIcons; font.pixelSize: 13; color: Theme.fg3
+                font.family: Theme.fontIcons; font.pixelSize: Theme.iconMd
+                color: rowMa.containsMouse ? Theme.textPrimary : Theme.textSecondary
             }
 
             MouseArea {
                 id: rowMa
                 anchors.fill: parent
                 hoverEnabled: true
-                enabled: row.entry && row.entry.enabled && !row.entry.isSeparator
+                enabled: row.usable
                 cursorShape: Qt.PointingHandCursor
                 onEntered: {
                     if (row.sub) return
@@ -118,26 +175,39 @@ Scope {
 
         MouseArea { anchors.fill: parent; onClicked: Globals.trayMenuOpen = false }
 
+        MenuSizer { id: mainSizer; entries: opener.children }
+        MenuSizer { id: subSizer; entries: subOpener.children }
+
         // main menu
         Rectangle {
             id: mainBox
-            x: Math.max(6, Math.min(parent.width - width - 6, Globals.trayMenuAnchorX - width / 2))
-            y: Theme.barHeight + 4
-            width: 230
-            height: mainCol.implicitHeight + 10
-            radius: Theme.radius; color: Theme.panel; border.color: Theme.stroke2; border.width: Theme.borderThin
+            x: Math.max(Theme.windowGap,
+                        Math.min(parent.width - width - Theme.windowGap,
+                                 Globals.trayMenuAnchorX - width / 2))
+            // the card's spaceXs below the module it belongs to
+            y: Theme.barHeight + Theme.spaceXs
+            width: Math.max(root.menuMin, Math.min(root.menuMax, mainSizer.implicitWidth + root.menuChrome))
+            height: mainCol.implicitHeight + 2 * Theme.spaceXs
+            radius: Theme.radiusRounded
+            color: Theme.surfaceOverlay
+            border.color: Theme.borderSubtle; border.width: Theme.borderWidth1
+            // fade plus a slideOffset drop from the bar, in at durBase and out
+            // at durFast — no overshoot
             opacity: Globals.trayMenuOpen ? 1 : 0
-            scale: Globals.trayMenuOpen ? 1 : 0.97
-            transformOrigin: Item.Top
-            Behavior on opacity { NumberAnimation { duration: Theme.durFast; easing.type: Theme.ease } }
-            Behavior on scale { NumberAnimation { duration: Theme.durFast; easing.type: Easing.OutBack; easing.overshoot: 1.2 } }
+            Behavior on opacity {
+                NumberAnimation { duration: Globals.trayMenuOpen ? Theme.durBase : Theme.durFast; easing.type: Theme.ease }
+            }
+            transform: Translate {
+                y: (Globals.trayMenuOpen || Theme.reduceMotion) ? 0 : -Theme.slideOffset
+                Behavior on y { NumberAnimation { duration: Theme.durBase; easing.type: Theme.ease } }
+            }
             layer.enabled: true
             layer.effect: Elevation {}
-            Sheen { radius: parent.radius }
             MouseArea { anchors.fill: parent }   // swallow clicks inside the box
             Column {
                 id: mainCol
-                width: parent.width; y: 5
+                anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top
+                anchors.margins: Theme.spaceXs + parent.border.width
                 Repeater { model: opener.children; delegate: MenuRow { required property var modelData; entry: modelData } }
             }
         }
@@ -146,17 +216,21 @@ Scope {
         Rectangle {
             id: subBox
             visible: root.subEntry !== null && Globals.trayMenuOpen
-            x: Math.min(parent.width - width - 6, mainBox.x + mainBox.width - 4)
+            x: Math.min(parent.width - width - Theme.windowGap,
+                        mainBox.x + mainBox.width + Theme.spaceXs)
             y: mainBox.y + root.subY
-            width: 210
-            height: subCol.implicitHeight + 10
-            radius: Theme.radius; color: Theme.panel; border.color: Theme.stroke2; border.width: Theme.borderThin
+            width: Math.max(root.menuMin, Math.min(root.menuMax, subSizer.implicitWidth + root.menuChrome))
+            height: subCol.implicitHeight + 2 * Theme.spaceXs
+            radius: Theme.radiusRounded
+            color: Theme.surfaceOverlay
+            border.color: Theme.borderSubtle; border.width: Theme.borderWidth1
             layer.enabled: true
             layer.effect: Elevation {}
             MouseArea { anchors.fill: parent }
             Column {
                 id: subCol
-                width: parent.width; y: 5
+                anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top
+                anchors.margins: Theme.spaceXs + parent.border.width
                 Repeater { model: subOpener.children; delegate: MenuRow { required property var modelData; entry: modelData; sub: true } }
             }
         }

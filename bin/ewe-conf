@@ -81,7 +81,9 @@ def _scalar(v):
 # Section comments — regenerated on every write, so the file explains itself.
 SECTION_NOTES = {
     "desktop": "everything the Settings surfaces manage",
-    "desktop.theme": "accent + shape/density + bar_opacity; every colour is derived from accent by ewe-theme",
+    "desktop.theme": "scheme + accent + look presets (corner/density/stroke) + bar_opacity; every token is derived by ewe-theme",
+    "desktop.bar": "the top bar: icon_size = small | normal | large (the bar is its icons plus padding: 44 / 48 / 56px); show = per-indicator visibility",
+    "desktop.accessibility": "reduce_motion, reduce_transparency, increase_contrast (bools); text_scale = 100 | 115 | 130",
     "desktop.dock": "the bottom dock (autohide = intelligent hide)",
     "desktop.animations": "speed multiplies every duration; detail = per-leaf tuning",
     "desktop.displays": "per-monitor-set profiles (Settings → Displays owns this)",
@@ -251,22 +253,24 @@ THEME_MAP = [  # ewe.conf key ↔ user-theme.json key (with defaults)
     # always "dark" — ewe is dark-only by decision (2026-09-01); the key stays
     # because Komble reads user-theme.json's colorScheme to follow the DE
     ("desktop.theme.color_scheme", "colorScheme", "dark"),
-    ("desktop.theme.accent", "accent", "#0a84ff"),
-    # "accent" (derive everything from the accent) or the slug of a palette in
-    # [[desktop.theme.schemes]] — ewe-theme's SCHEMES section. The list itself
-    # is not mirrored: user-theme.json carries the choice, the shell reads the
+    ("desktop.theme.accent", "accent", "#eeb407"),
+    # ewe-dark (the default), ewe-light, or the slug of a user scheme in
+    # [[desktop.theme.schemes]] — ewe-theme's SCHEMES section. The pre-v3
+    # value "accent" still reads as ewe-dark. The list itself is not
+    # mirrored: user-theme.json carries the choice, the shell reads the
     # palette from theme-tokens.json.
-    ("desktop.theme.scheme", "scheme", "accent"),
+    ("desktop.theme.scheme", "scheme", "ewe-dark"),
     # theme_name is vestigial: ewe has ONE look since the Fluent 2 move, and
     # ewe-theme resolves either legacy name to it. The key stays so a synced
     # ewe.conf from an older machine still round-trips.
     ("desktop.theme.theme_name", "themeName", "flock"),
-    # The shape/density knobs. These are the WHOLE user-facing surface of the
-    # theme engine — everything else (the grey ramp, the brand ramp, all 60-odd
-    # alias tokens) is derived from `accent` by ewe-theme, in the repo.
-    ("desktop.theme.corner", "themeCorner", "round"),
+    # The look presets (design/system/components/LookPresets). Everything
+    # else — every colour role, the accent ramp, type, sizes — is derived
+    # from the scheme + accent by ewe-theme, in the repo. `round` (pre-v3)
+    # reads as `large`.
+    ("desktop.theme.corner", "themeCorner", "medium"),
     ("desktop.theme.density", "themeDensity", "comfortable"),
-    ("desktop.theme.stroke", "themeStroke", "none"),
+    ("desktop.theme.stroke", "themeStroke", "thin"),
     ("desktop.theme.neutral_tint", "neutralTint", 8),
     ("desktop.theme.tint_borders", "tintBorders", True),
     ("desktop.theme.window_transparency", "windowTransparency", False),
@@ -281,8 +285,18 @@ THEME_MAP = [  # ewe.conf key ↔ user-theme.json key (with defaults)
     # the top bar (Settings → Layout → Top bar). `show` is a map of
     # indicator → bool; a missing key means shown, so {} is "everything"
     ("desktop.bar.enabled", "barEnabled", True),
+    # the bar's size follows its icons: small | normal | large (44 / 48 /
+    # 56px). The v3 `desktop.bar.size` is no longer written; ewe-theme still
+    # reads a `size = "large"` left in an older file as icon_size = large.
     ("desktop.bar.icon_size", "barIconSize", "normal"),
     ("desktop.bar.show", "barShow", {}),
+    # accessibility modes (design/system/components/AccessibilityModes):
+    # role remaps applied by ewe-theme; reduce_transparency also turns the
+    # compositor's blur and window opacity off in user.lua below
+    ("desktop.accessibility.reduce_motion", "reduceMotion", False),
+    ("desktop.accessibility.reduce_transparency", "reduceTransparency", False),
+    ("desktop.accessibility.increase_contrast", "increaseContrast", False),
+    ("desktop.accessibility.text_scale", "textScale", 100),
     ("desktop.animations.speed", "animationSpeed", 1),
     ("desktop.tiling.enabled", "tilingEnabled", True),
     ("desktop.sound.event_sounds", "eventSounds", True),
@@ -302,7 +316,7 @@ def do_import():
     an = _rj("animations.json", None)
     if an is not None:
         node, last = dig(doc, "desktop.animations.detail", create=True)
-        node[last] = an
+        node[last] = no_overshoot(an)
     node, last = dig(doc, "apps.pinned", create=True)
     node[last] = _rj("pinned-apps.json", [])
     node, last = dig(doc, "apps.startup", create=True)
@@ -462,10 +476,10 @@ def effective_accent(doc):
     scheme's accent as ewe-theme resolved it (theme-tokens.json input.accent).
     Both the window border and colorscheme.sh must follow the palette."""
     node, last = dig(doc, "desktop.theme.accent")
-    acc = ((node or {}).get(last, "#0a84ff") if node else "#0a84ff")
+    acc = ((node or {}).get(last, "#eeb407") if node else "#eeb407")
     node, last = dig(doc, "desktop.theme.scheme")
-    scheme = ((node or {}).get(last, "accent") if node else "accent")
-    if scheme and scheme != "accent":
+    scheme = ((node or {}).get(last, "ewe-dark") if node else "ewe-dark")
+    if scheme:
         try:
             with open(os.path.join(QS, "theme-tokens.json")) as f:
                 inp = (json.load(f).get("input") or {})
@@ -489,7 +503,7 @@ def do_apply(doc, only=None, hooks=True):
         build_theme_tokens()
     if want("animations"):
         node, last = dig(doc, "desktop.animations.detail")
-        detail = (node or {}).get(last) if node else None
+        detail = no_overshoot((node or {}).get(last) if node else None)
         if detail:
             _wj("animations.json", detail)
             node, last = dig(doc, "desktop.animations.speed")
@@ -584,17 +598,49 @@ def do_apply(doc, only=None, hooks=True):
 
 HYPR_GEN = os.path.join(CFG_DIR, "hypr", "generated")
 
+# The design system has no overshoot (no OutBack anywhere, 2026-09-18):
+# the `overshoot` curve and the Bouncy preset built on it are gone, and the
+# spring is critically damped (dampening = 2*sqrt(mass*stiffness)), so the
+# Smooth preset's windows settle without passing their target. The same
+# spring is hyprland.lua's "easy" curve.
 ANIM_CURVES = [  # ported from ewe-settings hypr.js — keep in lockstep
     ("snap", [[0.16, 1], [0.3, 1]], None),
     ("easeOutQuint", [[0.23, 1], [0.32, 1]], None),
     ("quick", [[0.15, 0], [0.1, 1]], None),
     ("easeInOutCubic", [[0.65, 0.05], [0.36, 1]], None),
-    ("overshoot", [[0.34, 1.56], [0.64, 1]], None),
     ("linear", [[0, 0], [1, 1]], None),
-    ("spring", None, {"mass": 1, "stiffness": 71.2633, "dampening": 15.8273644}),
+    ("spring", None, {"mass": 1, "stiffness": 71.2633, "dampening": 16.8835186}),
 ]
 ANIM_LEAVES = ["windows", "windowsOut", "fade", "workspaces", "layers", "border"]
 _SPRING = {c[0] for c in ANIM_CURVES if c[2]}
+# The default preset, "Snappy" (ewe-settings hypr.js ANIM_PRESETS[0]).
+ANIM_DEFAULT = {
+    "global": {"ms": 300, "curve": "snap"},
+    "anims": {
+        "windows": {"on": True, "ms": 280, "curve": "snap", "style": "popin", "pct": 92},
+        "windowsOut": {"on": True, "ms": 180, "curve": "quick", "style": "popin", "pct": 92},
+        "fade": {"on": True, "ms": 180, "curve": "quick"},
+        "workspaces": {"on": True, "ms": 280, "curve": "snap", "style": "slide"},
+        "layers": {"on": True, "ms": 200, "curve": "quick", "style": "fade"},
+        "border": {"on": True, "ms": 300, "curve": "easeOutQuint"},
+    },
+}
+RETIRED_CURVES = ("overshoot",)
+
+
+def no_overshoot(detail):
+    """A saved animation detail that uses a retired overshooting curve (the
+    Bouncy preset, or a custom mix with `overshoot`) becomes the default
+    preset, keeping whether animations are on. Anything else is untouched."""
+    if not isinstance(detail, dict):
+        return detail
+    curves = [(detail.get("global") or {}).get("curve")]
+    curves += [(a or {}).get("curve") for a in (detail.get("anims") or {}).values() if isinstance(a, dict)]
+    if not any(c in RETIRED_CURVES for c in curves):
+        return detail
+    out = json.loads(json.dumps(ANIM_DEFAULT))
+    out["enabled"] = detail.get("enabled", True) is not False
+    return out
 
 
 def _n(x):
@@ -834,19 +880,26 @@ def gen_user_lua(doc):
     # it, fullscreen opaque — one material for terminal, browser and the ewe
     # apps alike. Otherwise the old hair of unfocused translucency, if asked.
     app_blur = str(gv("desktop.theme.app_blur", False)).lower() in ("1", "true", "yes", "on")
+    # Reduce transparency: no blur, every window solid, the bar solid.
+    # Increase contrast makes Glass solid too (its blur is pointless then).
+    a11y = gv("desktop.accessibility", {}) or {}
+    reduce_t = str(a11y.get("reduce_transparency", False)).lower() in ("1", "true", "yes", "on")
+    inc_c = str(a11y.get("increase_contrast", False)).lower() in ("1", "true", "yes", "on")
+    if reduce_t:
+        app_blur = False
     if app_blur:
         s += ("hl.config({ decoration = { active_opacity = %s, inactive_opacity = %s, fullscreen_opacity = 1.0 } })\n"
               % (APP_OPACITY, APP_OPACITY))
     else:
         s += ("hl.config({ decoration = { active_opacity = 1.0, inactive_opacity = %s } })\n"
-              % ("0.97" if gv("desktop.theme.window_transparency", False) else "1.0"))
+              % ("0.97" if gv("desktop.theme.window_transparency", False) and not reduce_t else "1.0"))
     try:
         op = max(0, min(100, int(gv("desktop.theme.bar_opacity", 100))))
     except (TypeError, ValueError):
         op = 100
     if op == 100 and gv("desktop.theme.surface", "solid") == "glass":
-        op = 72                              # 0.12.8's one-release knob
-    bar_blur = BAR_BLUR_MIN <= op < 100
+        op = 80                              # 0.12.8's one-release knob = the Glass preset
+    bar_blur = BAR_BLUR_MIN <= op < 100 and not (reduce_t or inc_c)
     if bar_blur or app_blur:
         s += BLUR_ON_LUA
     if bar_blur:
@@ -1759,6 +1812,71 @@ def parse_value(raw):
         return raw
 
 
+# ── the keys with a fixed vocabulary (40-implementation.md, "Settings keys") ─
+# `set` refuses anything else so a typo never leaves the desktop half-themed;
+# the pre-v3 spellings still pass (ewe-theme maps them).
+_BOOL = ("reduce_motion", "reduce_transparency", "increase_contrast")
+ENUMS = {
+    "desktop.theme.corner": ("none", "small", "medium", "large", "round"),
+    "desktop.theme.density": ("compact", "comfortable", "roomy"),
+    "desktop.theme.stroke": ("none", "thin", "thick"),
+    "desktop.bar.icon_size": ("small", "normal", "large"),
+    "desktop.dock.icon_size": ("small", "medium", "large"),
+    "desktop.accessibility.text_scale": (100, 115, 130),
+}
+THEME_DEFAULTS = {ck: dflt for ck, _jk, dflt in THEME_MAP}
+
+
+def validate(key, value):
+    """(ok, value-or-message). Normalises the few typed keys, leaves the
+    rest alone."""
+    if key == "desktop.animations.detail":
+        return True, no_overshoot(value)
+    if key in ENUMS:
+        allowed = ENUMS[key]
+        v = value
+        if isinstance(allowed[0], int):
+            try:
+                v = int(value)
+            except (TypeError, ValueError):
+                return False, "%s must be one of %s" % (key, ", ".join(map(str, allowed)))
+        elif isinstance(v, str):
+            v = v.strip().lower()
+        if v not in allowed:
+            return False, "%s must be one of %s" % (key, ", ".join(map(str, allowed)))
+        return True, v
+    if key.startswith("desktop.accessibility.") and key.split(".")[-1] in _BOOL:
+        if isinstance(value, bool):
+            return True, value
+        s = str(value).strip().lower()
+        if s in ("1", "true", "yes", "on"):
+            return True, True
+        if s in ("0", "false", "no", "off"):
+            return True, False
+        return False, "%s must be true or false" % key
+    if key in ("desktop.theme.app_blur", "desktop.theme.window_transparency") and not isinstance(value, bool):
+        s = str(value).strip().lower()
+        if s in ("1", "true", "yes", "on", "0", "false", "no", "off"):
+            return True, s in ("1", "true", "yes", "on")
+        return False, "%s must be true or false" % key
+    if key == "desktop.theme.bar_opacity":
+        try:
+            v = int(value)
+        except (TypeError, ValueError):
+            return False, "%s must be 0-100" % key
+        if not 0 <= v <= 100:
+            return False, "%s must be 0-100" % key
+        return True, v
+    if key == "desktop.theme.accent":
+        h = str(value).strip().lstrip("#").lower()
+        if len(h) == 3:
+            h = "".join(c * 2 for c in h)
+        if len(h) != 6 or any(c not in "0123456789abcdef" for c in h):
+            return False, "%s must be a hex colour" % key
+        return True, "#" + h
+    return True, value
+
+
 def main(argv):
     # --no-hooks anywhere: suppress the colorscheme + settings-reload pokes.
     # The shell passes it because it live-applies itself and IS the thing the
@@ -1773,6 +1891,12 @@ def main(argv):
     elif cmd == "get" and len(argv) == 2:
         node, last = dig(load(), argv[1])
         if node is None or last not in node:
+            if argv[1] in THEME_DEFAULTS:
+                # a theme/bar/accessibility key that was never written IS
+                # its default — the same value ewe-theme and the shell use
+                v = THEME_DEFAULTS[argv[1]]
+                print(json.dumps(v) if isinstance(v, (dict, list, bool)) else v)
+                return 0
             # exit 1 stays (Komble keys on it); stderr says WHICH failure so
             # callers can tell "no manifest yet" from a broken tool
             print(json.dumps({"error": "no-manifest" if argv[1] == "apps.installed" else "no-key",
@@ -1781,10 +1905,14 @@ def main(argv):
         v = node[last]
         print(json.dumps(v) if isinstance(v, (dict, list, bool)) else v)
     elif cmd == "set" and len(argv) == 3:
+        ok, val = validate(argv[1], parse_value(argv[2]))
+        if not ok:
+            print(json.dumps({"error": "bad-value", "key": argv[1], "message": val}), file=sys.stderr)
+            return 1
         with locked():
             doc = load()
             node, last = dig(doc, argv[1], create=True)
-            node[last] = parse_value(argv[2])
+            node[last] = val
             save(doc)
             do_apply(doc, only=_domain(argv[1]), hooks=hooks)
             maybe_auto_push(doc)
@@ -1841,7 +1969,7 @@ def _domain(dotted):
     parts = dotted.split(".")
     if parts[0] == "desktop" and len(parts) > 1:
         return {"theme": "theme", "dock": "theme", "bar": "theme", "tiling": "theme",
-                "power": "theme", "animations": "animations",
+                "power": "theme", "accessibility": "theme", "animations": "animations",
                 "displays": "displays", "window_rules": "window_rules",
                 "wallpapers": "wallpapers", "input": "input",
                 "layout": "layout", "keybinds": "keybinds",

@@ -21,6 +21,7 @@ phase_postcheck() {
     if pkg_present greetd; then
         _check "greeter: greetd + regreet + cage"     sh -c 'pacman -Qq greetd && pacman -Qq greetd-regreet && pacman -Qq cage'
         _check "greeter: Quickshell config installed"  test -r /etc/xdg/quickshell/ewe-greeter/shell.qml
+        _check "greeter: Geist installed system-wide"  sh -c 'test -r /usr/share/fonts/ewe/Geist-Variable.woff2 && test -r /etc/fonts/conf.d/60-ewe-geist.conf'
     else
         _note "greeter: not installed (coexist — your login manager lists 'Ewe')"
     fi

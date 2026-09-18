@@ -8,7 +8,7 @@ A plugin is a git repository whose root holds a manifest.json:
       "id": "acme.weather",              <namespace>.<name>, lowercase; "ewe." is reserved
       "name": "Weather",
       "version": "0.1.0",
-      "apiVersion": 1,                   the shell's plugin API (PluginHost.apiVersion)
+      "apiVersion": 2,                   the shell's plugin API (PluginHost.apiVersion)
       "kinds": ["panel", "service"],
       "entryPoints": { "panel": "Panel.qml", "service": "Service.qml" },
       "description": "…", "homepage": "…", "author": "…"      (optional)
@@ -80,7 +80,7 @@ import sys
 import time
 import tomllib
 
-API_VERSION = 1
+API_VERSION = 2
 SCHEMA = 1
 KINDS = ("service", "panel", "overlay", "menu", "bar-widget", "desktop-widget")
 # a plugin's declared options -- what Komble renders as a form and the shell
@@ -935,24 +935,29 @@ TEMPLATES = {
 import qs
 
 // {name} -- bar widget. An Item with an IMPLICIT size: the bar packs it like
-// any built-in indicator. Draw with the shell's Theme roles; react to
-// `settings` (the values of what manifest.json declares).
+// any built-in module. Draw with the shell's Theme roles only (design system
+// v3, never a raw colour, size or duration); the bar* roles already follow
+// Glass. React to `settings` (the values of what manifest.json declares).
 Item {{
     id: root
     property var settings: ({{}})            // filled by ewe from ewe.conf plugins.settings.{id}
-    implicitWidth: row.implicitWidth + 2 * Theme.barItemPad
-    implicitHeight: Theme.barItemHeight
+    implicitWidth: row.implicitWidth + 2 * Theme.spaceS
+    implicitHeight: Theme.barModule
 
     Rectangle {{
-        anchors.fill: parent; radius: Theme.radiusControl
-        color: ma.containsMouse ? Theme.subtleHover : "transparent"
-        Behavior on color {{ ColorAnimation {{ duration: 130 }} }}
+        anchors.fill: parent; radius: Theme.radiusPrimary
+        color: ma.pressed ? Theme.barPressedFill : ma.containsMouse ? Theme.barHoverFill : "transparent"
+        Behavior on color {{ ColorAnimation {{ duration: Theme.durFast; easing.type: Theme.easeFast }} }}
     }}
     Row {{
         id: row
-        anchors.centerIn: parent; spacing: 6
-        Text {{ anchors.verticalCenter: parent.verticalCenter; text: "\\ue151"; font.family: Theme.fontIcons; font.pixelSize: Theme.barIconPx; color: Theme.fg2 }}
-        Text {{ anchors.verticalCenter: parent.verticalCenter; text: root.settings.label || "{name}"; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; color: Theme.fg1 }}
+        anchors.centerIn: parent; spacing: Theme.spaceXs
+        Text {{ anchors.verticalCenter: parent.verticalCenter; text: "\\ue151"; font.family: Theme.fontIcons; font.pixelSize: Theme.barIcon; color: Theme.textPrimary }}
+        Text {{
+            anchors.verticalCenter: parent.verticalCenter
+            text: root.settings.label || "{name}"; color: Theme.textPrimary
+            font.family: Theme.type.label.family; font.pixelSize: Theme.type.label.size; font.weight: Theme.type.label.weight
+        }}
     }}
     MouseArea {{
         id: ma; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
@@ -964,28 +969,36 @@ Item {{
 import qs
 
 // {name} -- desktop widget. A sized Item ewe places on the desktop (or above
-// windows when the user makes it sticky). The user moves it in arrange
-// mode (Super+Shift+W); you draw it. `settings` carries your declared
-// options. This one is a clock: replace the body, keep the shape.
+// windows when the user makes it sticky). ewe draws the card under it (the
+// Glass card: its fill, outline, corner and padding) and handles arrange
+// mode (Super+Shift+W); you draw only the content, with no background of
+// your own, in Theme roles and type styles. `settings` carries your
+// declared options. This one is a clock: replace the body, keep the shape.
 Item {{
     id: root
     property var settings: ({{}})            // from ewe.conf plugins.settings.{id}
-    implicitWidth: 260
-    implicitHeight: 96
+    implicitWidth: col.implicitWidth
+    implicitHeight: col.implicitHeight
 
     property string now: ""
     Timer {{
         interval: 1000; running: true; repeat: true; triggeredOnStart: true
         onTriggered: root.now = Qt.formatTime(new Date(), root.settings.seconds ? "hh:mm:ss" : "hh:mm")
     }}
-    Rectangle {{
-        anchors.fill: parent; radius: Theme.radiusInner
-        color: Qt.rgba(Theme.bg1.r, Theme.bg1.g, Theme.bg1.b, 0.72)
-    }}
     Column {{
-        anchors.centerIn: parent; spacing: 2
-        Text {{ text: root.now; font.family: Theme.fontText; font.pixelSize: 40; font.weight: Font.DemiBold; color: Theme.fg1; anchors.horizontalCenter: parent.horizontalCenter }}
-        Text {{ text: Qt.formatDate(new Date(), "dddd d MMMM"); font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; color: Theme.fg3; anchors.horizontalCenter: parent.horizontalCenter }}
+        id: col
+        spacing: Theme.spaceXs
+        // large numbers in a light weight, figures that don't shift
+        Text {{
+            text: root.now; color: Theme.textPrimary
+            font.family: Theme.type.displayLg.family; font.pixelSize: Theme.type.displayLg.size
+            font.weight: Theme.fontWeightLight; font.features: ({{ "tnum": 1 }})
+        }}
+        // the card is Glass: secondary text, not muted, stays readable on it
+        Text {{
+            text: Qt.formatDate(new Date(), "dddd d MMMM"); color: Theme.textSecondary
+            font.family: Theme.type.body.family; font.pixelSize: Theme.type.body.size
+        }}
     }}
 }}
 ''',
@@ -997,6 +1010,8 @@ import qs
 
 // {name} -- a panel: your own window, toggled over IPC
 //     qs ipc call {id} toggle      (bind it: ewe-conf set desktop.keybinds ...)
+// Panels are solid (never Glass): surfaceRaised, a borderSubtle outline and
+// the radiusRounded corner, like ewe's own.
 Scope {{
     id: root
     property bool open: false
@@ -1010,16 +1025,20 @@ Scope {{
     PanelWindow {{
         visible: root.open
         anchors {{ right: true; bottom: true }}
-        margins {{ right: 16; bottom: 16 }}
-        implicitWidth: 320
-        implicitHeight: 200
+        margins {{ right: Theme.windowGap; bottom: Theme.windowGap }}
+        implicitWidth: Theme.panelSm
+        implicitHeight: Theme.panelSm / 2
         color: "transparent"
         WlrLayershell.namespace: "quickshell:{id}"
         WlrLayershell.layer: WlrLayer.Overlay
         WlrLayershell.keyboardFocus: root.open ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
         Rectangle {{
-            anchors.fill: parent; radius: Theme.radius; color: Theme.panel
-            Text {{ anchors.centerIn: parent; text: "{name}"; font.family: Theme.fontText; font.pixelSize: Theme.fsBody; color: Theme.fg1 }}
+            anchors.fill: parent; radius: Theme.radiusRounded; color: Theme.surfaceRaised
+            border.color: Theme.borderSubtle; border.width: Theme.borderWidth1
+            Text {{
+                anchors.centerIn: parent; text: "{name}"; color: Theme.textPrimary
+                font.family: Theme.type.body.family; font.pixelSize: Theme.type.body.size
+            }}
         }}
     }}
 }}

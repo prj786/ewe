@@ -1,0 +1,141 @@
+{
+ "version": "1.7.1",
+ "mocha": {
+  "name": "Mocha",
+  "dark": true,
+  "colors": {
+   "base": {
+    "hex": "#1e1e2e"
+   },
+   "mantle": {
+    "hex": "#181825"
+   },
+   "crust": {
+    "hex": "#11111b"
+   },
+   "surface0": {
+    "hex": "#313244"
+   },
+   "surface1": {
+    "hex": "#45475a"
+   },
+   "surface2": {
+    "hex": "#585b70"
+   },
+   "subtext0": {
+    "hex": "#a6adc8"
+   },
+   "subtext1": {
+    "hex": "#bac2de"
+   },
+   "text": {
+    "hex": "#cdd6f4"
+   },
+   "red": {
+    "hex": "#f38ba8"
+   },
+   "peach": {
+    "hex": "#fab387"
+   },
+   "yellow": {
+    "hex": "#f9e2af"
+   },
+   "green": {
+    "hex": "#a6e3a1"
+   },
+   "teal": {
+    "hex": "#94e2d5"
+   },
+   "blue": {
+    "hex": "#89b4fa"
+   },
+   "mauve": {
+    "hex": "#cba6f7"
+   },
+   "flamingo": {
+    "hex": "#f2cdcd"
+   },
+   "maroon": {
+    "hex": "#eba0ac"
+   },
+   "sky": {
+    "hex": "#89dceb"
+   },
+   "sapphire": {
+    "hex": "#74c7ec"
+   },
+   "pink": {
+    "hex": "#f5c2e7"
+   }
+  }
+ },
+ "latte": {
+  "name": "Latte",
+  "dark": false,
+  "colors": {
+   "base": {
+    "hex": "#eff1f5"
+   },
+   "mantle": {
+    "hex": "#e6e9ef"
+   },
+   "crust": {
+    "hex": "#dce0e8"
+   },
+   "surface0": {
+    "hex": "#ccd0da"
+   },
+   "surface1": {
+    "hex": "#bcc0cc"
+   },
+   "surface2": {
+    "hex": "#acb0be"
+   },
+   "subtext0": {
+    "hex": "#6c6f85"
+   },
+   "subtext1": {
+    "hex": "#5c5f77"
+   },
+   "text": {
+    "hex": "#4c4f69"
+   },
+   "red": {
+    "hex": "#d20f39"
+   },
+   "peach": {
+    "hex": "#fe640b"
+   },
+   "yellow": {
+    "hex": "#df8e1d"
+   },
+   "green": {
+    "hex": "#40a02b"
+   },
+   "teal": {
+    "hex": "#179299"
+   },
+   "blue": {
+    "hex": "#1e66f5"
+   },
+   "mauve": {
+    "hex": "#8839ef"
+   },
+   "flamingo": {
+    "hex": "#dd7878"
+   },
+   "maroon": {
+    "hex": "#e64553"
+   },
+   "sky": {
+    "hex": "#04a5e5"
+   },
+   "sapphire": {
+    "hex": "#209fb5"
+   },
+   "pink": {
+    "hex": "#ea76cb"
+   }
+  }
+ }
+}

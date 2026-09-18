@@ -70,9 +70,10 @@ end
 -- ── Blur policy ─────────────────────────────────────────────────────────────
 -- Two [desktop.theme] knobs ask for compositor blur, both read off the token
 -- file through colors.lua:
---   bar_opacity 1-90  -> the bar and dock are translucent, so blur what shows
---                        through them (a layer rule below; the shell paints its
---                        own alpha ground).
+--   bar_opacity 10-99 -> Glass: the bar and dock are translucent, so blur what
+--                        shows through them (the layer rule ewe-conf writes to
+--                        generated/user.lua; the shell paints its own alpha
+--                        ground).
 --   app_blur          -> every window sits at a fixed 85 % with blur behind it;
 --                        fullscreen stays solid (window rules below).
 -- Neither asks -> decoration.blur stays off: it is a constant multi-pass GPU
@@ -82,18 +83,22 @@ end
 
 hl.config({
     general = {
-        gaps_in     = 6,
-        gaps_out    = 14,
-        border_size = 1,           -- the ring is a 1px stroke; the shadow carries the depth
+        -- The Window card's own figures: window-gap (8) around the screen
+        -- edges, half of it (space-xs, 4) between neighbours, and a
+        -- border-width-2 ring. Settings → Layout still wins over all three
+        -- through generated/user.lua, which is loaded last.
+        gaps_in     = 4,
+        gaps_out    = 8,
+        border_size = 2,
 
-        -- The window ring. Active: the user's accent when tint_borders is on
-        -- (colors.lua reads user-theme.json, so this tracks the shell live on
-        -- every reload), otherwise the stroke-2 hairline. Inactive: stroke-3,
-        -- the quieter hairline, so unfocused windows recede. Both strokes
-        -- carry the token file's own alpha (0.5) — no second alpha here.
+        -- The window ring (Window card). Focused: the accent when
+        -- tint_borders is on (colors.lua reads the token file, so this
+        -- tracks the shell live on every reload), otherwise border-strong.
+        -- Other windows: border-subtle, so they recede. Solid: the ring IS
+        -- the accent, not a wash of it.
         col = {
-            active_border   = c.tint_borders and c.rgba(c.accent, 0xee) or c.stroke2,
-            inactive_border = c.stroke3,
+            active_border   = c.tint_borders and c.rgb(c.accent) or c.ring_focused,
+            inactive_border = c.ring_idle,
         },
 
         resize_on_border = true,
@@ -102,30 +107,40 @@ hl.config({
     },
 
     decoration = {
-        -- The corner radius is the token file's radius-control (12 under the
-        -- default `round` preset). Settings → Layout still wins: its
-        -- generated/user.lua sets decoration.rounding again, loaded last.
-        rounding       = c.radius,
+        -- The corner radius is `rounded` (10), the radius panels and cards
+        -- share, so a window sits in the same family as the shell's
+        -- surfaces (colors.lua reads it off the token file). Settings →
+        -- Layout still wins through generated/user.lua.
+        rounding       = c.rounded,
         rounding_power = 2,
 
+        -- No dim: an unfocused window stays fully bright (Window card).
+        -- Window transparency and App blur are OFF by default and are
+        -- written into generated/user.lua by ewe-conf when they are turned
+        -- on — opacity-inactive (0.97) and opacity-app (0.85) live there.
         active_opacity   = 1.0,
-        inactive_opacity = 0.97,  -- a hair of depth on unfocused windows
+        inactive_opacity = 1.0,
 
-        -- Big soft drop shadow — the single biggest depth cue.
-        -- Large range, low alpha = a diffuse shadow (not a hard outline).
+        -- shadow-float, the one shadow a floating surface gets: 0 2px 6px at
+        -- 35% black. Short and tight — depth is a step of surface colour,
+        -- and the shadow only says "this floats above the rest". Tiled
+        -- windows take none (the "shadow-floating-only" rule below).
         shadow = {
             enabled      = true,
-            range        = 26,
+            range        = 6,
+            offset       = { 0, 2 },
             render_power = 3,
-            color        = 0x40000000,  -- 0xAARRGGBB: ~25% black, soft
+            color        = 0x59000000,  -- 0xAARRGGBB: shadow-float's 35% black
         },
 
-        -- Blur is OFF by default: every shell surface is solid, and the frosted
-        -- scrims (Overview/Settings) read fine as plain translucent dims. Blur
-        -- was also a constant multi-pass GPU cost on the whole desktop. The
-        -- `surface = "glass"` theme turns it on — only for the shell's own
-        -- layers, xray, via generated/user.lua (ewe-conf) — unless
-        -- EWE_NO_BLUR=1 (VMs, NVIDIA; start-hyprland.sh).
+        -- Blur is OFF by default: at bar_opacity 100 every shell surface is
+        -- solid, and blur is a constant multi-pass GPU cost on the whole
+        -- desktop. Glass turns it on — size 6, 3 passes, slight noise, which
+        -- is blur-glass (about 24px), applied to the bar and dock LAYERS
+        -- only, through generated/user.lua (ewe-conf), so it follows ewe.conf
+        -- like the rest of the theme. Where blur is unavailable
+        -- (EWE_NO_BLUR=1 on VMs and NVIDIA; start-hyprland.sh) Glass still
+        -- applies: the fill stays translucent, just sharp.
         blur = {
             enabled           = false,
             size              = 6,
@@ -285,16 +300,18 @@ end
 
 
 -- ── Animations: short and sharp (the "Snappy" preset's values) ───────────────
--- The old springy feel lives on as the "Smooth" preset in Settings → Animations
+-- The slower feel lives on as the "Smooth" preset in Settings → Animations
 -- (ewe-settings), which overrides all of this via generated/animations.lua.
 -- Mirrored by ANIM_BASE (hypr.js) and animBase (Settings.qml) — change together.
+-- Nothing overshoots (design system, Motion): the spring is critically damped,
+-- dampening = 2 * sqrt(mass * stiffness), the same as ewe-conf's and hypr.js's.
 hl.curve("easeOutQuint",   { type = "bezier", points = { {0.23, 1},    {0.32, 1} } })
 hl.curve("easeInOutCubic", { type = "bezier", points = { {0.65, 0.05}, {0.36, 1} } })
 hl.curve("linear",         { type = "bezier", points = { {0, 0},       {1, 1} } })
 hl.curve("almostLinear",   { type = "bezier", points = { {0.5, 0.5},   {0.75, 1} } })
 hl.curve("quick",          { type = "bezier", points = { {0.15, 0},    {0.1, 1} } })
 hl.curve("snap",           { type = "bezier", points = { {0.16, 1},    {0.3, 1} } })
-hl.curve("easy",           { type = "spring", mass = 1, stiffness = 71.2633, dampening = 15.8273644 })
+hl.curve("easy",           { type = "spring", mass = 1, stiffness = 71.2633, dampening = 16.8835186 })
 
 hl.config({ animations = { enabled = true } })
 
@@ -630,6 +647,14 @@ for _, klass in ipairs({ "gcr-prompter", "Gcr-prompter", "org.gnome.keyring.Syst
     hl.window_rule({ name = "gcr-" .. klass, match = { class = klass }, float = true, center = true, size = { 400, 200 } })
 end
 
+-- Window card: only FLOATING windows carry shadow-float; tiled ones sit flat
+-- in their gaps, their border saying which is focused.
+hl.window_rule({
+    name      = "shadow-floating-only",
+    match     = { float = false },
+    no_shadow = true,
+})
+
 -- Fix XWayland drag ghosts (from the upstream example).
 hl.window_rule({
     name     = "fix-xwayland-drags",
@@ -641,10 +666,12 @@ hl.window_rule({
 -- ╭───────────────────────────────────────────────────────────────╮
 -- │ LAYER RULES                                                     │
 -- ╰───────────────────────────────────────────────────────────────╯
--- No blur rules HERE: decoration.blur is off by default (see above) and every
--- Quickshell surface is solid; the Overview/Settings scrims are plain
--- translucent dims. The glass surface adds its blur layer rule from
--- generated/user.lua, so it follows ewe.conf like the rest of the theme.
+-- No blur rules HERE: decoration.blur is off by default (see above) and at
+-- bar_opacity 100 every Quickshell surface is solid. Glass adds the layer
+-- rule for the bar and dock from generated/user.lua, so it follows ewe.conf
+-- like the rest of the theme. Panels, popups, menus, notifications and
+-- dialogs are never blurred: they sit OVER windows, where a see-through fill
+-- would only add noise (Glass card, "What turns translucent").
 
 -- Quickshell surfaces that animate their own open/close in QML (zoom/fade over
 -- Theme.dur*) stay mapped through the close animation — `visible` only drops

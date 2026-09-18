@@ -56,14 +56,14 @@ function M.mix(a, b, t)
     return string.format("%02x%02x%02x", out[1], out[2], out[3])
 end
 
--- Readable text on an accent fill. MIRRORS Theme.accentText: white on dark
--- accents, ink on light ones, tipping at 0.55 (mid-luminance accents like the
--- system green already lose white text before 0.6).
+-- Readable text on an accent fill, for a token file without `on-accent`:
+-- Ewe's one black on light accents, its one white (neutral-0) on dark ones,
+-- tipping at 0.55 luminance like the generator's fallback.
 function M.on_accent(hex)
     local r, g, b = tonumber(hex:sub(1, 2), 16) / 255,
                     tonumber(hex:sub(3, 4), 16) / 255,
                     tonumber(hex:sub(5, 6), 16) / 255
-    return (0.299 * r + 0.587 * g + 0.114 * b) > 0.55 and "1c1c1e" or "ffffff"
+    return (0.299 * r + 0.587 * g + 0.114 * b) > 0.55 and "020202" or "fefdfc"
 end
 
 -- ── Live look: accent + tokens ──────────────────────────────────────────────
@@ -117,32 +117,46 @@ local function tok_bool(name, fallback)
     return fallback
 end
 
--- The user's accent, or the shipped system blue.
-M.accent    = ut:match('"accent"%s*:%s*"#?(%x%x%x%x%x%x)"') or "0a84ff"
-M.accent_fg = M.on_accent(M.accent)
+-- The accent the token file resolved (the person's pick, or the active
+-- scheme's), then user-theme.json's copy, then ewellow. on_accent() below is
+-- only the fallback for a token file that predates `on-accent`.
+local ut_accent = ut:match('"accent"%s*:%s*"#?(%x%x%x%x%x%x)"')
+M.accent      = tok_color("accent", ut_accent or "eeb407")
+M.accent_fg   = tok_color("on-accent", M.on_accent(M.accent))
+M.accent_text = tok_color("accent-text", M.accent)       -- grouped windows' ring
+M.accent_pressed = tok_color("accent-pressed", M.accent) -- a locked group's ring
 -- Accent-tinted window ring (ewe.conf desktop.theme.tint_borders, mirrored
 -- into user-theme.json as tintBorders). Absent -> on, the documented default.
 M.tint_borders = ut:match('"tintBorders"%s*:%s*(%a+)') ~= "false"
 
--- Neutral surfaces — the token roles Hyprland-drawn chrome uses. Plain 6-digit
--- hex, so rgb()/rgba()/mix() below take them unchanged.
-M.s_bg       = tok_color("bg-3",         "090a0e")  -- desktop / app base
-M.s_panel    = tok_color("bg-1",         "131417")  -- popup / panel surface
-M.s_elevated = tok_color("card",         "191a1d")  -- cards / inactive tab
-M.s_hover    = tok_color("subtle-hover", "1b1c1f")  -- hover fill
-M.s_fg       = tok_color("fg-1",         "ffffff")  -- primary text
-M.s_fg_dim   = tok_color("fg-3",         "adadad")  -- dim text
+-- Ewe roles (design system v3) that Hyprland-drawn chrome uses: plain
+-- 6-digit hex, so rgb()/rgba()/mix() below take them unchanged. The
+-- fallbacks are Ewe Dark's, for a token file that is missing or half-written.
+M.surface_base   = tok_color("surface-base",   "0b0a08")  -- desktop / app base
+M.surface_raised = tok_color("surface-raised", "151411")  -- popups, cards, an idle group tab
+M.surface_hover  = tok_color("surface-hover",  "2c2a26")  -- hover fill
+M.text_primary   = tok_color("text-primary",   "faf9f6")  -- primary text
+M.text_muted     = tok_color("text-muted",     "a8a49d")  -- an idle tab's title
+M.border_subtle  = tok_color("border-subtle",  "2c2a26")  -- other windows' ring
+M.border_strong  = tok_color("border-strong",  "7f7b75")  -- the focused ring, untinted
+M.danger         = tok_color("danger",         "ffa196")  -- an urgent window
 
--- Strokes carry their own alpha (0.5 by default): hex + alpha as a pair, and
--- the ready-made Hyprland `rgba(RRGGBBAA)` string for the ring/group borders.
-M.s_stroke,  M.s_stroke_alpha  = tok_color("stroke-2", "515255", 0x80)  -- hairline
-M.s_stroke3, M.s_stroke3_alpha = tok_color("stroke-3", "3c3d41", 0x80)  -- quieter hairline
-M.stroke2 = M.rgba(M.s_stroke,  M.s_stroke_alpha)
-M.stroke3 = M.rgba(M.s_stroke3, M.s_stroke3_alpha)
+-- The window rings as Hyprland rgb() strings (Window card): the focused
+-- window's when borders are not accent-tinted, and every other window's.
+M.ring_focused = M.rgb(M.border_strong)
+M.ring_idle    = M.rgb(M.border_subtle)
 
--- Shape: the control radius IS the window corner radius (12 under `round`).
-M.radius = math.floor(tok_number("radius-control", 12))
+-- Shape: `rounded` is the WINDOW corner (Window card; 10 at corner =
+-- medium, 16 at large, 0 at none), `primary` the control radius.
+M.rounded = math.floor(tok_number("rounded", 10))
+M.radius  = math.floor(tok_number("primary", 8))
 
--- The two [desktop.theme] knobs the compositor acts on (see hyprland.lua).
+-- Sizes and weights the group tab strip draws with (Window card).
+M.tab_height      = math.floor(tok_number("control-sm", 24))
+M.tab_font_size   = math.floor(tok_number("font-size-s", 12))
+M.tab_padding     = math.floor(tok_number("space-s", 8))
+M.tab_seam        = math.floor(tok_number("space-xxs", 2))
+M.weight_semibold = math.floor(tok_number("font-weight-semibold", 600))
+M.weight_medium   = math.floor(tok_number("font-weight-medium", 500))
 
 return M

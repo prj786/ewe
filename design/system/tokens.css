@@ -1,0 +1,244 @@
+/* Ewe design system tokens, version 3. Compiled from tokens.json: one custom property per token, per scheme
+   ([data-theme="dark"] is Ewe Dark and the default, [data-theme="light"] is Ewe Light), plus one class per type style. */
+:root, [data-theme="dark"] {
+  --ewellow: #eeb407;
+  --black: #020202;
+  --ewellow-50: #fff6e4;
+  --ewellow-100: #ffedc6;
+  --ewellow-200: #ffdf9a;
+  --ewellow-300: #fdcf64;
+  --ewellow-400: #f8c23a;
+  --ewellow-500: var(--ewellow);
+  --ewellow-600: #ce9707;
+  --ewellow-700: #a77607;
+  --ewellow-800: #805708;
+  --ewellow-900: #5a3b09;
+  --ewellow-950: #352206;
+  --neutral-0: #fefdfc;
+  --neutral-50: #faf9f6;
+  --neutral-100: #f4f2ee;
+  --neutral-200: #e9e6e0;
+  --neutral-300: #d5d2cb;
+  --neutral-400: #a8a49d;
+  --neutral-500: #7f7b75;
+  --neutral-600: #5d5a55;
+  --neutral-700: #423f3a;
+  --neutral-800: #2c2a26;
+  --neutral-850: #201e1a;
+  --neutral-900: #151411;
+  --neutral-950: #0b0a08;
+  --surface-base: var(--neutral-950);
+  --surface-raised: var(--neutral-900);
+  --surface-overlay: var(--neutral-850);
+  --surface-sunken: var(--black);
+  --surface-hover: var(--neutral-800);
+  --surface-pressed: var(--neutral-700);
+  --surface-selected: var(--neutral-800);
+  --scrim: rgba(2, 2, 2, 0.64);
+  --glass-base: rgba(11, 10, 8, 0.8);
+  --glass-raised: rgba(21, 20, 17, 0.8);
+  --glass-border: rgba(254, 253, 252, 0.1);
+  --glass-hover: rgba(254, 253, 252, 0.08);
+  --glass-pressed: rgba(254, 253, 252, 0.14);
+  --glass-accent: var(--ewellow-400);
+  --border-subtle: var(--neutral-800);
+  --border-strong: var(--neutral-500);
+  --text-primary: var(--neutral-50);
+  --text-secondary: var(--neutral-300);
+  --text-muted: var(--neutral-400);
+  --text-disabled: var(--neutral-600);
+  --accent: var(--ewellow);
+  --accent-hover: var(--ewellow-400);
+  --accent-pressed: var(--ewellow-600);
+  --on-accent: var(--black);
+  --accent-subtle: var(--ewellow-950);
+  --accent-text: var(--ewellow-400);
+  --focus-ring: var(--ewellow-400);
+  --success: #69d6aa;
+  --warning: #f9a870;
+  --danger: #ffa196;
+  --info: #76c7ff;
+  --success-subtle: #0d2d21;
+  --warning-subtle: #372010;
+  --danger-subtle: #3a1d1a;
+  --info-subtle: #0f293a;
+  --on-status: var(--black);
+  --shadow-none: none;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.40);
+  --shadow-float: 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+[data-theme="light"] {
+  --ewellow: #eeb407;
+  --black: #020202;
+  --ewellow-50: #fff6e4;
+  --ewellow-100: #ffedc6;
+  --ewellow-200: #ffdf9a;
+  --ewellow-300: #fdcf64;
+  --ewellow-400: #f8c23a;
+  --ewellow-500: var(--ewellow);
+  --ewellow-600: #ce9707;
+  --ewellow-700: #a77607;
+  --ewellow-800: #805708;
+  --ewellow-900: #5a3b09;
+  --ewellow-950: #352206;
+  --neutral-0: #fefdfc;
+  --neutral-50: #faf9f6;
+  --neutral-100: #f4f2ee;
+  --neutral-200: #e9e6e0;
+  --neutral-300: #d5d2cb;
+  --neutral-400: #a8a49d;
+  --neutral-500: #7f7b75;
+  --neutral-600: #5d5a55;
+  --neutral-700: #423f3a;
+  --neutral-800: #2c2a26;
+  --neutral-850: #201e1a;
+  --neutral-900: #151411;
+  --neutral-950: #0b0a08;
+  --surface-base: var(--neutral-100);
+  --surface-raised: var(--neutral-50);
+  --surface-overlay: var(--neutral-0);
+  --surface-sunken: var(--neutral-200);
+  --surface-hover: var(--neutral-200);
+  --surface-pressed: var(--neutral-300);
+  --surface-selected: var(--neutral-0);
+  --scrim: rgba(20, 16, 8, 0.32);
+  --glass-base: rgba(244, 242, 238, 0.8);
+  --glass-raised: rgba(250, 249, 246, 0.8);
+  --glass-border: rgba(11, 10, 8, 0.1);
+  --glass-hover: rgba(11, 10, 8, 0.06);
+  --glass-pressed: rgba(11, 10, 8, 0.12);
+  --glass-accent: var(--ewellow-900);
+  --border-subtle: var(--neutral-300);
+  --border-strong: var(--neutral-500);
+  --text-primary: var(--neutral-950);
+  --text-secondary: var(--neutral-700);
+  --text-muted: var(--neutral-600);
+  --text-disabled: var(--neutral-400);
+  --accent: var(--ewellow);
+  --accent-hover: var(--ewellow-600);
+  --accent-pressed: var(--ewellow-700);
+  --on-accent: var(--black);
+  --accent-subtle: var(--ewellow-50);
+  --accent-text: var(--ewellow-800);
+  --focus-ring: var(--ewellow-700);
+  --success: #047554;
+  --warning: #964d09;
+  --danger: #a04038;
+  --info: #026a9d;
+  --success-subtle: #dff7eb;
+  --warning-subtle: #ffece0;
+  --danger-subtle: #ffebe8;
+  --info-subtle: #e4f3fe;
+  --on-status: #ffffff;
+  --shadow-none: none;
+  --shadow-sm: 0 1px 2px rgba(20, 16, 8, 0.08);
+  --shadow-float: 0 2px 6px rgba(20, 16, 8, 0.10);
+}
+:root {
+  --font-size-xs: 11px;
+  --font-size-s: 12px;
+  --font-size-md: 13px;
+  --font-size-lg: 15px;
+  --font-size-xl: 18px;
+  --font-size-2xl: 22px;
+  --font-size-3xl: 28px;
+  --font-size-4xl: 36px;
+  --font-size-5xl: 48px;
+  --font-size-6xl: 64px;
+  --line-height-xs: 14px;
+  --line-height-s: 16px;
+  --line-height-md: 18px;
+  --line-height-lg: 20px;
+  --line-height-lg-relaxed: 22px;
+  --line-height-xl: 24px;
+  --line-height-2xl: 28px;
+  --line-height-3xl: 34px;
+  --line-height-4xl: 44px;
+  --line-height-5xl: 56px;
+  --line-height-6xl: 72px;
+  --font-weight-thin: 100;
+  --font-weight-extralight: 200;
+  --font-weight-light: 300;
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  --font-weight-extrabold: 800;
+  --font-weight-black: 900;
+  --tracking-tightest: -0.03em;
+  --tracking-tighter: -0.02em;
+  --tracking-tight: -0.015em;
+  --tracking-snug: -0.01em;
+  --tracking-normal: 0;
+  --tracking-wide: 0.06em;
+  --space-xxs: 2px;
+  --space-xs: 4px;
+  --space-s: 8px;
+  --space-md: 16px;
+  --space-lg: 32px;
+  --space-xl: 64px;
+  --slight: 4px;
+  --secondary: 6px;
+  --primary: 8px;
+  --rounded: 10px;
+  --fully-rounded: 9999px;
+  --gradient-ewellow: linear-gradient(135deg, #f4bd28 0%, #e6ab09 100%);
+  --gradient-ember: linear-gradient(160deg, #1b150b 0%, #0b0a08 100%);
+  --gradient-night: linear-gradient(180deg, #151411 0%, #0b0a08 100%);
+  --gradient-glow: radial-gradient(circle at 50% 0%, rgba(238, 180, 7, 0.08) 0%, rgba(238, 180, 7, 0) 60%);
+  --border-width-1: 1px;
+  --border-width-2: 2px;
+  --focus-width: 1px;
+  --control-sm: 24px;
+  --control-md: 28px;
+  --control-lg: 32px;
+  --control-xl: 40px;
+  --control-2xl: 48px;
+  --bar-height: 48px;
+  --bar-height-lg: 64px;
+  --icon-xs: 12px;
+  --icon-sm: 14px;
+  --icon-md: 16px;
+  --icon-lg: 20px;
+  --icon-xl: 24px;
+  --icon-2xl: 32px;
+  --icon-3xl: 48px;
+  --icon-4xl: 64px;
+  --panel-sm: 360px;
+  --panel-md: 400px;
+  --panel-lg: 560px;
+  --window-gap: 8px;
+  --blur-glass: 24px;
+  --opacity-solid: 1;
+  --opacity-glass: 0.8;
+  --opacity-app: 0.85;
+  --opacity-inactive: 0.97;
+  --font-sans: "Geist", "Noto Sans Georgian", system-ui, sans-serif;
+  --font-mono: "Geist Mono", "Noto Sans Georgian", ui-monospace, monospace;
+}
+.display-xl { font-family: var(--font-sans); font-size: 64px; line-height: 72px; font-weight: 300; letter-spacing: -0.03em; }
+.display-lg { font-family: var(--font-sans); font-size: 48px; line-height: 56px; font-weight: 400; letter-spacing: -0.025em; }
+.display { font-family: var(--font-sans); font-size: 36px; line-height: 44px; font-weight: 500; letter-spacing: -0.02em; }
+.h1 { font-family: var(--font-sans); font-size: 28px; line-height: 34px; font-weight: 600; letter-spacing: -0.02em; }
+.h2 { font-family: var(--font-sans); font-size: 22px; line-height: 28px; font-weight: 600; letter-spacing: -0.015em; }
+.h3 { font-family: var(--font-sans); font-size: 18px; line-height: 24px; font-weight: 600; letter-spacing: -0.01em; }
+.h4 { font-family: var(--font-sans); font-size: 15px; line-height: 20px; font-weight: 600; }
+.h4-italic { font-family: var(--font-sans); font-size: 15px; line-height: 20px; font-weight: 600; font-style: italic; }
+.body-lg { font-family: var(--font-sans); font-size: 15px; line-height: 22px; font-weight: 400; }
+.body { font-family: var(--font-sans); font-size: 13px; line-height: 18px; font-weight: 400; }
+.body-strong { font-family: var(--font-sans); font-size: 13px; line-height: 18px; font-weight: 500; }
+.body-italic { font-family: var(--font-sans); font-size: 13px; line-height: 18px; font-weight: 400; font-style: italic; }
+.body-strong-italic { font-family: var(--font-sans); font-size: 13px; line-height: 18px; font-weight: 500; font-style: italic; }
+.label { font-family: var(--font-sans); font-size: 12px; line-height: 16px; font-weight: 500; }
+.label-italic { font-family: var(--font-sans); font-size: 12px; line-height: 16px; font-weight: 500; font-style: italic; }
+.caption { font-family: var(--font-sans); font-size: 11px; line-height: 14px; font-weight: 400; }
+.caption-italic { font-family: var(--font-sans); font-size: 11px; line-height: 14px; font-weight: 400; font-style: italic; }
+.overline { font-family: var(--font-sans); font-size: 11px; line-height: 14px; font-weight: 600; letter-spacing: 0.06em; }
+.mono { font-family: var(--font-mono); font-size: 12px; line-height: 16px; font-weight: 400; }
+.mono-strong { font-family: var(--font-mono); font-size: 12px; line-height: 16px; font-weight: 600; }
+.mono-italic { font-family: var(--font-mono); font-size: 12px; line-height: 16px; font-weight: 400; font-style: italic; }
+.mono-numeric { font-family: var(--font-mono); font-size: 12px; line-height: 16px; font-weight: 500; }
+@font-face { font-family: "Geist"; src: url(fonts/Geist-Variable.woff2) format('woff2'); font-weight: 100 900; font-style: normal; }
+@font-face { font-family: "Geist"; src: url(fonts/Geist-Italic-Variable.woff2) format('woff2'); font-weight: 100 900; font-style: italic; }
+@font-face { font-family: "Geist Mono"; src: url(fonts/GeistMono-Variable.woff2) format('woff2'); font-weight: 100 900; font-style: normal; }
+@font-face { font-family: "Geist Mono"; src: url(fonts/GeistMono-Italic-Variable.woff2) format('woff2'); font-weight: 100 900; font-style: italic; }

@@ -30,7 +30,7 @@ QtObject {
     // Project version — the shell's runtime copy. Keep in sync with the repo-root
     // VERSION file (the canonical source used for git tags / releases). Semver, with
     // an -alpha/-beta pre-release suffix until the first stable cut.
-    readonly property string version: "0.21.2-beta"
+    readonly property string version: "0.22.0-beta"
 
     // ── event sounds (GNOME-style; the freedesktop sound theme, one toggle) ──
     // playSound("message-new-instant") etc — names are theme event ids from
@@ -73,6 +73,15 @@ QtObject {
     property int settingsPaneRequest: -1
     property string openDd: ""             // ddId of the one open DropRow, shell-wide ("" = none)
 
+    // ── Toasts (design system: Toast) ─────────────────────────────────────────
+    // Toast.qml registers itself here so any component can confirm an action
+    // it just took and offer one way back, without reaching for a notification:
+    //   Globals.toast("Moved <b>report.pdf</b> to Trash",
+    //                 { actionLabel: "Undo", action: function () { … } })
+    // Out-of-process callers use `qs ipc call toast show|action|undo|hide`.
+    property var toastHost: null
+    function toast(message, opts) { if (toastHost) toastHost.show(message, opts) }
+
     // ── Standalone first-party apps ───────────────────────────────────────────
     // Komble (the software manager) and ewe-settings (the Settings app) are
     // separate Tauri binaries installed by phase 20. When present they ARE the
@@ -87,20 +96,10 @@ QtObject {
     property bool settingsAppInstalled: false
     property string settingsAppBin: "ewe-settings"
     // an already-open Settings/Komble window is FOCUSED, never doubled —
-    // clicking the gear twice should land you on the window you had
-    function focusWindowByClass(klass) {
-        var tls = Hyprland.toplevels ? Hyprland.toplevels.values : []
-        for (var i = 0; i < tls.length; i++) {
-            var t = tls[i]
-            var o = t.lastIpcObject
-            var c = (o && (o.class || o.initialClass)) || (t.wayland && t.wayland.appId) || ""
-            if (c.toLowerCase() !== klass) continue
-            if (t.wayland) t.wayland.activate()
-            else if (o && o.address) Hyprland.dispatch('hl.dsp.focus({ window = "address:' + o.address + '" })')
-            return true
-        }
-        return false
-    }
+    // clicking the gear twice should land you on the window you had. Goes
+    // through focusAppWindow (by address), so the window's workspace comes
+    // with it.
+    function focusWindowByClass(klass) { return g.focusAppWindow([klass]) }
     // ── ewe-sync state (RFC-006) ──────────────────────────────────────────
     // The account app owns the state machine; it pokes the value in here on
     // every change (qs ipc call sync state …), the same out-of-process
@@ -151,28 +150,73 @@ QtObject {
         if (g.syncAppInstalled) Quickshell.execDetached(["ewe-sync"])
     }
     // ── Focus-or-launch ────────────────────────────────────────────────────
-    // Clicking an app that already has a window JUMPS to it (activate = focus
-    // + workspace switch) instead of spawning a second instance — for
+    // Clicking an app that already has a window JUMPS to it (focus +
+    // workspace switch) instead of spawning a second instance — for
     // single-instance apps (Slack, Komble, browsers) a relaunch just pings the
-    // existing process and looks like "nothing happened". Both launchers call
-    // this first; middle-click still forces a fresh instance. Prefers the
-    // window that was most recently active when an app has several.
+    // existing process and looks like "nothing happened". Every launcher
+    // calls this first; middle-click still forces a fresh instance. Prefers
+    // the window that was most recently focused when an app has several.
     function activateAppWindow(entry) {
-        if (!entry) return false
+        if (!entry || !entry.id) return false
+        return g.focusAppWindow([entry.id])
+    }
+
+    // ── Focus the window a notification came from ─────────────────────────
+    // `names` are the notification's desktop entry and app name. A client
+    // matches when its class (or Wayland app id) is one of them, their last
+    // dotted segment ("org.kde.kdeconnect" → "kdeconnect"), or resolves to
+    // the same desktop entry — all case-insensitive. The most recently
+    // focused match wins, and focusing it by address switches to its
+    // workspace. (This used to be `hyprctl dispatch focuswindow class:…`,
+    // the pre-Lua dispatcher syntax, which the Lua config rejects — so a
+    // click on a notification from another workspace did nothing.)
+    function focusAppWindow(names) {
+        var want = [], ids = []
+        for (var i = 0; i < names.length; i++) {
+            var n = String(names[i] || "").toLowerCase()
+            if (n === "") continue
+            want.push(n)
+            var seg = n.split(".").pop().replace(/[^a-z0-9_-]/g, "")
+            if (seg !== "" && seg !== n) want.push(seg)
+            var de = DesktopEntries.heuristicLookup(names[i])
+            if (de && de.id) ids.push(String(de.id).toLowerCase())
+        }
+        if (want.length === 0) return false
         var tls = Hyprland.toplevels ? Hyprland.toplevels.values : []
-        var best = null
-        for (var i = 0; i < tls.length; i++) {
-            var t = tls[i]
-            var o = t.lastIpcObject
-            var c = (o && (o.class || o.initialClass)) || (t.wayland && t.wayland.appId) || ""
+        var best = null, bestRank = 1e9
+        for (var j = 0; j < tls.length; j++) {
+            var t = tls[j], o = t.lastIpcObject
+            var c = String((o && (o.class || o.initialClass)) || (t.wayland && t.wayland.appId) || "").toLowerCase()
             if (c === "") continue
-            var e = DesktopEntries.heuristicLookup(c)
-            if (!e || e.id !== entry.id) continue
-            if (!best || t.activated) best = t
+            var hit = want.indexOf(c) >= 0 || want.indexOf(c.split(".").pop()) >= 0
+            if (!hit && ids.length) {
+                var ce = DesktopEntries.heuristicLookup(c)
+                hit = !!(ce && ce.id && ids.indexOf(String(ce.id).toLowerCase()) >= 0)
+            }
+            if (!hit) continue
+            // focusHistoryID: 0 is the window focused last
+            var rank = (o && o.focusHistoryID !== undefined) ? o.focusHistoryID : (t.activated ? -1 : 1e8)
+            if (!best || rank < bestRank) { best = t; bestRank = rank }
         }
         if (!best) return false
-        if (best.wayland) best.wayland.activate()
-        else if (best.address) Hyprland.dispatch('hl.dsp.focus({ window = "address:' + best.address + '" })')
+        return g.focusToplevel(best)
+    }
+    // ── Focus one window ──────────────────────────────────────────────────
+    // THE way the shell brings a window forward (bar, dock, Overview,
+    // launchers, notifications, the app openers above). By ADDRESS, so
+    // Hyprland switches to the window's workspace; the foreign-toplevel
+    // activate (t.wayland.activate()) is ignored for a window on another
+    // workspace under Hyprland 0.56, and is only the fallback for a
+    // toplevel whose IPC object has not arrived yet.
+    function focusToplevel(t) {
+        if (!t) return false
+        var a = String(t.address || (t.lastIpcObject && t.lastIpcObject.address) || "")
+        if (a === "") {
+            if (t.wayland) { t.wayland.activate(); return true }
+            return false
+        }
+        if (a.indexOf("0x") !== 0) a = "0x" + a   // Hyprland events sometimes omit the 0x
+        Hyprland.dispatch('hl.dsp.focus({ window = "address:' + a + '" })')
         return true
     }
 
@@ -284,8 +328,9 @@ QtObject {
     // ── User-chosen accent colour ─────────────────────────────────────────────
     // Single mutable source the Settings → Theme pane writes; Theme.accent binds to
     // it so the whole shell recolours live. Persisted to ~/.config/quickshell/
-    // user-theme.json and re-read here at startup (default = system blue).
-    property color accentColor: "#0a84ff"
+    // user-theme.json and re-read here at startup. Until someone picks one it
+    // is the accent the token file was built from (no colour of its own here).
+    property color accentColor: (g.tokColor && g.tokColor["accent"]) ? g.tokColor["accent"] : "transparent"
     // false = user-theme.json carries no accent, i.e. nobody has ever picked
     // one in the shell. Theme.accent then falls back to the accent in
     // ewe.conf [desktop.theme], which is what the token file was built from.
@@ -295,8 +340,10 @@ QtObject {
     property bool schemeActive: false
     property bool tintBorders: false        // mirror window border colour to the accent
     // false → fully opaque windows (decoration inactive_opacity forced to 1.0);
-    // true keeps hyprland.lua's subtle unfocused translucency. user-theme.json.
-    property bool windowTransparency: true
+    // true draws unfocused windows at opacity-inactive (97%). Default false,
+    // which is what ewe-conf's [desktop.theme] window_transparency says; this
+    // singleton disagreed with it until the design system v3 (Phase 3).
+    property bool windowTransparency: false
 
     // Tiling on (the Hyprland default) vs every new window opening floating, for
     // people who want the DE to behave like GNOME/Unity rather than a tiling WM.
@@ -526,16 +573,13 @@ QtObject {
     property var prefsRaw: ({})
 
     // ── Generated theme tokens (ewe.conf -> `ewe-theme build`) ────────────────
-    // What the looks ARE, as data: {flock: {color, shape, voice}, ...}. Theme.qml
-    // reads its tokens out of here, so the accent is changed in ewe.conf and
-    // the whole shell follows without touching QML. The values compiled into
-    // Theme.qml stay as the FALLBACK — a missing or unparsable file degrades to
-    // the shipped look rather than to a colourless shell.
-    // The FLUENT maps, straight off the top level of theme-tokens.json: six
-    // background levels each with their own states, a card ladder, three
-    // stroke weights, `subtle` for a thing with no fill until you point at
-    // it. The file's `themes` block is the old five-colour sub-object and no
-    // longer has a reader here — every component moved 2026-09-04.
+    // The Ewe token set as data, one block per kind: colour roles, shape
+    // (radii and outline widths), sizes (type scale, spacing, controls,
+    // icons, panels). Theme.qml reads its tokens out of here, so the scheme
+    // and the accent are changed in ewe.conf and the whole shell follows
+    // without touching QML. The values compiled into Theme.qml stay as the
+    // FALLBACK — a missing or unparsable file degrades to Ewe Dark rather
+    // than to a colourless shell.
     property var tokColor: ({})
     property var tokShape: ({})
     property var tokSize:  ({})
@@ -543,10 +587,34 @@ QtObject {
     // stroke, neutral_tint. The Settings pane shows the live value from here
     // rather than keeping a second copy that can disagree with the file.
     property var tokInput: ({})
-    property var tokSurface: ({})           // {kind: solid|glass, alpha, blur} — Theme.glass reads it
+    // {bar_alpha, glass, blur, app_blur, app_alpha, inactive_alpha, solid} —
+    // Theme.glass / Theme.barAlpha / Theme.glassBlur read it
+    property var tokSurface: ({})
+    // The rest of the v3 token file, each block as the generator wrote it:
+    // type (families, weights, tracking, the styles), motion (the four
+    // durations already divided by the animation speed, the easings),
+    // opacity, shadow, gradient, bar (height/module/icon for the bar size)
+    // and accessibility (the four modes). Theme.qml turns them into
+    // properties; nothing else should read these directly.
+    property var tokType: ({})
+    property var tokMotion: ({})
+    property var tokOpacity: ({})
+    property var tokShadow: ({})
+    property var tokGradient: ({})
+    property var tokBar: ({})
+    // the dock's cells per icon size, unscaled by Text size
+    property var tokDock: ({})
+    property var tokA11y: ({})
+    // the Accent picker's presets [{name, hex, ink}] — the generator's list,
+    // so Settings carries no colour of its own
+    property var tokAccentPresets: []
+    // the tallest thing in the bar (its rows' implicit height), reported by
+    // Bar.qml: Theme.barHeight is this plus barPadding above and below
+    property int barContentHeight: 0
     // start-hyprland.sh exports EWE_NO_BLUR=1 in VMs and on NVIDIA, where the
-    // compositor's blur is a known cost or glitch; the shell paints solid there
-    // whatever the theme says (alpha without blur is just a see-through panel)
+    // compositor's blur is a known cost or glitch. Glass still applies there —
+    // the fills stay translucent (Theme.barAlpha, the glass-* roles), only the
+    // compositor blur behind them is skipped (Theme.glassBlur is false).
     readonly property bool noBlur: Quickshell.env("EWE_NO_BLUR") === "1"
     property Process _tokenLoad: Process {
         running: true
@@ -561,6 +629,15 @@ QtObject {
                     if (j && j.input && typeof j.input === "object") g.tokInput = j.input
                     g.schemeActive = !!(j && j.input && j.input.scheme && j.input.scheme !== "accent")
                     g.tokSurface = (j && j.surface && typeof j.surface === "object") ? j.surface : {}
+                    if (j && j.type && typeof j.type === "object") g.tokType = j.type
+                    if (j && j.motion && typeof j.motion === "object") g.tokMotion = j.motion
+                    if (j && j.opacity && typeof j.opacity === "object") g.tokOpacity = j.opacity
+                    if (j && j.shadow && typeof j.shadow === "object") g.tokShadow = j.shadow
+                    if (j && j.gradient && typeof j.gradient === "object") g.tokGradient = j.gradient
+                    if (j && j.bar && typeof j.bar === "object") g.tokBar = j.bar
+                    if (j && j.dock && typeof j.dock === "object") g.tokDock = j.dock
+                    if (j && j.accessibility && typeof j.accessibility === "object") g.tokA11y = j.accessibility
+                    if (j && Array.isArray(j.accent_presets)) g.tokAccentPresets = j.accent_presets
                 } catch (e) {}
             }
         }

@@ -21,7 +21,6 @@ Elevation 1.0 Elevation.qml
 Spinner 1.0 Spinner.qml
 BarIcon 1.0 BarIcon.qml
 BarPluginSlots 1.0 BarPluginSlots.qml
-Sheen 1.0 Sheen.qml
 FileDropTarget 1.0 FileDropTarget.qml
 DropRow 1.0 DropRow.qml
 Toggle 1.0 Toggle.qml
@@ -37,6 +36,7 @@ Screensaver 1.0 Screensaver.qml
 Launcher 1.0 Launcher.qml
 Bar 1.0 Bar.qml
 Notifications 1.0 Notifications.qml
+Toast 1.0 Toast.qml
 QuickSettings 1.0 QuickSettings.qml
 Auth 1.0 Auth.qml
 BtPairing 1.0 BtPairing.qml

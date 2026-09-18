@@ -30,6 +30,11 @@ called `hypr-shell`; that's outside the repo. Distribution:
 `ewe-<version>.tar.zst` artefact built by `release.sh` (`--publish` creates the
 GitHub release).
 
+## Design system
+
+- The design system in `design/system/` is the source of truth for how every surface looks.
+- Read `design/system/guidelines/40-implementation.md` before UI work.
+
 ## Development workflow (critical)
 
 - **Work in the repo, then push — do not edit the live `~/.config`.** This repo is
@@ -121,9 +126,10 @@ registered in `qmldir`. Two singletons tie everything together:
   In-shell toggles flip a `Globals` bool directly (no IPC round-trip).
 - **`Theme.qml`** — the palette/metrics; `accent` binds to `Globals.accentColor`
   so changing the accent recolours the whole shell live. Values come from
-  `bin/ewe-theme` (one accent in `ewe.conf` → every token); the designer's
-  reference sheet is `design/spec/ewe-design-system.html` and
-  `design/check-spec.sh` holds the generated `design/tokens.css` to it.
+  `bin/ewe-theme` (scheme + accent in `ewe.conf` → every token of the Ewe
+  design system v3, `design/system/`); `design/check-spec.sh` holds the
+  generated `design/tokens.css` to `design/system/tokens.json` and
+  `design/check-contrast.sh` holds the derivation to the contrast rules.
 - **`BtAgent.qml`** — the bluez pairing agent (`scripts/bt-agent.py`, default
   `org.bluez.Agent1`, NDJSON over stdio like `KdeConnect.qml`); `BtPairing.qml`
   is its dialog. Device state still comes from `Quickshell.Bluetooth`; pairing
@@ -201,31 +207,81 @@ through to apps behind it.
 
 ### Theming (single source: `scripts/colorscheme.sh`)
 
-**Schemes (2026-09-16):** `bin/ewe-theme` has a second way to build its two
-ramps. `desktop.theme.scheme = accent` is the accent engine, byte-identical
-to before (`tests/ewe-theme-test.sh` pins `design/tokens.css`); any other
-value is the slug of a `[[desktop.theme.schemes]]` record (Base24 palette +
-optional accent + variant dark|light), and `scheme_ramp()` pins bg-3/bg-1/
-card/strokes/fg on base00/01/02/03/04/05/07 with LCH interpolation between —
-the role table `alias()` is untouched, so the 150 names never change. A
-light scheme is the same anchors running the other way. `ewe-theme scheme
-list|show|apply|import|remove|export|set|from-wallpaper` is the CLI (imports:
-base16/24 YAML via a mini parser, Omarchy TOML, Catppuccin JSON, Gogh;
-wallpaper via ImageMagick histogram, Pillow fallback). `colorscheme.sh`
-reads `input.variant` and `scheme.palette` from theme-tokens.json (GTK
-light switch, Qt/KDE palettes from tokens, kitty ANSI); `ewe-conf
-effective_accent()` gives the border and the colorscheme hook the scheme's
-accent; `Globals.schemeActive` stops the in-shell accent pick from
-overriding a scheme. `wallpaper.sh` re-derives when scheme = "wallpaper".
+**Schemes + the v3 generator (2026-09-17, branch `ewe-design-v3`, Phase 1):**
+`bin/ewe-theme` derives the Ewe design system v3 token set from a Base24
+scheme + an accent (`design/system/guidelines/10-color-schemes.md`): Ewe
+Dark (`ewe-dark`, the default) and Ewe Light are records embedded in the
+tool and marked `builtin` (tests hold them to
+`design/system/assets/Schemes/*.json`); user schemes live in
+`[[desktop.theme.schemes]]`. Derivation → `overrides` → guarantees (text
+4.5:1, borders 3:1, surfaces 2 L apart, warning ≠ accent hue; every move
+recorded in `adjusted`, shown by `scheme show`) → look presets and
+accessibility modes as remaps. **One source (2026-09-18):** the built-ins
+are palette + accent only (no `overrides`); accent roles are ramp steps
+(`ACCENT_STEP`); shadows and gradients are derived; `black` (#020202) is
+the floor and `neutral-0` (#fefdfc) the ceiling of every emitted colour
+(`in_range`) — never add a literal hex outside the FOUNDATIONS tables. The pre-v3 value `scheme = "accent"` reads
+as ewe-dark wearing `desktop.theme.accent`; `corner = round` reads as
+`large`. **Ewe names only (Phase 6, 2026-09-18):** the Fluent aliases
+(`bg-1`, `fg-2`, `brand-bg` …) and the old `themes` block are gone from
+theme-tokens.json and tokens.css; every reader (Theme.qml, colorscheme.sh,
+colors.lua, the greeter, plugins) uses the design system's names.
+**Text size** scales the type AND the control heights (`control-*`, whole
+px) — rows, fields, buttons and, via `line-height-xs`, badges grow with
+their text; icons, spacing, panels stay; the bar steps up an icon size at
+130 and the dock keeps its cells (the JSON's `dock` block). In QML never
+wrap a `control*` in `Theme.grow()` — it has grown already. `ewe-theme scheme list|show|apply|import|duplicate|remove|
+export|set|from-wallpaper` is the CLI (imports: base16/24 YAML via a mini
+parser, Omarchy TOML, Catppuccin JSON, Gogh; wallpaper via ImageMagick
+histogram, Pillow fallback); `set overrides.<role> <hex|none>` edits an
+override. `build --scheme SLUG --selector SEL` builds the CSS for another
+scheme without touching ewe.conf (the website's light/dark toggle).
+`colorscheme.sh` reads `input.variant` and `scheme.palette` from
+theme-tokens.json (GTK light switch, Qt/KDE palettes from tokens, kitty
+ANSI); `ewe-conf effective_accent()` gives the border and the colorscheme
+hook the scheme's accent; `Globals.schemeActive` stops the in-shell accent
+pick from overriding a scheme. `wallpaper.sh` re-derives when scheme =
+"wallpaper".
+
+**Fonts + Theme.qml (2026-09-17, Phases 2-3):** the DE faces are **Geist**
+and **Geist Mono** (OFL, not in the Arch repos): the variable woff2 files
+ship in `dotfiles/quickshell/fonts/geist/` and `dotfiles/fontconfig/fonts.conf`
+adds that folder with a relative `<dir>` (no installer change) and prefers
+**Noto Sans Georgian** (noto-fonts) next in every stack — Geist has no
+Georgian glyphs, and Georgian is NEVER uppercased (small headers are the
+`overline` style, which spaces letters and never changes case). GTK, kitty (with the Nerd PUA mapped to Symbols Nerd
+Font Mono), Zed, mpv, the groupbar and Helium follow; the greeter (another user, reads no dotfiles) gets them system-wide: phase 30 copies
+the geist/ files + OFL to `/usr/share/fonts/ewe/` and
+`system/fontconfig/60-ewe-geist.conf` (Noto Sans Georgian next) to
+`/etc/fonts/conf.d/`; `uninstall.sh --purge` removes both. `Theme.qml` is now one
+property per v3 token (QML names from `40-implementation.md`), plus
+`Theme.type.<style>` (both `body-strong` and `bodyStrong`), the motion
+table (`durFast/Base/Slow/Dim`, OutCubic + InOutCubic, no OutBack), the
+Glass trio (`glass`, `barAlpha`, `glassBlur` — `EWE_NO_BLUR=1` keeps the
+translucency, drops the blur) and the accessibility modes. **No Fluent
+name is left** (`bg1`, `fg2`, `radiusControl`, `fsBody`, `barIconPx` … were
+deleted in Phase 6, along with `Sheen.qml`); the "Theme.qml today → Ewe"
+table in `40-implementation.md` maps any old name. No raw colour, size or
+duration in QML: literals live only in `bin/ewe-theme` and as Theme.qml's
+fallbacks.
+**Gotcha:** `onAccent: <expr>` beside a property called `accent` parses as a
+signal handler — the token is declared bare and filled by a `Binding`.
+Iterating: `.claude/skills/run-ewe/driver.sh` now sandboxes HOME/XDG and
+generates the tokens itself (`HS_SCHEME=ewe-light`, `HS_CONF=<ewe.conf>`),
+so the live config and ewe-conf's sync hooks are never touched;
+`HS_PLUGINS=1` seeds the bundled plugins into the sandbox and
+`HS_NO_APPS=1` hides Komble/ewe-settings so the in-shell fallbacks open.
+`ewe-plugin` verbs restart the host's `ewe.service` unless given
+`--no-restart` — systemctl is not sandboxed.
 
 **Bar & dock opacity:** `desktop.theme.bar_opacity = 0..100` in ewe.conf
 (Settings → Appearance slider). The bar and dock are painted at
-`Theme.barAlpha` (`barTop`, `dockFill`); between 10 and 99 `ewe-conf` writes
+`Theme.barAlpha` (`barGround`, `dockGround`); between 10 and 99 `ewe-conf` writes
 the compositor blur + a `quickshell:(bar|dock)` layer rule into
 `generated/user.lua`; `EWE_NO_BLUR=1` (VMs, NVIDIA — `start-hyprland.sh`)
 skips the blur. `desktop.theme.app_blur` draws every WINDOW at 85 % with blur
 behind it (`decoration.active/inactive_opacity`, fullscreen opaque) — fixed, not
-the slider. Every other panel (`Theme.panel`) stays opaque. Prefs the
+the slider. Every other panel (`Theme.surfaceRaised`) stays opaque. Prefs the
 Settings app writes MUST be in `ewe-conf`'s `THEME_MAP`, or `absorb` drops
 them on the next write (that was the 0.12.7 "Top bar settings do nothing").
 

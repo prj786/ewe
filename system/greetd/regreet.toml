@@ -1,6 +1,6 @@
 # Installed to /etc/greetd/regreet.toml by phase 30. ReGreet inherits the same
-# look as the desktop: adw-gtk3 dark + Papirus + the Mocu cursor (both installed
-# system-wide so the `greeter` user can read them). It scans the standard
+# look as the desktop: adw-gtk3 dark + Papirus + the Mocu cursor + Geist (all
+# installed system-wide so the `greeter` user can read them). It scans the standard
 # wayland-session dirs (phase 30 installs the entry to both /usr/share and
 # /usr/local/share/wayland-sessions) and lists "Hyprland (DE)".
 
@@ -13,7 +13,7 @@
 [GTK]
 application_prefer_dark_theme = true
 cursor_theme_name = "Mocu-White-Right"
-font_name = "Inter 11"
+font_name = "Geist, Noto Sans Georgian 11"
 icon_theme_name = "Papirus-Dark"
 theme_name = "adw-gtk3-dark"
 

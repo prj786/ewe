@@ -44,43 +44,47 @@ Scope {
         property string sub: ""
         property string tag: ""
         signal go()
-        height: rr.sub !== "" ? 54 : 46
+        height: Theme.controlXl
         Rectangle {
-            anchors.fill: parent; radius: Theme.r(10)
-            color: rr.seld ? Qt.rgba(1, 1, 1, 0.12) : (rrMa.containsMouse ? Qt.rgba(1, 1, 1, 0.06) : "transparent")
+            anchors.fill: parent; radius: Theme.radiusPrimary
+            // pointing at a row is how it gets selected, so both are glassHover
+            color: rr.seld || rrMa.containsMouse ? Theme.glassHover : "transparent"
+            Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
         }
         Row {
-            anchors.fill: parent; anchors.leftMargin: 12; anchors.rightMargin: 12
-            spacing: 13
+            anchors.fill: parent
+            anchors.leftMargin: Theme.spaceS; anchors.rightMargin: Theme.spaceS
+            spacing: Theme.spaceS + Theme.spaceXs
             Item {
-                width: 28; height: 28
+                width: Theme.iconXl; height: Theme.iconXl
                 anchors.verticalCenter: parent.verticalCenter
                 Image {
                     visible: rr.icon !== ""
                     anchors.fill: parent
-                    sourceSize.width: 56; sourceSize.height: 56; mipmap: true
+                    sourceSize.width: 2 * Theme.iconXl; sourceSize.height: 2 * Theme.iconXl; mipmap: true
                     source: rr.icon
                 }
                 Rectangle {
                     visible: rr.icon === ""
-                    anchors.fill: parent; radius: Theme.r(7)
-                    color: Qt.rgba(1, 1, 1, 0.10)
-                    Text { anchors.centerIn: parent; text: rr.glyph; font.family: Theme.fontIcons; font.pixelSize: 15; color: Theme.fg2 }
+                    anchors.fill: parent; radius: Theme.radiusSecondary
+                    color: Theme.glassHover
+                    Text { anchors.centerIn: parent; text: rr.glyph; font.family: Theme.fontIcons; font.pixelSize: Theme.iconMd; color: Theme.textSecondary }
                 }
             }
             Column {
-                anchors.verticalCenter: parent.verticalCenter; spacing: 1
-                width: parent.width - 28 - 13 - tagLbl.implicitWidth - 8
-                Text { width: parent.width; text: rr.title; elide: Text.ElideRight; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsBody; font.weight: Font.Medium }
-                Text { visible: rr.sub !== ""; width: parent.width; text: rr.sub; elide: Text.ElideRight; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
+                anchors.verticalCenter: parent.verticalCenter
+                width: parent.width - Theme.iconXl - (Theme.spaceS + Theme.spaceXs) - tagLbl.implicitWidth - Theme.spaceS
+                Text { width: parent.width; text: rr.title; elide: Text.ElideRight; color: Theme.textPrimary; font.family: Theme.type.bodyStrong.family; font.pixelSize: Theme.type.bodyStrong.size; font.weight: Theme.fontWeightMedium }
+                // inside Glass, text-muted remaps to text-secondary (Glass card)
+                Text { visible: rr.sub !== ""; width: parent.width; text: rr.sub; elide: Text.ElideRight; color: Theme.textSecondary; font.family: Theme.type.caption.family; font.pixelSize: Theme.type.caption.size }
             }
         }
         Text {
             id: tagLbl
-            anchors.right: parent.right; anchors.rightMargin: 14
+            anchors.right: parent.right; anchors.rightMargin: Theme.spaceS + Theme.spaceXs
             anchors.verticalCenter: parent.verticalCenter
             text: rr.tag
-            color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
+            color: Theme.textSecondary; font.family: Theme.type.caption.family; font.pixelSize: Theme.type.caption.size
         }
         MouseArea {
             id: rrMa
@@ -230,8 +234,9 @@ Scope {
     // ── actions ──
     function launchApp(a) { Globals.launchEntry(a, false); root.close() }
     function jump(tl) {
-        if (tl && tl.wayland) tl.wayland.activate()
-        else if (tl && tl.address) Hyprland.dispatch('hl.dsp.focus({ window = "address:' + tl.address + '" })')
+        // by ADDRESS, so a window on another workspace (a "Jump to" result)
+        // takes you there; the foreign-toplevel activate does not switch
+        Globals.focusToplevel(tl)
         root.close()
     }
     function addrOf(tl) {
@@ -371,11 +376,11 @@ Scope {
             id: backdrop
             anchors.fill: parent
             opacity: Globals.overviewOpen ? 1 : 0
-            Behavior on opacity { NumberAnimation { duration: Theme.durSlow; easing.type: Theme.ease } }
+            Behavior on opacity { NumberAnimation { duration: Theme.reduceMotion ? Theme.durFast : Theme.durSlow; easing.type: Theme.easeSlow } }
 
             readonly property string wall: win.screen ? Wallpaper.pathFor(win.screen.name) : ""
 
-            Rectangle { anchors.fill: parent; color: Theme.bg4 }   // opaque ground, always
+            Rectangle { anchors.fill: parent; color: Theme.surfaceSunken }   // opaque ground, always
             Image {
                 id: wallImg
                 anchors.fill: parent
@@ -393,8 +398,10 @@ Scope {
                 source: wallImg
                 visible: wallImg.status === Image.Ready
                 blurEnabled: true
-                blurMax: 48
-                blur: 0.75
+                // the card's own backdrop: blurGlass, brightness 0.82,
+                // saturate 0.85 (Overview card #1 / .ewe-ov__bg)
+                blurMax: Theme.blurGlass
+                blur: 1.0
                 // dimmed, but not to black: the shipped wallpapers are already
                 // near-black gradients, and any darker reads as no wallpaper
                 // at all. A bright photo still drops far enough for cards.
@@ -408,25 +415,25 @@ Scope {
         Item {
             id: stage
             anchors.fill: parent
+            // opens with a slight zoom and fade at durSlow, closes in the
+            // reverse; Reduce motion drops the zoom to a durFast fade
             opacity: Globals.overviewOpen ? 1 : 0
-            scale: Globals.overviewOpen ? 1 : 1.10
+            scale: (Globals.overviewOpen || Theme.reduceMotion) ? 1 : 1.10
             transformOrigin: Item.Center
-            Behavior on opacity { NumberAnimation { duration: Theme.durSlow; easing.type: Theme.ease } }
-            Behavior on scale   { NumberAnimation { duration: Theme.durSlow; easing.type: Theme.ease } }
+            Behavior on opacity { NumberAnimation { duration: Theme.reduceMotion ? Theme.durFast : Theme.durSlow; easing.type: Theme.easeSlow } }
+            Behavior on scale   { NumberAnimation { duration: Theme.durSlow; easing.type: Theme.easeSlow } }
 
             readonly property real monAR: (win.screen && win.screen.height > 0) ? (win.screen.width / win.screen.height) : 1.6
-            readonly property color glassBg: Qt.rgba(Theme.bg1.r, Theme.bg1.g, Theme.bg1.b, 0.90)
-            readonly property color hairline: Qt.rgba(1, 1, 1, 0.16)
 
             // ══ WINDOW CARDS — always present; dim + freeze while searching ═══
             Flickable {
                 id: cardArea
                 anchors.left: parent.left; anchors.right: parent.right
-                anchors.top: searchBox.bottom; anchors.topMargin: 34
-                anchors.bottom: pagerRow.top; anchors.bottomMargin: 18
+                anchors.top: searchBox.bottom; anchors.topMargin: Theme.spaceLg
+                anchors.bottom: pagerRow.top; anchors.bottomMargin: Theme.spaceMd
                 clip: true
                 contentWidth: width
-                contentHeight: Math.max(height, cardLayout.blockH + 40)
+                contentHeight: Math.max(height, cardLayout.blockH + 2 * Theme.spaceMd)
                 boundsBehavior: Flickable.StopAtBounds
                 interactive: !root.searching
                 opacity: root.searching ? 0.35 : 1
@@ -438,13 +445,15 @@ Scope {
                 // Different window shapes → different card widths → the field
                 // reads natural instead of an arithmetic grid of identical
                 // monitor-shaped rectangles.
-                readonly property real fieldW: Math.max(1, width - 80)
-                readonly property real fieldH: Math.max(1, height - 20)
+                readonly property real fieldW: Math.max(1, width - 2 * Theme.spaceLg)
+                readonly property real fieldH: Math.max(1, height - Theme.spaceMd)
                 readonly property var cardLayout: computeLayout(win.winWins, fieldW, fieldH)
                 function computeLayout(wins, W, H) {
                     var n = wins.length
                     if (n === 0) return { rects: [], blockH: 0 }
-                    var gap = 26
+                    // 16px between rows, 24px between cards in a row
+                    var gap = Theme.spaceMd + Theme.spaceS
+                    var rowGap = Theme.spaceMd
                     // window aspect from the real geometry; monitor aspect as
                     // fallback; clamped so one extreme window can't starve a row
                     var asp = []
@@ -463,7 +472,7 @@ Scope {
                             var chunk = asp.slice(r * per, (r + 1) * per)
                             if (chunk.length) rr.push(chunk)
                         }
-                        var h = (H - (rr.length - 1) * gap) / rr.length
+                        var h = (H - (rr.length - 1) * rowGap) / rr.length
                         for (r = 0; r < rr.length; r++) {
                             var sum = 0
                             for (var k = 0; k < rr[r].length; k++) sum += rr[r][k]
@@ -476,7 +485,7 @@ Scope {
                             for (k = 0; k < rr[r].length; k++) area += rr[r][k] * h * h
                         if (!best || area > best.area) best = { rr: rr, h: h, area: area }
                     }
-                    var blockH = best.rr.length * best.h + (best.rr.length - 1) * gap
+                    var blockH = best.rr.length * best.h + (best.rr.length - 1) * rowGap
                     var rects = []
                     var y = 0
                     for (r = 0; r < best.rr.length; r++) {
@@ -488,15 +497,15 @@ Scope {
                             rects.push({ x: Math.round(x), y: Math.round(y), w: Math.round(wpx), h: Math.round(best.h) })
                             x += wpx + gap
                         }
-                        y += best.h + gap
+                        y += best.h + rowGap
                     }
                     return { rects: rects, blockH: blockH }
                 }
 
                 Item {
                     id: cardField
-                    x: 40
-                    y: Math.max(10, (cardArea.height - cardArea.cardLayout.blockH) / 2)
+                    x: Theme.spaceLg
+                    y: Math.max(Theme.spaceS, (cardArea.height - cardArea.cardLayout.blockH) / 2)
                     width: cardArea.fieldW
                     height: cardArea.cardLayout.blockH
 
@@ -509,7 +518,7 @@ Scope {
                             readonly property bool seld: win.isFocused && index === root.sel && !root.searching
                             readonly property int groupN: root.groupsByAddr[root.addrOf(modelData)] || 0
                             readonly property var rect: index < cardArea.cardLayout.rects.length
-                                ? cardArea.cardLayout.rects[index] : { x: 0, y: 0, w: 200, h: 130 }
+                                ? cardArea.cardLayout.rects[index] : { x: 0, y: 0, w: 0, h: 0 }
                             x: rect.x; y: rect.y
                             width: rect.w; height: rect.h
                             // cards glide to their new spot when the set changes
@@ -545,18 +554,15 @@ Scope {
                             Rectangle {
                                 id: shadowProxy
                                 anchors.fill: cardContent
-                                radius: Theme.r(14)
-                                color: "black"
+                                radius: Theme.radiusRounded
+                                color: Theme.black
                                 visible: false
                             }
-                            MultiEffect {
+                            // shadowFloat, the one shadow a floating surface gets
+                            Elevation {
                                 anchors.fill: shadowProxy
                                 source: shadowProxy
                                 visible: !dragArea.drag.active
-                                shadowEnabled: true
-                                shadowBlur: 1.0
-                                shadowColor: Qt.rgba(0, 0, 0, 0.5)
-                                shadowVerticalOffset: 10
                             }
 
                             // ClippingRectangle: children (preview, chip) clip to the rounded border
@@ -564,10 +570,11 @@ Scope {
                                 id: cardContent
                                 width: dragArea.width
                                 height: dragArea.height
-                                radius: Theme.r(14)
-                                color: Theme.bg1
-                                border.color: dragArea.seld ? Theme.accent : stage.hairline
-                                border.width: dragArea.seld ? 2 : 1
+                                radius: Theme.radiusRounded
+                                color: Theme.surfaceRaised
+                                // selected takes a borderWidth2 accent outline
+                                border.color: dragArea.seld ? Theme.accent : Theme.glassBorder
+                                border.width: dragArea.seld ? Theme.borderWidth2 : Theme.borderWidth1
 
                                 Drag.active: dragArea.drag.active
                                 Drag.source: dragArea
@@ -593,71 +600,96 @@ Scope {
                                 }
                                 Image {
                                     anchors.centerIn: parent; visible: !sc.visible
-                                    width: 56; height: 56; sourceSize.width: 112; sourceSize.height: 112; mipmap: true
+                                    width: Theme.icon3xl; height: Theme.icon3xl
+                                    sourceSize.width: 2 * Theme.icon3xl; sourceSize.height: 2 * Theme.icon3xl; mipmap: true
                                     source: root.iconFor(dragArea.modelData)
                                 }
 
-                                // title chip (bottom)
+                                // title chip — Glass, centred at the bottom,
+                                // semibold in textPrimary while selected
                                 Rectangle {
-                                    anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
-                                    height: 28
-                                    color: Qt.rgba(0, 0, 0, 0.55)
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    anchors.bottom: parent.bottom; anchors.bottomMargin: Theme.spaceS
+                                    width: Math.min(titleLbl.implicitWidth + 2 * Theme.spaceS,
+                                                    cardContent.width - Theme.spaceMd)
+                                    height: Theme.controlMd
+                                    radius: Theme.radiusPrimary
+                                    color: Theme.glassBase
+                                    border.color: Theme.glassBorder; border.width: Theme.borderWidth1
                                     Text {
-                                        anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10
+                                        id: titleLbl
+                                        anchors.fill: parent
+                                        anchors.leftMargin: Theme.spaceS; anchors.rightMargin: Theme.spaceS
                                         verticalAlignment: Text.AlignVCenter
                                         horizontalAlignment: Text.AlignHCenter
                                         text: root.titleOf(dragArea.modelData)
-                                        color: dragArea.seld ? Theme.fg1 : Theme.fg2
-                                        font.family: Theme.fontText; font.pixelSize: 12
-                                        font.weight: dragArea.seld ? Font.DemiBold : Font.Normal
+                                        color: dragArea.seld ? Theme.textPrimary : Theme.textSecondary
+                                        font.family: Theme.type.label.family
+                                        font.pixelSize: Theme.type.label.size
+                                        font.weight: dragArea.seld ? Theme.fontWeightSemibold : Theme.fontWeightRegular
                                         elide: Text.ElideRight
                                     }
                                 }
 
-                                // app-icon badge — top-right, as in the mockup
+                                // app badge — top right: the app's icon, plus a
+                                // `layers` glyph and the count when this window
+                                // is one tab of a group (Overview card #4)
                                 Rectangle {
                                     id: appBadge
-                                    anchors.top: parent.top; anchors.right: parent.right; anchors.margins: 10
-                                    width: 34; height: 34; radius: 17
-                                    color: Qt.rgba(0, 0, 0, 0.55)
-                                    Image {
-                                        anchors.centerIn: parent
-                                        width: 22; height: 22; sourceSize.width: 44; sourceSize.height: 44; mipmap: true
-                                        source: root.iconFor(dragArea.modelData)
-                                    }
-                                }
-
-                                // grouped → a stack pill beside the badge: this window
-                                // is one tab of N (same chip aesthetics as the badge)
-                                Rectangle {
-                                    visible: dragArea.groupN > 1
-                                    anchors.verticalCenter: appBadge.verticalCenter
-                                    anchors.right: appBadge.left; anchors.rightMargin: 6
-                                    width: grpRow.implicitWidth + 16; height: 24; radius: 12
-                                    color: Qt.rgba(0, 0, 0, 0.55)
-                                    border.color: Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.55); border.width: Theme.borderThin
+                                    anchors.top: parent.top; anchors.right: parent.right
+                                    anchors.margins: Theme.spaceS
+                                    width: badgeRow.implicitWidth + 2 * Theme.spaceXs
+                                    height: Theme.controlLg
+                                    radius: Theme.radiusPrimary
+                                    color: Theme.glassBase
+                                    border.color: Theme.glassBorder; border.width: Theme.borderWidth1
                                     Row {
-                                        id: grpRow
-                                        anchors.centerIn: parent; spacing: 5
-                                        Text { anchors.verticalCenter: parent.verticalCenter; text: Theme.icStack; font.family: Theme.fontIcons; font.pixelSize: 12; color: Theme.accent }
-                                        Text { anchors.verticalCenter: parent.verticalCenter; text: dragArea.groupN; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: 11; font.weight: Font.DemiBold }
+                                        id: badgeRow
+                                        anchors.centerIn: parent; spacing: Theme.spaceXs
+                                        Image {
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            width: Theme.iconLg; height: Theme.iconLg
+                                            sourceSize.width: 2 * Theme.iconLg; sourceSize.height: 2 * Theme.iconLg; mipmap: true
+                                            source: root.iconFor(dragArea.modelData)
+                                        }
+                                        Text {
+                                            visible: dragArea.groupN > 1
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            text: Theme.icStack
+                                            font.family: Theme.fontIcons; font.pixelSize: Theme.iconSm
+                                            color: Theme.glassAccent
+                                        }
+                                        Text {
+                                            visible: dragArea.groupN > 1
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            text: dragArea.groupN
+                                            color: Theme.textPrimary
+                                            font.family: Theme.type.label.family
+                                            font.pixelSize: Theme.type.label.size
+                                            font.weight: Theme.fontWeightSemibold
+                                            font.features: ({ "tnum": 1 })
+                                        }
                                     }
                                 }
                             }
 
                             // close (✕) — top-left on hover (badge owns the top-right corner).
                             Rectangle {
-                                anchors.top: parent.top; anchors.left: parent.left; anchors.margins: 10
+                                anchors.top: parent.top; anchors.left: parent.left
+                                anchors.margins: Theme.spaceS
                                 z: 50
-                                width: 24; height: 24; radius: 12
+                                width: Theme.controlMd; height: Theme.controlMd
+                                radius: Theme.radiusPrimary
                                 visible: !dragArea.drag.active && !root.searching && (dragArea.containsMouse || closeMa.containsMouse)
-                                color: closeMa.containsMouse ? Theme.danger : Qt.rgba(0, 0, 0, 0.6)
-                                border.color: closeMa.containsMouse ? Theme.danger : Theme.accent; border.width: Theme.borderThin
+                                color: closeMa.containsMouse ? Theme.danger : Theme.glassBase
+                                border.color: closeMa.containsMouse ? Theme.danger : Theme.glassBorder
+                                border.width: Theme.borderWidth1
+                                Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
                                 Text {
                                     anchors.fill: parent
                                     horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
-                                    text: Theme.icClose; font.family: Theme.fontIcons; font.pixelSize: 14
-                                    color: closeMa.containsMouse ? Theme.fgInverted : Theme.accent
+                                    text: Theme.icClose; font.family: Theme.fontIcons; font.pixelSize: Theme.iconSm
+                                    color: closeMa.containsMouse ? Theme.onStatus : Theme.textPrimary
                                 }
                                 MouseArea { id: closeMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.killWin(dragArea.modelData) }
                             }
@@ -669,10 +701,11 @@ Scope {
                 Text {
                     anchors.centerIn: parent
                     visible: win.winWins.length === 0 && !root.searching
-                    text: "No active windows"
-                    color: Theme.fg1
-                    opacity: 0.35
-                    font.family: Theme.fontDisplay; font.pixelSize: Theme.fsTitle
+                    text: "No open windows"
+                    color: Theme.textSecondary
+                    font.family: Theme.type.h2.family
+                    font.pixelSize: Theme.type.h2.size
+                    font.weight: Theme.fontWeightSemibold
                 }
             }
 
@@ -680,17 +713,13 @@ Scope {
             Rectangle {
                 id: searchShadowProxy
                 anchors.fill: searchBox
-                radius: Theme.r(16)
-                color: "black"
+                radius: Theme.radiusRounded
+                color: Theme.black
                 visible: false
             }
-            MultiEffect {
+            Elevation {
                 anchors.fill: searchShadowProxy
                 source: searchShadowProxy
-                shadowEnabled: true
-                shadowBlur: 1.0
-                shadowColor: Qt.rgba(0, 0, 0, 0.45)
-                shadowVerticalOffset: 12
             }
             Rectangle {
                 id: searchBox
@@ -698,40 +727,50 @@ Scope {
                 // show only their cards + the shared pager
                 visible: win.isFocused
                 anchors.horizontalCenter: parent.horizontalCenter
-                y: 30
-                width: 560; height: 52
-                radius: Theme.r(16)
-                color: stage.glassBg
-                border.color: search.activeFocus ? Qt.rgba(1, 1, 1, 0.24) : stage.hairline
-                border.width: Theme.borderThin
+                // spaceLg from the top of the stage (Overview card #2)
+                y: Theme.spaceLg
+                width: Math.min(parent.width - 2 * Theme.spaceLg, Theme.panelLg)
+                height: Theme.control2xl
+                radius: Theme.radiusRounded
+                color: Theme.glassRaised
+                border.color: search.activeFocus ? Theme.focusRing : Theme.glassBorder
+                border.width: Theme.borderWidth1
+                Behavior on border.color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
                 z: 10
 
                 Row {
                     anchors.fill: parent
-                    anchors.leftMargin: 20; anchors.rightMargin: 20
-                    spacing: 12
-                    Text { anchors.verticalCenter: parent.verticalCenter; text: Theme.icSearch; font.family: Theme.fontIcons; font.pixelSize: 16; color: Theme.fg3 }
+                    anchors.leftMargin: Theme.spaceMd; anchors.rightMargin: Theme.spaceMd
+                    spacing: Theme.spaceS
+                    Text { anchors.verticalCenter: parent.verticalCenter; text: Theme.icSearch; font.family: Theme.fontIcons; font.pixelSize: Theme.iconMd; color: Theme.textSecondary }
                     TextInput {
                         id: search
-                        width: parent.width - 40
+                        width: parent.width - Theme.iconMd - 2 * Theme.spaceS
                         anchors.verticalCenter: parent.verticalCenter
-                        color: Theme.fg1; font.family: Theme.fontDisplay; font.pixelSize: Theme.fsLarge
+                        color: Theme.textPrimary
+                        font.family: Theme.type.bodyLg.family; font.pixelSize: Theme.type.bodyLg.size
                         selectionColor: Theme.accent; selectByMouse: true; clip: true
-                        // accent caret, macOS-style blink
+                        // a borderWidth2 accent caret (Overview card #2)
                         cursorDelegate: Rectangle {
-                            width: 2; radius: 1
+                            id: caret
+                            width: Theme.borderWidth2
                             height: search.cursorRectangle.height
                             color: Theme.accent
-                            SequentialAnimation on opacity {
-                                loops: Animation.Infinite; running: search.activeFocus
-                                NumberAnimation { from: 1; to: 1; duration: 520 }
-                                NumberAnimation { from: 1; to: 0; duration: 60 }
-                                NumberAnimation { from: 0; to: 0; duration: 380 }
-                                NumberAnimation { from: 0; to: 1; duration: 60 }
+                            // blinks at the platform's cursor flash rate (a
+                            // behaviour, not motion); steady under Reduce motion
+                            readonly property int half: Math.max(1, Qt.styleHints.cursorFlashTime / 2)
+                            SequentialAnimation {
+                                loops: Animation.Infinite
+                                running: search.activeFocus && !Theme.reduceMotion && Qt.styleHints.cursorFlashTime > 0
+                                onRunningChanged: if (!running) caret.opacity = 1
+                                PropertyAction { target: caret; property: "opacity"; value: 1 }
+                                PauseAnimation { duration: caret.half }
+                                PropertyAction { target: caret; property: "opacity"; value: 0 }
+                                PauseAnimation { duration: caret.half }
                             }
                         }
                         onTextChanged: root.query = text
-                        Text { visible: search.text.length === 0; anchors.verticalCenter: parent.verticalCenter; text: "Search apps, windows and files…"; color: Theme.fg3; font: search.font }
+                        Text { visible: search.text.length === 0; anchors.verticalCenter: parent.verticalCenter; text: "Search apps, windows and files"; color: Theme.textSecondary; font: search.font }
                         Keys.onPressed: function (ev) {
                             if (ev.key === Qt.Key_Escape) { root.close(); ev.accepted = true }
                             else if (ev.key === Qt.Key_Return || ev.key === Qt.Key_Enter) { root.activateSel(); ev.accepted = true }
@@ -748,17 +787,18 @@ Scope {
                 id: resultsPanel
                 visible: root.searching && Globals.overviewOpen && win.isFocused
                 anchors.horizontalCenter: parent.horizontalCenter
-                anchors.top: searchBox.bottom; anchors.topMargin: 8
+                anchors.top: searchBox.bottom; anchors.topMargin: Theme.spaceS
                 width: searchBox.width
-                height: Math.min(resCol.implicitHeight + 16, stage.height - searchBox.y - searchBox.height - 60)
-                radius: Theme.r(16)
-                color: stage.glassBg
-                border.color: stage.hairline; border.width: Theme.borderThin
+                height: Math.min(resCol.implicitHeight + 2 * Theme.spaceS,
+                                 stage.height - searchBox.y - searchBox.height - Theme.spaceXl)
+                radius: Theme.radiusRounded
+                color: Theme.glassRaised
+                border.color: Theme.glassBorder; border.width: Theme.borderWidth1
                 z: 10
 
                 Flickable {
                     anchors.fill: parent
-                    anchors.margins: 8
+                    anchors.margins: Theme.spaceS
                     clip: true
                     contentWidth: width
                     contentHeight: resCol.implicitHeight
@@ -767,7 +807,7 @@ Scope {
                     Column {
                         id: resCol
                         width: parent.width
-                        spacing: 2
+                        spacing: Theme.spaceXxs
 
                         Repeater {
                             model: root.appResults
@@ -791,7 +831,7 @@ Scope {
                                 seld: root.appResults.length + index === root.sel
                                 icon: root.iconFor(modelData)
                                 title: root.titleOf(modelData)
-                                sub: "Open window on Desktop " + root.wsOf(modelData)
+                                sub: "Open window on workspace " + root.wsOf(modelData)
                                 tag: "Jump to"
                                 onGo: root.jump(modelData)
                             }
@@ -810,14 +850,35 @@ Scope {
                             }
                         }
 
-                        // dead-end state
-                        Item {
+                        // dead end — the compact Empty state (Empty state card)
+                        Column {
                             visible: root.navCount === 0
-                            width: resCol.width; height: 46
-                            Row {
-                                anchors.centerIn: parent; spacing: 10
-                                Text { anchors.verticalCenter: parent.verticalCenter; text: Theme.icSearchOff; font.family: Theme.fontIcons; font.pixelSize: 16; color: Theme.fg3 }
-                                Text { anchors.verticalCenter: parent.verticalCenter; text: "Nothing matches “" + root.query + "”"; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: Theme.fsBody }
+                            width: resCol.width
+                            spacing: Theme.spaceXs
+                            topPadding: Theme.spaceS; bottomPadding: Theme.spaceS
+                            Rectangle {
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                width: Theme.controlLg; height: Theme.controlLg
+                                radius: Theme.radiusFull
+                                color: Theme.glassHover
+                                Text { anchors.centerIn: parent; text: Theme.icSearchOff; font.family: Theme.fontIcons; font.pixelSize: Theme.iconMd; color: Theme.textSecondary }
+                            }
+                            Text {
+                                width: parent.width; horizontalAlignment: Text.AlignHCenter
+                                text: "Nothing matches “" + root.query + "”"
+                                color: Theme.textPrimary
+                                font.family: Theme.type.bodyStrong.family
+                                font.pixelSize: Theme.type.bodyStrong.size
+                                font.weight: Theme.fontWeightSemibold
+                                elide: Text.ElideRight
+                            }
+                            Text {
+                                width: parent.width; horizontalAlignment: Text.AlignHCenter
+                                wrapMode: Text.Wrap
+                                text: "Try an app name, a window title or a file name."
+                                color: Theme.textSecondary
+                                font.family: Theme.type.body.family
+                                font.pixelSize: Theme.type.body.size
                             }
                         }
                     }
@@ -832,9 +893,11 @@ Scope {
                 id: pagerRow
                 anchors.horizontalCenter: parent.horizontalCenter
                 // clear of the dock, which draws above the overview in the same
-                // layer (dockH + its 8 px float + breathing room)
-                anchors.bottom: parent.bottom; anchors.bottomMargin: 96
-                spacing: 12
+                // layer: its items + spaceS padding, windowGap above the edge,
+                // then spaceMd of breathing room — at every dock size
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: Theme.dockClearance + Theme.spaceMd
+                spacing: Theme.spaceS + Theme.spaceXs
                 opacity: root.searching ? 0.35 : 1
                 Behavior on opacity { NumberAnimation { duration: Theme.durBase; easing.type: Theme.ease } }
                 Repeater {
@@ -845,20 +908,19 @@ Scope {
                         readonly property int wsId: modelData.ws
                         readonly property bool current: wsId === root.focusedWs
                         readonly property bool empty: modelData.count === 0
-                        width: 58; height: 38
-                        scale: thumbDrop.containsDrag ? 1.14 : (thumbMa.containsMouse ? 1.06 : 1)
-                        Behavior on scale { NumberAnimation { duration: Theme.durFast; easing.type: Theme.ease } }
+                        // control2xl + spaceS by controlLg + spaceXs (56 x 36)
+                        width: Theme.control2xl + Theme.spaceS
+                        height: Theme.controlLg + Theme.spaceXs
 
                         Rectangle {
                             id: thumbBox
                             anchors.fill: parent
-                            radius: Theme.r(9)
-                            color: thumbDrop.containsDrag ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.30)
-                                 : thumb.current ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.16)
-                                 : Qt.rgba(1, 1, 1, thumbMa.containsMouse ? 0.13 : 0.07)
-                            border.color: (thumb.current || thumbDrop.containsDrag) ? Theme.accent : stage.hairline
-                            border.width: thumb.current || thumbDrop.containsDrag ? 2 : 1
-                            Behavior on color { ColorAnimation { duration: Theme.durFast } }
+                            radius: Theme.radiusPrimary
+                            color: (thumb.current || thumbDrop.containsDrag) ? Theme.accentSubtle
+                                 : thumbMa.containsMouse ? Theme.glassPressed : Theme.glassHover
+                            border.color: (thumb.current || thumbDrop.containsDrag) ? Theme.accent : Theme.glassBorder
+                            border.width: thumbDrop.containsDrag ? Theme.borderWidth2 : Theme.borderWidth1
+                            Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
 
                             // stylised windows: 1 = full, 2 = split, 3 = master+stack,
                             // 4+ = grid — a pager you can read at a glance
@@ -870,21 +932,22 @@ Scope {
                                     y: Math.round(thumbBox.height * modelData[1])
                                     width: Math.round(thumbBox.width * modelData[2])
                                     height: Math.round(thumbBox.height * modelData[3])
-                                    radius: Theme.r(2.5)
-                                    opacity: root.dragActive ? 0.25 : 1
-                                    color: thumb.current ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.75)
-                                                         : Qt.rgba(1, 1, 1, 0.40)
+                                    radius: Theme.borderWidth2
+                                    opacity: root.dragActive ? 0.25 : (thumb.current ? 0.8 : 0.55)
+                                    color: thumb.current ? Theme.accent : Theme.textSecondary
                                     Behavior on opacity { NumberAnimation { duration: Theme.durFast } }
                                 }
                             }
 
                             // trailing empty desktop reads as "new one lives here"
+                            // the trailing empty workspace reads as "a new one
+                            // lives here" — the card's `plus` glyph
                             Text {
                                 anchors.centerIn: parent
                                 visible: thumb.empty && !thumb.current && !root.dragActive
-                                text: "+"
-                                color: Qt.rgba(1, 1, 1, 0.45)
-                                font.family: Theme.fontDisplay; font.pixelSize: 17; font.weight: Font.DemiBold
+                                text: Theme.icPlus
+                                color: Theme.textSecondary
+                                font.family: Theme.fontIcons; font.pixelSize: Theme.iconSm
                             }
 
                             // while a card is being dragged, the number is the target
@@ -892,8 +955,11 @@ Scope {
                                 anchors.centerIn: parent
                                 visible: root.dragActive
                                 text: thumb.wsId
-                                color: thumbDrop.containsDrag ? Theme.fg1 : Theme.fg2
-                                font.family: Theme.fontDisplay; font.pixelSize: 14; font.weight: Font.DemiBold
+                                color: Theme.textPrimary
+                                font.family: Theme.type.label.family
+                                font.pixelSize: Theme.type.label.size
+                                font.weight: Theme.fontWeightSemibold
+                                font.features: ({ "tnum": 1 })
                             }
                         }
                         DropArea { id: thumbDrop; anchors.fill: parent; keys: ["overview-window"] }

@@ -21,7 +21,11 @@ QtObject {
                                 : source === "eds" ? Accounts.events : []
     readonly property string state: source === "nextcloud" ? Cloud.calState : source === "google" ? Google.calState : ""
     readonly property bool connected: Cloud.signedIn || Google.signedIn || (Accounts.events || []).length > 0
-    readonly property string hint: connected ? "No upcoming events" : "Sign in to your Nextcloud (Settings → Account) to see events here"
+    // the card's empty states (design system: Agenda), for any reader that
+    // shows one line; Quick settings shows the title and the description
+    readonly property string hintTitle: connected ? "No upcoming events" : "No calendar connected"
+    readonly property string hintBody: connected ? "Your week is clear." : "Sign in to Nextcloud or Google to see events here."
+    readonly property string hint: hintTitle + ". " + hintBody
 
     function refresh() {
         if (Cloud.signedIn) Cloud.fetchCalendar(true)
@@ -71,7 +75,7 @@ QtObject {
                 dirty = true
                 var when = new Date(start)
                 var lead = ev.reminders[r]
-                var body = (lead <= 0 ? "now" : "in " + lead + " min") + " · " + when.toLocaleTimeString(Qt.locale(), "h:mm AP")
+                var body = (lead <= 0 ? "Now" : "In " + lead + " min") + " · " + Qt.formatTime(when, "hh:mm AP")
                          + (ev.location ? "\n" + ev.location : "")
                          + (ev.video ? "\n" + ev.video : "")
                 Quickshell.execDetached(["notify-send", "-a", "Calendar", "-i", "x-office-calendar", ev.summary, body])

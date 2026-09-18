@@ -15,7 +15,7 @@ import Quickshell.Wayland
 // Re-open any time:  qs ipc call welcome toggle   (reset: … welcome reset)
 //
 // 0.9.16-2, the first bare-metal install: this overlay sat on the Overlay
-// layer above EVERYTHING — the Control Center (so no Wi-Fi could be joined
+// layer above EVERYTHING — Quick settings (so no Wi-Fi could be joined
 // to reach the sign-in step), the keyring prompt and the browser it had just
 // asked for. It now carries its own network step and steps aside while a
 // sign-in is in flight.
@@ -24,6 +24,18 @@ import Quickshell.Wayland
 // and nothing else on screen is swallowed. The card's height also no longer
 // animates between steps — a centred card grows from both edges at once, so
 // every step visibly walked up and down.
+//
+// Design system: Welcome, Step indicator, Wi-Fi picker.
+//
+//   card    panelLg wide, surfaceRaised with a borderWidth1 borderSubtle
+//           outline, the radiusRounded corner and shadowFloat
+//   body    spaceLg of padding, spaceMd between things, centred: an icon4xl
+//           accentSubtle glyph tile with an icon2xl accentText glyph (or the
+//           sheep mark on the first step), the h2 title, body-lg text in
+//           textSecondary and label notes in textMuted
+//   footer  above a borderWidth1 divider: six dots — the current one a
+//           spaceMd accent pill, the done ones textSecondary, the rest
+//           borderStrong — then a ghost and a primary Button
 Scope {
     id: root
 
@@ -179,92 +191,159 @@ Scope {
         Rectangle {
             id: card
             anchors.centerIn: parent
-            width: 600
-            height: body.implicitHeight + 40
-            radius: Theme.radius
-            // the panels' surface (rule 09: no outline — the Elevation and the
-            // Sheen separate it from the desktop behind, which stays live)
-            color: Theme.panel
-            border.width: 0
+            width: Theme.panelLg
+            height: body.implicitHeight
+            radius: Theme.radiusRounded
+            color: Theme.surfaceRaised
+            border.color: Theme.borderSubtle
+            border.width: Theme.borderWidth1
             layer.enabled: true
             layer.effect: Elevation {}
-            Sheen { radius: parent.radius }
+            // fade plus a slideOffset lift, in at durBase and out at durFast
             opacity: root.open ? 1 : 0
-            scale: root.open ? 1 : 0.94
-            Behavior on opacity { NumberAnimation { duration: Theme.durSlow; easing.type: Theme.ease } }
-            Behavior on scale { NumberAnimation { duration: Theme.durSlow; easing.type: Theme.ease } }
+            Behavior on opacity {
+                NumberAnimation { duration: root.open ? Theme.durBase : Theme.durFast; easing.type: Theme.ease }
+            }
+            transform: Translate {
+                y: (root.open || Theme.reduceMotion) ? 0 : Theme.slideOffset
+                Behavior on y { NumberAnimation { duration: Theme.durBase; easing.type: Theme.ease } }
+            }
             MouseArea { anchors.fill: parent }
 
             // ── shared bits ──
             component Title: Text {
                 width: parent.width; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.Wrap
-                color: Theme.fg1; font.family: Theme.fontDisplay; font.pixelSize: 26; font.weight: Font.Bold
+                color: Theme.textPrimary
+                font.family: Theme.type.h2.family
+                font.pixelSize: Theme.type.h2.size
+                font.weight: Theme.type.h2.weight
+                font.letterSpacing: Theme.type.h2.letterSpacing
             }
             component Body: Text {
                 width: parent.width; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.Wrap
-                color: Theme.fg2; font.family: Theme.fontText; font.pixelSize: Theme.fsBody; lineHeight: 1.25
+                color: Theme.textSecondary
+                font.family: Theme.type.bodyLg.family
+                font.pixelSize: Theme.type.bodyLg.size
             }
             component Note: Text {
                 width: parent.width; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.Wrap
-                color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
+                color: Theme.textMuted
+                font.family: Theme.type.label.family
+                font.pixelSize: Theme.fontSizeS
             }
+            // the system Button: ghost by default, primary when it carries the
+            // step's own verb
             component Btn: Rectangle {
                 id: b
                 property string label: ""
                 property bool primary: false
                 property bool enabled: true
                 signal go()
-                width: bt.implicitWidth + 36; height: 40; radius: Theme.r(12)
-                opacity: enabled ? 1 : 0.45
-                color: primary ? (bMa.containsMouse ? Theme.brandBgHover : Theme.accentFill)
-                               : (bMa.containsMouse ? Theme.cardHover : Theme.card)
-                Behavior on color { ColorAnimation { duration: 120 } }
-                Text { id: bt; anchors.centerIn: parent; text: b.label; color: b.primary ? Theme.accentOn : Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsBody; font.weight: Font.DemiBold }
+                width: bt.implicitWidth + 2 * Theme.spaceMd
+                height: Theme.controlLg
+                radius: Theme.radiusPrimary
+                color: !b.enabled ? Theme.surfaceRaised
+                     : b.primary ? (bMa.pressed ? Theme.accentPressed
+                                  : bMa.containsMouse ? Theme.accentHover : Theme.accent)
+                     : (bMa.pressed ? Theme.surfacePressed
+                       : bMa.containsMouse ? Theme.surfaceHover : "transparent")
+                border.color: b.enabled ? "transparent" : Theme.borderSubtle
+                border.width: Theme.borderWidth1
+                Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
+                Text {
+                    id: bt
+                    anchors.centerIn: parent; text: b.label
+                    color: !b.enabled ? Theme.textDisabled : b.primary ? Theme.onAccent : Theme.textPrimary
+                    font.family: Theme.type.body.family
+                    font.pixelSize: Theme.type.body.size
+                    font.weight: Theme.fontWeightMedium
+                }
                 MouseArea { id: bMa; anchors.fill: parent; hoverEnabled: true; enabled: b.enabled; cursorShape: Qt.PointingHandCursor; onClicked: b.go() }
             }
             component LinkBtn: Text {
                 property string label: ""
                 signal go()
-                text: label; color: Theme.accentFill; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold
-                MouseArea { anchors.fill: parent; anchors.margins: -6; cursorShape: Qt.PointingHandCursor; onClicked: parent.go() }
+                text: label; color: Theme.accentText
+                font.family: Theme.type.label.family
+                font.pixelSize: Theme.type.label.size
+                font.weight: Theme.fontWeightSemibold
+                MouseArea { anchors.fill: parent; anchors.margins: -Theme.spaceXs; cursorShape: Qt.PointingHandCursor; onClicked: parent.go() }
             }
             component Glyph: Rectangle {
                 property string ic: ""
-                width: 64; height: 64; radius: Theme.r(20)
-                color: Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.16)
-                Text { anchors.centerIn: parent; text: parent.ic; font.family: Theme.fontIcons; font.pixelSize: 30; color: Theme.accent }
+                width: Theme.icon4xl; height: Theme.icon4xl
+                radius: Theme.radiusRounded
+                color: Theme.accentSubtle
+                Text {
+                    anchors.centerIn: parent; text: parent.ic
+                    font.family: Theme.fontIcons; font.pixelSize: Theme.icon2xl
+                    color: Theme.accentText
+                }
             }
             component TourRow: Row {
                 property string ic: ""
                 property string head: ""
                 property string text: ""
-                width: parent.width; spacing: 14
+                width: parent.width; spacing: Theme.spaceS + Theme.spaceXs
                 Rectangle {
-                    width: 44; height: 44; radius: Theme.r(14)
-                    color: Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.16)
-                    Text { anchors.centerIn: parent; text: parent.parent.ic; font.family: Theme.fontIcons; font.pixelSize: 20; color: Theme.accent }
+                    width: Theme.controlXl; height: Theme.controlXl
+                    radius: Theme.radiusPrimary
+                    color: Theme.surfaceSunken
+                    border.color: Theme.borderSubtle; border.width: Theme.borderWidth1
+                    Text {
+                        anchors.centerIn: parent; text: parent.parent.ic
+                        font.family: Theme.fontIcons; font.pixelSize: Theme.iconLg
+                        color: Theme.textPrimary
+                    }
                 }
                 Column {
-                    width: parent.width - 58; spacing: 2
+                    width: parent.width - Theme.controlXl - parent.spacing
+                    spacing: Theme.spaceXxs
                     anchors.verticalCenter: parent.verticalCenter
-                    Text { width: parent.width; text: parent.parent.head; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsBody; font.weight: Font.DemiBold }
-                    Text { width: parent.width; text: parent.parent.text; color: Theme.fg2; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; wrapMode: Text.Wrap }
+                    Text {
+                        width: parent.width; text: parent.parent.head
+                        color: Theme.textPrimary
+                        font.family: Theme.type.bodyStrong.family
+                        font.pixelSize: Theme.type.bodyStrong.size
+                        font.weight: Theme.fontWeightSemibold
+                    }
+                    Text {
+                        width: parent.width; text: parent.parent.text
+                        color: Theme.textSecondary
+                        font.family: Theme.type.label.family
+                        font.pixelSize: Theme.fontSizeS
+                        wrapMode: Text.Wrap
+                    }
                 }
             }
 
+            // the card is one Column: the step's body with its own padding,
+            // then the footer full-bleed under a divider
             Column {
                 id: body
                 anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top
-                anchors.margins: 20; anchors.leftMargin: 36; anchors.rightMargin: 36
-                spacing: 18
+                anchors.margins: parent.border.width
+                spacing: 0
 
-                Item { width: 1; height: 8 }
+            Column {
+                id: steps
+                x: Theme.spaceLg
+                width: parent.width - 2 * Theme.spaceLg
+                topPadding: Theme.spaceLg
+                bottomPadding: Theme.spaceMd
+                spacing: Theme.spaceMd
 
                 // ── 1 · welcome ──
                 Column {
                     visible: root.step === 0
-                    width: parent.width; spacing: 16
-                    Image { anchors.horizontalCenter: parent.horizontalCenter; source: Qt.resolvedUrl("assets/logo.png"); width: 104; height: 104; sourceSize.width: 208; sourceSize.height: 208; fillMode: Image.PreserveAspectFit; mipmap: true }
+                    width: parent.width; spacing: Theme.spaceMd
+                    Image {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        source: Qt.resolvedUrl("assets/logo.png")
+                        width: Theme.icon4xl + Theme.spaceLg; height: width
+                        sourceSize.width: 2 * width; sourceSize.height: 2 * width
+                        fillMode: Image.PreserveAspectFit; mipmap: true
+                    }
                     Title { text: "Welcome to ewe" }
                     Body { text: "A clean, dark desktop that stays out of your way.\nA few short steps and it is yours." }
                 }
@@ -272,7 +351,7 @@ Scope {
                 // ── 2 · get online ──
                 Column {
                     visible: root.step === root.stepNetwork
-                    width: parent.width; spacing: 16
+                    width: parent.width; spacing: Theme.spaceMd
                     Glyph { anchors.horizontalCenter: parent.horizontalCenter; ic: Theme.icWifi }
                     Title { text: "Connect to the internet" }
                     Body { text: "The next steps bring the system up to date and sign you in to your Nextcloud, which can bring a backup down to this machine — all of that needs a connection. A cable just works; Wi-Fi is joined right here." }
@@ -294,7 +373,7 @@ Scope {
                 // restore can try to install anything.
                 Column {
                     visible: root.step === root.stepUpdates
-                    width: parent.width; spacing: 16
+                    width: parent.width; spacing: Theme.spaceMd
                     Glyph { anchors.horizontalCenter: parent.horizontalCenter; ic: Theme.icRefresh }
                     Title { text: root.updState === "done" ? "Up to date" : root.updState === "current" ? "Your system is up to date" : "Bring the system up to date" }
                     Body {
@@ -308,21 +387,33 @@ Scope {
                     }
                     Row {
                         visible: root.updBusy
-                        anchors.horizontalCenter: parent.horizontalCenter; spacing: 8
-                        Spinner { anchors.verticalCenter: parent.verticalCenter; font.pixelSize: 13 }
-                        Text { anchors.verticalCenter: parent.verticalCenter; text: root.updState === "checking" ? "Checking…" : "Upgrading…"; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
+                        anchors.horizontalCenter: parent.horizontalCenter; spacing: Theme.spaceS
+                        Spinner { anchors.verticalCenter: parent.verticalCenter; size: Theme.iconMd }
+                        Text {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: root.updState === "checking" ? "Checking…" : "Installing…"
+                            color: Theme.textMuted
+                            font.family: Theme.type.label.family; font.pixelSize: Theme.fontSizeS
+                        }
                     }
                     // the last lines of pacman, so a long upgrade is visibly alive
                     Rectangle {
                         visible: root.updTail.length > 0
-                        width: parent.width; height: updLog.implicitHeight + 16
-                        radius: Theme.radiusInner; color: root.updState === "failed" ? Theme.dangerBg : Theme.card; border.width: 0
+                        width: parent.width; height: updLog.implicitHeight + 2 * Theme.spaceS
+                        radius: Theme.radiusPrimary
+                        color: root.updState === "failed" ? Theme.dangerSubtle : Theme.surfaceSunken
+                        border.color: root.updState === "failed" ? Theme.danger : Theme.borderSubtle
+                        border.width: Theme.borderWidth1
                         Text {
                             id: updLog
-                            anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 8
+                            anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top
+                            anchors.margins: Theme.spaceS
+                            anchors.leftMargin: Theme.spaceS + Theme.spaceXs
+                            anchors.rightMargin: Theme.spaceS + Theme.spaceXs
                             text: root.updTail.join("\n")
-                            color: root.updState === "failed" ? Theme.danger : Theme.fg3
-                            font.family: Theme.fontMono; font.pixelSize: 11; wrapMode: Text.WrapAnywhere
+                            color: root.updState === "failed" ? Theme.danger : Theme.textSecondary
+                            font.family: Theme.fontMono; font.pixelSize: Theme.fontSizeXs
+                            wrapMode: Text.WrapAnywhere
                         }
                     }
                 }
@@ -330,32 +421,57 @@ Scope {
                 // ── 4 · your account: Nextcloud ──
                 Column {
                     visible: root.step === root.stepSignIn
-                    width: parent.width; spacing: 16
+                    width: parent.width; spacing: Theme.spaceMd
                     Rectangle {
                         anchors.horizontalCenter: parent.horizontalCenter
-                        width: 64; height: 64; radius: Theme.r(20)
-                        color: Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.16)
-                        Image { anchors.centerIn: parent; source: Qt.resolvedUrl("assets/nextcloud.svg"); width: 40; height: 40; sourceSize.width: 80; sourceSize.height: 80; fillMode: Image.PreserveAspectFit; opacity: 0.92 }
+                        width: Theme.icon4xl; height: Theme.icon4xl
+                        radius: Theme.radiusRounded
+                        color: Theme.accentSubtle
+                        Image {
+                            anchors.centerIn: parent
+                            source: Qt.resolvedUrl("assets/nextcloud.svg")
+                            width: Theme.icon2xl; height: Theme.icon2xl
+                            sourceSize.width: 2 * Theme.icon2xl; sourceSize.height: 2 * Theme.icon2xl
+                            fillMode: Image.PreserveAspectFit
+                        }
                     }
                     Title { text: Cloud.signedIn ? "Signed in" : "Your account: Nextcloud" }
                     Body {
                         visible: !Cloud.signedIn
-                        text: "ewe keeps your machine in sync as one file, restores your apps through Komble, shows your calendar in the Control Center and keeps your files in ~/Nextcloud — all in YOUR Nextcloud: a server you run, or a hosted account (Murena, Disroot, Infomaniak…). Nothing about it is baked into ewe.\n\nSkip it and nothing changes; you can sign in later in Settings → Account."
+                        text: "ewe keeps your machine in sync as one file, restores your apps through Komble, shows your calendar in Quick settings and keeps your files in ~/Nextcloud — all in YOUR Nextcloud: a server you run, or a hosted account (Murena, Disroot, Infomaniak…). Nothing about it is baked into ewe.\n\nSkip it and nothing changes; you can sign in later in Settings → Account."
                     }
                     // signed in: who, and what just got set up
                     Row {
                         visible: Cloud.signedIn
-                        anchors.horizontalCenter: parent.horizontalCenter; spacing: 12
+                        anchors.horizontalCenter: parent.horizontalCenter; spacing: Theme.spaceS + Theme.spaceXs
                         Rectangle {
                             anchors.verticalCenter: parent.verticalCenter
-                            width: 40; height: 40; radius: 20; color: Theme.card
-                            Text { anchors.centerIn: parent; visible: wAv.status !== Image.Ready; text: (Cloud.displayName || "?").charAt(0).toUpperCase(); color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: 16; font.weight: Font.DemiBold }
+                            width: Theme.controlXl; height: Theme.controlXl
+                            radius: Theme.radiusFull
+                            color: Theme.surfaceHover
+                            clip: true
+                            Text {
+                                anchors.centerIn: parent; visible: wAv.status !== Image.Ready
+                                text: (Cloud.displayName || "?").charAt(0).toUpperCase()
+                                color: Theme.textPrimary
+                                font.family: Theme.type.h4.family; font.pixelSize: Theme.type.h4.size
+                                font.weight: Theme.type.h4.weight
+                            }
                             Image { id: wAv; anchors.fill: parent; source: Cloud.avatarPath !== "" ? "file://" + Cloud.avatarPath : ""; fillMode: Image.PreserveAspectCrop; visible: status === Image.Ready }
                         }
                         Column {
-                            anchors.verticalCenter: parent.verticalCenter; spacing: 2
-                            Text { text: Cloud.displayName; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsBody; font.weight: Font.DemiBold }
-                            Text { text: (Cloud.email !== "" ? Cloud.email + " · " : "") + Cloud.serverHost; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
+                            anchors.verticalCenter: parent.verticalCenter; spacing: Theme.spaceXxs
+                            Text {
+                                text: Cloud.displayName; color: Theme.textPrimary
+                                font.family: Theme.type.bodyStrong.family
+                                font.pixelSize: Theme.type.bodyStrong.size
+                                font.weight: Theme.fontWeightSemibold
+                            }
+                            Text {
+                                text: (Cloud.email !== "" ? Cloud.email + " · " : "") + Cloud.serverHost
+                                color: Theme.textMuted
+                                font.family: Theme.type.label.family; font.pixelSize: Theme.fontSizeS
+                            }
                         }
                     }
                     Note { visible: Cloud.signedIn; text: "Your files are at ~/Nextcloud (Files → sidebar)." }
@@ -363,31 +479,42 @@ Scope {
                     Note { visible: Cloud.signedIn && Globals.syncAppInstalled; text: "Folders and your machines: ewe-sync (the tray icon)." }
                     Row {
                         visible: Cloud.signedIn && Globals.syncAppInstalled
-                        anchors.horizontalCenter: parent.horizontalCenter; spacing: 18
+                        anchors.horizontalCenter: parent.horizontalCenter; spacing: Theme.spaceMd
                         LinkBtn { label: "Open ewe-sync"; onGo: Globals.openSync() }
                     }
                     // the server address — remembered between attempts
                     Rectangle {
                         visible: !Cloud.signedIn && Cloud.busy !== "signin"
-                        width: parent.width; height: 40; radius: Theme.r(10)
-                        // a filled well; the focus stroke is the one outline that means something
-                        color: Theme.bg3; border.color: Theme.strokeFocus1; border.width: srvField.activeFocus ? Theme.focusWidth : 0
+                        width: parent.width; height: Theme.controlXl
+                        radius: Theme.radiusPrimary
+                        color: Theme.surfaceSunken
+                        border.width: Theme.fieldBorderWidth
+                        border.color: srvField.activeFocus ? Theme.focusRing : Theme.borderStrong
+                        Behavior on border.color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
                         TextInput {
                             id: srvField
-                            anchors.fill: parent; anchors.leftMargin: 12; anchors.rightMargin: 12
+                            anchors.fill: parent
+                            anchors.leftMargin: Theme.spaceS + Theme.spaceXs
+                            anchors.rightMargin: Theme.spaceS + Theme.spaceXs
                             verticalAlignment: TextInput.AlignVCenter
                             text: Cloud.lastServer
-                            color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsBody
+                            color: Theme.textPrimary
+                            font.family: Theme.type.bodyLg.family; font.pixelSize: Theme.type.bodyLg.size
                             clip: true; selectByMouse: true
                             onAccepted: if (root.online && text.trim() !== "") Cloud.signIn(text)
-                            Text { visible: srvField.text === "" && !srvField.activeFocus; anchors.verticalCenter: parent.verticalCenter; text: "https://cloud.example.org"; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: Theme.fsBody }
+                            Text {
+                                visible: srvField.text === "" && !srvField.activeFocus
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: "https://cloud.example.org"; color: Theme.textMuted; font: srvField.font
+                            }
                         }
                     }
                     Text {
                         visible: !root.online && Cloud.busy !== "signin" && !Cloud.signedIn
                         width: parent.width; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.Wrap
-                        text: "You are offline — sign-in needs a connection. Go back to connect, or skip for now."
-                        color: Theme.warning; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
+                        text: "You are offline. Sign-in needs a connection: go back to connect, or skip for now."
+                        color: Theme.warning
+                        font.family: Theme.type.label.family; font.pixelSize: Theme.fontSizeS
                     }
                     Note {
                         visible: root.online && !Cloud.signedIn && Cloud.keyringPromptExpected
@@ -397,20 +524,26 @@ Scope {
                     }
                     Row {
                         visible: Cloud.busy === "signin"
-                        anchors.horizontalCenter: parent.horizontalCenter; spacing: 8
-                        Spinner { anchors.verticalCenter: parent.verticalCenter; font.pixelSize: 13 }
-                        Text { anchors.verticalCenter: parent.verticalCenter; text: "Waiting for the browser — sign in on your server's page and grant access to ewe…"; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
+                        anchors.horizontalCenter: parent.horizontalCenter; spacing: Theme.spaceS
+                        Spinner { anchors.verticalCenter: parent.verticalCenter; size: Theme.iconMd }
+                        Text {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: "Waiting for the browser…"
+                            color: Theme.textMuted
+                            font.family: Theme.type.label.family; font.pixelSize: Theme.fontSizeS
+                        }
                     }
                     Text {
                         visible: Cloud.error !== ""
                         width: parent.width; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.Wrap
-                        text: Cloud.error; color: Theme.danger; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
+                        text: Cloud.error; color: Theme.danger
+                        font.family: Theme.type.label.family; font.pixelSize: Theme.fontSizeS
                     }
                     // the link itself, for when the browser hand-off did not
                     // happen (no default browser, odd session)
                     Row {
                         visible: Cloud.loginUrl !== "" && !Cloud.signedIn
-                        anchors.horizontalCenter: parent.horizontalCenter; spacing: 18
+                        anchors.horizontalCenter: parent.horizontalCenter; spacing: Theme.spaceMd
                         LinkBtn { label: "Open the sign-in page"; onGo: Cloud.openLoginUrl() }
                         LinkBtn { label: "Copy the link"; onGo: Cloud.copyLoginUrl() }
                     }
@@ -419,7 +552,7 @@ Scope {
                     Row {
                         visible: root.online && !Cloud.signedIn && Cloud.busy !== "signin"
                                  && (Cloud.keyringTrouble || Cloud.keyringResetDone)
-                        anchors.horizontalCenter: parent.horizontalCenter; spacing: 18
+                        anchors.horizontalCenter: parent.horizontalCenter; spacing: Theme.spaceMd
                         LinkBtn { visible: !Cloud.keyringResetDone; label: "Reset the keyring"; onGo: Cloud.resetKeyring() }
                         LinkBtn { visible: Cloud.keyringResetDone; label: "Log out now"; onGo: Cloud.logOut() }
                     }
@@ -428,7 +561,7 @@ Scope {
                 // ── 5 · restore ──
                 Column {
                     visible: root.step === root.stepRestore
-                    width: parent.width; spacing: 16
+                    width: parent.width; spacing: Theme.spaceMd
                     Glyph { anchors.horizontalCenter: parent.horizontalCenter; ic: Theme.icDownload }
                     Title { text: "Your desktop is in your account" }
                     Body {
@@ -438,37 +571,50 @@ Scope {
                     }
                     Row {
                         visible: root._restoring
-                        anchors.horizontalCenter: parent.horizontalCenter; spacing: 8
-                        Spinner { anchors.verticalCenter: parent.verticalCenter; font.pixelSize: 13 }
-                        Text { anchors.verticalCenter: parent.verticalCenter; text: "Restoring…"; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
+                        anchors.horizontalCenter: parent.horizontalCenter; spacing: Theme.spaceS
+                        Spinner { anchors.verticalCenter: parent.verticalCenter; size: Theme.iconMd }
+                        Text {
+                            anchors.verticalCenter: parent.verticalCenter; text: "Restoring…"
+                            color: Theme.textMuted
+                            font.family: Theme.type.label.family; font.pixelSize: Theme.fontSizeS
+                        }
                     }
                     Text {
                         visible: Cloud.syncError !== "" && !root._restoring
                         width: parent.width; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.Wrap
-                        text: Cloud.syncError; color: Theme.danger; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
+                        text: Cloud.syncError; color: Theme.danger
+                        font.family: Theme.type.label.family; font.pixelSize: Theme.fontSizeS
                     }
                 }
 
                 // ── 6 · tour ──
                 Column {
                     visible: root.step === root.stepTour
-                    width: parent.width; spacing: 16
+                    width: parent.width; spacing: Theme.spaceMd
                     Title { text: "The sixty-second tour" }
                     // what the restore left for Komble
                     Rectangle {
                         visible: Cloud.restoreApps > 0 || Cloud.restorePlugins > 0
-                        width: parent.width; height: appsRow.implicitHeight + 20
-                        radius: Theme.radiusInner; color: Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.12); border.width: 0
+                        width: parent.width; height: appsRow.implicitHeight + 2 * (Theme.spaceS + Theme.spaceXs)
+                        radius: Theme.radiusPrimary
+                        color: Theme.accentSubtle
                         Row {
                             id: appsRow
-                            anchors.left: parent.left; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; anchors.margins: 12; spacing: 12
-                            Text { anchors.verticalCenter: parent.verticalCenter; text: Theme.icDownload; font.family: Theme.fontIcons; font.pixelSize: 18; color: Theme.accent }
+                            anchors.left: parent.left; anchors.right: parent.right
+                            anchors.verticalCenter: parent.verticalCenter
+                            anchors.margins: Theme.spaceS + Theme.spaceXs
+                            spacing: Theme.spaceS + Theme.spaceXs
+                            Text {
+                                anchors.verticalCenter: parent.verticalCenter; text: Theme.icDownload
+                                font.family: Theme.fontIcons; font.pixelSize: Theme.iconLg; color: Theme.accentText
+                            }
                             Text {
                                 anchors.verticalCenter: parent.verticalCenter
-                                width: parent.width - 24 - 12 - openKomble.width - 12
+                                width: parent.width - Theme.iconLg - openKomble.width - 2 * parent.spacing
                                 wrapMode: Text.Wrap
                                 text: Cloud.restorePhrase() + " → For you and Plugins: repository apps install in one go, AUR apps go through the PKGBUILD review first, plugins are cloned from their git URLs. Never automatic."
-                                color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
+                                color: Theme.textPrimary
+                                font.family: Theme.type.label.family; font.pixelSize: Theme.fontSizeS
                             }
                             Btn { id: openKomble; anchors.verticalCenter: parent.verticalCenter; label: "Open Komble"; onGo: Globals.openStore() }
                         }
@@ -477,48 +623,70 @@ Scope {
                     // pushes on its own (see Cloud.autoPushAllowed)
                     Rectangle {
                         visible: Cloud.signedIn && Cloud.lastSync === ""
-                        width: parent.width; height: bkRow.implicitHeight + 20
-                        radius: Theme.radiusInner; color: Theme.card; border.width: 0
+                        width: parent.width; height: bkRow.implicitHeight + 2 * (Theme.spaceS + Theme.spaceXs)
+                        radius: Theme.radiusPrimary
+                        color: Theme.surfaceSunken
+                        border.color: Theme.borderSubtle; border.width: Theme.borderWidth1
                         Row {
                             id: bkRow
-                            anchors.left: parent.left; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; anchors.margins: 12; spacing: 12
-                            Text { anchors.verticalCenter: parent.verticalCenter; text: Theme.icRefresh; font.family: Theme.fontIcons; font.pixelSize: 18; color: Theme.accent }
+                            anchors.left: parent.left; anchors.right: parent.right
+                            anchors.verticalCenter: parent.verticalCenter
+                            anchors.margins: Theme.spaceS + Theme.spaceXs
+                            spacing: Theme.spaceS + Theme.spaceXs
+                            Text {
+                                anchors.verticalCenter: parent.verticalCenter; text: Theme.icRefresh
+                                font.family: Theme.fontIcons; font.pixelSize: Theme.iconLg; color: Theme.accentText
+                            }
                             Text {
                                 anchors.verticalCenter: parent.verticalCenter
-                                width: parent.width - 24 - 12 - bkBtn.width - 12
+                                width: parent.width - Theme.iconLg - bkBtn.width - 2 * parent.spacing
                                 wrapMode: Text.Wrap
                                 text: root._backingUp ? "Backing this machine up to your account…" : "This machine is not backed up yet. Nothing is uploaded until you say so."
-                                color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
+                                color: Theme.textPrimary
+                                font.family: Theme.type.label.family; font.pixelSize: Theme.fontSizeS
                             }
                             Btn { id: bkBtn; anchors.verticalCenter: parent.verticalCenter; label: root._backingUp ? "Backing up…" : "Back up now"; enabled: !root._backingUp; onGo: { root._backingUp = true; Cloud.backUpNow() } }
                         }
                     }
                     Column {
-                        width: parent.width; spacing: 14
-                        TourRow { ic: Theme.icKeyboard; head: "The Super key"; text: "Tap Super for the overview of your windows and workspaces. Super + D searches apps and files; Super + Return opens a terminal." }
+                        width: parent.width; spacing: Theme.spaceS + Theme.spaceXs
+                        TourRow { ic: Theme.icKeyboard; head: "The Super key"; text: "Tap Super for the Overview of your windows and workspaces. Super+D searches apps and files; Super+Return opens a terminal." }
                         TourRow { ic: Theme.icApps; head: "The dock"; text: "Your pinned apps and open windows live at the bottom. Right-click any app to pin it; the first icon is the launcher." }
-                        TourRow { ic: Theme.icCog; head: "Control Center and Settings"; text: "Super + N (or the clock) opens the Control Center — Wi-Fi, sound, cast, calendar, notifications. Super + , opens Settings." }
-                        TourRow { ic: Theme.icDownload; head: "Komble"; text: "One store for everything: the Arch repositories, the AUR and AppImages, with updates in one place — the download glyph in the top bar tells you when." }
+                        TourRow { ic: Theme.icCog; head: "Quick settings and Settings"; text: "Super+N (or the clock) opens Quick settings — Wi-Fi, sound, cast, calendar, notifications. Super+, opens Settings." }
+                        TourRow { ic: Theme.icDownload; head: "Komble"; text: "One store for everything: the Arch repositories, the AUR and AppImages, with updates in one place — the download glyph in the bar tells you when." }
                     }
                 }
 
-                // ── footer: dots + buttons ──
+            }
+
+                // ── footer: the step dots and the buttons, under a divider ──
+                Rectangle { width: parent.width; height: Theme.borderWidth1; color: Theme.borderSubtle }
                 Item {
-                    width: parent.width; height: 44
+                    width: parent.width
+                    height: Theme.controlLg + 2 * (Theme.spaceS + Theme.spaceXs)
                     Row {
-                        anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; spacing: 6
+                        anchors.left: parent.left; anchors.leftMargin: Theme.spaceMd
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: Theme.spaceXs
                         Repeater {
                             model: 6
                             delegate: Rectangle {
                                 required property int index
-                                width: index === root.step ? 18 : 6; height: 6; radius: 3
-                                color: index === root.step ? Theme.accent : Theme.subtleSelected
-                                Behavior on width { NumberAnimation { duration: Theme.durBase; easing.type: Theme.ease } }
+                                width: index === root.step ? Theme.spaceMd : Theme.spaceXs
+                                height: Theme.spaceXs
+                                radius: Theme.radiusFull
+                                color: index === root.step ? Theme.accent
+                                     : index < root.step ? Theme.textSecondary : Theme.borderStrong
+                                Behavior on width {
+                                    NumberAnimation { duration: Theme.reduceMotion ? 0 : Theme.durBase; easing.type: Theme.ease }
+                                }
                             }
                         }
                     }
                     Row {
-                        anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; spacing: 8
+                        anchors.right: parent.right; anchors.rightMargin: Theme.spaceMd
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: Theme.spaceS
                         // step-specific secondary
                         Btn { visible: root.step === root.stepNetwork && !root.online; label: "Continue offline"; onGo: root.next() }
                         Btn { visible: root.step === root.stepUpdates && (root.updState === "pending" || root.updState === "failed" || root.updState === "unknown"); label: "Later"; onGo: root.next() }

@@ -67,9 +67,9 @@ tok() {  # tok <role> <fallback-6hex> → 6 hex chars, no '#'
     case "${#v}" in 8) v="${v:2}";; 6) ;; *) v="$2";; esac
     printf '%s' "$v"
 }
-S_BG="$(tok bg-3 090a0e)"; S_PANEL="$(tok bg-1 131417)"; S_ELEV="$(tok card 191a1d)"
-S_STROKE="$(tok stroke-2 515255)"; S_HOVER="$(tok subtle-hover 1c1c1e)"; S_FRAME="$(tok bg-6 191a1d)"
-S_FG="$(tok fg-1 ffffff)"; S_FG_DIM="$(tok fg-3 adadad)"; S_FG_INV="$(tok fg-inverted 232427)"
+S_BG="$(tok surface-base 0b0a08)"; S_PANEL="$(tok surface-raised 151411)"; S_ELEV="$(tok surface-raised 151411)"
+S_STROKE="$(tok border-subtle 2c2a26)"; S_HOVER="$(tok surface-hover 2c2a26)"; S_FRAME="$(tok surface-overlay 201e1a)"
+S_FG="$(tok text-primary faf9f6)"; S_FG_DIM="$(tok text-muted a8a49d)"; S_FG_INV="$(tok on-accent 020202)"
 S_BG_R=$((16#${S_BG:0:2}));    S_BG_G=$((16#${S_BG:2:2}));    S_BG_B=$((16#${S_BG:4:2}))
 tokrgb() {  # tok as "r,g,b" (kdeglobals' spelling)
     local h; h="$(tok "$1" "$2")"
@@ -107,7 +107,7 @@ for v in 3.0 4.0; do
 [Settings]
 gtk-theme-name=$GTK_THEME
 gtk-icon-theme-name=$ICONS
-gtk-font-name=Inter 11
+gtk-font-name=Geist 11
 gtk-application-prefer-dark-theme=$PREFER_DARK
 gtk-cursor-theme-name=$CURSOR
 gtk-cursor-theme-size=$CURSOR_SIZE
@@ -118,13 +118,15 @@ done
 # ── GTK accent — adw-gtk3 and libadwaita both read these named colors from
 #    gtk.css, so Nemo/Engrampa selections follow the shell accent instead of
 #    staying stock blue. Managed file: rewritten on every scheme apply. ──
-# accent_fg follows luminance like the shell's Theme.accentText — white text
+# accent_fg follows luminance like the shell's Theme.onAccent — white text
 # on a yellow selection is unreadable. Threshold 140 (~0.55), matching the
 # shell: mid-luminance accents (system green) already need ink, not white.
-if [ $(( (AR * 299 + AG * 587 + AB * 114) / 1000 )) -gt 140 ]; then ACC_FG="$S_FG_INV"; else ACC_FG="ffffff"; fi
-# GTK surfaces on the derived ramp: the window is the app ground (bg-3), the
-# sidebar the frame step (bg-6), views one step up (bg-1), cards the card
-# role, popovers and dialogs the panel level — the same layering the shell
+# The ink is on-accent (Ewe's one black) or neutral-0 (its one white).
+if [ $(( (AR * 299 + AG * 587 + AB * 114) / 1000 )) -gt 140 ]; then ACC_FG="$S_FG_INV"; else ACC_FG="$(tok neutral-0 fefdfc)"; fi
+# GTK surfaces on the derived ramp: the window is the app ground
+# (surface-base), the sidebar the frame step (surface-overlay), views and
+# cards one step up (surface-raised), popovers and dialogs the panel level
+# (surface-raised) — the same layering the shell
 # and the Tauri apps use, so a GTK window beside them reads as one system.
 BS_CSS="
 /* ewe surfaces — the derived ramp, managed by colorscheme.sh */
@@ -191,7 +193,7 @@ color11 #$(_b base13 "$(_b base0A fdea3d)")
 color12 #$(_b base16 "$(_b base0D "$ACC")")
 color13 #$(_b base17 "$(_b base0E b38aff)")
 color14 #$(_b base15 "$(_b base0C 9ea2a6)")
-color15 #$(_b base07 ffffff)
+color15 #$(_b base07 fefdfc)
 EOF
 fi
 pkill -USR1 -x kitty 2>/dev/null || true
@@ -365,8 +367,8 @@ EOF
     "--radius-lg": "12px",
     "--radius-xl": "16px",
     "--radius-full": "9999px",
-    "--font-ui": "\"Inter\", \"Noto Sans Georgian\", \"system-ui\", sans-serif",
-    "--font-mono": "\"JetBrainsMono Nerd Font\", \"ui-monospace\", monospace",
+    "--font-ui": "\"Geist\", \"Noto Sans Georgian\", \"system-ui\", sans-serif",
+    "--font-mono": "\"Geist Mono\", \"Noto Sans Georgian\", \"ui-monospace\", monospace",
     "--asyar-brand": "#${ACC}",
     "--asyar-brand-hover": "#${ACC}",
     "--asyar-brand-muted": "rgba($AR, $AG, $AB, 0.15)",
@@ -384,8 +386,8 @@ if command -v gsettings >/dev/null 2>&1; then
     gsettings set org.gnome.desktop.interface icon-theme   "$ICONS"     2>/dev/null || true
     gsettings set org.gnome.desktop.interface cursor-theme "$CURSOR"    2>/dev/null || true
     gsettings set org.gnome.desktop.interface cursor-size  "$CURSOR_SIZE" 2>/dev/null || true
-    gsettings set org.gnome.desktop.interface font-name    "Inter 11"  2>/dev/null || true
-    gsettings set org.gnome.desktop.interface document-font-name "Inter 11" 2>/dev/null || true
+    gsettings set org.gnome.desktop.interface font-name    "Geist 11"  2>/dev/null || true
+    gsettings set org.gnome.desktop.interface document-font-name "Geist 11" 2>/dev/null || true
     # no close/min/max buttons in headerbars — Hyprland has no titlebars and
     # windows close via Super+Q; GTK3 reads gtk-decoration-layout from
     # settings.ini, GTK4/libadwaita follows this key
@@ -403,11 +405,11 @@ mkdir -p "$COLORS"
 # AlternateBase NoRole ToolTipBase ToolTipText PlaceholderText — every value
 # a token, so a scheme (or a light one) reaches Qt apps too (was a frozen
 # grey palette with only the accent substituted).
-Q_FG="$(tok fg-1 ffffff)"; Q_FG3="$(tok fg-3 adadad)"; Q_DIS="$(tok fg-disabled 5b5c5f)"
-Q_BTN="$(tok bg-1 131417)"; Q_LIGHT="$(tok bg-1-hover 1e1f22)"; Q_MIDL="$(tok card 191a1d)"
-Q_DARK="$(tok bg-4 040509)"; Q_MID="$(tok bg-2 0e0f12)"; Q_BASE="$(tok bg-3 090a0e)"
-Q_WIN="$(tok bg-2 0e0f12)"; Q_SHADOW="$(tok bg-5 000000)"; Q_ALT="$(tok bg-2-hover 191a1d)"
-Q_LINKV="$(tok brand-fg-2 93b8ff)"; Q_ACC_FG="${ACC_FG}"
+Q_FG="$(tok text-primary faf9f6)"; Q_FG3="$(tok text-muted a8a49d)"; Q_DIS="$(tok text-disabled 5d5a55)"
+Q_BTN="$(tok surface-raised 151411)"; Q_LIGHT="$(tok surface-hover 2c2a26)"; Q_MIDL="$(tok surface-raised 151411)"
+Q_DARK="$(tok surface-sunken 020202)"; Q_MID="$(tok surface-base 0b0a08)"; Q_BASE="$(tok surface-base 0b0a08)"
+Q_WIN="$(tok surface-base 0b0a08)"; Q_SHADOW="$(tok surface-sunken 020202)"; Q_ALT="$(tok surface-hover 2c2a26)"
+Q_LINKV="$(tok accent-text f8c23a)"; Q_ACC_FG="${ACC_FG}"
 cat > "$COLORS/ewe-dark.conf" <<EOF
 [ColorScheme]
 active_colors=#ff${Q_FG}, #ff${Q_BTN}, #ff${Q_LIGHT}, #ff${Q_MIDL}, #ff${Q_DARK}, #ff${Q_MID}, #ff${Q_FG}, #ff${Q_FG}, #ff${Q_FG}, #ff${Q_BASE}, #ff${Q_WIN}, #ff${Q_SHADOW}, #ff${ACC}, #ff${Q_ACC_FG}, #ff${ACC}, #ff${Q_LINKV}, #ff${Q_ALT}, #ff${Q_BTN}, #ff${Q_MIDL}, #ff${Q_FG}, #ff${Q_FG3}
@@ -434,11 +436,11 @@ done
 # We ship no KDE apps, but writing this keeps any KColorScheme-aware app you install
 # later dark (incl. its item views) instead of falling back to a light default.
 # Accent = Selection + Decoration*.
-C_WIN="$(tokrgb bg-2 0e0f12)";   C_WINA="$(tokrgb bg-1 131417)"
-C_VIEW="$(tokrgb bg-3 090a0e)";  C_VIEWA="$(tokrgb bg-2 0e0f12)"
-C_BTN="$(tokrgb bg-1 131417)";   C_FG="$(tokrgb fg-1 ffffff)"
-C_FGI="$(tokrgb fg-3 adadad)";   C_TIP="$(tokrgb card 191a1d)"
-C_VIS="$(tokrgb brand-fg-2 93b8ff)"
+C_WIN="$(tokrgb surface-base 0b0a08)";   C_WINA="$(tokrgb surface-raised 151411)"
+C_VIEW="$(tokrgb surface-base 0b0a08)";  C_VIEWA="$(tokrgb surface-base 0b0a08)"
+C_BTN="$(tokrgb surface-raised 151411)";   C_FG="$(tokrgb text-primary faf9f6)"
+C_FGI="$(tokrgb text-muted a8a49d)";   C_TIP="$(tokrgb surface-raised 151411)"
+C_VIS="$(tokrgb accent-text f8c23a)"
 A="$AR,$AG,$AB"
 _cgroup() {  # $1 bg  $2 bgAlt
     cat <<EOF
@@ -501,7 +503,7 @@ mkdir -p "$MPVDIR/script-opts"
 { echo "# Generated by ewe (colorscheme.sh) — do not edit; theme via Settings."
   # uosc 5.x: one comma-joined color option
   echo "color=foreground=${ACC},foreground_text=${ACC_FG},background=${S_BG},background_text=${S_FG}"
-  echo "font=Inter"
+  echo "font=Geist"
 } > "$MPVDIR/script-opts/uosc.conf"
 
 # ── Helium (the DE browser): chrome surface + vertical tabs ──────────────────

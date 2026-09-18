@@ -122,7 +122,7 @@ A plugin is a git repository with `manifest.json` at its root:
   "id": "acme.weather",
   "name": "Weather",
   "version": "0.1.0",
-  "apiVersion": 1,
+  "apiVersion": 2,
   "description": "Current conditions in the bar, forecast in a panel.",
   "homepage": "https://github.com/acme/ewe-weather",
   "author": "acme",
@@ -137,7 +137,7 @@ A plugin is a git repository with `manifest.json` at its root:
 | `schemaVersion` | `1` |
 | `id` | `<namespace>.<name>`, lowercase `[a-z0-9_-]`, at least one dot. `ewe.` is reserved for the plugins ewe ships. The install directory is named after it. |
 | `name`, `version` | non-empty strings; `version` is what `list` shows |
-| `apiVersion` | the shell's plugin API this plugin was written against (`1`); a mismatch is refused at install, not at login |
+| `apiVersion` | the shell's plugin API this plugin was written against (`2`); a mismatch is refused at install, not at login |
 | `kinds` | one or more of `service`, `panel`, `overlay`, `menu`, `bar-widget`, `desktop-widget` |
 | `desktopWidget` | optional, for `desktop-widget`: `{ "x": 48, "y": 64, "layer": "desktop" }` — the default place; the user's own placement in ewe.conf wins |
 | `settings` | optional: `[{ "key", "type", "default", "label", "choices"?, "min"?, "max"? }]` with `type` one of `bool`, `int`, `string`, `choice`, `color`. The values reach every entry point as `settings` and render as a form in Komble |
@@ -161,31 +161,39 @@ every other bar item.
 ### The bar-widget contract
 
 The entry point's root is an `Item` with an implicit size. The bar's `Row`
-packs it; give it the bar's conventions and it will not look foreign.
-A widget in the **right** section lands right after the system tray, in the
-tray's rhythm (`Theme.trayItemSpacing` apart) — a single-glyph widget looks
-right at the tray's size, a 16 px glyph in an 18 px cell
-(`implicitWidth: Theme.trayIconPx + 2`, `font.pixelSize: Theme.trayIconPx`),
-which is what the bundled scissors and camera do. A widget with text uses the
-item conventions below:
+packs it; give it the bar's conventions (the design system's Bar card) and it
+will not look foreign. A bar **module** is `Theme.barModule` tall, with
+`Theme.radiusPrimary` corners, no fill until you point at it
+(`Theme.barHoverFill`, `Theme.barPressedFill` while pressed or open), glyphs
+`Theme.barIcon` in `Theme.textSecondary` (`textPrimary` on hover), and
+`Theme.spaceXs` between modules. A single-glyph widget is a `barModule`
+square with no side padding — what the bundled scissors and camera do. A
+widget with text adds `Theme.spaceS` of side padding:
 
 ```qml
 import QtQuick
 import qs
 
 Item {
-    implicitWidth: row.implicitWidth + 2 * Theme.barItemPad
-    implicitHeight: Theme.barItemHeight
-    Rectangle { anchors.fill: parent; radius: Theme.barItemRadius
-                color: ma.containsMouse ? Theme.barHover : "transparent" }
+    implicitWidth: row.implicitWidth + 2 * Theme.spaceS
+    implicitHeight: Theme.barModule
+    Rectangle { anchors.fill: parent; radius: Theme.radiusPrimary
+                color: ma.containsMouse ? Theme.barHoverFill : "transparent"
+                Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } } }
     Row {
-        id: row; anchors.centerIn: parent; spacing: 5
-        Text { text: Theme.icStar; font.family: Theme.fontIcons; font.pixelSize: Theme.barIconPx; color: Theme.fg2 }
-        Text { text: "hello"; font.family: Theme.fontText; font.pixelSize: 12; color: Theme.fg1 }
+        id: row; anchors.centerIn: parent; spacing: Theme.spaceXs
+        Text { text: Theme.icStar; font.family: Theme.fontIcons; font.pixelSize: Theme.barIcon; color: Theme.textSecondary }
+        Text { text: "hello"; color: Theme.textPrimary
+               font.family: Theme.type.label.family; font.pixelSize: Theme.type.label.size; font.weight: Theme.type.label.weight }
     }
     MouseArea { id: ma; anchors.fill: parent; hoverEnabled: true; onClicked: Globals.openSettings() }
 }
 ```
+
+The `bar*` roles (`barGround`, `barOutline`, `barHoverFill`,
+`barPressedFill`, `barAccentText`, `barTextMuted`) already follow Glass, so
+a widget reads them instead of the plain surface roles and never asks
+whether Glass is on.
 
 Widgets append to their section in id order after the built-ins; the
 centre section yields on an output too narrow to hold it. Settings → Layout →
@@ -198,13 +206,32 @@ A plugin's QML says `import qs` and sees the shell's modules like any
 first-party file. Of those, this is **public** — it will not change without
 `apiVersion` moving:
 
-- **`Theme`** — every role: the background ladder `bg1…bg6`, `fg1…fg4`, the
-  `brand*`/`accent*` colours, `success`/`warning`/`danger`, `stroke*`,
-  `radius*`, the bar metrics (`barHeight`, `barItemHeight`, `barItemRadius`,
-  `barItemPad`, `barIconPx`, `barItemSpacing`), the type ramp (`fontText`,
-  `fontMono`, `fontIcons`, `fs*`), the durations (`durFast`, `durBase`,
-  `durSlow`, `ease`), and the `ic*` Lucide glyphs. Ask for a role, never a
-  value — the accent is the user's and changes at runtime.
+API history: **2** is the Ewe design system v3 (the Fluent-era `Theme`
+names — `bg1`, `fg1`, `stroke2`, `brandBg`, `radiusControl`, `fsBody`… —
+are gone; the website's plugin API page has the rename table). **1** was the
+Fluent-era surface; a plugin still saying `"apiVersion": 1` is refused at
+install and needs its Theme names updated.
+
+
+- **`Theme`** — the Ewe design system v3 tokens, under their QML names
+  (`design/system/guidelines/40-implementation.md`): colour roles
+  (`surface*`, `text*`, `border*`, `accent*`, `onAccent`, `focusRing`,
+  `success`/`warning`/`danger`/`info` and their `*Subtle` grounds, `glass*`,
+  `scrim`), the bar roles above plus `barModule`, `barIcon`, `barHeight`,
+  spacing (`spaceXxs…spaceXl`), radii (`radiusSlight`, `radiusSecondary`,
+  `radiusPrimary`, `radiusRounded`, `radiusFull`), widths (`borderWidth1/2`,
+  `focusWidth`, `fieldBorderWidth`), sizes (`control*`, `icon*`, `panel*`,
+  `windowGap`), type (`fontSans`, `fontMono`, `fontIcons`, `fontSize*`,
+  `lineHeight*`, `fontWeight*`, and the styles as `Theme.type.<style>` with
+  `size`, `lineHeight`, `weight`, `family`, `italic`, `letterSpacing`),
+  motion (`durFast`, `durBase`, `durSlow`, `ease`, `easeFast`, `easeSlow`,
+  `slideOffset`), the accessibility modes (`reduceMotion`, `textScale` …)
+  and the `ic*` Lucide glyphs. Ask for a role, never a value — the accent,
+  the scheme and the look presets are the user's and change at runtime.
+  The Fluent names ewe used before v3 (`bg1`, `fg2`, `stroke1`, `brandBg`,
+  `radiusControl`, `fsBody`, `barIconPx`, `trayIconPx`, `labelCaps` …) were
+  removed in 2026-09; the migration table is in
+  `design/system/guidelines/40-implementation.md` ("Theme.qml today → Ewe").
 - **`Globals`** — read: `version`, `accentColor`, `dnd`, `onBattery`,
   `lowPower`, `locked`, `barShows(key)`; call: `openSettings()`,
   `openStore()`, `launchEntry(desktopId)`, `focusWindowByClass(cls)`,

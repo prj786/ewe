@@ -148,8 +148,8 @@ elif command -v hypridle >/dev/null 2>&1 && [ -r "$HOME/.config/hypr/hypridle.co
 elif command -v swayidle >/dev/null 2>&1 && ! pgrep -x swayidle >/dev/null 2>&1; then
     swayidle -w \
         timeout 300 "$LOCK" \
-        timeout 600 'hyprctl dispatch dpms off' \
-        resume       'hyprctl dispatch dpms on' \
+        timeout 600 'hyprctl dispatch '"'"'hl.dsp.dpms("off")'"'"'' \
+        resume       'hyprctl dispatch '"'"'hl.dsp.dpms("on")'"'"'' \
         before-sleep "$LOCK" >/dev/null 2>&1 &
 fi
 

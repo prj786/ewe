@@ -25,7 +25,7 @@ check "create: refuses an unknown kind" "! $P create acme.x --kinds gadget 2>/de
 # settings schema validation ---------------------------------------------------
 mkdir -p "$SB/bad.plugin"; cp "$SB/acme.clock/Widget.qml" "$SB/bad.plugin/"
 cat > "$SB/bad.plugin/manifest.json" <<'J'
-{"schemaVersion":1,"id":"bad.plugin","name":"Bad","version":"0.1.0","apiVersion":1,"kinds":["bar-widget"],"entryPoints":{"bar-widget":"Widget.qml"},
+{"schemaVersion":1,"id":"bad.plugin","name":"Bad","version":"0.1.0","apiVersion":2,"kinds":["bar-widget"],"entryPoints":{"bar-widget":"Widget.qml"},
  "settings":[{"key":"Nope","type":"bool","default":true},{"key":"n","type":"int","default":"3"},{"key":"c","type":"choice","default":"a"},{"key":"ok","type":"color","default":"#abcdef"}],
  "desktopWidget":{"layer":"middle"}}
 J
@@ -53,7 +53,7 @@ check "place refuses a plugin without a desktop widget" "mkdir -p '$SB/cfg/ewe/p
 # keybinds: declared in the manifest, generated for enabled plugins ----------
 mkdir -p "$SB/payload/plugins/ewe.demo"; cp "$SB/acme.clock/Widget.qml" "$SB/payload/plugins/ewe.demo/"
 cat > "$SB/payload/plugins/ewe.demo/manifest.json" <<'J'
-{"schemaVersion":1,"id":"ewe.demo","name":"Demo","version":"1.0.0","apiVersion":1,"kinds":["bar-widget"],"entryPoints":{"bar-widget":"Widget.qml"},
+{"schemaVersion":1,"id":"ewe.demo","name":"Demo","version":"1.0.0","apiVersion":2,"kinds":["bar-widget"],"entryPoints":{"bar-widget":"Widget.qml"},
  "keybinds":[{"combo":"SUPER + SHIFT + D","ipc":"ewe.demo toggle"}]}
 J
 check "a reserved id is refused from a plain directory" "! $P validate '$SB/payload/plugins/ewe.demo' >/dev/null 2>&1"

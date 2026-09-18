@@ -5,13 +5,15 @@ import Quickshell.Wayland
 import Quickshell.Hyprland
 import Quickshell.Io
 
-// AppStore — search + install/remove apps from the Arch official repos + the AUR.
-// Installs run in the BACKGROUND (no terminal): clicking an action opens a themed
-// sudo-password prompt, the password is handed to sudo via an ASKPASS file (never
-// on the command line), and a spinner shows on the button until it finishes.
-// The AUR helper (paru) is installed by the setup script (phase 10); the store
-// just uses it when present, otherwise it searches the official repos only.
-// Themed from Theme.qml.
+// AppStore — search + install/remove apps from the Arch official repos + the AUR,
+// the fallback quick installer for a machine without Komble (design system:
+// Launcher panel for the panel, App card's row form for the results, Card,
+// Dialog, Progress bar, Inline alert). Installs run in the BACKGROUND (no
+// terminal): clicking an action opens a password dialog, the password is
+// handed to sudo via an ASKPASS file (never on the command line), and a
+// spinner shows on the row until it finishes. The AUR helper (paru) is
+// installed by the setup script (phase 10); the store just uses it when
+// present, otherwise it searches the official repos only. Tokens only.
 Scope {
     id: root
     function g(c) { return String.fromCodePoint(c) }
@@ -183,8 +185,8 @@ Scope {
             if (code === 0) { root.opError = "" }
             else {
                 var e = (opErr.text || "").trim().split("\n").filter(function (l) { return l.trim().length }).pop()
-                root.opError = "Operation failed. "
-                             + (e && e.length ? e : ("exit code " + code + " — wrong password?"))
+                root.opError = (root.busyKind === "remove" ? "Couldn’t remove " : "Couldn’t install ") + root.busyId + ". "
+                             + (e && e.length ? e : ("The password may be wrong (exit code " + code + ")."))
             }
             root.busyId = ""; root.busyKind = ""; root.busyPct = -1; root.busyStat = ""
             qProc.running = true; helperProc.running = true     // refresh installed set + helper presence
@@ -205,43 +207,91 @@ Scope {
         // `held` keeps the window mapped through the close animation; set on
         // OPEN so no signal-order race can unmap it early (see Overview.qml)
         property bool held: false
-        Timer { id: closeTimer; interval: Math.max(1, Theme.durSlow + 60); onTriggered: win.held = false }
+        Timer { id: closeTimer; interval: Math.max(1, Theme.durSlow + Theme.durFast); onTriggered: win.held = false }
         Connections { target: Globals; function onStoreOpenChanged() {
             if (Globals.storeOpen) { closeTimer.stop(); win.held = true; root.openScreen = root.focusedScreen(); root.query = ""; root.results = []; root.searched = false; root.cancelAsk(); storeIn.text = ""; storeIn.forceActiveFocus(); helperProc.running = true; qProc.running = true }
             else closeTimer.restart()
         } }
 
         // click-outside closes. A running install/remove keeps going in the
-        // BACKGROUND (opProc lives on the Scope, not this window) and the chip
-        // re-appears next time the store is opened — so closing is always allowed.
+        // BACKGROUND (opProc lives on the Scope, not this window) and its
+        // progress is back next time the panel opens — so closing is always allowed.
         MouseArea { anchors.fill: parent; onClicked: Globals.storeOpen = false }
 
-        // small reusable spinner
-        component Spinner: Item {
-            id: sp
-            property color ring: Theme.stroke1
-            property color dot: Theme.accent
-            // `running: true` drove a 60 fps repaint of the whole store overlay
-            // whenever it was open — even with no job and the spinner hidden.
-            // QML propagates `visible` down from ancestors, so this stops the
-            // animator whenever the chip/button holding it isn't drawn.
-            RotationAnimator on rotation { from: 0; to: 360; duration: 850; loops: Animation.Infinite; running: sp.visible }
-            Rectangle { anchors.fill: parent; radius: width / 2; color: "transparent"; border.color: parent.ring; border.width: Theme.border }
-            Rectangle { width: parent.width * 0.3; height: width; radius: width / 2; color: parent.dot; anchors.horizontalCenter: parent.horizontalCenter; anchors.top: parent.top; anchors.topMargin: -1 }
+        // ── the parts, in the type styles ──
+        component TBody: Text {
+            color: Theme.textPrimary
+            font.family: Theme.type.body.family; font.pixelSize: Theme.type.body.size; font.weight: Theme.type.body.weight
+        }
+        component TCaption: Text {
+            color: Theme.textMuted
+            font.family: Theme.type.caption.family; font.pixelSize: Theme.type.caption.size; font.weight: Theme.type.caption.weight
+        }
+        // Button: primary (accent), secondary (surfaceRaised + borderStrong),
+        // ghost, or danger (the danger fill with onStatus ink); sm is
+        // controlSm tall, md controlMd
+        component Btn: Rectangle {
+            id: bt
+            property string label: ""
+            property string kind: "secondary"      // primary · secondary · ghost · danger
+            property string size: "md"
+            property bool disabled: false
+            property string a11yName: bt.label
+            signal go()
+            readonly property bool _sm: bt.size === "sm"
+            width: btT.implicitWidth + 2 * (bt._sm ? Theme.spaceS : Theme.spaceS + Theme.spaceXs)
+            height: bt._sm ? Theme.controlSm : Theme.controlMd
+            radius: Theme.radiusPrimary
+            color: bt.disabled ? (bt.kind === "ghost" ? "transparent" : Theme.surfaceRaised)
+                 : bt.kind === "primary" ? (btMa.pressed ? Theme.accentPressed : btMa.containsMouse ? Theme.accentHover : Theme.accent)
+                 : bt.kind === "danger" ? Theme.danger
+                 : btMa.pressed ? Theme.surfacePressed : btMa.containsMouse ? Theme.surfaceHover
+                 : bt.kind === "ghost" ? "transparent" : Theme.surfaceRaised
+            border.width: bt.disabled || bt.kind === "secondary" ? Theme.borderWidth1 : 0
+            border.color: bt.disabled ? Theme.borderSubtle : Theme.borderStrong
+            Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
+            activeFocusOnTab: !bt.disabled
+            Accessible.role: Accessible.Button
+            Accessible.name: bt.a11yName
+            Keys.onSpacePressed: if (!bt.disabled) bt.go()
+            Keys.onReturnPressed: if (!bt.disabled) bt.go()
+            Rectangle {
+                anchors.fill: parent
+                anchors.margins: -(Theme.borderWidth1 + Theme.focusWidth)
+                radius: Theme.radiusPrimary + Theme.borderWidth1 + Theme.focusWidth
+                color: "transparent"; visible: bt.activeFocus
+                border.color: Theme.focusRing; border.width: Theme.focusWidth
+            }
+            Text {
+                id: btT
+                anchors.centerIn: parent
+                text: bt.label
+                color: bt.disabled ? Theme.textDisabled : bt.kind === "primary" ? Theme.onAccent
+                     : bt.kind === "danger" ? Theme.onStatus : Theme.textPrimary
+                font.family: Theme.type.body.family
+                font.pixelSize: bt._sm ? Theme.fontSizeS : Theme.fontSizeMd
+                font.weight: Theme.fontWeightMedium
+            }
+            MouseArea { id: btMa; anchors.fill: parent; enabled: !bt.disabled; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: bt.go() }
         }
 
         Rectangle {
             id: box
-            x: Math.max(12, Math.min(parent.width - width - 12, Globals.storeAnchorX - width / 2))
-            y: parent.height - height - 90
-            width: 460; height: 460
-            radius: Theme.radius; color: Theme.bg1
-            border.color: Theme.stroke2; border.width: Theme.borderThin
+            // Launcher panel placement: above the dock's store button, kept
+            // spaceS + spaceXs from the screen edges and above the dock
+            readonly property int edgeGap: Theme.spaceS + Theme.spaceXs
+            readonly property int dockGap: Theme.dockClearance + edgeGap
+            x: Math.max(edgeGap, Math.min(parent.width - width - edgeGap, Globals.storeAnchorX - width / 2))
+            width: Theme.panelMd
+            height: Math.min(Theme.panelMd + Theme.controlXl + Theme.spaceMd + Theme.spaceXs, parent.height - dockGap - 2 * edgeGap)
+            radius: Theme.radiusRounded; color: Theme.surfaceRaised
+            border.color: Theme.borderSubtle; border.width: Theme.borderWidth1
             opacity: Globals.storeOpen ? 1 : 0
-            scale: Globals.storeOpen ? 1 : 0.96
-            transformOrigin: Item.BottomLeft
+            // a panel opens with a fade plus a short rise from its own edge;
+            // Reduce motion zeroes the offset, leaving the fade (Theme)
+            y: Math.max(edgeGap, parent.height - height - dockGap) + (Globals.storeOpen ? 0 : Theme.slideOffset)
             Behavior on opacity { NumberAnimation { duration: Theme.durBase; easing.type: Theme.ease } }
-            Behavior on scale { NumberAnimation { duration: Theme.durBase; easing.type: Theme.ease } }
+            Behavior on y { NumberAnimation { duration: Theme.durBase; easing.type: Theme.ease } }
             layer.enabled: true
             layer.effect: Elevation {}
 
@@ -249,116 +299,47 @@ Scope {
             Keys.onEscapePressed: { if (root.pwOpen) root.cancelAsk(); else Globals.storeOpen = false }
 
             Column {
-                anchors.fill: parent; anchors.margins: 14; spacing: 12
+                anchors.fill: parent; anchors.margins: Theme.spaceS + Theme.spaceXs; spacing: Theme.spaceS + Theme.spaceXs
 
-                // ── header: title (left) + AUR status (right) ──
+                // ── header: title, where it searches, Komble ──
                 Item {
-                    // above later siblings so the running-job hover tooltip isn't
-                    // clipped behind the search box drawn under it.
-                    z: 5
-                    width: parent.width; height: 26
-                    Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "App Store"; color: Theme.fg1; font.family: Theme.fontDisplay; font.pixelSize: Theme.fsLarge; font.weight: Font.Bold }
-
-                    // AUR helper (paru) is provided by setup — just reflect its presence.
+                    width: parent.width; height: Theme.controlMd
+                    Text {
+                        anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter
+                        text: "Install apps"; color: Theme.textPrimary
+                        font.family: Theme.type.h4.family; font.pixelSize: Theme.type.h4.size; font.weight: Theme.type.h4.weight
+                    }
                     Row {
-                        anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; spacing: 8
-                        // through to the full store — only when it is actually installed
-                        Item {
+                        anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; spacing: Theme.spaceS
+                        Badge {
+                            anchors.verticalCenter: parent.verticalCenter
+                            label: root.helper !== "" ? "Repos + AUR" : "Official repos"
+                            tone: root.helper !== "" ? "success" : "neutral"; solid: false
+                        }
+                        // through to the full software manager, when it is installed
+                        Btn {
                             visible: Globals.kombleInstalled
                             anchors.verticalCenter: parent.verticalCenter
-                            width: kombleLbl.implicitWidth + 16; height: 18
-                            Rectangle {
-                                anchors.fill: parent; radius: Theme.radiusPill
-                                color: kombleMa.containsMouse ? Theme.subtleHover : Theme.subtle
-                            }
-                            Text {
-                                id: kombleLbl
-                                anchors.centerIn: parent
-                                text: "Open Komble ↗"
-                                color: kombleMa.containsMouse ? Theme.fg1 : Theme.fg3
-                                font.family: Theme.fontText; font.pixelSize: 10; font.weight: Font.DemiBold
-                            }
-                            MouseArea {
-                                id: kombleMa
-                                anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                                onClicked: { Quickshell.execDetached(["komble"]); Globals.storeOpen = false }
-                            }
-                        }
-                        // running-job chip: "1 app installing/removing" — hover names it.
-                        Rectangle {
-                            visible: root.busyId !== ""
-                            anchors.verticalCenter: parent.verticalCenter
-                            width: instRow.implicitWidth + 14; height: 18; radius: 9; color: Theme.accentFill
-                            Row { id: instRow; anchors.centerIn: parent; spacing: 5
-                                Spinner { width: 10; height: 10; anchors.verticalCenter: parent.verticalCenter; ring: Qt.rgba(1, 1, 1, 0.4); dot: Theme.accentOn }
-                                Text { anchors.verticalCenter: parent.verticalCenter; text: "1 app " + (root.busyKind === "remove" ? "removing" : "installing"); color: Theme.accentOn; font.family: Theme.fontText; font.pixelSize: 9; font.weight: Font.DemiBold }
-                            }
-                            MouseArea { id: instMa; anchors.fill: parent; hoverEnabled: true }
-                            Rectangle {
-                                visible: instMa.containsMouse; z: 50
-                                anchors.top: parent.bottom; anchors.topMargin: 6; anchors.right: parent.right
-                                width: ttT.implicitWidth + 16; height: ttT.implicitHeight + 12
-                                radius: Theme.r(8); color: Theme.card; border.color: Theme.stroke2; border.width: Theme.borderThin
-                                Text { id: ttT; anchors.centerIn: parent; text: (root.busyKind === "remove" ? "Removing " : "Installing ") + root.busyId + "…"; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: 10 }
-                            }
-                        }
-                        Text { anchors.verticalCenter: parent.verticalCenter; text: (root.helper !== "" ? Theme.icCheck : Theme.icClose); font.family: Theme.fontIcons; font.pixelSize: 12; color: root.helper !== "" ? Theme.accent : Theme.fg3 }
-                        Text { anchors.verticalCenter: parent.verticalCenter; text: root.helper !== "" ? ("AUR · " + root.helper) : "Official repos only"; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 10 }
-                    }
-                }
-
-                // ── live install/remove progress (background job) ──
-                Rectangle {
-                    width: parent.width; visible: root.busyId !== ""
-                    height: visible ? 46 : 0; radius: Theme.radiusInner; color: Theme.card
-                    clip: true
-                    Column {
-                        anchors.left: parent.left; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
-                        anchors.margins: 9; spacing: 7
-                        Item {
-                            width: parent.width; height: 13
-                            Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter
-                                width: parent.width - pctT.width - 10; elide: Text.ElideRight
-                                text: (root.busyKind === "remove" ? "Removing " : "Installing ") + root.busyId
-                                color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: 11; font.weight: Font.DemiBold }
-                            Text { id: pctT; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
-                                text: root.busyStat + (root.busyPct >= 0 ? "  ·  " + Math.round(root.busyPct * 100) + "%" : "")
-                                color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 10 }
-                        }
-                        // progress track: determinate fill when we have a step count,
-                        // otherwise an indeterminate sliding bar.
-                        Rectangle {
-                            id: track
-                            width: parent.width; height: 4; radius: 2; color: Theme.bg2; clip: true
-                            Rectangle {
-                                id: fill
-                                height: parent.height; radius: Theme.r(2); color: Theme.accent
-                                width: root.busyPct >= 0 ? Math.max(6, track.width * root.busyPct) : track.width * 0.32
-                                x: root.busyPct >= 0 ? 0 : indet.pos
-                                Behavior on width { NumberAnimation { duration: 200; easing.type: Theme.ease } }
-                            }
-                            // indeterminate sweep (only runs while pct is unknown)
-                            QtObject {
-                                id: indet
-                                property real pos: 0
-                                SequentialAnimation on pos {
-                                    running: root.busyId !== "" && root.busyPct < 0
-                                    loops: Animation.Infinite
-                                    NumberAnimation { from: -track.width * 0.32; to: track.width; duration: 1100; easing.type: Easing.InOutQuad }
-                                }
-                            }
+                            kind: "ghost"; size: "sm"; label: "Open Komble"
+                            onGo: { if (!Globals.focusAppWindow(["komble"])) Quickshell.execDetached(["komble"]); Globals.storeOpen = false }
                         }
                     }
                 }
 
+                // ── Search field ──
                 Rectangle {
-                    width: parent.width; height: 36; radius: Theme.radiusInner
-                    color: Theme.bg3; border.color: storeIn.activeFocus ? Theme.accent : Theme.stroke1; border.width: Theme.borderThin
-                    Text { anchors.left: parent.left; anchors.leftMargin: 11; anchors.verticalCenter: parent.verticalCenter; text: Theme.icSearch; font.family: Theme.fontIcons; font.pixelSize: 14; color: Theme.fg3 }
+                    width: parent.width; height: Theme.controlMd
+                    radius: Theme.radiusPrimary; color: Theme.surfaceSunken
+                    border.width: Theme.fieldBorderWidth
+                    border.color: storeIn.activeFocus ? Theme.focusRing : Theme.borderStrong
+                    Behavior on border.color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
+                    Text { id: sIc; anchors.left: parent.left; anchors.leftMargin: Theme.spaceS; anchors.verticalCenter: parent.verticalCenter; text: Theme.icSearch; font.family: Theme.fontIcons; font.pixelSize: Theme.iconMd; color: Theme.textMuted }
                     TextInput {
                         id: storeIn
-                        anchors.fill: parent; anchors.leftMargin: 34; anchors.rightMargin: 12; verticalAlignment: TextInput.AlignVCenter
-                        color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsBody; clip: true
+                        anchors.left: sIc.right; anchors.leftMargin: Theme.spaceXs; anchors.right: parent.right; anchors.rightMargin: Theme.spaceS
+                        anchors.top: parent.top; anchors.bottom: parent.bottom
+                        verticalAlignment: TextInput.AlignVCenter
+                        color: Theme.textPrimary; font.family: Theme.type.body.family; font.pixelSize: Theme.type.body.size; clip: true
                         enabled: !root.pwOpen
                         onTextChanged: {
                             root.query = text
@@ -368,16 +349,68 @@ Scope {
                         }
                         Keys.onEscapePressed: Globals.storeOpen = false
                         onAccepted: { searchDebounce.stop(); root.doSearch() }
-                        Text { anchors.verticalCenter: parent.verticalCenter; visible: storeIn.text.length === 0; text: "Search apps to install or remove…"; color: Theme.fg3; font: storeIn.font }
+                        TBody { anchors.verticalCenter: parent.verticalCenter; visible: storeIn.text.length === 0; text: "Search apps"; color: Theme.textMuted }
                     }
                 }
-                Text { width: parent.width; wrapMode: Text.WordWrap; text: (root.helper ? "Searches the official repos + AUR as you type." : "Searches the official repos as you type.") + " Installs run in the background."; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 10 }
 
-                // ── error banner ──
+                // ── the running install/remove (a Progress bar; the job
+                //    keeps going in the background if the panel closes) ──
+                Column {
+                    width: parent.width; spacing: Theme.spaceXs; visible: root.busyId !== ""
+                    Item {
+                        width: parent.width; height: Theme.lineHeightS
+                        Text {
+                            anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter
+                            width: parent.width - pctT.width - Theme.spaceS; elide: Text.ElideRight
+                            text: (root.busyKind === "remove" ? "Removing " : "Installing ") + root.busyId + "…"
+                            color: Theme.textPrimary
+                            font.family: Theme.type.label.family; font.pixelSize: Theme.type.label.size; font.weight: Theme.type.label.weight
+                        }
+                        Text {
+                            id: pctT
+                            anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
+                            visible: root.busyPct >= 0
+                            text: Math.round(root.busyPct * 100) + "%"
+                            color: Theme.textSecondary
+                            font.family: Theme.type.monoNumeric.family; font.pixelSize: Theme.type.monoNumeric.size; font.weight: Theme.type.monoNumeric.weight
+                            font.features: ({ "tnum": 1 })
+                        }
+                    }
+                    // the track: determinate fill when there is a step count,
+                    // otherwise an indeterminate sweep
+                    Rectangle {
+                        id: track
+                        width: parent.width; height: Theme.spaceXs; radius: Theme.radiusFull; color: Theme.surfaceHover; clip: true
+                        Rectangle {
+                            height: parent.height; radius: Theme.radiusFull; color: Theme.accent
+                            width: root.busyPct >= 0 ? Math.max(height, track.width * root.busyPct) : track.width / 3
+                            x: root.busyPct >= 0 ? 0 : indet.pos
+                            Behavior on width { NumberAnimation { duration: Theme.durBase; easing.type: Theme.ease } }
+                        }
+                        // indeterminate sweep (only runs while pct is unknown).
+                        // Its period has no token (reported); Reduce motion
+                        // makes it three times slower (Progress bar card).
+                        QtObject {
+                            id: indet
+                            property real pos: 0
+                            readonly property int period: Theme.reduceMotion ? 3300 : 1100
+                            SequentialAnimation on pos {
+                                running: root.busyId !== "" && root.busyPct < 0
+                                loops: Animation.Infinite
+                                NumberAnimation { from: -track.width / 3; to: track.width; duration: indet.period; easing.type: Easing.InOutCubic }
+                            }
+                        }
+                    }
+                    TCaption { width: parent.width; text: root.busyStat; elide: Text.ElideRight }
+                }
+
+                // ── an error: a danger Inline alert ──
                 Rectangle {
-                    width: parent.width; visible: root.opError !== ""; radius: Theme.radiusInner
-                    height: visible ? errT.implicitHeight + 16 : 0; color: Qt.rgba(1, 0.27, 0.23, 0.12); border.color: Theme.danger; border.width: Theme.borderThin
-                    Text { id: errT; anchors.left: parent.left; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; anchors.margins: 8; text: root.opError; wrapMode: Text.WordWrap; color: Theme.danger; font.family: Theme.fontText; font.pixelSize: 10 }
+                    width: parent.width; visible: root.opError !== ""; radius: Theme.radiusPrimary
+                    height: visible ? errT.implicitHeight + 2 * Theme.spaceS : 0
+                    color: Theme.dangerSubtle
+                    Text { id: errIc; anchors.left: parent.left; anchors.leftMargin: Theme.spaceS + Theme.spaceXs; anchors.top: parent.top; anchors.topMargin: Theme.spaceS + Theme.borderWidth1; text: Theme.icWarning; font.family: Theme.fontIcons; font.pixelSize: Theme.iconMd; color: Theme.danger }
+                    TBody { id: errT; anchors.left: errIc.right; anchors.leftMargin: Theme.spaceS; anchors.right: parent.right; anchors.rightMargin: Theme.spaceS + Theme.spaceXs; anchors.top: parent.top; anchors.topMargin: Theme.spaceS; text: root.opError; wrapMode: Text.WordWrap }
                 }
 
                 Flickable {
@@ -385,21 +418,30 @@ Scope {
                     contentHeight: resCol.implicitHeight; clip: true; boundsBehavior: Flickable.StopAtBounds
                     Column {
                         id: resCol
-                        width: parent.width; spacing: 6
-                        // search spinner
+                        width: parent.width; spacing: Theme.spaceXxs
+                        // before a search: what this panel does
+                        Column {
+                            width: parent.width; spacing: Theme.spaceXxs
+                            visible: !root.searching && root.query.trim().length < 2
+                            TBody { width: parent.width; text: "Search to install or remove an app"; wrapMode: Text.WordWrap }
+                            TCaption { width: parent.width; wrapMode: Text.WordWrap
+                                text: (root.helper ? "Searches the official repos and the AUR as you type." : "Searches the official repos as you type.") + " Installs run in the background." }
+                        }
+                        // searching
                         Row {
-                            width: parent.width; height: visible ? 30 : 0; visible: root.searching; spacing: 10
-                            Spinner { width: 20; height: 20; anchors.verticalCenter: parent.verticalCenter }
-                            Text { anchors.verticalCenter: parent.verticalCenter; text: "Searching repos + AUR…"; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
+                            width: parent.width; height: visible ? Theme.controlLg : 0; visible: root.searching; spacing: Theme.spaceS
+                            Spinner { anchors.verticalCenter: parent.verticalCenter }
+                            TBody { anchors.verticalCenter: parent.verticalCenter; text: root.helper ? "Searching the repos and the AUR…" : "Searching the repos…"; color: Theme.textSecondary }
                         }
-                        Text {
-                            width: parent.width
+                        // no results (Empty state)
+                        Column {
+                            width: parent.width; spacing: Theme.spaceXxs
                             visible: !root.searching && root.searched && root.results.length === 0 && root.query.trim().length >= 2
-                            text: root.helper === "" ? "No results in the official repos. Many apps (e.g. Chrome) are AUR-only — re-run setup to enable the AUR."
-                                                      : "No results."
-                            wrapMode: Text.WordWrap
-                            color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
+                            TBody { width: parent.width; text: "No apps match “" + root.query.trim() + "”"; wrapMode: Text.WordWrap }
+                            TCaption { width: parent.width; wrapMode: Text.WordWrap
+                                text: root.helper === "" ? "Many apps, Chrome among them, are only in the AUR. Run the setup again to turn it on." : "Try another name." }
                         }
+                        // the results: App card rows
                         Repeater {
                             model: root.results
                             delegate: Rectangle {
@@ -408,41 +450,49 @@ Scope {
                                 readonly property bool aur: modelData.source === "aur"
                                 readonly property bool isInstalled: modelData.inst === true || root.installed[modelData.id] === true
                                 readonly property bool isBusy: root.busyId === modelData.id
-                                width: resCol.width; height: 56; radius: Theme.radiusInner; color: Theme.card
-                                Row {
-                                    anchors.left: parent.left; anchors.leftMargin: 10; anchors.right: actions.left; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter; spacing: 10
-                                    Image { anchors.verticalCenter: parent.verticalCenter; width: 30; height: 30; sourceSize.width: 60; sourceSize.height: 60; mipmap: true; source: Quickshell.iconPath(modelData.name, "application-x-executable") }
-                                    Column {
-                                        anchors.verticalCenter: parent.verticalCenter; spacing: 1; width: 230
-                                        Row { spacing: 6
-                                            Text { text: modelData.name; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold; elide: Text.ElideRight; width: Math.min(implicitWidth, 150) }
-                                            Rectangle { anchors.verticalCenter: parent.verticalCenter; width: badge.implicitWidth + 10; height: 15; radius: Theme.r(4); color: rowItem.aur ? Theme.accentFill : Theme.card
-                                                Text { id: badge; anchors.centerIn: parent; text: modelData.source; color: rowItem.aur ? Theme.accentOn : Theme.fg2; font.family: Theme.fontText; font.pixelSize: 9; font.weight: Font.DemiBold } }
-                                            Text { anchors.verticalCenter: parent.verticalCenter; visible: rowItem.isInstalled; text: "installed"; color: Theme.accent; font.family: Theme.fontText; font.pixelSize: 9 }
-                                        }
-                                        Text { width: 230; text: modelData.desc; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11; elide: Text.ElideRight; maximumLineCount: 1 }
+                                width: resCol.width; height: Theme.control2xl + Theme.spaceS
+                                radius: Theme.radiusSecondary
+                                color: rowMa.containsMouse ? Theme.surfaceHover : "transparent"
+                                MouseArea { id: rowMa; anchors.fill: parent; hoverEnabled: true }
+                                Image {
+                                    id: appIc
+                                    anchors.left: parent.left; anchors.leftMargin: Theme.spaceS; anchors.verticalCenter: parent.verticalCenter
+                                    width: Theme.icon2xl; height: Theme.icon2xl
+                                    sourceSize.width: 2 * Theme.icon2xl; sourceSize.height: 2 * Theme.icon2xl; mipmap: true
+                                    source: Quickshell.iconPath(rowItem.modelData.name, "application-x-executable")
+                                }
+                                Column {
+                                    anchors.left: appIc.right; anchors.leftMargin: Theme.spaceS + Theme.spaceXs
+                                    anchors.right: actions.left; anchors.rightMargin: Theme.spaceS
+                                    anchors.verticalCenter: parent.verticalCenter; spacing: Theme.spaceXxs
+                                    Row {
+                                        width: parent.width; spacing: Theme.spaceXs
+                                        TBody { id: nameT; anchors.verticalCenter: parent.verticalCenter; text: rowItem.modelData.name; font.weight: Theme.fontWeightMedium; elide: Text.ElideRight
+                                                width: Math.min(implicitWidth, parent.width - srcB.width - parent.spacing - (instB.visible ? instB.width + parent.spacing : 0)) }
+                                        // App card "Sources": the repo neutral, the AUR warning (built from source)
+                                        Badge { id: srcB; anchors.verticalCenter: parent.verticalCenter; label: rowItem.modelData.source; tone: rowItem.aur ? "warning" : "neutral"; solid: false }
+                                        Badge { id: instB; anchors.verticalCenter: parent.verticalCenter; visible: rowItem.isInstalled; label: "Installed"; tone: "success"; solid: false }
                                     }
+                                    TCaption { width: parent.width; text: rowItem.modelData.desc; elide: Text.ElideRight; maximumLineCount: 1 }
                                 }
                                 Row {
                                     id: actions
-                                    anchors.right: parent.right; anchors.rightMargin: 10; anchors.verticalCenter: parent.verticalCenter; spacing: 6
-                                    // busy → spinner on this row's button
-                                    Rectangle {
-                                        visible: rowItem.isBusy; width: 26; height: 26; radius: Theme.r(7); color: Theme.card
-                                        Spinner { anchors.centerIn: parent; width: 15; height: 15 }
+                                    anchors.right: parent.right; anchors.rightMargin: Theme.spaceS; anchors.verticalCenter: parent.verticalCenter; spacing: Theme.spaceXs
+                                    Spinner { visible: rowItem.isBusy; anchors.verticalCenter: parent.verticalCenter }
+                                    Btn {
+                                        visible: !rowItem.isInstalled && !rowItem.isBusy
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        kind: "primary"; size: "sm"; label: "Install"; a11yName: "Install " + rowItem.modelData.name
+                                        disabled: root.busyId !== ""
+                                        onGo: root.ask("install", rowItem.modelData.id)
                                     }
-                                    // Install (hidden if already installed or busy)
-                                    Rectangle { visible: !rowItem.isInstalled && !rowItem.isBusy; width: il.implicitWidth + 16; height: 26; radius: Theme.r(7)
-                                        opacity: root.busyId === "" ? 1 : 0.4
-                                        color: iMa.containsMouse && root.busyId === "" ? Theme.accentFill : Theme.card
-                                        Text { id: il; anchors.centerIn: parent; text: "Install"; color: (iMa.containsMouse && root.busyId === "") ? Theme.accentOn : Theme.fg1; font.family: Theme.fontText; font.pixelSize: 11; font.weight: Font.DemiBold }
-                                        MouseArea { id: iMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.ask("install", modelData.id) } }
-                                    // Remove (only if installed, hidden while busy)
-                                    Rectangle { visible: rowItem.isInstalled && !rowItem.isBusy; width: rl.implicitWidth + 14; height: 26; radius: Theme.r(7)
-                                        opacity: root.busyId === "" ? 1 : 0.4
-                                        color: rMa.containsMouse && root.busyId === "" ? Theme.danger : Theme.card
-                                        Text { id: rl; anchors.centerIn: parent; text: "Remove"; color: (rMa.containsMouse && root.busyId === "") ? Theme.accentOn : Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11; font.weight: Font.DemiBold }
-                                        MouseArea { id: rMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.ask("remove", modelData.id) } }
+                                    Btn {
+                                        visible: rowItem.isInstalled && !rowItem.isBusy
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        kind: "secondary"; size: "sm"; label: "Remove"; a11yName: "Remove " + rowItem.modelData.name
+                                        disabled: root.busyId !== ""
+                                        onGo: root.ask("remove", rowItem.modelData.id)
+                                    }
                                 }
                             }
                         }
@@ -450,45 +500,56 @@ Scope {
                 }
             }
 
-            // ════════ in-app sudo password prompt (background auth — no terminal) ════════
+            // ════════ the password Dialog (background auth — no terminal) ════════
             Rectangle {
-                anchors.fill: parent; radius: Theme.radius; visible: root.pwOpen
-                color: Qt.rgba(0, 0, 0, 0.55)
-                MouseArea { anchors.fill: parent; onClicked: root.cancelAsk() }   // click-outside cancels
+                anchors.fill: parent; radius: Theme.radiusRounded; visible: root.pwOpen
+                color: Theme.scrim
+                MouseArea { anchors.fill: parent }   // the scrim does nothing: work isn't lost by a stray click
                 Rectangle {
-                    anchors.centerIn: parent; width: 320; height: pwCol.implicitHeight + 36
-                    radius: Theme.radius; color: Theme.bg1; border.color: Theme.stroke2; border.width: Theme.borderThin
+                    anchors.left: parent.left; anchors.right: parent.right; anchors.margins: Theme.spaceMd
+                    anchors.verticalCenter: parent.verticalCenter
+                    height: pwCol.implicitHeight + 2 * Theme.spaceMd
+                    radius: Theme.radiusRounded; color: Theme.surfaceRaised
+                    border.color: Theme.borderSubtle; border.width: Theme.borderWidth1
                     MouseArea { anchors.fill: parent }   // swallow clicks inside the card
                     Column {
                         id: pwCol
-                        anchors.left: parent.left; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
-                        anchors.margins: 18; spacing: 12
-                        Text { text: "Administrator password"; color: Theme.fg1; font.family: Theme.fontDisplay; font.pixelSize: Theme.fsBody; font.weight: Font.Bold }
-                        Text { width: parent.width; wrapMode: Text.WordWrap; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11
-                            text: (root.pendKind === "remove" ? "Remove " : "Install ") + (root.pendId || "") + (root.pendKind === "install" && root.helper ? "  (repos + AUR)" : "") }
+                        anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top
+                        anchors.margins: Theme.spaceMd; spacing: Theme.spaceMd
+                        Column {
+                            width: parent.width; spacing: Theme.spaceXs
+                            Text { width: parent.width; wrapMode: Text.WordWrap
+                                text: (root.pendKind === "remove" ? "Remove " : "Install ") + (root.pendId || "") + "?"
+                                color: Theme.textPrimary
+                                font.family: Theme.type.h3.family; font.pixelSize: Theme.type.h3.size; font.weight: Theme.type.h3.weight }
+                            TBody { width: parent.width; wrapMode: Text.WordWrap; color: Theme.textSecondary
+                                text: "Enter your password to change the system." + (root.pendKind === "install" && root.helper ? " It is built from the AUR if it isn’t in the repos." : "") }
+                        }
                         Rectangle {
-                            width: parent.width; height: 38; radius: Theme.radiusInner
-                            color: Theme.bg3; border.color: pwIn.activeFocus ? Theme.accent : Theme.stroke1; border.width: Theme.borderThin
+                            width: parent.width; height: Theme.controlMd; radius: Theme.radiusPrimary
+                            color: Theme.surfaceSunken
+                            border.width: Theme.fieldBorderWidth
+                            border.color: pwIn.activeFocus ? Theme.focusRing : Theme.borderStrong
                             TextInput {
                                 id: pwIn
-                                anchors.fill: parent; anchors.leftMargin: 12; anchors.rightMargin: 12; verticalAlignment: TextInput.AlignVCenter
+                                anchors.fill: parent; anchors.leftMargin: Theme.spaceS; anchors.rightMargin: Theme.spaceS; verticalAlignment: TextInput.AlignVCenter
                                 echoMode: TextInput.Password; passwordCharacter: "•"
-                                color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsBody; clip: true
+                                color: Theme.textPrimary; font.family: Theme.type.body.family; font.pixelSize: Theme.type.body.size; clip: true
                                 onTextChanged: root.pwText = text
                                 Keys.onEscapePressed: root.cancelAsk()
                                 onAccepted: { if (root.pwText.length) root.confirmAsk() }
-                                Text { anchors.verticalCenter: parent.verticalCenter; visible: pwIn.text.length === 0; text: "sudo password"; color: Theme.fg3; font: pwIn.font }
+                                TBody { anchors.verticalCenter: parent.verticalCenter; visible: pwIn.text.length === 0; text: "Password"; color: Theme.textMuted }
                             }
                         }
                         Row {
-                            anchors.right: parent.right; spacing: 8
-                            Rectangle { width: cl.implicitWidth + 22; height: 30; radius: Theme.r(8); color: clMa.containsMouse ? Theme.cardHover : Theme.card
-                                Text { id: cl; anchors.centerIn: parent; text: "Cancel"; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: 11; font.weight: Font.DemiBold }
-                                MouseArea { id: clMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.cancelAsk() } }
-                            Rectangle { width: ol.implicitWidth + 22; height: 30; radius: Theme.r(8); opacity: root.pwText.length ? 1 : 0.4
-                                color: Theme.accentFill
-                                Text { id: ol; anchors.centerIn: parent; text: root.pendKind === "remove" ? "Remove" : "Install"; color: Theme.accentOn; font.family: Theme.fontText; font.pixelSize: 11; font.weight: Font.DemiBold }
-                                MouseArea { id: okMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: { if (root.pwText.length) root.confirmAsk() } } }
+                            anchors.right: parent.right; spacing: Theme.spaceS
+                            Btn { kind: "ghost"; label: "Cancel"; onGo: root.cancelAsk() }
+                            Btn {
+                                kind: root.pendKind === "remove" ? "danger" : "primary"
+                                label: (root.pendKind === "remove" ? "Remove " : "Install ") + (root.pendId || "")
+                                disabled: root.pwText.length === 0
+                                onGo: { if (root.pwText.length) root.confirmAsk() }
+                            }
                         }
                     }
                     // clear + focus the field whenever the prompt opens

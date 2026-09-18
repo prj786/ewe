@@ -1,44 +1,68 @@
 import QtQuick
 import QtQuick.Effects
 
-// Avatar — THE user avatar, used everywhere one appears (Settings account card,
-// lock screen). Draws Globals.faceUrl masked to the user-chosen shape
-// (Globals.avatarShape: "circle" | "rounded" | "square") with an initials/icon
-// placeholder when no ~/.face exists. QtQuick `clip: true` clips to the
-// bounding rectangle only — it can NOT round an Image's corners — so the shape
-// comes from a MultiEffect alpha mask rendered from an antialiased Rectangle.
+// Avatar — the person, the account or the machine (design system: Avatar),
+// used wherever one appears (Settings account card, lock screen).
+//
+//   photo     ~/.face, cropped to fill
+//   initials  weight semibold, accentText on accentSubtle
+//   neither   a `user` glyph in textSecondary on surfaceHover
+//   shape     the person's own preference (Globals.avatarShape): circle,
+//             rounded, or the square form with the radiusPrimary corner
+//   status    a dot a quarter of the avatar's size at the bottom right,
+//             inside a borderWidth2 ring in the surface colour — always
+//             repeat it in words nearby
+//
+// Sizes come from the size ramp: controlSm (24) inline · controlMd (28) in
+// list rows · controlLg (32) the quick settings header · control2xl (48)
+// accounts and the power menu · icon4xl (64) the lock screen · 96 in user
+// settings and the installer.
+//
+// QtQuick `clip: true` clips to the bounding rectangle only — it can NOT
+// round an Image's corners — so the shape comes from a MultiEffect alpha
+// mask rendered from an antialiased Rectangle.
 Item {
     id: av
-    property int size: 72
+    property int size: Theme.control2xl
     property string initial: ""        // placeholder letter; "" → generic user glyph
+    property string source: Globals.faceUrl
+    property string status: ""         // online · away · busy · offline
+    property color ringColor: Theme.surfaceBase
+    // the placeholder's plate and letter — a surface pinned to Ewe Dark
+    // (Lock) passes its own
+    property color plateColor: av.initial !== "" ? Theme.accentSubtle : Theme.surfaceHover
+    property color inkColor: av.initial !== "" ? Theme.accentText : Theme.textSecondary
     width: size; height: size
 
     readonly property real shapeRadius: Globals.avatarShape === "circle" ? size / 2
-                                      : Globals.avatarShape === "square" ? Math.max(3, size * 0.08)
+                                      : Globals.avatarShape === "square" ? Theme.radiusPrimary
                                       : size * 0.25            // "rounded"
+    readonly property color statusColor: av.status === "away" ? Theme.warning
+                                       : av.status === "busy" ? Theme.danger
+                                       : av.status === "offline" ? Theme.textDisabled
+                                       : Theme.success
 
     // backplate + placeholder — same shape as the mask so every state matches
     Rectangle {
         anchors.fill: parent
         radius: av.shapeRadius
-        color: Theme.card
-        border.color: Theme.stroke2; border.width: Theme.borderThin
+        color: av.plateColor
         antialiasing: true
         Text {
             anchors.centerIn: parent
             visible: !img.visible
             text: av.initial !== "" ? av.initial : Theme.icUser
-            color: av.initial !== "" ? Theme.fg1 : Theme.fg3
-            font.family: av.initial !== "" ? Theme.fontDisplay : Theme.fontIcons
+            color: av.inkColor
+            font.family: av.initial !== "" ? Theme.fontSans : Theme.fontIcons
             font.pixelSize: Math.round(av.size * 0.45)
-            font.weight: Font.Bold
+            font.weight: Theme.fontWeightSemibold
         }
     }
     Image {
         id: img
         anchors.fill: parent
-        source: Globals.faceUrl
-        visible: Globals.hasFace && status === Image.Ready
+        source: av.source
+        visible: Globals.hasFace && img.status === Image.Ready
         fillMode: Image.PreserveAspectCrop
         cache: false
         sourceSize.width: av.size * 2; sourceSize.height: av.size * 2
@@ -57,13 +81,20 @@ Item {
         visible: false
         Rectangle { anchors.fill: parent; radius: av.shapeRadius; antialiasing: true }
     }
-    // hairline rim over the image so the edge reads crisp on any background
+    // the status dot, in its ring of the surface colour
     Rectangle {
-        anchors.fill: parent
-        visible: img.visible
-        radius: av.shapeRadius
-        color: "transparent"
-        border.color: Theme.stroke2; border.width: Theme.borderThin
+        visible: av.status !== ""
+        width: Math.max(Theme.spaceS, Math.round(av.size / 4)); height: width
+        radius: Theme.radiusFull
+        anchors.right: parent.right; anchors.bottom: parent.bottom
+        color: av.ringColor
         antialiasing: true
+        Rectangle {
+            anchors.fill: parent
+            anchors.margins: Theme.borderWidth2
+            radius: Theme.radiusFull
+            color: av.statusColor
+            antialiasing: true
+        }
     }
 }
