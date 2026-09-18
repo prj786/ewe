@@ -21,7 +21,6 @@ Elevation 1.0 Elevation.qml
 Spinner 1.0 Spinner.qml
 BarIcon 1.0 BarIcon.qml
 BarPluginSlots 1.0 BarPluginSlots.qml
-Sheen 1.0 Sheen.qml
 FileDropTarget 1.0 FileDropTarget.qml
 DropRow 1.0 DropRow.qml
 Toggle 1.0 Toggle.qml
