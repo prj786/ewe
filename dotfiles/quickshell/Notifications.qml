@@ -144,10 +144,9 @@ Scope {
                     required property var modelData
                     readonly property var latest: modelData.latest
                     readonly property int count: modelData.items.length
-                    readonly property bool critical: latest.urgency !== undefined
-                                                     && String(latest.urgency).toLowerCase().indexOf("critical") >= 0
+                    readonly property bool critical: latest.urgency === NotificationUrgency.Critical
                     width: Theme.panelSm
-                    height: card.height + (count > 1 ? Theme.spaceS + more.height + Theme.spaceXs : 0)
+                    height: card.height + (count > 1 ? Theme.spaceS + Theme.spaceXs + more.height + Theme.spaceXs : 0)
 
                     // expire the whole group together (latest notification's timeout)
                     Timer {
@@ -159,7 +158,7 @@ Scope {
                     // the stack: two layers peeking out below the newest card
                     Rectangle {
                         visible: groupItem.count > 1
-                        anchors.top: card.bottom; anchors.topMargin: -Theme.radiusRounded
+                        anchors.top: card.bottom; anchors.topMargin: -(Theme.spaceMd - Theme.spaceXs)
                         anchors.horizontalCenter: parent.horizontalCenter
                         width: parent.width - 2 * Theme.spaceS
                         height: Theme.spaceMd
@@ -170,7 +169,7 @@ Scope {
                     }
                     Rectangle {
                         visible: groupItem.count > 2
-                        anchors.top: card.bottom; anchors.topMargin: -Theme.radiusRounded + Theme.spaceXs
+                        anchors.top: card.bottom; anchors.topMargin: -(Theme.spaceMd - 2 * Theme.spaceXs)
                         anchors.horizontalCenter: parent.horizontalCenter
                         width: parent.width - 2 * Theme.spaceMd
                         height: Theme.spaceMd
@@ -353,7 +352,7 @@ Scope {
                     Text {
                         id: more
                         visible: groupItem.count > 1
-                        anchors.top: card.bottom; anchors.topMargin: Theme.spaceS
+                        anchors.top: card.bottom; anchors.topMargin: Theme.spaceS + Theme.spaceXs
                         anchors.horizontalCenter: parent.horizontalCenter
                         text: (groupItem.count - 1) + " more from " + (groupItem.latest.appName || "this app")
                         color: Theme.textMuted
