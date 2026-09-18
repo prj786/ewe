@@ -185,7 +185,7 @@ Scope {
             if (code === 0) { root.opError = "" }
             else {
                 var e = (opErr.text || "").trim().split("\n").filter(function (l) { return l.trim().length }).pop()
-                root.opError = (root.busyKind === "remove" ? "Couldn't remove " : "Couldn't install ") + root.busyId + ". "
+                root.opError = (root.busyKind === "remove" ? "Couldn’t remove " : "Couldn’t install ") + root.busyId + ". "
                              + (e && e.length ? e : ("The password may be wrong (exit code " + code + ")."))
             }
             root.busyId = ""; root.busyKind = ""; root.busyPct = -1; root.busyStat = ""
@@ -523,7 +523,7 @@ Scope {
                                 color: Theme.textPrimary
                                 font.family: Theme.type.h3.family; font.pixelSize: Theme.type.h3.size; font.weight: Theme.type.h3.weight }
                             TBody { width: parent.width; wrapMode: Text.WordWrap; color: Theme.textSecondary
-                                text: "Enter your password to change the system." + (root.pendKind === "install" && root.helper ? " It is built from the AUR if it isn't in the repos." : "") }
+                                text: "Enter your password to change the system." + (root.pendKind === "install" && root.helper ? " It is built from the AUR if it isn’t in the repos." : "") }
                         }
                         Rectangle {
                             width: parent.width; height: Theme.controlMd; radius: Theme.radiusPrimary

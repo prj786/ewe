@@ -1156,7 +1156,7 @@ Scope {
         stdout: StdioCollector {
             onStreamFinished: {
                 var t = this.text.trim()
-                if (t !== "") root.errorMsg = "Couldn't change your name: " + t.split("\n")[0]
+                if (t !== "") root.errorMsg = "Couldn’t change your name: " + t.split("\n")[0]
                 else { root.flashApplied("Name changed"); userInfoProbe.running = false; userInfoProbe.running = true }
             }
         }
@@ -1178,7 +1178,7 @@ Scope {
     function saveAvatar() {
         cropCanvas.grabToImage(function (res) {
             var tmp = root.home + "/.cache/ewe-avatar.png"
-            if (!res.saveToFile(tmp)) { root.errorMsg = "Couldn't save the cropped picture."; root.avatarCropSrc = ""; return }
+            if (!res.saveToFile(tmp)) { root.errorMsg = "Couldn’t save the cropped picture."; root.avatarCropSrc = ""; return }
             avatarSave.command = ["sh", "-c",
                 'if cp "$1" "$HOME/.face"; then busctl call org.freedesktop.Accounts /org/freedesktop/Accounts/User$(id -u) org.freedesktop.Accounts.User SetIconFile s "$HOME/.face" >/dev/null 2>&1 || echo ACCOUNTS-FAIL; else echo CP-FAIL; fi',
                 "qs-settings", tmp]
@@ -1191,7 +1191,7 @@ Scope {
         stdout: StdioCollector {
             onStreamFinished: {
                 var out = this.text.trim()
-                if (out.indexOf("CP-FAIL") >= 0) root.errorMsg = "Couldn't save ~/.face. Check its permissions."
+                if (out.indexOf("CP-FAIL") >= 0) root.errorMsg = "Couldn’t save ~/.face. Check its permissions."
                 else if (out.indexOf("ACCOUNTS-FAIL") >= 0) { root.errorMsg = "Picture saved to ~/.face, but AccountsService refused it. The sign-in screen may keep the old one."; Globals.recheckFace() }
                 else { root.flashApplied("Picture changed"); Globals.recheckFace() }
             }
@@ -1213,7 +1213,7 @@ Scope {
         id: gPhotoFetch
         stdout: StdioCollector {
             onStreamFinished: {
-                if (this.text.indexOf("DL-OK") < 0) { root.errorMsg = "Couldn't download your Google profile photo. Check your connection and try again."; return }
+                if (this.text.indexOf("DL-OK") < 0) { root.errorMsg = "Couldn’t download your Google profile photo. Check your connection and try again."; return }
                 avatarSave.command = ["sh", "-c",
                     'if cp "$1" "$HOME/.face"; then busctl call org.freedesktop.Accounts /org/freedesktop/Accounts/User$(id -u) org.freedesktop.Accounts.User SetIconFile s "$HOME/.face" >/dev/null 2>&1 || echo ACCOUNTS-FAIL; else echo CP-FAIL; fi',
                     "qs-settings", root.home + "/.cache/ewe-avatar.png"]
@@ -1924,7 +1924,7 @@ Scope {
                                     readonly property bool frac: (wh[0] / monCard.modelData.scale) % 1 !== 0 || (wh[1] / monCard.modelData.scale) % 1 !== 0
                                     visible: frac
                                     color: Theme.warning
-                                    text: "This scale doesn't divide the resolution evenly, so Hyprland rounds it to whole pixels."
+                                    text: "This scale doesn’t divide the resolution evenly, so Hyprland rounds it to whole pixels."
                                 }
                                 DropRow {
                                     label: "Rotation"; ddId: "rot-" + monCard.modelData.name
@@ -1947,7 +1947,7 @@ Scope {
                         }
                     }
                     Note { text: "Changes apply at once. A change that can black out a display goes back on its own after 10 seconds unless you keep it. Each set of displays keeps its own profile, restored when you dock or undock and at startup." }
-                    Note { text: "Screen goes black when you plug in the charger? The saved profile comes back a moment later. If the built-in panel stays black, that is the xe driver's panel self-refresh: use Reset displays, or start with xe.enable_psr=0." }
+                    Note { text: "Screen goes black when you plug in the charger? The saved profile comes back a moment later. If the built-in panel stays black, that is the xe driver’s panel self-refresh: use Reset displays, or start with xe.enable_psr=0." }
                 }
             }
 
@@ -2420,7 +2420,7 @@ Scope {
                         ToggleRow { title: "Middle-click emulation"; sub: "Press left and right together to middle-click."; on: root.inp.tp_mbe === true; onToggled: root.applyInput({ tp_mbe: !(root.inp.tp_mbe === true) }) }
                         Slider { label: "Scroll speed"; value: Number(root.inp.tp_scroll_factor); from: 0.1; to: 3; step: 0.1; decimals: 1; onMoved: function (v) { root.applyInput({ tp_scroll_factor: Math.round(v * 10) / 10 }) } }
                     }
-                    Note { text: "Everything here applies at once and is kept in generated/input.lua. Two-finger or edge scrolling follows the hardware's default, which Hyprland doesn't expose." }
+                    Note { text: "Everything here applies at once and is kept in generated/input.lua. Two-finger or edge scrolling follows the hardware’s default, which Hyprland doesn’t expose." }
                 }
             }
 
@@ -2617,12 +2617,12 @@ Scope {
                         Alert {
                             visible: lookPane.opacityShown < Math.round(Theme.opacityGlass * 100)
                             tone: "warning"
-                            text: "Text can be hard to read on bright wallpapers." + (Globals.noBlur ? " Blur isn't available on this machine, so 90% or more keeps it readable." : "")
+                            text: "Text can be hard to read on bright wallpapers." + (Globals.noBlur ? " Blur isn’t available on this machine, so 90% or more keeps it readable." : "")
                         }
                         Alert {
                             visible: Globals.noBlur && lookPane.opacityShown >= Math.round(Theme.opacityGlass * 100) && lookPane.opacityShown < 90
                             tone: "info"
-                            text: "Blur isn't available on this machine, so the wallpaper shows through sharp. 90% or more keeps text easy to read."
+                            text: "Blur isn’t available on this machine, so the wallpaper shows through sharp. 90% or more keeps text easy to read."
                         }
                         Note { visible: root.tokIn("reduce_transparency", false) === true || root.tokIn("increase_contrast", false) === true; text: "Reduce transparency or Increase contrast is on (Accessibility), so the bar and dock stay solid." }
                     }
@@ -2631,7 +2631,7 @@ Scope {
                     Card {
                         ToggleRow {
                             title: "Accent-colored borders"
-                            sub: "The focused window's border follows your accent color."
+                            sub: "The focused window’s border follows your accent color."
                             on: Globals.tintBorders
                             onToggled: { Globals.tintBorders = !Globals.tintBorders; root.applyBorder(); root.setAccent(String(Globals.accentColor)) }
                         }
@@ -2696,7 +2696,7 @@ Scope {
                         }
                         ToggleRow {
                             visible: root.wpAnyVideo
-                            title: "Mute video wallpaper"; sub: "Otherwise mpvpaper plays the video's sound."
+                            title: "Mute video wallpaper"; sub: "Otherwise mpvpaper plays the video’s sound."
                             on: root.wpMute
                             onToggled: { root.wpMute = !root.wpMute; root.wpWrite(); root.flashApplied() }
                         }
@@ -2890,7 +2890,7 @@ Scope {
                             value: Logind.hasKbdBacklight ? Logind.kbdBacklight.value : 0
                             onPicked: function (v) { Logind.setKbdStep(v) }
                         }
-                        Note { text: "The keyboard's backlight keys change it too." }
+                        Note { text: "The keyboard’s backlight keys change it too." }
                     }
 
                     SectionTitle { text: "Performance" }
@@ -3225,14 +3225,14 @@ Scope {
                         Row {
                             visible: Cloud.busy === "signin"; spacing: Theme.spaceS
                             Spinner { anchors.verticalCenter: parent.verticalCenter }
-                            TBody { anchors.verticalCenter: parent.verticalCenter; text: "Waiting for the browser. Sign in on your server's page and allow ewe…" }
+                            TBody { anchors.verticalCenter: parent.verticalCenter; text: "Waiting for the browser. Sign in on your server’s page and allow ewe…" }
                         }
                         Row {
                             visible: Cloud.loginUrl !== ""; spacing: Theme.spaceS
                             Pill { label: "Open the sign-in page"; onGo: Cloud.openLoginUrl() }
                             Pill { label: "Copy the link"; onGo: Cloud.copyLoginUrl() }
                         }
-                        Alert { visible: Cloud.reason === "revoked"; tone: "warning"; text: "This machine's access was revoked on the server. Sign in again." }
+                        Alert { visible: Cloud.reason === "revoked"; tone: "warning"; text: "This machine’s access was revoked on the server. Sign in again." }
                         Note { visible: Cloud.keyringPromptExpected; text: Cloud.keyringState === "locked" ? "Your keyring is locked, so an “Unlock keyring” prompt appears during sign-in. Answer it with your sign-in password." : "A “Choose password for new keyring” prompt appears during sign-in. Use your sign-in password, so it unlocks by itself every time you sign in." }
                         Alert { visible: Google.legacyGoogleSync; tone: "warning"; text: "Settings sync now uses a Nextcloud account. Sign in to keep your backups going; your Google Drive backup stays where it is." }
                     }
@@ -3251,7 +3251,7 @@ Scope {
                             Pill { id: ncOut; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; label: "Sign out"; onGo: Cloud.signOut() }
                         }
                         Divider {}
-                        KV { k: "Server"; v: Cloud.serverHost + (Cloud.offline ? " · can't be reached right now" : ""); dot: Cloud.offline ? "info" : "ok" }
+                        KV { k: "Server"; v: Cloud.serverHost + (Cloud.offline ? " · can’t be reached right now" : ""); dot: Cloud.offline ? "info" : "ok" }
                         KV { k: "Storage"; v: Cloud.quota && Cloud.quota.total > 0 ? (root.fmtBytes(Cloud.quota.used) + " of " + root.fmtBytes(Cloud.quota.total) + " · " + Math.round(Cloud.quota.relative || 0) + "%") : (Cloud.quota ? root.fmtBytes(Cloud.quota.used) + " used" : "—") }
                         KV { k: "Files"; v: Cloud.filesMounted ? "In " + Cloud.filesPath : "Not connected"; dot: Cloud.filesMounted ? "ok" : "info"; action: !Cloud.filesMounted; actionLabel: "Connect files"; onAct: Cloud.mountFiles() }
                         KV { k: "Calendar"; v: Cloud.calState === "offline" ? "Offline, showing events from the last sync" : (Cloud.events.length + " upcoming in Quick settings"); dot: Cloud.calState === "offline" ? "info" : "ok" }
@@ -3264,7 +3264,7 @@ Scope {
                     // recreates `login` with the login password at the next login)
                     Card {
                         visible: !Cloud.signedIn && (Cloud.keyringTrouble || Cloud.keyringResetDone)
-                        KV { visible: !Cloud.keyringResetDone; k: "Keyring"; v: Cloud.keyringState === "locked" ? "Locked; it couldn't be unlocked at sign-in" : "It refused the app password"; dot: "bad"; action: true; actionLabel: "Reset keyring"; onAct: Cloud.resetKeyring() }
+                        KV { visible: !Cloud.keyringResetDone; k: "Keyring"; v: Cloud.keyringState === "locked" ? "Locked; it couldn’t be unlocked at sign-in" : "It refused the app password"; dot: "bad"; action: true; actionLabel: "Reset keyring"; onAct: Cloud.resetKeyring() }
                         KV { visible: Cloud.keyringResetDone; k: "Keyring"; v: "Reset. Sign out and in again, then sign in here"; dot: "info"; action: true; actionLabel: "Sign out now"; onAct: Cloud.logOut() }
                     }
 
@@ -3277,7 +3277,7 @@ Scope {
                         KV { k: "This machine last synced"; v: (Cloud.localSyncedAt !== "" ? root.fmtSyncTime(Cloud.localSyncedAt) : (Cloud.lastSync !== "" ? root.fmtSyncTime(Cloud.lastSync) : "Never. Nothing is uploaded until you back it up")) + (Cloud.inSync && Cloud.lastSync !== "" ? " · up to date" : "") }
                         ToggleRow {
                             title: "Sync automatically"
-                            sub: Cloud.lastSync === "" ? "Starts after this machine's first backup. After that, every change (in Settings, Komble or the terminal) is uploaded about 20 s later." : "Every change, in Settings, Komble or the terminal, is uploaded about 20 s later."
+                            sub: Cloud.lastSync === "" ? "Starts after this machine’s first backup. After that, every change (in Settings, Komble or the terminal) is uploaded about 20 s later." : "Every change, in Settings, Komble or the terminal, is uploaded about 20 s later."
                             on: Cloud.autoSync
                             onToggled: Cloud.setAutoSync(!Cloud.autoSync)
                         }
@@ -3289,7 +3289,7 @@ Scope {
                             // only offered when the server refused a push
                             Pill { visible: Cloud.syncConflict; label: "Upload anyway"; onGo: Cloud.pushForce() }
                         }
-                        Note { text: "The machine file (ewe.conf) lives in the ewe folder of your account: scheme and accent, dock, animations, power, display profiles, window rules, wallpapers, pinned and startup apps, places, VPN and SSH hosts, and Komble's list of installed apps (reinstalling from it is always your choice). Passwords and keys never sync." }
+                        Note { text: "The machine file (ewe.conf) lives in the ewe folder of your account: scheme and accent, dock, animations, power, display profiles, window rules, wallpapers, pinned and startup apps, places, VPN and SSH hosts, and Komble’s list of installed apps (reinstalling from it is always your choice). Passwords and keys never sync." }
                         Alert { visible: Cloud.syncError !== ""; tone: "danger"; text: Cloud.syncError }
                         Alert { visible: Cloud.restoreSummary !== ""; tone: "success"; text: Cloud.restoreSummary }
                     }
@@ -3302,7 +3302,7 @@ Scope {
                         KV { k: "Saved on"; v: Cloud.pendingRestore ? ("“" + (Cloud.pendingRestore.device || "?") + "” · " + root.fmtSyncTime(Cloud.pendingRestore.updatedAt || "")) : "" }
                         KV { k: "Restores"; v: "The machine file (ewe.conf); your current one is kept as a dated backup" }
                         KV { k: "Apps"; v: "Offered in Komble → For you, never installed on their own" }
-                        Alert { tone: "warning"; text: "This machine's scheme, dock, wallpaper, window rules, display profiles and app list are replaced, then the shell reloads them." }
+                        Alert { tone: "warning"; text: "This machine’s scheme, dock, wallpaper, window rules, display profiles and app list are replaced, then the shell reloads them." }
                         Row {
                             anchors.right: parent.right; spacing: Theme.spaceS
                             Pill { label: "Cancel"; ghost: true; onGo: Cloud.cancelRestore() }
@@ -3361,7 +3361,7 @@ Scope {
                     Alert { visible: Google.error !== ""; tone: "danger"; text: Google.error }
                     Card {
                         visible: Google.configured && !Google.signedIn && (Google.keyringTrouble || Google.keyringResetDone)
-                        KV { visible: !Google.keyringResetDone; k: "Keyring"; v: Google.keyringState === "locked" ? "Locked; it couldn't be unlocked at sign-in" : "It refused the token"; dot: "bad"; action: true; actionLabel: "Reset keyring"; onAct: Google.resetKeyring() }
+                        KV { visible: !Google.keyringResetDone; k: "Keyring"; v: Google.keyringState === "locked" ? "Locked; it couldn’t be unlocked at sign-in" : "It refused the token"; dot: "bad"; action: true; actionLabel: "Reset keyring"; onAct: Google.resetKeyring() }
                         KV { visible: Google.keyringResetDone; k: "Keyring"; v: "Reset. Sign out and in again, then connect here"; dot: "info"; action: true; actionLabel: "Sign out now"; onAct: Google.logOut() }
                     }
 
@@ -3426,7 +3426,7 @@ Scope {
                         }
                         SetRow {
                             glyph: root.g(0xE198); title: "Text size"
-                            desc: "Text grows, and controls grow with it. At 130% the bar uses its large size."
+                            desc: "Text grows, and controls grow with it. At 130% the bar’s icons are one size larger."
                             Seg {
                                 anchors.verticalCenter: parent.verticalCenter
                                 options: [{ label: "100%", value: 100 }, { label: "115%", value: 115 }, { label: "130%", value: 130 }]
@@ -3555,7 +3555,7 @@ Scope {
                             width: parent.width; spacing: Theme.spaceXs
                             Text { width: parent.width; text: "Keep these display settings?"; color: Theme.textPrimary; wrapMode: Text.WordWrap
                                    font.family: Theme.type.h3.family; font.pixelSize: Theme.type.h3.size; font.weight: Theme.type.h3.weight }
-                            TBody { width: parent.width; text: "The previous settings come back in " + root.revertLeft + " s if you can't see this."; color: Theme.textSecondary; wrapMode: Text.WordWrap }
+                            TBody { width: parent.width; text: "The previous settings come back in " + root.revertLeft + " s if you can’t see this."; color: Theme.textSecondary; wrapMode: Text.WordWrap }
                         }
                         Row {
                             anchors.right: parent.right; spacing: Theme.spaceS
