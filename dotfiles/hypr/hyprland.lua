@@ -70,15 +70,28 @@ end
 -- ── Blur policy ─────────────────────────────────────────────────────────────
 -- Two [desktop.theme] knobs ask for compositor blur, both read off the token
 -- file through colors.lua:
---   bar_opacity 1-90  -> the bar and dock are translucent, so blur what shows
---                        through them (a layer rule below; the shell paints its
---                        own alpha ground).
+--   bar_opacity 10-99 -> Glass: the bar and dock are translucent, so blur what
+--                        shows through them (the layer rule ewe-conf writes to
+--                        generated/user.lua; the shell paints its own alpha
+--                        ground).
 --   app_blur          -> every window sits at a fixed 85 % with blur behind it;
 --                        fullscreen stays solid (window rules below).
 -- Neither asks -> decoration.blur stays off: it is a constant multi-pass GPU
 -- cost on the whole desktop. And on VMs / NVIDIA it is off by policy whatever
 -- the knobs say — start-hyprland.sh exports EWE_NO_BLUR=1 there (virtio /
 -- llvmpipe and the NVIDIA Wayland path both render blur as flicker).
+
+-- The window corner is the `rounded` token (10 at corner = medium), read from
+-- the same token file colors.lua reads. colors.lua only exposes the control
+-- radius (8), so the one number is picked up here; colors.lua's radius stays
+-- the fallback for a missing or half-written token file.
+local function tok_rounded()
+    local f = home and io.open(home .. "/.config/quickshell/theme-tokens.json", "r")
+    if not f then return nil end
+    local t = f:read("*a") or ""
+    f:close()
+    return tonumber(t:match('"rounded"%s*:%s*(%d+)'))
+end
 
 hl.config({
     general = {
@@ -108,10 +121,9 @@ hl.config({
     decoration = {
         -- The corner radius is `rounded` (10), the radius panels and cards
         -- share, so a window sits in the same family as the shell's
-        -- surfaces. colors.lua exposes it as radius_window once it reads the
-        -- token; until then its radius (radius-control) is the fallback.
-        -- Settings → Layout still wins through generated/user.lua.
-        rounding       = c.radius_window or c.radius,
+        -- surfaces (tok_rounded above). Settings → Layout still wins through
+        -- generated/user.lua.
+        rounding       = tok_rounded() or c.radius,
         rounding_power = 2,
 
         -- No dim: an unfocused window stays fully bright (Window card).
@@ -123,7 +135,8 @@ hl.config({
 
         -- shadow-float, the one shadow a floating surface gets: 0 2px 6px at
         -- 35% black. Short and tight — depth is a step of surface colour,
-        -- and the shadow only says "this floats above the rest".
+        -- and the shadow only says "this floats above the rest". Tiled
+        -- windows take none (the "shadow-floating-only" rule below).
         shadow = {
             enabled      = true,
             range        = 6,
@@ -643,6 +656,14 @@ hl.window_rule({
 for _, klass in ipairs({ "gcr-prompter", "Gcr-prompter", "org.gnome.keyring.SystemPrompter" }) do
     hl.window_rule({ name = "gcr-" .. klass, match = { class = klass }, float = true, center = true, size = { 400, 200 } })
 end
+
+-- Window card: only FLOATING windows carry shadow-float; tiled ones sit flat
+-- in their gaps, their border saying which is focused.
+hl.window_rule({
+    name      = "shadow-floating-only",
+    match     = { float = false },
+    no_shadow = true,
+})
 
 -- Fix XWayland drag ghosts (from the upstream example).
 hl.window_rule({
