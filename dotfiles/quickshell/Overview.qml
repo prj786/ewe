@@ -47,8 +47,8 @@ Scope {
         height: Theme.controlXl
         Rectangle {
             anchors.fill: parent; radius: Theme.radiusPrimary
+            // pointing at a row is how it gets selected, so both are glassHover
             color: rr.seld || rrMa.containsMouse ? Theme.glassHover : "transparent"
-            opacity: rr.seld ? 1 : (rrMa.containsMouse ? 0.55 : 1)
             Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
         }
         Row {
@@ -432,7 +432,7 @@ Scope {
                 anchors.bottom: pagerRow.top; anchors.bottomMargin: Theme.spaceMd
                 clip: true
                 contentWidth: width
-                contentHeight: Math.max(height, cardLayout.blockH + 40)
+                contentHeight: Math.max(height, cardLayout.blockH + 2 * Theme.spaceMd)
                 boundsBehavior: Flickable.StopAtBounds
                 interactive: !root.searching
                 opacity: root.searching ? 0.35 : 1
@@ -444,13 +444,15 @@ Scope {
                 // Different window shapes → different card widths → the field
                 // reads natural instead of an arithmetic grid of identical
                 // monitor-shaped rectangles.
-                readonly property real fieldW: Math.max(1, width - 80)
-                readonly property real fieldH: Math.max(1, height - 20)
+                readonly property real fieldW: Math.max(1, width - 2 * Theme.spaceLg)
+                readonly property real fieldH: Math.max(1, height - Theme.spaceMd)
                 readonly property var cardLayout: computeLayout(win.winWins, fieldW, fieldH)
                 function computeLayout(wins, W, H) {
                     var n = wins.length
                     if (n === 0) return { rects: [], blockH: 0 }
+                    // 16px between rows, 24px between cards in a row
                     var gap = Theme.spaceMd + Theme.spaceS
+                    var rowGap = Theme.spaceMd
                     // window aspect from the real geometry; monitor aspect as
                     // fallback; clamped so one extreme window can't starve a row
                     var asp = []
@@ -469,7 +471,7 @@ Scope {
                             var chunk = asp.slice(r * per, (r + 1) * per)
                             if (chunk.length) rr.push(chunk)
                         }
-                        var h = (H - (rr.length - 1) * gap) / rr.length
+                        var h = (H - (rr.length - 1) * rowGap) / rr.length
                         for (r = 0; r < rr.length; r++) {
                             var sum = 0
                             for (var k = 0; k < rr[r].length; k++) sum += rr[r][k]
@@ -482,7 +484,7 @@ Scope {
                             for (k = 0; k < rr[r].length; k++) area += rr[r][k] * h * h
                         if (!best || area > best.area) best = { rr: rr, h: h, area: area }
                     }
-                    var blockH = best.rr.length * best.h + (best.rr.length - 1) * gap
+                    var blockH = best.rr.length * best.h + (best.rr.length - 1) * rowGap
                     var rects = []
                     var y = 0
                     for (r = 0; r < best.rr.length; r++) {
@@ -494,15 +496,15 @@ Scope {
                             rects.push({ x: Math.round(x), y: Math.round(y), w: Math.round(wpx), h: Math.round(best.h) })
                             x += wpx + gap
                         }
-                        y += best.h + gap
+                        y += best.h + rowGap
                     }
                     return { rects: rects, blockH: blockH }
                 }
 
                 Item {
                     id: cardField
-                    x: 40
-                    y: Math.max(10, (cardArea.height - cardArea.cardLayout.blockH) / 2)
+                    x: Theme.spaceLg
+                    y: Math.max(Theme.spaceS, (cardArea.height - cardArea.cardLayout.blockH) / 2)
                     width: cardArea.fieldW
                     height: cardArea.cardLayout.blockH
 
@@ -515,7 +517,7 @@ Scope {
                             readonly property bool seld: win.isFocused && index === root.sel && !root.searching
                             readonly property int groupN: root.groupsByAddr[root.addrOf(modelData)] || 0
                             readonly property var rect: index < cardArea.cardLayout.rects.length
-                                ? cardArea.cardLayout.rects[index] : { x: 0, y: 0, w: 200, h: 130 }
+                                ? cardArea.cardLayout.rects[index] : { x: 0, y: 0, w: 0, h: 0 }
                             x: rect.x; y: rect.y
                             width: rect.w; height: rect.h
                             // cards glide to their new spot when the set changes
@@ -749,15 +751,21 @@ Scope {
                         selectionColor: Theme.accent; selectByMouse: true; clip: true
                         // a borderWidth2 accent caret (Overview card #2)
                         cursorDelegate: Rectangle {
+                            id: caret
                             width: Theme.borderWidth2
                             height: search.cursorRectangle.height
                             color: Theme.accent
-                            SequentialAnimation on opacity {
-                                loops: Animation.Infinite; running: search.activeFocus && !Theme.reduceMotion
-                                NumberAnimation { from: 1; to: 1; duration: 520 }
-                                NumberAnimation { from: 1; to: 0; duration: 60 }
-                                NumberAnimation { from: 0; to: 0; duration: 380 }
-                                NumberAnimation { from: 0; to: 1; duration: 60 }
+                            // blinks at the platform's cursor flash rate (a
+                            // behaviour, not motion); steady under Reduce motion
+                            readonly property int half: Math.max(1, Qt.styleHints.cursorFlashTime / 2)
+                            SequentialAnimation {
+                                loops: Animation.Infinite
+                                running: search.activeFocus && !Theme.reduceMotion && Qt.styleHints.cursorFlashTime > 0
+                                onRunningChanged: if (!running) caret.opacity = 1
+                                PropertyAction { target: caret; property: "opacity"; value: 1 }
+                                PauseAnimation { duration: caret.half }
+                                PropertyAction { target: caret; property: "opacity"; value: 0 }
+                                PauseAnimation { duration: caret.half }
                             }
                         }
                         onTextChanged: root.query = text
@@ -884,8 +892,12 @@ Scope {
                 id: pagerRow
                 anchors.horizontalCenter: parent.horizontalCenter
                 // clear of the dock, which draws above the overview in the same
-                // layer (dockH + its 8 px float + breathing room)
-                anchors.bottom: parent.bottom; anchors.bottomMargin: 96
+                // layer: its items + spaceS padding, windowGap above the edge,
+                // then spaceMd of breathing room — at every dock size
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: (Globals.dockIconSize === "small" ? Theme.controlXl
+                                     : Globals.dockIconSize === "large" ? Theme.barHeightLg : Theme.control2xl)
+                                    + 2 * Theme.spaceS + Theme.windowGap + Theme.spaceMd
                 spacing: Theme.spaceS + Theme.spaceXs
                 opacity: root.searching ? 0.35 : 1
                 Behavior on opacity { NumberAnimation { duration: Theme.durBase; easing.type: Theme.ease } }
