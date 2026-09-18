@@ -554,7 +554,7 @@ Scope {
                                 id: shadowProxy
                                 anchors.fill: cardContent
                                 radius: Theme.radiusRounded
-                                color: "black"
+                                color: Theme.black
                                 visible: false
                             }
                             // shadowFloat, the one shadow a floating surface gets
@@ -713,7 +713,7 @@ Scope {
                 id: searchShadowProxy
                 anchors.fill: searchBox
                 radius: Theme.radiusRounded
-                color: "black"
+                color: Theme.black
                 visible: false
             }
             Elevation {

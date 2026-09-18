@@ -21,6 +21,54 @@ import Quickshell.Io
 Scope {
     id: root
 
+    // ── an arrange-mode chip (.ewe-chip): controlSm pill on surfaceOverlay
+    //    with a borderSubtle edge, fontSizeXs medium textPrimary; the name
+    //    chip is solid accent (semibold, onAccent); `on` is accentSubtle
+    //    with an accent edge and accentText; hover is surfaceHover ──
+    component Chip: Rectangle {
+        id: chip
+        property string glyph: ""
+        property string label: ""
+        property bool name: false
+        property bool on: false
+        signal act()
+        readonly property color ink: chip.name ? Theme.onAccent : chip.on ? Theme.accentText : Theme.textPrimary
+        height: Theme.controlSm; radius: Theme.radiusFull
+        width: chipRow.implicitWidth + 2 * Theme.spaceS
+        color: chip.name ? Theme.accent : chip.on ? Theme.accentSubtle
+             : chipMa.containsMouse ? Theme.surfaceHover : Theme.surfaceOverlay
+        border.color: chip.name || chip.on ? Theme.accent : Theme.borderSubtle
+        border.width: Theme.borderWidth1
+        Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
+        Row {
+            id: chipRow
+            anchors.centerIn: parent; spacing: Theme.spaceXs
+            Text {
+                visible: chip.glyph !== ""
+                anchors.verticalCenter: parent.verticalCenter
+                text: chip.glyph
+                font.family: Theme.fontIcons; font.pixelSize: Theme.iconXs
+                color: chip.ink
+            }
+            Text {
+                anchors.verticalCenter: parent.verticalCenter
+                text: chip.label; color: chip.ink
+                font.family: Theme.type.caption.family
+                font.pixelSize: Theme.fontSizeXs
+                font.weight: chip.name ? Theme.fontWeightSemibold : Theme.fontWeightMedium
+            }
+        }
+        MouseArea {
+            id: chipMa
+            anchors.fill: parent
+            enabled: !chip.name
+            hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+            onClicked: chip.act()
+        }
+    }
+
+    // 48/64 is a stored placement default shared with bin/ewe-plugin (a
+    // position in ewe.conf, not a look), so it stays as it is written there
     function _place(id) { return PluginHost.placement[id] || ({ x: 48, y: 64, output: "", layer: "desktop", visible: true }) }
     function _onScreen(w, screen, index) {
         var p = root._place(w.id)
@@ -113,8 +161,10 @@ Scope {
                                 readonly property int padV: Theme.spaceS + Theme.spaceXs
                                 x: place.x
                                 y: place.y
-                                width: (loader.item ? loader.item.implicitWidth : 200) + 2 * padH
-                                height: (loader.item ? loader.item.implicitHeight : 80) + 2 * padV
+                                // until the plugin reports a size: half a panel-sm
+                                // wide (.ewe-widget__rows) and one control2xl tall
+                                width: (loader.item ? loader.item.implicitWidth : Theme.panelSm / 2) + 2 * padH
+                                height: (loader.item ? loader.item.implicitHeight : Theme.control2xl) + 2 * padV
                                 // the window's input region for this widget follows its geometry
                                 readonly property Region regionObj: Region { item: slot }
 
@@ -165,7 +215,7 @@ Scope {
                                         ctx.setLineDash(frame.solid ? [] : [Theme.spaceXs, Theme.spaceXs])
                                         var h = Theme.borderWidth1 / 2
                                         ctx.beginPath()
-                                        ctx.roundedRect(h, h, width - 2 * h, height - 2 * h, Theme.radiusRounded, Theme.radiusRounded)
+                                        ctx.roundedRect(h, h, width - 2 * h, height - 2 * h, Theme.radiusRounded + Theme.spaceXs, Theme.radiusRounded + Theme.spaceXs)
                                         ctx.stroke()
                                     }
                                 }
@@ -175,7 +225,7 @@ Scope {
                                     anchors.fill: parent
                                     anchors.margins: -(Theme.spaceXs + Theme.spaceXxs)
                                     visible: Globals.widgetsArrange && slot.keyFocused
-                                    radius: Theme.radiusRounded
+                                    radius: Theme.radiusRounded + Theme.spaceXs + Theme.spaceXxs
                                     color: "transparent"
                                     border.color: Theme.focusRing
                                     border.width: Theme.focusWidth
@@ -196,128 +246,87 @@ Scope {
                                     onReleased: PluginHost.placeWidget(slot.modelData.id, slot.x, slot.y)
                                 }
 
-                                // ── the chip row, spaceS + spaceXs above the card ──
+                                // ── the chip row, spaceS + spaceXs above the card —
+                                //    or below it when the bar would cover it (a
+                                //    widget near the top edge; the default spot) ──
                                 Row {
+                                    id: chips
                                     visible: Globals.widgetsArrange
                                     anchors.left: parent.left
-                                    anchors.bottom: parent.top
-                                    anchors.bottomMargin: Theme.spaceS + Theme.spaceXs
+                                    readonly property int gap: Theme.spaceS + Theme.spaceXs
+                                    readonly property bool below: slot.y - chips.height - chips.gap
+                                                                  < (Globals.barVisible ? Theme.barHeight : 0)
+                                    y: chips.below ? slot.height + chips.gap : -(chips.height + chips.gap)
                                     spacing: Theme.spaceXs
                                     // the widget's name: a solid accent chip
-                                    Rectangle {
-                                        height: Theme.controlSm; radius: Theme.radiusFull
-                                        width: nameT.implicitWidth + 2 * Theme.spaceS
-                                        color: Theme.accent
-                                        Text {
-                                            id: nameT; anchors.centerIn: parent
-                                            text: slot.modelData.name; color: Theme.onAccent
-                                            font.family: Theme.type.label.family
-                                            font.pixelSize: Theme.type.label.size
-                                            font.weight: Theme.fontWeightMedium
-                                        }
+                                    Chip { label: slot.modelData.name; name: true }
+                                    // Sticky keeps it above windows; accentSubtle while on
+                                    Chip {
+                                        glyph: Theme.icPin; label: "Sticky"
+                                        on: win.layerName === "top"
+                                        onAct: PluginHost.setWidgetLayer(slot.modelData.id, win.layerName === "top" ? "desktop" : "top")
                                     }
-                                    // Sticky: accentSubtle while the widget sits above windows
-                                    Rectangle {
-                                        readonly property bool on: win.layerName === "top"
-                                        height: Theme.controlSm; radius: Theme.radiusFull
-                                        width: stickyRow.implicitWidth + 2 * Theme.spaceS
-                                        color: on ? Theme.accentSubtle
-                                             : stickyMa.containsMouse ? Theme.surfaceHover : "transparent"
-                                        border.color: on ? Theme.accent : Theme.borderStrong
-                                        border.width: Theme.borderWidth1
-                                        Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
-                                        Row {
-                                            id: stickyRow
-                                            anchors.centerIn: parent; spacing: Theme.spaceXs
-                                            Text {
-                                                anchors.verticalCenter: parent.verticalCenter
-                                                text: Theme.icPin
-                                                font.family: Theme.fontIcons; font.pixelSize: Theme.iconXs
-                                                color: parent.parent.on ? Theme.accentText : Theme.textSecondary
-                                            }
-                                            Text {
-                                                anchors.verticalCenter: parent.verticalCenter
-                                                text: "Sticky"
-                                                color: parent.parent.on ? Theme.accentText : Theme.textSecondary
-                                                font.family: Theme.type.label.family
-                                                font.pixelSize: Theme.type.label.size
-                                                font.weight: Theme.fontWeightMedium
-                                            }
-                                        }
-                                        MouseArea { id: stickyMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: PluginHost.setWidgetLayer(slot.modelData.id, win.layerName === "top" ? "desktop" : "top") }
-                                    }
-                                    // Hide
-                                    Rectangle {
-                                        height: Theme.controlSm; radius: Theme.radiusFull
-                                        width: hideRow.implicitWidth + 2 * Theme.spaceS
-                                        color: hideMa.containsMouse ? Theme.surfaceHover : "transparent"
-                                        border.color: Theme.borderStrong; border.width: Theme.borderWidth1
-                                        Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
-                                        Row {
-                                            id: hideRow
-                                            anchors.centerIn: parent; spacing: Theme.spaceXs
-                                            Text {
-                                                anchors.verticalCenter: parent.verticalCenter
-                                                text: Theme.icEyeOff
-                                                font.family: Theme.fontIcons; font.pixelSize: Theme.iconXs
-                                                color: Theme.textSecondary
-                                            }
-                                            Text {
-                                                anchors.verticalCenter: parent.verticalCenter
-                                                text: "Hide"; color: Theme.textSecondary
-                                                font.family: Theme.type.label.family
-                                                font.pixelSize: Theme.type.label.size
-                                                font.weight: Theme.fontWeightMedium
-                                            }
-                                        }
-                                        MouseArea { id: hideMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: PluginHost.setWidgetVisible(slot.modelData.id, false) }
+                                    Chip {
+                                        glyph: Theme.icEyeOff; label: "Hide"
+                                        onAct: PluginHost.setWidgetVisible(slot.modelData.id, false)
                                     }
                                 }
                             }
                         }
 
                         // ── the mode's own hint: a Glass pill at the bottom,
-                        //    once per screen (on the desktop layer) ──
-                        Rectangle {
+                        //    once per screen (on the desktop layer), clear of
+                        //    the dock (its strip + windowGap + spaceMd) ──
+                        Item {
                             visible: Globals.widgetsArrange && win.layerName === "desktop"
                             anchors.horizontalCenter: parent.horizontalCenter
-                            anchors.bottom: parent.bottom; anchors.bottomMargin: 96
-                            width: hint.implicitWidth + 2 * Theme.spaceMd
-                            height: Theme.controlXl
-                            radius: Theme.radiusFull
-                            color: Theme.glassRaised
-                            border.color: Theme.glassBorder; border.width: Theme.borderWidth1
-                            Row {
-                                id: hint
-                                anchors.centerIn: parent; spacing: Theme.spaceXs
-                                Text {
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    text: "Drag to move · Sticky stays above windows ·"
-                                    color: Theme.textSecondary
-                                    font.family: Theme.type.body.family
-                                    font.pixelSize: Theme.type.body.size
-                                }
-                                Rectangle {
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    width: escT.implicitWidth + 2 * Theme.spaceXs
-                                    height: escT.implicitHeight + 2 * Theme.borderWidth2
-                                    radius: Theme.radiusSlight
-                                    color: Theme.surfaceRaised
-                                    border.color: Theme.borderStrong; border.width: Theme.borderWidth1
+                            anchors.bottom: parent.bottom
+                            anchors.bottomMargin: (Globals.dockIconSize === "small" ? Theme.controlXl
+                                                 : Globals.dockIconSize === "large" ? Theme.barHeightLg : Theme.control2xl)
+                                                + 2 * Theme.spaceS + Theme.windowGap + Theme.spaceMd
+                            width: pill.width; height: pill.height
+                            // shadowFloat under the pill (.ewe-hintpill)
+                            Rectangle { id: pillShadow; anchors.fill: parent; radius: Theme.radiusFull; color: Theme.black; visible: false }
+                            Elevation { anchors.fill: pillShadow; source: pillShadow }
+                            Rectangle {
+                                id: pill
+                                width: hint.implicitWidth + 2 * Theme.spaceMd
+                                height: Theme.controlXl
+                                radius: Theme.radiusFull
+                                color: Theme.glassRaised
+                                border.color: Theme.glassBorder; border.width: Theme.borderWidth1
+                                Row {
+                                    id: hint
+                                    anchors.centerIn: parent; spacing: Theme.spaceS
                                     Text {
-                                        id: escT; anchors.centerIn: parent; text: "Esc"
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        text: "Drag to move · Sticky stays above windows ·"
                                         color: Theme.textSecondary
-                                        font.family: Theme.type.mono.family
-                                        font.pixelSize: Theme.type.caption.size
-                                        font.weight: Theme.fontWeightMedium
+                                        font.family: Theme.type.label.family
+                                        font.pixelSize: Theme.fontSizeS
                                     }
-                                }
-                                Text {
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    text: "Done"
-                                    color: Theme.textSecondary
-                                    font.family: Theme.type.body.family
-                                    font.pixelSize: Theme.type.body.size
+                                    Rectangle {
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        width: escT.implicitWidth + 2 * Theme.spaceXs
+                                        height: escT.implicitHeight + 2 * Theme.borderWidth2
+                                        radius: Theme.radiusSlight
+                                        color: Theme.surfaceRaised
+                                        border.color: Theme.borderStrong; border.width: Theme.borderWidth1
+                                        Text {
+                                            id: escT; anchors.centerIn: parent; text: "Esc"
+                                            color: Theme.textSecondary
+                                            font.family: Theme.type.mono.family
+                                            font.pixelSize: Theme.type.caption.size
+                                            font.weight: Theme.fontWeightMedium
+                                        }
+                                    }
+                                    Text {
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        text: "Done"
+                                        color: Theme.textSecondary
+                                        font.family: Theme.type.label.family
+                                        font.pixelSize: Theme.fontSizeS
+                                    }
                                 }
                             }
                         }
