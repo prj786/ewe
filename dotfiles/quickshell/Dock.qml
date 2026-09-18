@@ -15,6 +15,14 @@ Scope {
     id: root
 
     function g(c) { return String.fromCodePoint(c) }
+
+    // ── roles inside Glass (Glass card): once bar opacity drops below 100
+    //    the dock is a glass surface, so hover/pressed tint the glass, accent
+    //    text deepens to glassAccent and muted text rises to textSecondary ──
+    readonly property color hoverFill:   Theme.glass ? Theme.glassHover : Theme.surfaceHover
+    readonly property color pressedFill: Theme.glass ? Theme.glassPressed : Theme.surfacePressed
+    readonly property color inkAccent:   Theme.glass ? Theme.glassAccent : Theme.accentText
+    readonly property color inkMuted:    Theme.glass ? Theme.textSecondary : Theme.textMuted
     function clsOf(t) { return (t && t.lastIpcObject && t.lastIpcObject.class) ? t.lastIpcObject.class : (t && t.wayland ? (t.wayland.appId || "") : "") }
     function iconFor(t) { var e = DesktopEntries.heuristicLookup(root.clsOf(t)); return Quickshell.iconPath(e && e.icon ? e.icon : root.clsOf(t), "application-x-executable") }
     function goWorkspace(id) { Hyprland.dispatch("hl.dsp.focus({workspace=" + id + "})") }
@@ -177,7 +185,7 @@ Scope {
             anchors.horizontalCenter: parent.horizontalCenter
             // windowGap above the bottom edge (Dock card, "Placement")
             y: win.revealed ? (parent.height - height - Theme.windowGap) : (parent.height - win.peek)
-            Behavior on y { NumberAnimation { duration: Theme.durBase; easing.type: Theme.ease } }
+            Behavior on y { enabled: !Theme.reduceMotion; NumberAnimation { duration: Theme.durBase; easing.type: Theme.ease } }
             // Entrance: slide up from below the screen edge once the shell is
             // up (mirrors the bar's slide-down; also plays on hotplug). Runs
             // on a Translate so it never fights the revealed/peek y binding.
@@ -189,11 +197,14 @@ Scope {
                     duration: Theme.durSlow; easing.type: Theme.easeSlow
                 }
             }
-            OpacityAnimator on opacity {
-                running: Theme.reduceMotion
-                from: 0; to: 1
-                duration: Theme.durFast; easing.type: Theme.easeFast
-            }
+            // Reduce motion: no slides. The pill fades in at start, and
+            // auto-hide jumps to the peek and back while the pill fades out
+            // and in at durFast, so it still says where it went.
+            property bool entered: false
+            Component.onCompleted: dock.entered = true
+            opacity: !dock.entered ? 0
+                   : (Theme.reduceMotion && !win.revealed) ? 0 : 1
+            Behavior on opacity { enabled: Theme.reduceMotion; NumberAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
             height: win.dockH
             width: row.implicitWidth + 2 * Theme.spaceS
             radius: win.dockR
@@ -214,13 +225,17 @@ Scope {
                 property string glyph: ""
                 property string image: ""          // an SVG instead of a glyph (the ewe sheep), tinted like one
                 property bool activeState: false
+                // a toolbar button named by what it opens (Dock card, Accessibility)
+                property string a11yName: ""
+                Accessible.role: Accessible.Button
+                Accessible.name: db.a11yName
                 signal go()
                 width: win.cell; height: win.cell; radius: Theme.radiusPrimary
                 color: db.activeState ? (Theme.glass ? Theme.glassPressed : Theme.accentSubtle)
-                     : dbMa.pressed ? Theme.surfacePressed
-                     : dbMa.containsMouse ? Theme.surfaceHover : "transparent"
+                     : dbMa.pressed ? root.pressedFill
+                     : dbMa.containsMouse ? root.hoverFill : "transparent"
                 Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
-                readonly property color tint: db.activeState ? Theme.accentText
+                readonly property color tint: db.activeState ? root.inkAccent
                                             : dbMa.containsMouse ? Theme.textPrimary : Theme.textSecondary
                 Text {
                     visible: db.image === ""
@@ -255,14 +270,14 @@ Scope {
                 anchors.centerIn: parent
                 spacing: Theme.spaceS
 
-                DockBtn { id: launchBtn; image: Qt.resolvedUrl("assets/sheep.svg"); activeState: Globals.launcherOpen; anchors.verticalCenter: parent.verticalCenter; onGo: { Globals.launcherAnchorX = launchBtn.mapToItem(null, launchBtn.width / 2, 0).x; Globals.storeOpen = false; Globals.placesOpen = false; Globals.mediaOpen = false; Globals.launcherOpen = !Globals.launcherOpen } }
-                DockBtn { glyph: Theme.icStack; anchors.verticalCenter: parent.verticalCenter; onGo: Quickshell.execDetached(["qs", "ipc", "call", "overview", "toggle"]) }
+                DockBtn { id: launchBtn; a11yName: "Apps"; image: Qt.resolvedUrl("assets/sheep.svg"); activeState: Globals.launcherOpen; anchors.verticalCenter: parent.verticalCenter; onGo: { Globals.launcherAnchorX = launchBtn.mapToItem(null, launchBtn.width / 2, 0).x; Globals.storeOpen = false; Globals.placesOpen = false; Globals.mediaOpen = false; Globals.launcherOpen = !Globals.launcherOpen } }
+                DockBtn { a11yName: "Overview"; glyph: Theme.icStack; anchors.verticalCenter: parent.verticalCenter; onGo: Quickshell.execDetached(["qs", "ipc", "call", "overview", "toggle"]) }
                 // store button → Komble (the software manager) when installed;
                 // the in-shell quick-installer panel is only the fallback.
-                DockBtn { id: storeBtn; glyph: Theme.icStore; activeState: Globals.storeOpen; anchors.verticalCenter: parent.verticalCenter; onGo: { if (Globals.kombleInstalled) { Quickshell.execDetached(["komble"]) } else { Globals.storeAnchorX = storeBtn.mapToItem(null, storeBtn.width / 2, 0).x; Globals.launcherOpen = false; Globals.placesOpen = false; Globals.mediaOpen = false; Globals.storeOpen = !Globals.storeOpen } } }
-                DockBtn { id: placesBtn; glyph: Theme.icFolder; activeState: Globals.placesOpen; anchors.verticalCenter: parent.verticalCenter; onGo: { Globals.placesAnchorX = placesBtn.mapToItem(null, placesBtn.width / 2, 0).x; Globals.launcherOpen = false; Globals.storeOpen = false; Globals.mediaOpen = false; Globals.placesOpen = !Globals.placesOpen } }
+                DockBtn { id: storeBtn; a11yName: "Komble"; glyph: Theme.icStore; activeState: Globals.storeOpen; anchors.verticalCenter: parent.verticalCenter; onGo: { if (Globals.kombleInstalled) { Quickshell.execDetached(["komble"]) } else { Globals.storeAnchorX = storeBtn.mapToItem(null, storeBtn.width / 2, 0).x; Globals.launcherOpen = false; Globals.placesOpen = false; Globals.mediaOpen = false; Globals.storeOpen = !Globals.storeOpen } } }
+                DockBtn { id: placesBtn; a11yName: "Places"; glyph: Theme.icFolder; activeState: Globals.placesOpen; anchors.verticalCenter: parent.verticalCenter; onGo: { Globals.placesAnchorX = placesBtn.mapToItem(null, placesBtn.width / 2, 0).x; Globals.launcherOpen = false; Globals.storeOpen = false; Globals.mediaOpen = false; Globals.placesOpen = !Globals.placesOpen } }
                 // now-playing — only exists while an MPRIS player does (MediaPlayer.qml resolves it)
-                DockBtn { id: mediaBtn; visible: Globals.mediaPlayer !== null; glyph: Theme.icMusic; activeState: Globals.mediaOpen; anchors.verticalCenter: parent.verticalCenter; onGo: { Globals.mediaAnchorX = mediaBtn.mapToItem(null, mediaBtn.width / 2, 0).x; Globals.launcherOpen = false; Globals.storeOpen = false; Globals.placesOpen = false; Globals.mediaOpen = !Globals.mediaOpen } }
+                DockBtn { id: mediaBtn; a11yName: "Media player"; visible: Globals.mediaPlayer !== null; glyph: Theme.icMusic; activeState: Globals.mediaOpen; anchors.verticalCenter: parent.verticalCenter; onGo: { Globals.mediaAnchorX = mediaBtn.mapToItem(null, mediaBtn.width / 2, 0).x; Globals.launcherOpen = false; Globals.storeOpen = false; Globals.placesOpen = false; Globals.mediaOpen = !Globals.mediaOpen } }
 
                 // spaceS shorter than the items beside it (Dock card #3)
                 Rectangle { anchors.verticalCenter: parent.verticalCenter; width: Theme.borderWidth1; height: win.cell - Theme.spaceS; color: Theme.dockStroke }
@@ -279,7 +294,7 @@ Scope {
                     width: Math.max(win.cell, penRow.implicitWidth + 2 * Theme.spaceS)
                     // open = accentSubtle with an accent border (Dock card)
                     color: win.penOpen ? (Theme.glass ? Theme.glassHover : Theme.accentSubtle)
-                         : penMa.hovered ? Theme.surfaceHover : "transparent"
+                         : penMa.hovered ? root.hoverFill : "transparent"
                     border.color: win.penOpen ? Theme.accent : Theme.dockStroke
                     border.width: Theme.borderWidth1
                     Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
@@ -293,7 +308,7 @@ Scope {
                         Text {
                             anchors.verticalCenter: parent.verticalCenter
                             text: Theme.icPen
-                            color: win.penOpen ? Theme.accentText : Theme.textMuted
+                            color: win.penOpen ? root.inkAccent : root.inkMuted
                             font.family: Theme.fontIcons; font.pixelSize: Theme.iconSm
                         }
                         Repeater {
@@ -303,7 +318,7 @@ Scope {
                                 anchors.verticalCenter: parent.verticalCenter
                                 width: win.tileW; height: win.tileH; radius: Theme.radiusSecondary
                                 color: modelData.activated && win.penOpen ? Theme.accent
-                                     : penTileMa.containsMouse ? Theme.surfaceHover : "transparent"
+                                     : penTileMa.containsMouse ? root.hoverFill : "transparent"
                                 Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
                                 Image {
                                     anchors.centerIn: parent
@@ -342,7 +357,7 @@ Scope {
                         height: win.cell; radius: Theme.radiusPrimary
                         width: Math.max(win.cell, wsRow.implicitWidth + 2 * Theme.spaceS)
                         color: focused ? (Theme.glass ? Theme.glassHover : Theme.accentSubtle)
-                             : wsMa.containsMouse ? Theme.surfaceHover : "transparent"
+                             : wsMa.containsMouse ? root.hoverFill : "transparent"
                         border.color: focused ? Theme.accent : Theme.dockStroke
                         border.width: Theme.borderWidth1
                         Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
@@ -357,7 +372,7 @@ Scope {
                             Text {
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: wsBox.modelData.id + ":"
-                                color: wsBox.focused ? Theme.accentText : Theme.textMuted
+                                color: wsBox.focused ? root.inkAccent : root.inkMuted
                                 font.family: Theme.type.label.family
                                 font.pixelSize: Theme.type.label.size
                                 font.weight: Theme.fontWeightSemibold
@@ -379,7 +394,7 @@ Scope {
                                     anchors.verticalCenter: parent.verticalCenter
                                     width: win.tileW; height: win.tileH; radius: Theme.radiusSecondary
                                     color: modelData.activated ? Theme.accent
-                                         : tileMa.containsMouse ? Theme.surfaceHover : "transparent"
+                                         : tileMa.containsMouse ? root.hoverFill : "transparent"
                                     Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
                                     Image {
                                         anchors.centerIn: parent
