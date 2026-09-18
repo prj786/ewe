@@ -29,7 +29,7 @@ An icon button runs an action or toggles a setting using only an icon, in places
 | xl | `control-xl` (40) | `icon-lg` (20) |
 | 2xl | `control-2xl` (48) | `icon-xl` (24) |
 
-In the bar, use lg with `bar-height` (48px) and xl with `bar-height-lg` (64px).
+In the bar, use lg with `bar-height` (40px) and xl with `bar-height-lg` (48px).
 
 ## States
 - **Hover:** ghost fills with `surface-hover` and the icon turns `text-primary`; secondary uses `surface-hover`; primary uses `accent-hover`.

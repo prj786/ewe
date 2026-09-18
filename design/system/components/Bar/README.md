@@ -1,6 +1,6 @@
 # Bar
 
-The bar runs along the top of every screen: the focused workspace and app on the left, tray, updates, keyboard layout, the Quick settings button and the clock on the right.
+The bar runs along the top of every screen: the focused workspace and app on the left, tray, updates, keyboard layout, and the Quick settings button — the status indicators and the clock in one pill — on the right.
 
 ## Placement
 - One bar per screen, anchored to the top edge and running edge to edge. It reserves its own height, so windows start below it.
@@ -8,17 +8,16 @@ The bar runs along the top of every screen: the focused workspace and app on the
 - Center is empty by default. A plugin placed there stays centered on the screen and hides itself if it would touch the left or right side.
 
 ## Anatomy
-1. Strip: `bar-height` (48px), `surface-base`, a 1px `border-subtle` line below, 8px side padding. With transparency on, it is Glass (`glass-base` over a `blur-glass` blur).
+1. Strip: `bar-height` (40px), `surface-base`, a 1px `border-subtle` line below, 8px side padding. With transparency on, it is Glass (`glass-base` over a `blur-glass` blur).
 2. Workspace chip: the focused workspace number, 13px weight 600 `text-primary`, in a 32px `primary` chip with a 16px × 2px `accent` underline. Click opens the Overview.
 3. Focused app: its 20px icon and its name (from the app's id, not the window title) in 13px weight 600 `accent-text`. Hidden on a bare desktop.
 4. Plugin slots: start (after the app), center, and end (after the tray). Plugins sit in install order.
-5. Tray: app icons 20px wide with 2px between them. Single-color icons are tinted `text-secondary`; colored icons keep their colors.
+5. Tray: app icons 20px wide with 4px between them — the same `space-xs` rhythm as every other gap in the right cluster. Single-color icons are tinted `text-secondary`; colored icons keep their colors.
 6. Tiling toggle: `layout-grid` while tiling, `app-window` while floating.
 7. Updates: `download` in `accent-text` with a count Badge; `check` in `text-muted` when everything is current; a spinning `refresh-cw` while updating.
 8. Keyboard layout: two capitals ("US", "GE"), 12px weight 600.
 9. Divider: 1px × 16px `border-subtle`, 4px margin on each side.
-10. Quick settings button: one pill holding the status indicators, 12px side padding, 8px between glyphs. It opens Quick settings.
-11. Divider, then the clock: date and time in 13px weight 600 `text-primary` with tabular numbers, 8px apart ("Thu 17 Sep  04:18 PM", following the locale's 12- or 24-hour setting).
+10. Quick settings button: one pill holding the status indicators — 12px side padding, 8px between glyphs — and the clock at its end: date and time in 13px weight 600 `text-primary` with tabular numbers, 8px apart ("Thu 17 Sep  04:18 PM", following the locale's 12- or 24-hour setting). It opens Quick settings.
 
 ## Status indicators
 Each shows only while it applies, always in this order:
@@ -49,13 +48,13 @@ Settings can hide the tray, tiling, keyboard, sound, mic, network, Bluetooth, po
 - A dot (8px) marks "something new" without a number, as on the phone indicator.
 
 ## Sizes
-The bar's size follows its icons (`[desktop.bar] icon_size`). It has no height of its own: it is its content plus `space-s` above and below, so taller content (a larger text size, Georgian) makes it taller. Text size 130% moves the icons one size up.
+The bar's size follows its icons (`[desktop.bar] icon_size`). It has no height of its own: it is its content plus `space-xs` above and below, so taller content (a larger text size, Georgian) makes it taller. Text size 130% moves the icons one size up.
 
 | Icon size | Bar | Modules | Glyphs | Text |
 | --- | --- | --- | --- | --- |
-| Small | 44px | `control-md` 28px | `icon-md` 16px | 13px, 12px for layout and % |
-| Normal (default) | `bar-height` 48px | `control-lg` 32px | `icon-lg` 20px | 13px, 12px for layout and % |
-| Large | `bar-height-lg` 56px | `control-xl` 40px | `icon-xl` 24px | 15px, 13px |
+| Small | 36px | `control-md` 28px | `icon-md` 16px | 13px, 12px for layout and % |
+| Normal (default) | `bar-height` 40px | `control-lg` 32px | `icon-lg` 20px | 13px, 12px for layout and % |
+| Large | `bar-height-lg` 48px | `control-xl` 40px | `icon-xl` 24px | 15px, 13px |
 
 ## Module states
 | State | Look |
@@ -68,7 +67,7 @@ The bar's size follows its icons (`[desktop.bar] icon_size`). It has no height o
 | Problem | `danger` |
 
 ## Behavior
-- Quick settings button: click opens Quick settings; scrolling changes the volume by 3% and shows the volume popup.
+- Quick settings button: click opens Quick settings; scrolling changes the volume by 3% and shows the volume popup. The clock sits in the same button and follows it.
 - Updates: click opens Komble's updates (or the store); middle-click checks now.
 - Keyboard layout: click switches to the next layout.
 - Tray: left-click activates the app (or opens its menu if that is all it has), right-click opens its menu, middle-click activates, scroll passes through.

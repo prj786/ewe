@@ -91,7 +91,8 @@ Scope {
         function hide(): void { Globals.barVisible = false }
     }
 
-    // ── clock: date and time as two fields spaceS apart (Bar card #11).
+    // ── clock: date and time as two fields spaceS apart, shown inside the
+    //    Quick settings button (Bar card #10) ──────────────────────────────
     //    12-hour, as before: the shell has no 12/24-hour setting yet ────────
     property string clockDate: ""
     property string clockTime: ""
@@ -458,14 +459,15 @@ Scope {
 
                     // system tray, then the plugins' bar widgets (defaultSection =
                     // right, the default) — one row, so a widget sits in the
-                    // tray's rhythm: barIcon glyphs, spaceXxs apart (Bar card #5)
+                    // tray's rhythm: barIcon glyphs, spaceXs apart, the same
+                    // gap as every other module in the cluster (Bar card #5)
                     Row {
                         anchors.verticalCenter: parent.verticalCenter
                         spacing: Theme.spaceXs
                         Row {
                         visible: Globals.barShows("tray") && SystemTray.items.values.length > 0
                         anchors.verticalCenter: parent.verticalCenter
-                        spacing: Theme.spaceXxs
+                        spacing: Theme.spaceXs
                         Repeater {
                             model: SystemTray.items
                             delegate: Item {
@@ -858,27 +860,12 @@ Scope {
                                     color: ctlGroup.ink
                                 }
                             }
-                        }
-                    }
-
-                    // divider, then the clock — its own module at the end of
-                    // the bar (Bar card #11). Date and time are spaceS apart,
-                    // with tabular figures so the digits never shift; clicking
-                    // it opens Quick settings and the wheel changes the volume,
-                    // as they did while the clock sat inside that button.
-                    BarSep { anchors.verticalCenter: parent.verticalCenter }
-
-                    BarModule {
-                        anchors.verticalCenter: parent.verticalCenter
-                        a11yName: bar.clockText
-                        onActivated: Globals.quickSettingsOpen = !Globals.quickSettingsOpen
-                        onScrolled: function (dy) {
-                            Quickshell.execDetached(["wpctl", "set-volume", "-l", "1.0",
-                                                     "@DEFAULT_AUDIO_SINK@", dy > 0 ? "3%+" : "3%-"])
-                        }
-                        Row {
-                            anchors.verticalCenter: parent.verticalCenter
-                            spacing: Theme.spaceS
+                            // the clock — date and time inside the pill, so the
+                            // one button holds every status indicator plus the
+                            // time (Bar card #10). Tabular figures keep the
+                            // digits still; clicking the button opens Quick
+                            // settings and the wheel changes the volume, as
+                            // they did while the clock sat on its own.
                             Text {
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: bar.clockDate

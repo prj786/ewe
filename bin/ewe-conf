@@ -82,7 +82,7 @@ def _scalar(v):
 SECTION_NOTES = {
     "desktop": "everything the Settings surfaces manage",
     "desktop.theme": "scheme + accent + look presets (corner/density/stroke) + bar_opacity; every token is derived by ewe-theme",
-    "desktop.bar": "the top bar: icon_size = small | normal | large (the bar is its icons plus padding: 44 / 48 / 56px); show = per-indicator visibility",
+    "desktop.bar": "the top bar: icon_size = small | normal | large (the bar is its icons plus padding: 36 / 40 / 48px); show = per-indicator visibility",
     "desktop.accessibility": "reduce_motion, reduce_transparency, increase_contrast (bools); text_scale = 100 | 115 | 130",
     "desktop.dock": "the bottom dock (autohide = intelligent hide)",
     "desktop.animations": "speed multiplies every duration; detail = per-leaf tuning",

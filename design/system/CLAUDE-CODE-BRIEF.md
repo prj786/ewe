@@ -85,7 +85,7 @@ When you need a value, look it up; never guess it. If a spec is silent, say so i
 - Text fields turn their own border `focus-ring`.
 
 **Bar**
-- `bar-height` is 48px, or 64px at the large size.
+- `bar-height` is 40px, or 48px at the large size.
 - Modules are 32px or 40px with 20px or 24px glyphs.
 - The bar's status glyphs sit inside the **Quick settings button** (the old "control center" pill).
 

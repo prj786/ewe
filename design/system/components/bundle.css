@@ -905,7 +905,7 @@
 .ewe-glass .ewe-bar__glyph > .ewe-badge { box-shadow: none; }
 .ewe-bar__glyph > .ewe-badge--dot { top: calc(-1 * var(--border-width-1)); left: calc(var(--icon-lg) - var(--space-xs)); }
 .ewe-bar__sep { flex: none; width: var(--border-width-1); height: var(--icon-md); background: var(--border-subtle); margin: 0 var(--space-xs); }
-.ewe-bar__tray { display: inline-flex; align-items: center; gap: var(--space-xxs); }
+.ewe-bar__tray { display: inline-flex; align-items: center; gap: var(--space-xs); }
 .ewe-trayicon { display: inline-grid; place-items: center; box-sizing: border-box; width: var(--icon-lg); height: var(--icon-lg); border-radius: var(--slight); }
 .ewe-trayicon .ewe-icon { width: 80%; height: 80%; }
 .ewe-trayicon--color { background: var(--tray, var(--info)); color: var(--on-status); border-radius: var(--fully-rounded); }
