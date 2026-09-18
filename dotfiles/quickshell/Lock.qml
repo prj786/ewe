@@ -236,6 +236,10 @@ Scope {
                             anchors.horizontalCenter: parent.horizontalCenter
                             size: Theme.icon4xl
                             initial: root.userInitial
+                            // Ewe Dark whatever the scheme: the surface-hover
+                            // step, with the person's accent for the letter
+                            plateColor: Theme.neutral800
+                            inkColor: Theme.accent
                         }
                         Text {
                             anchors.horizontalCenter: parent.horizontalCenter
@@ -302,15 +306,21 @@ Scope {
                             width: Theme.controlLg; height: Theme.controlLg
                             radius: Theme.radiusPrimary
                             visible: !root.busy
-                            color: goMa.pressed ? Theme.accentPressed
+                            // nothing typed: the Button's disabled look, in the
+                            // Ewe Dark steps (surfaceRaised, borderSubtle,
+                            // textDisabled) instead of a faded accent
+                            readonly property bool ready: root.pw.length > 0
+                            color: !go.ready ? Theme.neutral900
+                                 : goMa.pressed ? Theme.accentPressed
                                  : goMa.containsMouse ? Theme.accentHover : Theme.accent
-                            opacity: root.pw.length > 0 ? 1 : 0.35
+                            border.color: go.ready ? "transparent" : Theme.neutral800
+                            border.width: Theme.borderWidth1
                             Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
                             Text {
                                 anchors.centerIn: parent
                                 text: Theme.icChevronRight
                                 font.family: Theme.fontIcons; font.pixelSize: Theme.iconMd
-                                color: Theme.onAccent
+                                color: go.ready ? Theme.onAccent : Theme.neutral600
                             }
                             MouseArea {
                                 id: goMa
