@@ -15,7 +15,7 @@ version 3). What you can CHANGE lives in `ewe.conf`:
     bar_opacity  = 100            # 0-100; the Glass preset is 80
     app_blur     = false          # every window at opacity-app, blurred behind
     window_transparency = false   # unfocused windows at opacity-inactive
-    [desktop.bar]            size = "normal"      # normal (48) | large (64)
+    [desktop.bar]            icon_size = "normal" # small | normal | large (44 / 48 / 56)
     [desktop.accessibility]  reduce_motion, reduce_transparency,
                              increase_contrast = false; text_scale = 100|115|130
     [desktop.animations]     speed = 1            # divides the motion durations
@@ -73,11 +73,11 @@ anything lighter to `neutral-0` (on-accent/on-status candidates, the scrim,
 shadows, guarantee moves, an imported palette's #000000 or #ffffff). There
 is no second white or black anywhere in the output.
 
-THE ALIAS LAYER. The shell and the three apps still read the Fluent 2 names
-this tool emitted until version 3 (bg-1, fg-2, stroke-1, brand-bg …). Every
-one of them is still emitted, as an alias onto its Ewe token per
-design/system/guidelines/20-migration.md, so nothing breaks while components
-move over. The alias layer is deleted in Phase 6.
+ONLY EWE NAMES. Every token is emitted under its design-system name
+(surface-raised, text-muted, control-md …). The Fluent 2 aliases this tool
+emitted while the shell and the apps moved over (bg-1, fg-2, brand-bg …)
+were deleted in Phase 6 of the v3 rollout; design/system/guidelines/
+20-migration.md is the rename table for anything still carrying one.
 """
 import argparse
 import json
@@ -1100,100 +1100,7 @@ def tokens(cfg):
                     "builtin": bool(sc.get("builtin")), "accent": accent,
                     "semantic": sc.get("semantic", True), "palette": sc["palette"],
                     "overrides": sc.get("overrides") or {}}}
-    add_aliases(t)
     return t
-
-
-# ═══ the alias layer — today's Fluent names onto the Ewe tokens ════════════
-# design/system/guidelines/20-migration.md, verbatim. A value here is an Ewe
-# role name, or a literal for the handful the guide marks "removed" (kept
-# at a neutral value so an unmigrated component still renders).
-ALIAS_COLOR = {
-    "fg-1": "text-primary", "fg-2": "text-secondary", "fg-2-hover": "text-primary",
-    "fg-3": "text-muted", "fg-3-hover": "text-primary", "fg-4": "text-muted",
-    "fg-disabled": "text-disabled", "fg-inverted": "on-accent", "fg-on-brand": "on-accent",
-    "bg-1": "surface-raised", "bg-1-hover": "surface-hover", "bg-1-pressed": "surface-pressed",
-    "bg-1-selected": "accent-subtle",
-    "bg-2": "surface-base", "bg-2-hover": "surface-hover", "bg-2-pressed": "surface-pressed",
-    "bg-2-selected": "accent-subtle",
-    "bg-3": "surface-base", "bg-3-hover": "surface-hover", "bg-3-pressed": "surface-pressed",
-    "bg-3-selected": "accent-subtle",
-    "bg-4": "surface-sunken", "bg-4-hover": "surface-hover", "bg-4-pressed": "surface-pressed",
-    "bg-4-selected": "accent-subtle",
-    "bg-5": "surface-sunken", "bg-5-hover": "surface-hover", "bg-5-pressed": "surface-pressed",
-    "bg-5-selected": "accent-subtle",
-    "bg-6": "surface-overlay", "bg-disabled": "surface-raised",
-    "card": "surface-raised", "card-hover": "surface-hover", "card-pressed": "surface-pressed",
-    "card-selected": "accent-subtle",
-    "subtle": "transparent", "subtle-hover": "surface-hover", "subtle-pressed": "surface-pressed",
-    "subtle-selected": "accent-subtle",
-    "stroke-1": "border-strong", "stroke-1-hover": "text-muted", "stroke-1-pressed": "border-strong",
-    "stroke-1-selected": "accent-text", "stroke-2": "border-subtle", "stroke-3": "border-subtle",
-    "stroke-accessible": "border-strong", "stroke-disabled": "border-subtle",
-    "stroke-focus-1": "transparent",       # removed: Ewe draws a single 1px ring
-    "stroke-focus-2": "focus-ring",
-    "brand-bg": "accent", "brand-bg-hover": "accent-hover", "brand-bg-pressed": "accent-pressed",
-    "brand-bg-selected": "accent-pressed", "brand-fg-1": "accent-text", "brand-fg-2": "accent-text",
-    "brand-fg-link": "accent-text", "brand-fg-link-hover": "accent-text",
-    "brand-stroke-1": "focus-ring", "brand-stroke-2": "ewellow-900",
-    "compound-brand-bg": "accent", "compound-brand-bg-hover": "accent-hover",
-    "compound-brand-bg-pressed": "accent-pressed", "compound-brand-fg": "accent-text",
-    "compound-brand-stroke": "focus-ring",
-    "success-bg": "success-subtle", "success-border": "success",
-    "warning-bg": "warning-subtle", "warning-border": "warning",
-    "danger-bg": "danger-subtle", "danger-border": "danger",
-    "info-bg": "info-subtle", "info-border": "info",
-}
-# the pre-Fluent names (2026-08), still injected into installed app binaries
-LEGACY_COLOR = {
-    "bg": "surface-base", "panel": "surface-raised", "elevated": "surface-overlay",
-    "hover": "surface-hover", "stroke": "border-subtle", "fg": "text-primary",
-    "fg-secondary": "text-secondary", "fg-dim": "text-muted", "link": "accent-text",
-    "link-solid": "accent", "accent-fg": "on-accent",
-}
-ALIAS_SHAPE = {"radius-control": "primary", "radius-card": "rounded", "radius-panel": "rounded",
-               "radius-pill": "fully-rounded", "radius": "rounded", "radius-inner": "primary",
-               "outline-width": "border-width-1", "stroke-width-thick": "border-width-2",
-               "border": "border-width-1", "border-thin": "border-width-1",
-               "input-border-width": "border-width-1", "focus": "focus-width"}
-ALIAS_SIZE = {"control": "control-md", "row": "control-md", "icon": "icon-md",
-              "fs-100": "font-size-xs", "lh-100": "line-height-xs",
-              "fs-200": "font-size-s", "lh-200": "line-height-s",
-              "fs-300": "font-size-md", "lh-300": "line-height-md",
-              "fs-400": "font-size-lg", "lh-400": "line-height-lg",
-              "fs-500": "font-size-xl", "lh-500": "line-height-xl",
-              "fs-600": "font-size-2xl", "lh-600": "line-height-2xl",
-              "fs-700": "font-size-3xl", "lh-700": "line-height-3xl",
-              "fs-800": "font-size-4xl", "lh-800": "line-height-4xl",
-              "fs-body": "font-size-md", "fs-small": "font-size-s", "fs-large": "font-size-lg",
-              "fs-title": "font-size-2xl",
-              "space-none": 0, "space-snudge": "space-s", "space-mnudge": "space-s",
-              "space-m": 12, "space-l": "space-md", "space-xxl": 24, "space-xxxl": "space-lg"}
-LEGACY_LOOKS = ("flock", "blacksheep")     # the `themes` block's two old look names
-
-
-def add_aliases(t):
-    c, s, z = t["color"], t["shape"], t["size"]
-    for k, v in ALIAS_COLOR.items():
-        c[k] = c[v] if v in c else v
-    for k, v in LEGACY_COLOR.items():
-        c[k] = c[v]
-    for k in ("success", "warning", "danger"):
-        c.setdefault(k, c[k])
-    # the old two-layer shadow: both layers are the one Ewe shadow now
-    sf = t["shadow"]["shadow-float"]
-    c["shadow-ambient"] = c["shadow-key"] = sf["color"]
-    t["alpha"]["shadow-ambient"] = t["alpha"]["shadow-key"] = sf["alpha"]
-    for k, v in ALIAS_SHAPE.items():
-        s[k] = s[v]
-    # `stroke-width` is a rule INSIDE a surface (dividers, the window ring)
-    # and never drops below 1, even under stroke = none; that is what kept
-    # hairlines visible before v3 and what the current shell still reads.
-    s["stroke-width"] = max(1, s["border-width-1"])
-    for k, v in ALIAS_SIZE.items():
-        z[k] = z[v] if isinstance(v, str) else v
-    z["pad"] = z["space-s"] + z["space-xs"]
-    z["gap"] = z["space-s"]
 
 
 # ═══ SCHEMES — import / export / wallpaper ═════════════════════════════════
@@ -1678,27 +1585,6 @@ def shadow_qml(sh):
             "color": "#%02x%s" % (round(sh["alpha"] * 255), sh["color"].lstrip("#"))}
 
 
-def legacy(t):
-    """The pre-Fluent `themes` block: one look under both of its old names,
-    so a machine whose user-theme.json still says "blacksheep" themes."""
-    c, s, z = t["color"], t["shape"], t["size"]
-    look = {
-        "label": "Ewe",
-        "note": "Ewe design system v%d tokens, derived from the active scheme." % DS_VERSION,
-        "accent": c["accent-text"],
-        "color": {k: color_qml(t, k) for k in LEGACY_COLOR},
-        "shape": dict({k: s[k] for k in ("radius", "radius-inner", "radius-pill", "border",
-                                         "border-thin", "focus")},
-                      **{"hover-inset": s["stroke-width"], "shadow-offset": 0}),
-        "size": {k: z[k] for k in ("pad", "gap", "row", "control", "bar-height", "icon",
-                                   "fs-small", "fs-body", "fs-large", "fs-title")},
-        "voice": {"label-transform": "none", "label-tracking": "normal",
-                  "label-weight": FONT_WEIGHT["medium"], "hover": "brighten",
-                  "input-border": "all", "surface": "tonal"},
-    }
-    return {n: look for n in LEGACY_LOOKS}
-
-
 def gen_json(t):
     doc = {
         "version": DS_VERSION,
@@ -1714,18 +1600,15 @@ def gen_json(t):
         "scheme": t["scheme"],          # colorscheme.sh reads the palette for kitty's ANSI
         # the Accent picker's swatches, each with the ink its check mark takes
         "accent_presets": accent_presets(),
-        "themes": legacy(t),
     }
     return json.dumps(doc, indent=2) + "\n"
 
 
 def css_vars(t):
-    """Every token as a CSS custom property (names = token names), then the
-    Fluent aliases and the handful of helpers the apps inject at runtime."""
+    """Every token as a CSS custom property (names = token names), plus
+    --accent-default, which the apps' runtime accent falls back to."""
     v = {}
-    ewe_colors = [k for k in t["color"] if k not in ALIAS_COLOR and k not in LEGACY_COLOR
-                  and k not in ("shadow-ambient", "shadow-key")]
-    for k in ewe_colors:
+    for k in t["color"]:
         v["--" + k] = color_css(t, k)
     v["--font-sans"] = t["type"]["css"]["sans"]
     v["--font-mono"] = t["type"]["css"]["mono"]
@@ -1753,31 +1636,7 @@ def css_vars(t):
         v["--" + k] = "%dpx" % t["size"][k]
     for k, val in t["opacity"].items():
         v["--" + k] = _fmt(val)
-    # ── the alias layer (Migration guide) — deleted in Phase 6 ─────────────
-    for k in ALIAS_COLOR:
-        v["--" + k] = color_css(t, k)
-    v["--shadow-ambient"] = color_css(t, "shadow-ambient")
-    v["--shadow-key"] = color_css(t, "shadow-key")
-    sf = t["surface"]
-    v["--bar-alpha"] = _fmt(sf["bar_alpha"])
-    v["--bg-3-bar"] = _rgba(t["color"]["surface-base"], sf["bar_alpha"])
-    for k in ALIAS_SHAPE:
-        v["--" + k] = "%dpx" % t["shape"][k]
-    v["--stroke-width"] = "%dpx" % t["shape"]["stroke-width"]
-    v["--hover-inset"] = "0px"                 # removed
-    v["--shadow-offset"] = "0px"               # removed
-    for k in list(ALIAS_SIZE) + ["pad", "gap"]:
-        v["--" + k] = "%dpx" % t["size"][k]
     v["--accent-default"] = t["color"]["accent"]
-    v["--elevation-sm"] = shadow_css(t["shadow"]["shadow-sm"])
-    v["--elevation"] = shadow_css(t["shadow"]["shadow-float"])
-    for k in LEGACY_COLOR:
-        v["--" + k] = color_css(t, k)
-    v["--label-transform"] = "none"
-    v["--label-tracking"] = "normal"
-    v["--label-weight"] = str(FONT_WEIGHT["medium"])
-    v["--btn-hover-bg"] = t["color"]["accent-hover"]
-    v["--btn-hover-fg"] = t["color"]["on-accent"]
     return v
 
 
@@ -1815,19 +1674,10 @@ def gen_css(t, selector=":root"):
          " * component asks for a role and this layer decides the value; no",
          " * component carries a palette literal.",
          " *",
-         " * The Fluent 2 names after the Ewe tokens (--bg-1, --fg-2, --stroke-1 …)",
-         " * are ALIASES onto the Ewe tokens, kept while components migrate",
-         " * (guidelines/20-migration.md) and deleted in Phase 6.",
-         " *",
          " * --accent is the person's pick, injected inline at runtime, which",
          " * beats any rule here.",
          " */", "", selector + " {"]
-    vars_ = css_vars(t)
-    first_alias = "--fg-1"
-    for k, val in vars_.items():
-        if k == first_alias:
-            s.append("")
-            s.append("  /* ── Fluent aliases (Migration guide); removed in Phase 6 ── */")
+    for k, val in css_vars(t).items():
         s.append("  %s: %s;" % (k, val))
     s.append("  --accent: var(--accent-default);")
     s.append("}")
@@ -2045,7 +1895,7 @@ document.getElementById("brand").innerHTML = bar(T.brand);
 document.getElementById("grey").innerHTML  = bar(T.grey);
 document.getElementById("type").innerHTML = Object.keys(T.type.styles).map(n =>
   `<div class="${n}">The quick brown sheep &mdash; ${n} <code class="caption">${T.type.styles[n].size}/${T.type.styles[n].lineHeight} ${T.type.styles[n].weight}</code></div>`).join("");
-const roles = Object.keys(T.color).filter(k => !T.aliases.includes(k));
+const roles = Object.keys(T.color);
 document.getElementById("all").innerHTML = roles.map(k =>
   `<div><s style="background:${T.color[k]}"></s>--${k}<br>${T.color[k]}</div>`).join("");
 document.getElementById("dens").innerHTML =
@@ -2065,8 +1915,7 @@ def cmd_preview(a):
                     .replace("__TOKENS_JSON__", json.dumps({
                         "input": t["input"], "color": {k: color_css(t, k) for k in t["color"]},
                         "shape": t["shape"], "size": t["size"], "type": t["type"],
-                        "brand": t["brand"], "grey": t["grey"], "adjusted": t["adjusted"],
-                        "aliases": list(ALIAS_COLOR) + list(LEGACY_COLOR) + ["shadow-ambient", "shadow-key"]})))
+                        "brand": t["brand"], "grey": t["grey"], "adjusted": t["adjusted"]})))
     target = a.out or os.path.join(HERE, "design", "specimen.html")
     _write(target, html)
     out({"ok": True, "path": target, "conf": src, "accent": t["input"]["accent"]})

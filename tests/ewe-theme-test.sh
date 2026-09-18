@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ewe-theme tests — sandboxed ewe.conf, no shell, no hooks. Covers the Ewe
 # design system v3 generator: the default build (byte-identical CSS, every
-# token + the Fluent aliases in the JSON), the two built-in schemes (embedded
+# token in the JSON, no Fluent alias left), the two built-in schemes (embedded
 # = the shipped asset files; set/remove refused; duplicate/export), the
 # pre-v3 conf values (scheme = accent, corner = round, bar icon_size), role
 # derivation for dark AND light imports (Base16, Omarchy, Catppuccin, Gogh,
@@ -46,10 +46,16 @@ import json,sys; c=json.load(sys.stdin)[\"color\"]
 need=[\"ewellow\",\"black\"]+[\"ewellow-%d\"%s for s in (50,100,200,300,400,500,600,700,800,900,950)]+[\"neutral-%d\"%s for s in (0,50,100,200,300,400,500,600,700,800,850,900,950)]
 need+=[\"surface-base\",\"surface-raised\",\"surface-overlay\",\"surface-sunken\",\"surface-hover\",\"surface-pressed\",\"surface-selected\",\"scrim\",\"glass-base\",\"glass-raised\",\"glass-border\",\"glass-hover\",\"glass-pressed\",\"glass-accent\",\"border-subtle\",\"border-strong\",\"text-primary\",\"text-secondary\",\"text-muted\",\"text-disabled\",\"accent\",\"accent-hover\",\"accent-pressed\",\"on-accent\",\"accent-subtle\",\"accent-text\",\"focus-ring\",\"success\",\"warning\",\"danger\",\"info\",\"success-subtle\",\"warning-subtle\",\"danger-subtle\",\"info-subtle\",\"on-status\"]
 miss=[k for k in need if not c.get(k)]; assert not miss, miss'"
-check "the Fluent aliases are still emitted, onto the Ewe roles" "[ \"$(echo "$show" | role fg-1)\" = \"$(echo "$show" | role text-primary)\" ] && [ \"$(echo "$show" | role bg-1)\" = \"$(echo "$show" | role surface-raised)\" ] && [ \"$(echo "$show" | role brand-bg)\" = \"$(echo "$show" | role accent)\" ] && [ \"$(echo "$show" | role stroke-1)\" = \"$(echo "$show" | role border-strong)\" ] && [ \"$(echo "$show" | role card-selected)\" = \"$(echo "$show" | role accent-subtle)\" ] && [ \"$(echo "$show" | role subtle)\" = transparent ]"
-check "the older aliases (bg/panel/fg/link) too" "[ \"$(echo "$show" | role panel)\" = \"$(echo "$show" | role surface-raised)\" ] && [ \"$(echo "$show" | role link)\" = \"$(echo "$show" | role accent-text)\" ]"
-check "shape: v3 radii + widths, and the old names beside them" "[ \"$(echo "$show" | shape primary)\" = 8 ] && [ \"$(echo "$show" | shape rounded)\" = 10 ] && [ \"$(echo "$show" | shape border-width-1)\" = 1 ] && [ \"$(echo "$show" | shape focus-width)\" = 1 ] && [ \"$(echo "$show" | shape field-border-width)\" = 1 ] && [ \"$(echo "$show" | shape radius-control)\" = 8 ] && [ \"$(echo "$show" | shape radius-panel)\" = 10 ] && [ \"$(echo "$show" | shape outline-width)\" = 1 ]"
-check "size: the type scale, controls, bar, icons, panels, and the old names" "[ \"$(echo "$show" | size font-size-md)\" = 13 ] && [ \"$(echo "$show" | size control-md)\" = 28 ] && [ \"$(echo "$show" | size bar-height)\" = 48 ] && [ \"$(echo "$show" | size icon-lg)\" = 20 ] && [ \"$(echo "$show" | size panel-lg)\" = 560 ] && [ \"$(echo "$show" | size blur-glass)\" = 24 ] && [ \"$(echo "$show" | size fs-body)\" = 13 ] && [ \"$(echo "$show" | size control)\" = 28 ] && [ \"$(echo "$show" | size pad)\" = 12 ] && [ \"$(echo "$show" | size gap)\" = 8 ]"
+check "no Fluent alias is emitted, in the JSON or the CSS" "echo '$show' | python3 -c '
+import json,sys; d=json.load(sys.stdin)
+gone=[\"fg-1\",\"bg-1\",\"brand-bg\",\"stroke-1\",\"card-selected\",\"subtle\",\"panel\",\"link\",\"shadow-key\"]
+assert not [k for k in gone if k in d[\"color\"]], d[\"color\"].keys()
+assert not [k for k in (\"radius-control\",\"radius-panel\",\"outline-width\",\"stroke-width\",\"border\") if k in d[\"shape\"]]
+assert not [k for k in (\"fs-body\",\"control\",\"pad\",\"gap\",\"space-m\") if k in d[\"size\"]]
+assert not [k for k in d[\"css_vars\"] if k in (\"--fg-1\",\"--bg-3\",\"--brand-bg\",\"--bar-alpha\",\"--bg-3-bar\",\"--radius\",\"--pad\",\"--elevation\")]
+' && python3 -c 'import json; assert \"themes\" not in json.load(open(\"$TOK\"))' && ! grep -qE -- '--(fg|bg|stroke|brand)-[0-9a-z]' '$SB/tokens.css'"
+check "shape: v3 radii + widths" "[ \"$(echo "$show" | shape primary)\" = 8 ] && [ \"$(echo "$show" | shape rounded)\" = 10 ] && [ \"$(echo "$show" | shape border-width-1)\" = 1 ] && [ \"$(echo "$show" | shape focus-width)\" = 1 ] && [ \"$(echo "$show" | shape field-border-width)\" = 1 ]"
+check "size: the type scale, controls, bar, icons, panels" "[ \"$(echo "$show" | size font-size-md)\" = 13 ] && [ \"$(echo "$show" | size control-md)\" = 28 ] && [ \"$(echo "$show" | size bar-height)\" = 48 ] && [ \"$(echo "$show" | size icon-lg)\" = 20 ] && [ \"$(echo "$show" | size panel-lg)\" = 560 ] && [ \"$(echo "$show" | size blur-glass)\" = 24 ]"
 check "glass, opacity, motion, type styles, bar block in the JSON" "python3 -c '
 import json; d=json.load(open(\"$TOK\"))
 assert d[\"version\"]==3
@@ -64,7 +70,6 @@ assert d[\"bar\"]=={\"icon_size\":\"normal\",\"size\":\"normal\",\"height\":48,\
 assert d[\"shadow\"][\"shadow-float\"][\"y\"]==2 and d[\"gradient\"][\"gradient-ember\"][\"css\"].startswith(\"linear-gradient(160deg\")
 assert d[\"scheme\"][\"slug\"]==\"ewe-dark\" and d[\"scheme\"][\"builtin\"] and d[\"scheme\"][\"palette\"][\"base00\"]==\"#0b0a08\"
 assert d[\"adjusted\"]==[], d[\"adjusted\"]
-assert \"flock\" in d[\"themes\"] and d[\"themes\"][\"flock\"][\"color\"][\"bg\"]==\"#0b0a08\"
 assert d[\"input\"][\"variant\"]==\"dark\"
 '"
 check "the CSS carries the type-style classes and the font stacks" "grep -q '^\.body { font-family: var(--font-sans); font-size: 13px; line-height: 18px; font-weight: 400; }' '$SB/tokens.css' && grep -q '^\.overline .*letter-spacing: 0.06em' '$SB/tokens.css' && grep -q -- '--font-sans: \"Geist\", \"Noto Sans Georgian\"' '$SB/tokens.css'"
@@ -193,8 +198,8 @@ assert g[\"gradient-glow\"][\"stops\"][0][0]==\"#1b559c\"
 assert [s[0] for s in g[\"gradient-night\"][\"stops\"]]==[c[\"surface-raised\"],c[\"surface-base\"]]
 assert d[\"shadow\"][\"shadow-float\"][\"color\"].endswith(\"020202\")
 '"
-check "corner = round maps to large (6/8/12/16)" "[ \"$(echo "$show" | inp corner)\" = large ] && [ \"$(echo "$show" | shape slight)\" = 6 ] && [ \"$(echo "$show" | shape primary)\" = 12 ] && [ \"$(echo "$show" | shape rounded)\" = 16 ] && [ \"$(echo "$show" | shape radius-control)\" = 12 ]"
-check "stroke = none: outlines 0, hairlines (stroke-width alias) and field outlines stay 1, thick 2" "[ \"$(echo "$show" | shape border-width-1)\" = 0 ] && [ \"$(echo "$show" | shape outline-width)\" = 0 ] && [ \"$(echo "$show" | shape stroke-width)\" = 1 ] && [ \"$(echo "$show" | shape field-border-width)\" = 1 ] && [ \"$(echo "$show" | shape border-width-2)\" = 2 ]"
+check "corner = round maps to large (6/8/12/16)" "[ \"$(echo "$show" | inp corner)\" = large ] && [ \"$(echo "$show" | shape slight)\" = 6 ] && [ \"$(echo "$show" | shape primary)\" = 12 ] && [ \"$(echo "$show" | shape rounded)\" = 16 ]"
+check "stroke = none: outlines 0, field outlines stay 1, thick 2" "[ \"$(echo "$show" | shape border-width-1)\" = 0 ] && [ \"$(echo "$show" | shape field-border-width)\" = 1 ] && [ \"$(echo "$show" | shape border-width-2)\" = 2 ]"
 check "bar icon_size = large is the large bar: 40 modules, 24 glyphs, 56 tall" "echo '$show' | jq_ 'd[\"bar\"][\"height\"]' | grep -qx 56 && echo '$show' | jq_ 'd[\"bar\"][\"icon\"]' | grep -qx 24"
 $T scheme --no-hooks apply accent >/dev/null
 check "apply accent writes ewe-dark" "grep -q 'scheme = \"ewe-dark\"' '$CONF'"
@@ -470,7 +475,7 @@ show="$($T show)"
 check "corner small / density roomy / stroke thick" "[ \"$(echo "$show" | shape primary)\" = 4 ] && [ \"$(echo "$show" | shape rounded)\" = 6 ] && [ \"$(echo "$show" | size control-md)\" = 32 ] && [ \"$(echo "$show" | size control-lg)\" = 40 ] && [ \"$(echo "$show" | shape border-width-1)\" = 2 ] && [ \"$(echo "$show" | shape border-width-2)\" = 3 ] && [ \"$(echo "$show" | shape focus-width)\" = 1 ] && [ \"$(echo "$show" | shape field-border-width)\" = 2 ]"
 check "presets never touch colours" "[ \"$(echo "$show" | role surface-raised)\" = '#151411' ]"
 check "the v3 bar size = large still reads as icon_size large: 56 / 40 / 24, density ignored" "echo '$show' | jq_ 'd[\"bar\"]' | grep -q \"'height': 56, 'module': 40, 'icon': 24\""
-check "Glass at 80: glass roles carry the alpha, blur on, bar_alpha 0.8" "echo '$show' | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d[\"surface\"][\"bar_alpha\"]==0.8 and d[\"surface\"][\"blur\"] and d[\"surface\"][\"glass\"]; assert d[\"alpha\"][\"glass-base\"]==0.8 and d[\"alpha\"][\"glass-border\"]==0.1 and d[\"alpha\"][\"glass-pressed\"]==0.14; assert d[\"color\"][\"glass-border\"]==\"#fefdfc\"; assert d[\"css_vars\"][\"--glass-base\"]==\"rgba(11, 10, 8, 0.8)\" and d[\"css_vars\"][\"--bg-3-bar\"]==\"rgba(11, 10, 8, 0.8)\"'"
+check "Glass at 80: glass roles carry the alpha, blur on, bar_alpha 0.8" "echo '$show' | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d[\"surface\"][\"bar_alpha\"]==0.8 and d[\"surface\"][\"blur\"] and d[\"surface\"][\"glass\"]; assert d[\"alpha\"][\"glass-base\"]==0.8 and d[\"alpha\"][\"glass-border\"]==0.1 and d[\"alpha\"][\"glass-pressed\"]==0.14; assert d[\"color\"][\"glass-border\"]==\"#fefdfc\"; assert d[\"css_vars\"][\"--glass-base\"]==\"rgba(11, 10, 8, 0.8)\"'"
 cat > "$CONF" <<'C'
 schema = 1
 [desktop.theme]
@@ -481,7 +486,7 @@ increase_contrast = true
 C
 show="$($T show)"
 check "increase contrast: border-subtle = border-strong, text-muted = text-secondary, hover = pressed, focus 2px, glass solid" "[ \"$(echo "$show" | role border-subtle)\" = \"$(echo "$show" | role border-strong)\" ] && [ \"$(echo "$show" | role text-muted)\" = \"$(echo "$show" | role text-secondary)\" ] && [ \"$(echo "$show" | role surface-hover)\" = \"$(echo "$show" | role surface-pressed)\" ] && [ \"$(echo "$show" | shape focus-width)\" = 2 ] && [ \"$(echo "$show" | shape field-border-width)\" = 2 ] && [ \"$(echo "$show" | role glass-border)\" = \"$(echo "$show" | role border-subtle)\" ] && echo '$show' | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d[\"surface\"][\"bar_alpha\"]==1.0 and not d[\"surface\"][\"blur\"] and \"glass-base\" not in d[\"alpha\"]'"
-check "corner none: every radius 0, pills square" "[ \"$(echo "$show" | shape primary)\" = 0 ] && [ \"$(echo "$show" | shape fully-rounded)\" = 0 ] && [ \"$(echo "$show" | shape radius-pill)\" = 0 ]"
+check "corner none: every radius 0, pills square" "[ \"$(echo "$show" | shape primary)\" = 0 ] && [ \"$(echo "$show" | shape fully-rounded)\" = 0 ]"
 cat > "$CONF" <<'C'
 schema = 1
 [desktop.theme]
@@ -498,7 +503,7 @@ C
 show="$($T show)"
 check "reduce transparency: bar solid, no blur, app blur and window transparency off" "echo '$show' | python3 -c 'import json,sys; d=json.load(sys.stdin); s=d[\"surface\"]; assert s[\"bar_alpha\"]==1.0 and not s[\"blur\"] and not s[\"app_blur\"] and s[\"app_alpha\"]==1.0 and s[\"inactive_alpha\"]==1.0 and s[\"solid\"]; assert d[\"color\"][\"glass-base\"]==d[\"color\"][\"surface-base\"] and d[\"color\"][\"glass-hover\"]==d[\"color\"][\"surface-hover\"]'"
 check "reduce motion + speed 2: durations halved, then base/slow become fast fades, no slide" "echo '$show' | python3 -c 'import json,sys; d=json.load(sys.stdin); m=d[\"motion\"]; assert m[\"durFast\"]==75 and m[\"durBase\"]==75 and m[\"durSlow\"]==75 and m[\"durDim\"]==750 and m[\"reduceMotion\"] and m[\"slideOffset\"]==0, m'"
-check "text size 130: the type scale grows, styles follow, the bar icons go one step up (normal → large, 56), sizes stay" "[ \"$(echo "$show" | size font-size-md)\" = 17 ] && [ \"$(echo "$show" | size line-height-md)\" = 23 ] && [ \"$(echo "$show" | size fs-body)\" = 17 ] && echo '$show' | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d[\"type\"][\"styles\"][\"body\"][\"size\"]==17 and d[\"type\"][\"scale\"]==130; assert d[\"bar\"][\"height\"]==56 and d[\"bar\"][\"icon_size\"]==\"large\"; assert d[\"size\"][\"control-md\"]==28'"
+check "text size 130: the type scale grows, styles follow, the bar icons go one step up (normal → large, 56), sizes stay" "[ \"$(echo "$show" | size font-size-md)\" = 17 ] && [ \"$(echo "$show" | size line-height-md)\" = 23 ] && echo '$show' | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d[\"type\"][\"styles\"][\"body\"][\"size\"]==17 and d[\"type\"][\"scale\"]==130; assert d[\"bar\"][\"height\"]==56 and d[\"bar\"][\"icon_size\"]==\"large\"; assert d[\"size\"][\"control-md\"]==28'"
 cat > "$CONF" <<'C'
 schema = 1
 [desktop.animations]
