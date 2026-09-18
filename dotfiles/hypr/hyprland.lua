@@ -97,8 +97,8 @@ hl.config({
         -- Other windows: border-subtle, so they recede. Solid: the ring IS
         -- the accent, not a wash of it.
         col = {
-            active_border   = c.tint_borders and c.rgb(c.accent) or c.stroke2,
-            inactive_border = c.stroke3,
+            active_border   = c.tint_borders and c.rgb(c.accent) or c.ring_focused,
+            inactive_border = c.ring_idle,
         },
 
         resize_on_border = true,

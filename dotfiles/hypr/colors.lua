@@ -132,23 +132,19 @@ M.tint_borders = ut:match('"tintBorders"%s*:%s*(%a+)') ~= "false"
 -- Ewe roles (design system v3) that Hyprland-drawn chrome uses: plain
 -- 6-digit hex, so rgb()/rgba()/mix() below take them unchanged. The
 -- fallbacks are Ewe Dark's, for a token file that is missing or half-written.
-M.s_bg         = tok_color("surface-base",    "0b0a08")  -- desktop / app base
-M.s_panel      = tok_color("surface-raised",  "151411")  -- popup / panel surface
-M.s_elevated   = M.s_panel                                -- cards / an idle group tab
-M.s_hover      = tok_color("surface-hover",   "2c2a26")  -- hover fill
-M.s_fg         = tok_color("text-primary",    "faf9f6")  -- primary text
-M.s_fg_dim     = tok_color("text-muted",      "a8a49d")  -- an idle tab's title
-M.border_subtle = tok_color("border-subtle",  "2c2a26")  -- other windows' ring
-M.border_strong = tok_color("border-strong",  "7f7b75")  -- the focused ring, untinted
-M.danger       = tok_color("danger",          "ffa196")  -- an urgent window
+M.surface_base   = tok_color("surface-base",   "0b0a08")  -- desktop / app base
+M.surface_raised = tok_color("surface-raised", "151411")  -- popups, cards, an idle group tab
+M.surface_hover  = tok_color("surface-hover",  "2c2a26")  -- hover fill
+M.text_primary   = tok_color("text-primary",   "faf9f6")  -- primary text
+M.text_muted     = tok_color("text-muted",     "a8a49d")  -- an idle tab's title
+M.border_subtle  = tok_color("border-subtle",  "2c2a26")  -- other windows' ring
+M.border_strong  = tok_color("border-strong",  "7f7b75")  -- the focused ring, untinted
+M.danger         = tok_color("danger",         "ffa196")  -- an urgent window
 
--- The old names, for anything that still reads them: `s_stroke` is the
--- idle ring, `stroke2` / `stroke3` the Hyprland rgba() strings of the
--- focused-untinted and the other windows' rings (Window card).
-M.s_stroke, M.s_stroke_alpha   = M.border_subtle, 0xff
-M.s_stroke3, M.s_stroke3_alpha = M.border_subtle, 0xff
-M.stroke2 = M.rgb(M.border_strong)
-M.stroke3 = M.rgb(M.border_subtle)
+-- The window rings as Hyprland rgb() strings (Window card): the focused
+-- window's when borders are not accent-tinted, and every other window's.
+M.ring_focused = M.rgb(M.border_strong)
+M.ring_idle    = M.rgb(M.border_subtle)
 
 -- Shape: `rounded` is the WINDOW corner (Window card; 10 at corner =
 -- medium, 16 at large, 0 at none), `primary` the control radius.
