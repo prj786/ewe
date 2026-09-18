@@ -48,13 +48,32 @@ FloatingWindow {
         readonly property color focus:   role("focus-ring", "white")
         readonly property color accent:  role("accent-text", "white")     // accent ink: the arrow, the chosen session
         readonly property color danger:  role("danger", "red")
-        readonly property int radiusControl: shape("primary", 8)
-        readonly property int radiusPanel:   shape("rounded", 10)
+        readonly property int radiusPrimary: shape("primary", 8)
+        readonly property int radiusRounded: shape("rounded", 10)
+        readonly property int borderWidth1:  shape("border-width-1", 1)
         readonly property int focusWidth:    shape("focus-width", 1)
+        readonly property int fieldBorderWidth: shape("field-border-width", 1)
+        // sizes and the type styles, from the same file (Ewe design system
+        // v3 names; the fallbacks are the generator's defaults)
+        function size(k, fb) { return (tok.size && tok.size[k] !== undefined) ? tok.size[k] : fb }
+        readonly property int spaceXxs:  size("space-xxs", 2)
+        readonly property int spaceXs:   size("space-xs", 4)
+        readonly property int spaceS:    size("space-s", 8)
+        readonly property int spaceMd:   size("space-md", 16)
+        readonly property int spaceLg:   size("space-lg", 32)
+        readonly property int controlLg: size("control-lg", 32)
+        readonly property int controlXl: size("control-xl", 40)
+        readonly property int icon4xl:   size("icon-4xl", 64)
+        readonly property int panelSm:   size("panel-sm", 360)
+        readonly property int panelMd:   size("panel-md", 400)
+        readonly property int durFast:   (tok.motion && tok.motion.durFast !== undefined) ? tok.motion.durFast : 150
+        readonly property int fontWeightLight:  (tok.type && tok.type.weight && tok.type.weight["font-weight-light"]) || 300
+        readonly property int fontWeightMedium: (tok.type && tok.type.weight && tok.type.weight["font-weight-medium"]) || 500
+        function px(style, fb) { return (tok.type && tok.type.styles && tok.type.styles[style]) ? tok.type.styles[style].size : fb }
         // Geist + Geist Mono, installed system-wide by phase 30
         // (/usr/share/fonts/ewe); /etc/fonts/conf.d/60-ewe-geist.conf puts
         // Noto Sans Georgian next in both stacks (Geist has no Georgian).
-        readonly property string fontText: (tok.type && tok.type.sans && tok.type.sans[0]) || "Geist"
+        readonly property string fontSans: (tok.type && tok.type.sans && tok.type.sans[0]) || "Geist"
         readonly property string fontMono: (tok.type && tok.type.mono && tok.type.mono[0]) || "Geist Mono"
     }
 
@@ -189,29 +208,28 @@ FloatingWindow {
         // ── centred stack: avatar · name · password ──
         Column {
             anchors.centerIn: parent
-            anchors.verticalCenterOffset: -40 * win.ui
-            spacing: 18
+            anchors.verticalCenterOffset: -pal.spaceLg * win.ui
+            spacing: pal.spaceMd
             scale: win.ui
 
             // avatar — the user's account icon (AccountsService copy is world-
             // readable, unlike ~/.face), circle-masked; initial as fallback
             Item {
                 anchors.horizontalCenter: parent.horizontalCenter
-                width: 128; height: 128
+                width: 2 * pal.icon4xl; height: width
 
                 Rectangle {
-                    anchors.fill: parent; radius: 64
-                    color: pal.raised; border.color: pal.stroke; border.width: 1
+                    anchors.fill: parent; radius: width / 2
+                    color: pal.raised; border.color: pal.stroke; border.width: pal.borderWidth1
                     // brand fallback: the sheep mark (payload path first, then
                     // the packaged one); a bare initial only if both are absent
                     Image {
                         id: brandFace
                         anchors.centerIn: parent
-                        width: 84; height: 84
+                        width: pal.icon4xl; height: pal.icon4xl
                         visible: face.status !== Image.Ready && status === Image.Ready
-                        opacity: 0.85
                         fillMode: Image.PreserveAspectFit
-                        sourceSize.width: 168; sourceSize.height: 168
+                        sourceSize.width: 2 * width; sourceSize.height: 2 * height
                         source: "file:///usr/share/ewe/system/branding/ewe-logo-dark.png"
                         onStatusChanged: if (status === Image.Error && source != "file:///usr/share/pixmaps/ewe-logo-dark.png")
                                              source = "file:///usr/share/pixmaps/ewe-logo-dark.png"
@@ -220,7 +238,7 @@ FloatingWindow {
                         anchors.centerIn: parent
                         visible: face.status !== Image.Ready && brandFace.status !== Image.Ready
                         text: (win.userReal || win.userName || "?").charAt(0).toUpperCase()
-                        color: pal.fgDim; font.family: pal.fontText; font.pixelSize: 52; font.weight: Font.Light
+                        color: pal.fgDim; font.family: pal.fontSans; font.pixelSize: pal.px("display-lg", 48); font.weight: pal.fontWeightLight
                     }
                 }
                 Image {
@@ -229,7 +247,7 @@ FloatingWindow {
                     source: win.userName !== "" ? "file:///var/lib/AccountsService/icons/" + win.userName : ""
                     visible: status === Image.Ready
                     fillMode: Image.PreserveAspectCrop
-                    sourceSize.width: 256; sourceSize.height: 256
+                    sourceSize.width: 2 * width; sourceSize.height: 2 * height
                     layer.enabled: status === Image.Ready
                     layer.effect: MultiEffect {
                         maskEnabled: true
@@ -241,11 +259,11 @@ FloatingWindow {
                 Item {
                     id: faceMask
                     anchors.fill: parent; layer.enabled: true; visible: false
-                    Rectangle { anchors.fill: parent; radius: 64; antialiasing: true }
+                    Rectangle { anchors.fill: parent; radius: width / 2; antialiasing: true }
                 }
                 Rectangle {   // hairline rim so the photo edge reads crisp
-                    anchors.fill: parent; visible: face.visible; radius: 64
-                    color: "transparent"; border.color: pal.stroke; border.width: 1; antialiasing: true
+                    anchors.fill: parent; visible: face.visible; radius: width / 2
+                    color: "transparent"; border.color: pal.stroke; border.width: pal.borderWidth1; antialiasing: true
                 }
             }
 
@@ -253,25 +271,25 @@ FloatingWindow {
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: win.userReal || win.userName || ""
-                color: pal.fg; font.family: pal.fontText; font.pixelSize: 20; font.weight: Font.Medium
+                color: pal.fg; font.family: pal.fontSans; font.pixelSize: pal.px("h3", 18); font.weight: pal.fontWeightMedium
             }
 
             // password field
             Rectangle {
                 anchors.horizontalCenter: parent.horizontalCenter
-                width: 300; height: 46; radius: pal.radiusControl
+                width: pal.panelMd - 2 * pal.spaceLg; height: pal.controlXl; radius: pal.radiusPrimary
                 color: pal.field
                 // Text field: the border itself turns focus-ring, danger on error
                 border.color: pw.activeFocus ? pal.focus : (win.failed ? pal.danger : pal.fieldStroke)
-                border.width: pw.activeFocus ? Math.max(1, pal.focusWidth) : 1
-                Behavior on border.color { ColorAnimation { duration: 120 } }
+                border.width: pw.activeFocus ? pal.focusWidth : pal.fieldBorderWidth
+                Behavior on border.color { ColorAnimation { duration: pal.durFast; easing.type: Easing.OutCubic } }
 
                 TextInput {
                     id: pw
-                    anchors.fill: parent; anchors.leftMargin: 16; anchors.rightMargin: 40
+                    anchors.fill: parent; anchors.leftMargin: pal.spaceS + pal.spaceXs; anchors.rightMargin: pal.controlLg
                     verticalAlignment: TextInput.AlignVCenter
                     echoMode: TextInput.Password; passwordCharacter: "•"
-                    color: pal.fg; font.family: pal.fontText; font.pixelSize: 15
+                    color: pal.fg; font.family: pal.fontSans; font.pixelSize: pal.px("body-lg", 15)
                     enabled: !win.busy
                     focus: true; Component.onCompleted: forceActiveFocus()
                     onAccepted: win.submit()
@@ -283,10 +301,10 @@ FloatingWindow {
                 }
                 // submit arrow ("…" while checking)
                 Text {
-                    anchors.right: parent.right; anchors.rightMargin: 14; anchors.verticalCenter: parent.verticalCenter
+                    anchors.right: parent.right; anchors.rightMargin: pal.spaceS + pal.spaceXs; anchors.verticalCenter: parent.verticalCenter
                     text: win.busy ? "…" : "→"
-                    color: win.busy ? pal.fgDim : pal.accent; font.family: pal.fontText; font.pixelSize: 18
-                    MouseArea { anchors.fill: parent; anchors.margins: -8; cursorShape: Qt.PointingHandCursor; onClicked: win.submit() }
+                    color: win.busy ? pal.fgDim : pal.accent; font.family: pal.fontSans; font.pixelSize: pal.px("h3", 18)
+                    MouseArea { anchors.fill: parent; anchors.margins: -pal.spaceS; cursorShape: Qt.PointingHandCursor; onClicked: win.submit() }
                 }
             }
 
@@ -295,49 +313,49 @@ FloatingWindow {
                 anchors.horizontalCenter: parent.horizontalCenter
                 visible: win.statusMsg.length > 0
                 text: win.statusMsg; color: win.failed ? pal.danger : pal.fgDim
-                font.family: pal.fontText; font.pixelSize: 12
+                font.family: pal.fontSans; font.pixelSize: pal.px("caption", 11)
             }
         }
 
         // ── clock, bottom-left ──
         Column {
             anchors.left: parent.left; anchors.bottom: parent.bottom
-            anchors.leftMargin: 40 * win.ui; anchors.bottomMargin: 36 * win.ui
-            spacing: 2
+            anchors.leftMargin: pal.spaceLg * win.ui; anchors.bottomMargin: pal.spaceLg * win.ui
+            spacing: pal.spaceXxs
             scale: win.ui; transformOrigin: Item.BottomLeft
-            Text { text: win.clockText; color: pal.fg; font.family: pal.fontText; font.pixelSize: 34; font.weight: Font.Light }
-            Text { text: win.dateText; color: pal.fgDim; font.family: pal.fontText; font.pixelSize: 13 }
+            Text { text: win.clockText; color: pal.fg; font.family: pal.fontSans; font.pixelSize: pal.px("display", 36); font.weight: pal.fontWeightLight }
+            Text { text: win.dateText; color: pal.fgDim; font.family: pal.fontSans; font.pixelSize: pal.px("body", 13) }
         }
 
         // ── session picker, bottom-right ──
         Item {
             anchors.right: parent.right; anchors.bottom: parent.bottom
-            anchors.rightMargin: 40 * win.ui; anchors.bottomMargin: 36 * win.ui
-            width: 200; height: 38
+            anchors.rightMargin: pal.spaceLg * win.ui; anchors.bottomMargin: pal.spaceLg * win.ui
+            width: pal.panelSm / 2; height: pal.controlXl
             scale: win.ui; transformOrigin: Item.BottomRight
 
             // dropdown list (opens upward)
             Rectangle {
                 id: menu
                 visible: win.sessionMenuOpen && win.sessions.length > 0
-                anchors.bottom: trigger.top; anchors.bottomMargin: 6; anchors.right: parent.right
-                width: trigger.width; height: menuCol.height + 10; radius: pal.radiusPanel
-                color: pal.raised; border.color: pal.stroke; border.width: 1
+                anchors.bottom: trigger.top; anchors.bottomMargin: pal.spaceXs; anchors.right: parent.right
+                width: trigger.width; height: menuCol.height + 2 * pal.spaceXs; radius: pal.radiusRounded
+                color: pal.raised; border.color: pal.stroke; border.width: pal.borderWidth1
                 Column {
-                    id: menuCol; width: parent.width; y: 5
+                    id: menuCol; width: parent.width; y: pal.spaceXs
                     Repeater {
                         model: win.sessions
                         delegate: Rectangle {
                             required property var modelData
                             required property int index
-                            width: parent.width; height: 32
+                            width: parent.width; height: pal.controlLg
                             color: smA.containsMouse ? pal.hover : "transparent"
                             Text {
-                                anchors.left: parent.left; anchors.leftMargin: 12; anchors.right: parent.right; anchors.rightMargin: 12
+                                anchors.left: parent.left; anchors.leftMargin: pal.spaceS + pal.spaceXs; anchors.right: parent.right; anchors.rightMargin: pal.spaceS + pal.spaceXs
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: modelData.name; elide: Text.ElideRight
                                 color: index === win.sessionIdx ? pal.accent : pal.fg
-                                font.family: pal.fontText; font.pixelSize: 13
+                                font.family: pal.fontSans; font.pixelSize: pal.px("body", 13)
                             }
                             MouseArea { id: smA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
                                 onClicked: { win.sessionIdx = index; win.sessionMenuOpen = false } }
@@ -349,16 +367,16 @@ FloatingWindow {
             // trigger button
             Rectangle {
                 id: trigger
-                anchors.fill: parent; radius: pal.radiusControl
+                anchors.fill: parent; radius: pal.radiusPrimary
                 color: trA.containsMouse ? pal.hover : "transparent"
-                border.color: pal.stroke; border.width: 1
+                border.color: pal.stroke; border.width: pal.borderWidth1
                 Text {
-                    anchors.left: parent.left; anchors.leftMargin: 12; anchors.right: chev.left; anchors.verticalCenter: parent.verticalCenter
+                    anchors.left: parent.left; anchors.leftMargin: pal.spaceS + pal.spaceXs; anchors.right: chev.left; anchors.verticalCenter: parent.verticalCenter
                     text: win.sessions.length ? win.sessions[win.sessionIdx].name : "Session"
-                    color: pal.fg; font.family: pal.fontText; font.pixelSize: 13; elide: Text.ElideRight
+                    color: pal.fg; font.family: pal.fontSans; font.pixelSize: pal.px("body", 13); elide: Text.ElideRight
                 }
-                Text { id: chev; anchors.right: parent.right; anchors.rightMargin: 12; anchors.verticalCenter: parent.verticalCenter
-                    text: "▾"; color: pal.fgDim; font.pixelSize: 12 }
+                Text { id: chev; anchors.right: parent.right; anchors.rightMargin: pal.spaceS + pal.spaceXs; anchors.verticalCenter: parent.verticalCenter
+                    text: "▾"; color: pal.fgDim; font.family: pal.fontSans; font.pixelSize: pal.px("label", 12) }
                 MouseArea { id: trA; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
                     onClicked: win.sessionMenuOpen = !win.sessionMenuOpen }
             }
