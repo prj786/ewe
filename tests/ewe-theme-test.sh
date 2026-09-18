@@ -545,6 +545,8 @@ r="$(bin/ewe-conf set --no-hooks desktop.theme.corner '"blob"' 2>&1 || true)"
 check "ewe-conf set: an unknown corner is refused, nothing written" "echo '$r' | grep -q 'bad-value' && ! grep -q 'blob' '$CONF'"
 r="$(bin/ewe-conf set --no-hooks desktop.accessibility.text_scale 120 2>&1 || true)"
 check "ewe-conf set: text_scale must be 100/115/130" "echo '$r' | grep -q 'bad-value'"
+bin/ewe-conf set --no-hooks desktop.animations.detail '{"enabled":false,"global":{"ms":400,"curve":"overshoot"},"anims":{"layers":{"on":true,"ms":300,"curve":"overshoot","style":"popin"}}}' >/dev/null 2>&1
+check "no overshoot: a Bouncy animation detail is saved as the default (Snappy) preset, on/off kept" "bin/ewe-conf get desktop.animations.detail | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d[\"enabled\"] is False and d[\"global\"]==({\"ms\":300,\"curve\":\"snap\"}) and d[\"anims\"][\"layers\"][\"curve\"]==\"quick\"; assert \"overshoot\" not in json.dumps(d)'"
 bin/ewe-conf set --no-hooks desktop.accessibility.increase_contrast true >/dev/null
 check "ewe-conf set accessibility: routed to theme, tokens rebuilt with the remap" "grep -q 'increase_contrast = true' '$CONF' && python3 -c 'import json; d=json.load(open(\"$TOK\")); assert d[\"shape\"][\"focus-width\"]==2 and d[\"accessibility\"][\"increase_contrast\"]'"
 bin/ewe-conf set --no-hooks desktop.accessibility.reduce_transparency true >/dev/null

@@ -316,7 +316,7 @@ def do_import():
     an = _rj("animations.json", None)
     if an is not None:
         node, last = dig(doc, "desktop.animations.detail", create=True)
-        node[last] = an
+        node[last] = no_overshoot(an)
     node, last = dig(doc, "apps.pinned", create=True)
     node[last] = _rj("pinned-apps.json", [])
     node, last = dig(doc, "apps.startup", create=True)
@@ -503,7 +503,7 @@ def do_apply(doc, only=None, hooks=True):
         build_theme_tokens()
     if want("animations"):
         node, last = dig(doc, "desktop.animations.detail")
-        detail = (node or {}).get(last) if node else None
+        detail = no_overshoot((node or {}).get(last) if node else None)
         if detail:
             _wj("animations.json", detail)
             node, last = dig(doc, "desktop.animations.speed")
@@ -598,17 +598,46 @@ def do_apply(doc, only=None, hooks=True):
 
 HYPR_GEN = os.path.join(CFG_DIR, "hypr", "generated")
 
+# The design system has no overshoot (no OutBack anywhere, 2026-09-18):
+# the `overshoot` curve and the Bouncy preset built on it are gone.
 ANIM_CURVES = [  # ported from ewe-settings hypr.js — keep in lockstep
     ("snap", [[0.16, 1], [0.3, 1]], None),
     ("easeOutQuint", [[0.23, 1], [0.32, 1]], None),
     ("quick", [[0.15, 0], [0.1, 1]], None),
     ("easeInOutCubic", [[0.65, 0.05], [0.36, 1]], None),
-    ("overshoot", [[0.34, 1.56], [0.64, 1]], None),
     ("linear", [[0, 0], [1, 1]], None),
     ("spring", None, {"mass": 1, "stiffness": 71.2633, "dampening": 15.8273644}),
 ]
 ANIM_LEAVES = ["windows", "windowsOut", "fade", "workspaces", "layers", "border"]
 _SPRING = {c[0] for c in ANIM_CURVES if c[2]}
+# The default preset, "Snappy" (ewe-settings hypr.js ANIM_PRESETS[0]).
+ANIM_DEFAULT = {
+    "global": {"ms": 300, "curve": "snap"},
+    "anims": {
+        "windows": {"on": True, "ms": 280, "curve": "snap", "style": "popin", "pct": 92},
+        "windowsOut": {"on": True, "ms": 180, "curve": "quick", "style": "popin", "pct": 92},
+        "fade": {"on": True, "ms": 180, "curve": "quick"},
+        "workspaces": {"on": True, "ms": 280, "curve": "snap", "style": "slide"},
+        "layers": {"on": True, "ms": 200, "curve": "quick", "style": "fade"},
+        "border": {"on": True, "ms": 300, "curve": "easeOutQuint"},
+    },
+}
+RETIRED_CURVES = ("overshoot",)
+
+
+def no_overshoot(detail):
+    """A saved animation detail that uses a retired overshooting curve (the
+    Bouncy preset, or a custom mix with `overshoot`) becomes the default
+    preset, keeping whether animations are on. Anything else is untouched."""
+    if not isinstance(detail, dict):
+        return detail
+    curves = [(detail.get("global") or {}).get("curve")]
+    curves += [(a or {}).get("curve") for a in (detail.get("anims") or {}).values() if isinstance(a, dict)]
+    if not any(c in RETIRED_CURVES for c in curves):
+        return detail
+    out = json.loads(json.dumps(ANIM_DEFAULT))
+    out["enabled"] = detail.get("enabled", True) is not False
+    return out
 
 
 def _n(x):
@@ -1798,6 +1827,8 @@ THEME_DEFAULTS = {ck: dflt for ck, _jk, dflt in THEME_MAP}
 def validate(key, value):
     """(ok, value-or-message). Normalises the few typed keys, leaves the
     rest alone."""
+    if key == "desktop.animations.detail":
+        return True, no_overshoot(value)
     if key in ENUMS:
         allowed = ENUMS[key]
         v = value
