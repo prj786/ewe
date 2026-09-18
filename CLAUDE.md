@@ -216,7 +216,11 @@ tool and marked `builtin` (tests hold them to
 `[[desktop.theme.schemes]]`. Derivation → `overrides` → guarantees (text
 4.5:1, borders 3:1, surfaces 2 L apart, warning ≠ accent hue; every move
 recorded in `adjusted`, shown by `scheme show`) → look presets and
-accessibility modes as remaps. The pre-v3 value `scheme = "accent"` reads
+accessibility modes as remaps. **One source (2026-09-18):** the built-ins
+are palette + accent only (no `overrides`); accent roles are ramp steps
+(`ACCENT_STEP`); shadows and gradients are derived; `black` (#020202) is
+the floor and `neutral-0` (#fefdfc) the ceiling of every emitted colour
+(`in_range`) — never add a literal hex outside the FOUNDATIONS tables. The pre-v3 value `scheme = "accent"` reads
 as ewe-dark wearing `desktop.theme.accent`; `corner = round` reads as
 `large`. Every Fluent name is still emitted as an alias (Migration guide)
 until Phase 6. `ewe-theme scheme list|show|apply|import|duplicate|remove|

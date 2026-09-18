@@ -31,13 +31,3 @@ palette:
   base15: "#035e62"
   base16: "#025884"
   base17: "#6f397b"
-overrides:
-  on-accent: "#020202"
-  accent-text: "#805708"
-  focus-ring: "#a77607"
-  surface-overlay: "#fefdfc"
-  surface-pressed: "#d5d2cb"
-  surface-selected: "#fefdfc"
-  border-subtle: "#d5d2cb"
-  border-strong: "#7f7b75"
-  accent-subtle: "#fff6e4"

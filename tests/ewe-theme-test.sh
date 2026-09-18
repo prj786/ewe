@@ -79,6 +79,57 @@ for slug in (\"ewe-dark\",\"ewe-light\"):
     a=json.load(open(\"design/system/assets/Schemes/%s.json\"%slug)); b=ns[\"BUILTIN_BY_SLUG\"][slug]
     for k in a: assert a[k]==b[k], (slug,k,a[k],b[k])
 '"
+check "built-ins are data only: palette, accent, variant, semantic — no overrides" "python3 -c '
+import json,sys
+sys.argv=[\"x\"]; src=open(\"bin/ewe-theme\").read()
+ns={\"__file__\": \"bin/ewe-theme\"}; exec(src.split(\"# ═══ one black, one white\")[0], ns)
+for b in ns[\"BUILTIN_SCHEMES\"]:
+    assert \"overrides\" not in b, b[\"slug\"]
+    assert set(b) <= {\"slug\",\"name\",\"author\",\"variant\",\"builtin\",\"accent\",\"semantic\",\"palette\"}, set(b)
+'"
+# one black, one white: every colour the default builds emit (CSS + JSON, dark
+# and light) is a palette entry, a ramp step, a neutral or a derived role /
+# gradient stop, and none lies outside black (#020202) .. neutral-0 (#fefdfc)
+$T build --json "$SB/one-dark.json" --css "$SB/one-dark.css" --scheme ewe-dark >/dev/null
+$T build --json /dev/null --css "$SB/one-light.css" --scheme ewe-light >/dev/null
+cp "$CONF" "$SB/conf.bak" 2>/dev/null || true
+printf 'schema = 1\n[desktop.theme]\nscheme = "ewe-light"\n' > "$CONF"
+$T build --json "$SB/one-light.json" --css /dev/null >/dev/null
+if [ -f "$SB/conf.bak" ]; then cp "$SB/conf.bak" "$CONF"; else rm -f "$CONF"; fi
+check "one black, one white: no #ffffff / #000000 and no colour outside the derived set in the emitted CSS/JSON" "python3 - '$SB' <<'PY'
+import json, re, sys
+sb = sys.argv[1]
+def okL(h):
+    def lin(x):
+        x /= 255; return x / 12.92 if x <= 0.04045 else ((x + 0.055) / 1.055) ** 2.4
+    r, g, b = (lin(int(h[i:i + 2], 16)) for i in (1, 3, 5))
+    l = (0.4122214708*r + 0.5363325363*g + 0.0514459929*b) ** (1/3)
+    m = (0.2119034982*r + 0.6806995451*g + 0.1073969566*b) ** (1/3)
+    s = (0.0883024619*r + 0.2817188376*g + 0.6299787005*b) ** (1/3)
+    return 100 * (0.2104542553*l + 0.7936177850*m - 0.0040720468*s)
+def colours(text):
+    out = set()
+    for h in re.findall(r'#([0-9a-fA-F]{8}|[0-9a-fA-F]{6})\\b', text):
+        out.add('#' + h[-6:].lower())
+    for r, g, b in re.findall(r'rgba?\\(\\s*(\\d+)\\s*,\\s*(\\d+)\\s*,\\s*(\\d+)', text):
+        out.add('#%02x%02x%02x' % (int(r), int(g), int(b)))
+    return out
+for v in ('dark', 'light'):
+    d = json.load(open('%s/one-%s.json' % (sb, v)))
+    allowed = set(d['scheme']['palette'].values()) | set(d['brand'].values()) | set(d['grey'].values())
+    allowed |= {c[-6:] and '#' + c[-6:] for c in d['color'].values() if c.startswith('#')}
+    for g in d['gradient'].values():
+        allowed |= {s[0] for s in g['stops']}
+    for f in ('one-%s.css' % v, 'one-%s.json' % v):
+        text = open('%s/%s' % (sb, f)).read()
+        text = re.sub(r'/\\*.*?\\*/', '', text, flags=re.S)     # the header's example accent
+        found = colours(text)
+        assert '#ffffff' not in found and '#000000' not in found, (f, 'a second white or black')
+        stray = sorted(c for c in found if c not in allowed)
+        assert not stray, (f, 'colours from nowhere', stray)
+        out = sorted(c for c in found if not okL('#020202') - 1e-6 <= okL(c) <= okL('#fefdfc') + 1e-6)
+        assert not out, (f, 'outside black .. neutral-0', out)
+PY"
 lst="$($T scheme list)"
 check "list: both built-ins first, marked builtin, ewe-dark current" "echo '$lst' | python3 -c 'import json,sys; d=json.load(sys.stdin); s=d[\"schemes\"]; assert [x[\"slug\"] for x in s[:2]]==[\"ewe-dark\",\"ewe-light\"]; assert all(x[\"builtin\"] for x in s[:2]); assert s[0][\"current\"] and not s[1][\"current\"]; assert d[\"current\"]==\"ewe-dark\"'"
 r="$($T scheme --no-hooks set accent '#ff0000' || true)"
@@ -88,17 +139,19 @@ check "remove on a built-in is refused" "echo '$r' | grep -q '\"builtin\"'"
 r="$($T scheme --no-hooks set overrides.accent-text '#ff0000' --slug ewe-light || true)"
 check "set overrides.<role> on a built-in is refused too" "echo '$r' | grep -q '\"builtin\"'"
 $T scheme export ewe-light > "$SB/ewe-light.yaml"
-check "export of a built-in is the asset YAML shape (builtin, semantic, overrides)" "grep -q '^builtin: true' '$SB/ewe-light.yaml' && grep -q '^semantic: true' '$SB/ewe-light.yaml' && grep -q '^  border-strong: \"#7f7b75\"' '$SB/ewe-light.yaml' && grep -q '^slug: \"ewe-light\"' '$SB/ewe-light.yaml'"
+check "export of a built-in is the asset YAML shape (builtin, semantic, no overrides)" "grep -q '^builtin: true' '$SB/ewe-light.yaml' && grep -q '^semantic: true' '$SB/ewe-light.yaml' && ! grep -q '^overrides:' '$SB/ewe-light.yaml' && grep -q '^slug: \"ewe-light\"' '$SB/ewe-light.yaml'"
 r="$($T scheme --no-hooks import "$SB/ewe-light.yaml" || true)"
 check "importing it back under the built-in slug is refused" "echo '$r' | grep -q '\"builtin\"'"
 r="$($T scheme --no-hooks import "$SB/ewe-light.yaml" --slug my-light)"
-check "…but works under another slug, keeping overrides and not builtin" "echo '$r' | grep -q '\"slug\": \"my-light\"' && $T scheme show my-light | python3 -c 'import json,sys; d=json.load(sys.stdin)[\"scheme\"]; assert not d.get(\"builtin\"); assert d[\"overrides\"][\"border-strong\"]==\"#7f7b75\"'"
+rj() { python3 -c 'import json,sys; d=json.load(sys.stdin); assert not d["scheme"].get("builtin") or d["scheme"]["slug"]=="ewe-light"; assert not d["scheme"].get("overrides"); print(json.dumps(d["roles"], sort_keys=True))'; }
+mine="$($T scheme show my-light | rj)"; theirs="$($T scheme show ewe-light | rj)"
+check "…but works under another slug, not builtin, no overrides, and derives the same roles" "echo '$r' | grep -q '\"slug\": \"my-light\"' && [ -n '$mine' ] && [ '$mine' = '$theirs' ]"
 r="$($T scheme --no-hooks duplicate ewe-dark --name "My dark")"
 check "duplicate a built-in: a user copy with the accent it wore" "echo '$r' | grep -q '\"slug\": \"my-dark\"' && $T scheme show my-dark | python3 -c 'import json,sys; d=json.load(sys.stdin)[\"scheme\"]; assert not d.get(\"builtin\") and d[\"accent\"]==\"#eeb407\" and d[\"palette\"][\"base00\"]==\"#0b0a08\"'"
 $T scheme --no-hooks set accent '#7e9cd8' --slug my-dark >/dev/null
 check "the copy can be changed (set accent)" "$T scheme show my-dark | grep -q '\"accent\": \"#7e9cd8\"'"
 show="$($T scheme show ewe-light)"
-check "show ewe-light: roles + the adjusted list (overlay pushed 2 L off raised)" "echo '$show' | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d[\"roles\"][\"surface-base\"]==\"#f4f2ee\" and d[\"roles\"][\"text-primary\"]==\"#0b0a08\"; assert [a[\"role\"] for a in d[\"adjusted\"]]==[\"surface-overlay\"], d[\"adjusted\"]'"
+check "show ewe-light: roles, and nothing adjusted (overlay stays neutral-0: no room above it)" "echo '$show' | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d[\"roles\"][\"surface-base\"]==\"#f4f2ee\" and d[\"roles\"][\"text-primary\"]==\"#0b0a08\" and d[\"roles\"][\"surface-overlay\"]==\"#fefdfc\"; assert d[\"adjusted\"]==[], d[\"adjusted\"]'"
 $T scheme --no-hooks apply ewe-light >/dev/null
 show="$($T show)"
 check "apply ewe-light: variant light, light roles, dark accent text, on-accent black" "[ \"$(echo "$show" | inp variant)\" = light ] && [ \"$(echo "$show" | role surface-base)\" = '#f4f2ee' ] && [ \"$(echo "$show" | role accent-text)\" = '#805708' ] && [ \"$(echo "$show" | role on-accent)\" = '#020202' ] && [ \"$(echo "$show" | role glass-accent)\" = '#5a3b09' ]"
@@ -116,10 +169,19 @@ icon_size = "large"
 C
 show="$($T show)"
 check "scheme = accent reads as ewe-dark wearing the person's accent" "[ \"$(echo "$show" | inp scheme)\" = accent ] && [ \"$(echo "$show" | inp scheme_slug)\" = ewe-dark ] && [ \"$(echo "$show" | role accent)\" = '#1b559c' ] && [ \"$(echo "$show" | role ewellow)\" = '#eeb407' ] && [ \"$(echo "$show" | role ewellow-500)\" = '#1b559c' ]"
-check "a dark blue accent: the built-in's gold overrides step aside — ramp, accent-text, focus-ring are blue; on-accent flips to white" "[ \"$(echo "$show" | role on-accent)\" = '#ffffff' ] && python3 -c \"
+check "a dark blue accent: the ramp, accent-text and focus-ring are blue; on-accent flips to neutral-0 (the one white)" "[ \"$(echo "$show" | role on-accent)\" = '#fefdfc' ] && python3 -c \"
 import colorsys
 for h in ('$(echo "$show" | role accent-text)', '$(echo "$show" | role ewellow-900)', '$(echo "$show" | role focus-ring)'):
     r,g,b=(int(h.lstrip('#')[i:i+2],16)/255 for i in (0,2,4)); hh,s,v=colorsys.rgb_to_hsv(r,g,b); assert 0.5<hh<0.7 and s>0.15, (h,hh,s)\""
+$T build --json "$SB/blue.json" --css /dev/null >/dev/null
+check "gradients follow the accent: ewellow stops from the blue ramp, glow in the accent, night = raised -> base" "python3 -c '
+import json, colorsys; d=json.load(open(\"$SB/blue.json\")); g=d[\"gradient\"]; c=d[\"color\"]
+for h in (g[\"gradient-ewellow\"][\"stops\"][0][0], g[\"gradient-ewellow\"][\"stops\"][1][0]):
+    r,gg,b=(int(h.lstrip(\"#\")[i:i+2],16)/255 for i in (0,2,4)); hh,sat,v=colorsys.rgb_to_hsv(r,gg,b); assert 0.5<hh<0.7, h
+assert g[\"gradient-glow\"][\"stops\"][0][0]==\"#1b559c\"
+assert [s[0] for s in g[\"gradient-night\"][\"stops\"]]==[c[\"surface-raised\"],c[\"surface-base\"]]
+assert d[\"shadow\"][\"shadow-float\"][\"color\"].endswith(\"020202\")
+'"
 check "corner = round maps to large (6/8/12/16)" "[ \"$(echo "$show" | inp corner)\" = large ] && [ \"$(echo "$show" | shape slight)\" = 6 ] && [ \"$(echo "$show" | shape primary)\" = 12 ] && [ \"$(echo "$show" | shape rounded)\" = 16 ] && [ \"$(echo "$show" | shape radius-control)\" = 12 ]"
 check "stroke = none: outlines 0, hairlines (stroke-width alias) and field outlines stay 1, thick 2" "[ \"$(echo "$show" | shape border-width-1)\" = 0 ] && [ \"$(echo "$show" | shape outline-width)\" = 0 ] && [ \"$(echo "$show" | shape stroke-width)\" = 1 ] && [ \"$(echo "$show" | shape field-border-width)\" = 1 ] && [ \"$(echo "$show" | shape border-width-2)\" = 2 ]"
 check "bar icon_size = large is read as the large bar" "echo '$show' | jq_ 'd[\"bar\"][\"height\"]' | grep -qx 64 && echo '$show' | jq_ 'd[\"bar\"][\"icon\"]' | grep -qx 24"
@@ -266,7 +328,7 @@ palette:
 Y
 $T scheme --no-hooks import "$SB/flat.yaml" --apply >/dev/null
 show="$($T show)"
-check "flat light: raised, overlay and hover each sit at least 2 L off the surface below; base untouched" "echo '$show' | python3 -c '
+check "flat light: raised, overlay and hover each sit at least 2 L off the surface below; base only clamped" "echo '$show' | python3 -c '
 import json,sys,math
 d=json.load(sys.stdin); c=d[\"color\"]
 def lin(x):
@@ -275,7 +337,7 @@ def okL(h):
     h=h.lstrip(\"#\"); r,g,b=(lin(int(h[i:i+2],16)) for i in (0,2,4))
     l=(0.4122214708*r+0.5363325363*g+0.0514459929*b)**(1/3); m=(0.2119034982*r+0.6806995451*g+0.1073969566*b)**(1/3); s=(0.0883024619*r+0.2817188376*g+0.6299787005*b)**(1/3)
     return 100*(0.2104542553*l+0.7936177850*m-0.0040720468*s)
-assert c[\"surface-base\"]==\"#ffffff\"
+assert c[\"surface-base\"]==\"#fefdfc\"          # #ffffff clamps to neutral-0, the one white
 for below,role in ((\"surface-base\",\"surface-raised\"),(\"surface-raised\",\"surface-overlay\"),(\"surface-raised\",\"surface-hover\")):
     assert abs(okL(c[role])-okL(c[below]))>=1.9, (role, c[role], below, c[below])
 roles=[a[\"role\"] for a in d[\"adjusted\"]]; assert \"surface-raised\" in roles, roles'"

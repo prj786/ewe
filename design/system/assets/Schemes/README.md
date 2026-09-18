@@ -5,7 +5,7 @@ The two color schemes ewe ships with. A scheme is a **Base24 YAML file** (the Ti
 - `ewe-dark.json`: **Ewe Dark**, the default. Warm near-black surfaces, gold accent.
 - `ewe-light.json`: **Ewe Light**. Warm off-white surfaces, the same gold accent with darker gold for text.
 
-Both are `builtin: true`: they can be applied, exported and duplicated, not changed or removed. The `overrides` table sets the roles a Base24 palette can't express on its own (overlay and pressed surfaces, both border strengths, accent text and focus ring). User schemes may carry the same table. The Color schemes section of this design system has every key and how each role is derived.
+Both are `builtin: true`: they can be applied, exported and duplicated, not changed or removed. They carry no `overrides`: every role, including the accent roles, comes out of the same derivation an imported scheme goes through. User schemes may carry an `overrides` table. The Color schemes section of this design system has every key and how each role is derived.
 
 ## Ewe Dark as YAML
 
@@ -36,23 +36,13 @@ palette:
   base0E: "#e0a4ee"
   base0F: "#805708"
   base10: "#020202"
-  base11: "#000000"
+  base11: "#020202"
   base12: "#febfb7"
   base13: "#ffc29a"
   base14: "#7deabd"
   base15: "#79e5eb"
   base16: "#a3d8ff"
   base17: "#f1bafe"
-overrides:
-  on-accent: "#020202"
-  accent-text: "#f8c23a"
-  focus-ring: "#f8c23a"
-  surface-overlay: "#201e1a"
-  surface-pressed: "#423f3a"
-  surface-selected: "#2c2a26"
-  border-subtle: "#2c2a26"
-  border-strong: "#7f7b75"
-  accent-subtle: "#352206"
 ```
 
 ## Ewe Light as YAML
@@ -91,14 +81,4 @@ palette:
   base15: "#035e62"
   base16: "#025884"
   base17: "#6f397b"
-overrides:
-  on-accent: "#020202"
-  accent-text: "#805708"
-  focus-ring: "#a77607"
-  surface-overlay: "#fefdfc"
-  surface-pressed: "#d5d2cb"
-  surface-selected: "#fefdfc"
-  border-subtle: "#d5d2cb"
-  border-strong: "#7f7b75"
-  accent-subtle: "#fff6e4"
 ```

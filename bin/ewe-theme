@@ -38,28 +38,40 @@ Base24 palette (base00..base0F required, base10..base17 optional) plus a few
 ewe keys: `slug`, `variant` (dark|light), `accent`, `semantic` (status
 colours from the palette), `overrides` (any colour role, applied after
 derivation) and `builtin`. Ewe Dark and Ewe Light are two such records,
-embedded below and marked built-in; they run through exactly the same
-derivation as an imported Gruvbox or a palette pulled off the wallpaper:
+embedded below and marked built-in. They are DATA only — palette, accent,
+variant, semantic — and carry no overrides: every role they show comes out
+of exactly the same derivation as an imported Gruvbox or a palette pulled
+off the wallpaper:
 
-  1. every ROLE (surface-*, text-*, border-*, the accent set, status,
-     scrim, glass-*) comes from one palette entry, an OKLCH mix of two, or
-     the accent, per the role table in that guide;
-  2. the scheme's `overrides` are applied on top;
+  1. every ROLE (surface-*, text-*, border-*, status, scrim, glass-*)
+     comes from one palette entry or an OKLCH mix of two, per the role table
+     in that guide; the accent roles are STEPS of the ramp generated from
+     the accent (accent-text = ewellow-400 in the dark, -800 in the light …);
+     shadows and gradients are derived from the same roles and ramp;
+  2. a user scheme's `overrides` are applied on top;
   3. the GUARANTEES run: text 4.5:1 and border-strong/focus-ring 3:1 on
-     every surface role, surfaces at least 2 L apart, warning never within
-     20 degrees of the accent. Only lightness moves, hue stays, and every
-     move is recorded so `scheme show` (and Settings) can say which role was
-     adjusted and why;
+     every surface role, surfaces at least 2 L apart (as far as the range
+     below allows), warning never within 20 degrees of the accent. Only
+     lightness moves, hue stays, and every move is recorded so `scheme show`
+     (and Settings) can say which role was adjusted and why;
   4. look presets (corner / density / stroke) and accessibility modes are
      applied as REMAPS of the finished set. Components never know which is
      active — they only ever read roles.
 
 WHAT IS FIXED. The design system defines the foundations as values, not
-derivations, and they live in the tables below — the one place raw values
-are allowed: the brand colour `ewellow` and `black`, the warm `neutral-*`
-scale, Ewe's default status colours, the type scale, weights, tracking,
-spacing, radii per corner preset, sizes, shadows, gradients, opacity and
-the motion table. Everything else is derived.
+derivations, and they live in the tables below — the one place raw colour
+values are allowed: the brand colour `ewellow`, `black`, the warm
+`neutral-*` scale, Ewe's default status colours (semantic = false) and the
+SHAPE of the accent ramp. Besides colours: the type scale, weights,
+tracking, spacing, radii per corner preset, sizes, shadow geometry and
+alphas, gradient angles, opacity and the motion table. Everything else is
+derived.
+
+ONE BLACK, ONE WHITE. `black` is the floor and `neutral-0` the ceiling of
+every colour this tool emits: anything derived darker clamps to `black`,
+anything lighter to `neutral-0` (on-accent/on-status candidates, the scrim,
+shadows, guarantee moves, an imported palette's #000000 or #ffffff). There
+is no second white or black anywhere in the output.
 
 THE ALIAS LAYER. The shell and the three apps still read the Fluent 2 names
 this tool emitted until version 3 (bg-1, fg-2, stroke-1, brand-bg …). Every
@@ -287,9 +299,10 @@ def over(fg, alpha, bg):
     return _hex(*(f[i] * alpha + b[i] * (1 - alpha) for i in range(3)))
 
 
-def on_color(fill, dark="#020202", light="#ffffff"):
-    """black or white, whichever contrasts more with `fill`."""
-    return dark if contrast(fill, dark) >= contrast(fill, light) else light
+def on_color(fill):
+    """`black` or `neutral-0` — Ewe's one black and one white — whichever
+    contrasts more with `fill`."""
+    return BLACK if contrast(fill, BLACK) >= contrast(fill, NEUTRAL[0]) else NEUTRAL[0]
 
 
 # ═══ FOUNDATIONS — the design system's fixed values ═══════════════════════
@@ -316,16 +329,25 @@ EWE_STATUS = {
     "dark": {"success": "#69d6aa", "warning": "#f9a870", "danger": "#ffa196", "info": "#76c7ff"},
     "light": {"success": "#047554", "warning": "#964d09", "danger": "#a04038", "info": "#026a9d"},
 }
-# Where the accent roles sit on the ramp (10-color-schemes.md, role table):
-# hover/pressed are RELATIVE to the accent's own lightness, the rest are
-# absolute. "Low chroma" for the subtle tints is the ramp's own chroma at
-# that lightness.
-ACCENT_L = {"dark": {"hover": +4, "pressed": -10, "subtle": 27, "text": 84, "ring": 84},
-            "light": {"hover": -10, "pressed": -20, "subtle": 97, "text": 49, "ring": 60}}
+# Which step of the accent ramp each accent role is (tokens.json; the role
+# table in 10-color-schemes.md). The ramp is regenerated from the chosen
+# accent, so these follow any pick; `accent` itself is step 500 and
+# `on-accent` is chosen by contrast.
+ACCENT_STEP = {
+    "dark": {"accent-hover": 400, "accent-pressed": 600, "accent-subtle": 950,
+             "accent-text": 400, "focus-ring": 400, "glass-accent": 400},
+    "light": {"accent-hover": 600, "accent-pressed": 700, "accent-subtle": 50,
+              "accent-text": 800, "focus-ring": 700, "glass-accent": 900},
+}
 # Status tints: the status colour at this L, with chroma capped here.
 STATUS_SUBTLE = {"dark": (27, 0.045), "light": (95, 0.026)}
 # surface-sunken without a base10: base00 darkened by this much
 SUNKEN_DL = 4
+# surface-pressed: base02 moved this many L toward base05 (neutral-800 ->
+# 700 in the dark, neutral-200 -> 300 in the light)
+PRESSED_DL = {"dark": 8, "light": 6}
+# light border-subtle: this far from base02 toward base03 (neutral-300)
+BORDER_SUBTLE_MIX = 0.3
 # scrim: base11 (dark) / base05 (light) at this alpha
 SCRIM_ALPHA = {"dark": 0.64, "light": 0.32}
 # glass tints over the glass fill: the outline, hover and pressed alphas
@@ -391,15 +413,20 @@ SIZES = {"control-sm": 24, "control-xl": 40, "control-2xl": 48,
 BAR = {"normal": {"height": "bar-height", "module": "control-lg", "icon": "icon-lg"},
        "large": {"height": "bar-height-lg", "module": "control-xl", "icon": "icon-xl"}}
 TEXT_SCALES = (100, 115, 130)
-# shadow: (x, y, blur, colour, alpha) per variant
-SHADOW = {"shadow-sm": {"dark": (0, 1, 2, "#000000", 0.40), "light": (0, 1, 2, "#141008", 0.08)},
-          "shadow-float": {"dark": (0, 2, 6, "#000000", 0.35), "light": (0, 2, 6, "#141008", 0.10)}}
-GRADIENT = {
-    "gradient-ewellow": {"kind": "linear", "angle": 135, "stops": [["#f4bd28", 1, 0], ["#e6ab09", 1, 100]]},
-    "gradient-ember": {"kind": "linear", "angle": 160, "stops": [["#1b150b", 1, 0], ["#0b0a08", 1, 100]]},
-    "gradient-night": {"kind": "linear", "angle": 180, "stops": [["#151411", 1, 0], ["#0b0a08", 1, 100]]},
-    "gradient-glow": {"kind": "radial", "at": "50% 0%", "stops": [[EWELLOW, 0.08, 0], [EWELLOW, 0, 60]]},
-}
+# shadow: (x, y, blur) and the alpha per variant. The colour is derived
+# (shadow_color): `black` in the dark, the scheme's darkest ink in the light.
+SHADOW = {"shadow-sm": ((0, 1, 2), {"dark": 0.40, "light": 0.08}),
+          "shadow-float": ((0, 2, 6), {"dark": 0.35, "light": 0.10})}
+# gradients: geometry only; the stops are derived (gradients()).
+#   ewellow  halfway from ewellow-400 to the accent -> a quarter of the way
+#            from the accent to ewellow-600
+#   ember    surface-raised tinted with accent-subtle's hue -> surface-base
+#   night    surface-raised -> surface-base
+#   glow     the accent at 8% -> the accent at 0
+GRADIENT_ANGLE = {"gradient-ewellow": 135, "gradient-ember": 160, "gradient-night": 180}
+GRADIENT_EWELLOW_MIX = (0.5, 0.25)
+EMBER_TINT = 0.4            # of accent-subtle's chroma, at surface-raised's lightness
+GLOW_ALPHA = 0.08
 OPACITY = {"opacity-solid": 1, "opacity-glass": GLASS_PRESET / 100, "opacity-app": 0.85,
            "opacity-inactive": 0.97}
 # Motion (README): the Normal-speed durations; the animation speed setting
@@ -411,8 +438,9 @@ SLIDE_OFFSET = 4            # px: panels and popups slide this far while fading 
 
 # ═══ the two built-in schemes (design/system/assets/Schemes) ═══════════════
 # Plain Base24 records, identical to the shipped YAML/JSON (tests hold them
-# to it). They are not written into ewe.conf: the tool knows them, so a
-# synced or hand-edited file can never corrupt or lose them.
+# to it): palette + accent, nothing else — no overrides, so every role they
+# show is the derivation's. They are not written into ewe.conf: the tool
+# knows them, so a synced or hand-edited file can never corrupt or lose them.
 BUILTIN_SCHEMES = [
     {"slug": "ewe-dark", "name": "Ewe Dark", "author": "ewe", "variant": "dark", "builtin": True,
      "accent": EWELLOW, "semantic": True,
@@ -420,12 +448,8 @@ BUILTIN_SCHEMES = [
                  "base04": "#a8a49d", "base05": "#faf9f6", "base06": "#d5d2cb", "base07": "#fefdfc",
                  "base08": "#ffa196", "base09": "#f9a870", "base0A": "#eeb407", "base0B": "#69d6aa",
                  "base0C": "#64d1d7", "base0D": "#76c7ff", "base0E": "#e0a4ee", "base0F": "#805708",
-                 "base10": "#020202", "base11": "#000000", "base12": "#febfb7", "base13": "#ffc29a",
-                 "base14": "#7deabd", "base15": "#79e5eb", "base16": "#a3d8ff", "base17": "#f1bafe"},
-     "overrides": {"on-accent": "#020202", "accent-text": "#f8c23a", "focus-ring": "#f8c23a",
-                   "surface-overlay": "#201e1a", "surface-pressed": "#423f3a",
-                   "surface-selected": "#2c2a26", "border-subtle": "#2c2a26",
-                   "border-strong": "#7f7b75", "accent-subtle": "#352206"}},
+                 "base10": "#020202", "base11": "#020202", "base12": "#febfb7", "base13": "#ffc29a",
+                 "base14": "#7deabd", "base15": "#79e5eb", "base16": "#a3d8ff", "base17": "#f1bafe"}},
     {"slug": "ewe-light", "name": "Ewe Light", "author": "ewe", "variant": "light", "builtin": True,
      "accent": EWELLOW, "semantic": True,
      "palette": {"base00": "#f4f2ee", "base01": "#faf9f6", "base02": "#e9e6e0", "base03": "#a8a49d",
@@ -433,11 +457,7 @@ BUILTIN_SCHEMES = [
                  "base08": "#a04038", "base09": "#964d09", "base0A": "#eeb407", "base0B": "#047554",
                  "base0C": "#057176", "base0D": "#026a9d", "base0E": "#814a8d", "base0F": "#805708",
                  "base10": "#e9e6e0", "base11": "#d5d2cb", "base12": "#8c2e28", "base13": "#7f3f02",
-                 "base14": "#016245", "base15": "#035e62", "base16": "#025884", "base17": "#6f397b"},
-     "overrides": {"on-accent": "#020202", "accent-text": "#805708", "focus-ring": "#a77607",
-                   "surface-overlay": "#fefdfc", "surface-pressed": "#d5d2cb",
-                   "surface-selected": "#fefdfc", "border-subtle": "#d5d2cb",
-                   "border-strong": "#7f7b75", "accent-subtle": "#fff6e4"}},
+                 "base14": "#016245", "base15": "#035e62", "base16": "#025884", "base17": "#6f397b"}},
 ]
 BUILTIN_BY_SLUG = {s["slug"]: s for s in BUILTIN_SCHEMES}
 DEFAULT_SCHEME = "ewe-dark"
@@ -455,6 +475,27 @@ ROLES = (SURFACES + ["border-subtle", "border-strong", "text-primary", "text-sec
 TEXT_ROLES = ["text-primary", "text-secondary", "text-muted", "accent-text"] + STATUS
 ACCENT_ROLES = ["accent", "accent-hover", "accent-pressed", "on-accent", "accent-subtle",
                 "accent-text", "focus-ring", "glass-accent"]
+
+
+# ═══ one black, one white ══════════════════════════════════════════════════
+L_FLOOR = oklch(BLACK)[0]           # nothing emitted is darker than `black`
+L_CEIL = oklch(NEUTRAL[0])[0]       # nothing emitted is lighter than `neutral-0`
+
+
+def in_range(hexv):
+    """`hexv`, or `black` / `neutral-0` when it lies beyond them."""
+    L = oklch(hexv)[0]
+    if L < L_FLOOR - 1e-6:
+        return BLACK
+    if L > L_CEIL + 1e-6:
+        return NEUTRAL[0]
+    return hexv
+
+
+def at_l(hexv, L):
+    """`hexv` at lightness L (hue and chroma kept), inside the range."""
+    _, C, H = oklch(hexv)
+    return in_range(oklch_hex(max(L_FLOOR, min(L_CEIL, L)), C, H))
 
 
 # ═══ the accent ramp ═══════════════════════════════════════════════════════
@@ -489,22 +530,6 @@ def accent_ramp(accent):
     ramp = {s: oklch_hex(*v) for s, v in steps.items()}
     ramp[500] = _hex6(accent)              # the anchor is the accent itself
     return ramp
-
-
-def ramp_at(accent, L):
-    """The accent ramp read at lightness L: chroma and hue interpolated
-    between the two steps that bracket it. "accent at 84 L" means this."""
-    pts = sorted(accent_ramp_lch(accent).values())
-    if L <= pts[0][0]:
-        return oklch_hex(L, pts[0][1], pts[0][2])
-    if L >= pts[-1][0]:
-        return oklch_hex(L, pts[-1][1], pts[-1][2])
-    for (L1, C1, H1), (L2, C2, H2) in zip(pts, pts[1:]):
-        if L1 <= L <= L2:
-            f = (L - L1) / (L2 - L1) if L2 > L1 else 0
-            d = ((H2 - H1 + 180) % 360) - 180
-            return oklch_hex(L, C1 + (C2 - C1) * f, (H1 + d * f) % 360)
-    return oklch_hex(L, pts[-1][1], pts[-1][2])
 
 
 # ═══ SCHEMES — Base24 records ══════════════════════════════════════════════
@@ -689,12 +714,13 @@ def derive_roles(sc, accent):
     for k, v in NEUTRAL.items():
         c["neutral-%d" % k] = v
     sunken = p.get("base10") or ok_shift(p["base00"], -SUNKEN_DL)
+    pressed = ok_toward(p["base02"], p["base05"], PRESSED_DL[variant])
     if dark:
         c.update({
             "surface-base": p["base00"], "surface-raised": p["base01"],
             "surface-overlay": ok_mix(p["base01"], p["base02"], 0.5),
             "surface-sunken": sunken, "surface-hover": p["base02"],
-            "surface-pressed": ok_toward(p["base02"], p["base05"], 8),
+            "surface-pressed": pressed,
             "surface-selected": p["base02"], "border-subtle": p["base02"],
             "border-strong": ok_mix(p["base03"], p["base04"], 0.5)})
     else:
@@ -707,21 +733,17 @@ def derive_roles(sc, accent):
             "surface-base": p["base00"], "surface-raised": p["base01"],
             "surface-overlay": top, "surface-sunken": sunken,
             "surface-hover": p["base02"],
-            "surface-pressed": ok_toward(p["base02"], p["base05"], 8),
+            "surface-pressed": pressed,
             "surface-selected": top,
-            "border-subtle": ok_mix(p["base02"], p["base03"], 0.5),
+            "border-subtle": ok_mix(p["base02"], p["base03"], BORDER_SUBTLE_MIX),
             "border-strong": ok_mix(p["base03"], p["base04"], 0.5)})
     c.update({"text-primary": p["base05"], "text-secondary": p["base06"],
               "text-muted": p["base04"], "text-disabled": p["base03"]})
-    L0 = oklch(accent)[0]
-    A = ACCENT_L[variant]
-    c["accent"] = accent
-    c["accent-hover"] = ramp_at(accent, L0 + A["hover"])
-    c["accent-pressed"] = ramp_at(accent, L0 + A["pressed"])
-    c["on-accent"] = on_color(accent, BLACK, "#ffffff")
-    c["accent-subtle"] = ramp_at(accent, A["subtle"])
-    c["accent-text"] = ramp_at(accent, A["text"])
-    c["focus-ring"] = ramp_at(accent, A["ring"])
+    # the accent roles are steps of the ramp generated from the accent
+    c["accent"] = ramp[500]
+    for role in ("accent-hover", "accent-pressed", "on-accent", "accent-subtle",
+                 "accent-text", "focus-ring", "glass-accent"):
+        c[role] = ramp[ACCENT_STEP[variant][role]] if role != "on-accent" else None
     if sc.get("semantic", True):
         c.update({"danger": p["base08"], "warning": p["base09"],
                   "success": p["base0B"], "info": p["base0D"]})
@@ -729,6 +751,10 @@ def derive_roles(sc, accent):
         c.update(EWE_STATUS[variant])
     alpha = {"scrim": SCRIM_ALPHA[variant]}
     c["scrim"] = (p.get("base11") or BLACK) if dark else p["base05"]
+    for k in c:                      # one black, one white
+        if c[k]:
+            c[k] = in_range(c[k])
+    c["on-accent"] = on_color(c["accent"])
     return c, alpha
 
 
@@ -736,27 +762,24 @@ def status_subtle(color, variant):
     """A status colour as a tinted ground: at the subtle L, chroma capped."""
     Ls, Cmax = STATUS_SUBTLE[variant]
     L, C, H = oklch(color)
-    return oklch_hex(Ls, min(C, Cmax), H)
+    return in_range(oklch_hex(Ls, min(C, Cmax), H))
 
 
 def finish_status(c, variant):
     for s in STATUS:
         c[s + "-subtle"] = status_subtle(c[s], variant)
-    # one on-status for the four fills: the candidate that holds best on all
-    best = max(("#020202", "#ffffff"), key=lambda cand: min(contrast(c[s], cand) for s in STATUS))
-    c["on-status"] = best
+    # one on-status for the four fills: black or neutral-0, whichever holds
+    # best on all four
+    c["on-status"] = max((BLACK, NEUTRAL[0]),
+                         key=lambda cand: min(contrast(c[s], cand) for s in STATUS))
 
 
 # ═══ the guarantees ════════════════════════════════════════════════════════
-def _move_l(hexv, L):
-    _, C, H = oklch(hexv)
-    return oklch_hex(L, C, H)
-
-
 def ensure_contrast(c, role, surfaces, target, adjusted, why):
     """Move `role`'s lightness, hue held, until it reaches `target` against
     every surface named. Direction: away from the surfaces' mean lightness,
-    then the other way if that runs out of room."""
+    then the other way if that runs out of room. The room ends at `black`
+    and `neutral-0`."""
     worst = min(contrast(c[role], c[s]) for s in surfaces)
     if worst >= target - 1e-9:
         return
@@ -766,28 +789,42 @@ def ensure_contrast(c, role, surfaces, target, adjusted, why):
     for direction in (first, -first):
         for step in range(1, 101):
             Ln = L + direction * step
-            if not 0 <= Ln <= 100:
+            if not L_FLOOR <= Ln <= L_CEIL:
                 break
-            cand = oklch_hex(Ln, C, H)
+            cand = in_range(oklch_hex(Ln, C, H))
             if min(contrast(cand, c[s]) for s in surfaces) >= target:
                 adjusted.append({"role": role, "from": c[role], "to": cand,
                                  "why": "%s (was %.2f:1)" % (why, worst)})
                 c[role] = cand
                 return
+        # the last step inside the range, before turning round
+        edge = L_CEIL if direction > 0 else L_FLOOR
+        cand = at_l(c[role], edge)
+        if min(contrast(cand, c[s]) for s in surfaces) >= target:
+            adjusted.append({"role": role, "from": c[role], "to": cand,
+                             "why": "%s (was %.2f:1)" % (why, worst)})
+            c[role] = cand
+            return
     adjusted.append({"role": role, "from": c[role], "to": c[role],
                      "why": "%s — could not be reached by moving lightness alone (%.2f:1)" % (why, worst)})
 
 
 def guarantees(c, variant, accent, adjusted):
     dark = variant == "dark"
-    # 1. surfaces stay apart: each differs from the surface below by 2 L
+    # 1. surfaces stay apart: each differs from the surface below by 2 L, as
+    #    far as the range between black and neutral-0 allows. A surface that
+    #    already sits as far off as that range lets it stays where it is —
+    #    the rule is met, nothing is invented beyond the range.
     for below, role in (("surface-base", "surface-raised"), ("surface-raised", "surface-overlay"),
                         ("surface-raised", "surface-hover")):
         Lb, L = oklch(c[below])[0], oklch(c[role])[0]
         if abs(L - Lb) >= SURFACE_STEP - 0.05:
             continue
         sign = (1 if L > Lb else -1) if abs(L - Lb) > 1e-6 else (1 if dark else -1)
-        new = _move_l(c[role], max(0.0, min(100.0, Lb + sign * SURFACE_STEP)))
+        want = max(L_FLOOR, min(L_CEIL, Lb + sign * SURFACE_STEP))
+        if abs(want - Lb) <= abs(L - Lb) + 0.05:
+            continue                 # no room left: as far apart as the palette allows
+        new = at_l(c[role], want)
         if new != c[role]:
             adjusted.append({"role": role, "from": c[role], "to": new,
                              "why": "at least %g L from %s" % (SURFACE_STEP, below)})
@@ -800,7 +837,7 @@ def guarantees(c, variant, accent, adjusted):
         if abs(d) < WARNING_HUE_GAP:
             toward = ((RED_HUE - Ha + 180) % 360) - 180
             sign = 1 if toward >= 0 else -1
-            new = oklch_hex(Lw, Cw, (Ha + sign * WARNING_HUE_GAP) % 360)
+            new = in_range(oklch_hex(Lw, Cw, (Ha + sign * WARNING_HUE_GAP) % 360))
             adjusted.append({"role": "warning", "from": c["warning"], "to": new,
                              "why": "hue within %g° of the accent; turned toward red" % WARNING_HUE_GAP})
             c["warning"] = new
@@ -821,24 +858,51 @@ def scheme_colors(sc, accent):
     """derive -> overrides -> guarantees. The finished role set and the list
     of what the guarantees had to move."""
     c, alpha = derive_roles(sc, accent)
-    for k, v in (sc.get("overrides") or {}).items():
-        # an override of an accent role belongs to the accent the file was
-        # written for: when the person picked another accent (a built-in
-        # always wears desktop.theme.accent), those roles follow the pick
-        if k in ACCENT_ROLES and sc.get("builtin") and accent != sc.get("accent"):
-            continue
-        c[k] = v
+    ov = {k: in_range(v) for k, v in (sc.get("overrides") or {}).items()}
+    for k, v in ov.items():
+        if k not in STATUS_FINISH:
+            c[k] = v
     adjusted = []
     guarantees(c, sc["variant"], accent, adjusted)
+    # glass-accent is accent-text inside glass: where they are the same
+    # ramp step (the dark), it follows accent-text through the guarantees
+    steps = ACCENT_STEP[sc["variant"]]
+    if "glass-accent" not in ov and steps["glass-accent"] == steps["accent-text"]:
+        c["glass-accent"] = c["accent-text"]
     finish_status(c, sc["variant"])
-    if "on-status" in (sc.get("overrides") or {}):
-        c["on-status"] = sc["overrides"]["on-status"]
-    for s in STATUS:
-        k = s + "-subtle"
-        if k in (sc.get("overrides") or {}):
-            c[k] = sc["overrides"][k]
+    for k in STATUS_FINISH:
+        if k in ov:
+            c[k] = ov[k]
     return c, alpha, adjusted
 
+
+# roles finish_status writes, so an override of them is applied after it
+STATUS_FINISH = ["on-status"] + [s + "-subtle" for s in STATUS]
+
+
+def shadow_color(c, sc):
+    """Shadows: `black` in the dark, the scheme's darkest ink (base05) in
+    the light."""
+    return BLACK if sc["variant"] == "dark" else in_range(sc["palette"]["base05"])
+
+
+def gradients(c):
+    """The four gradients, from the ramp and the surfaces (see GRADIENT_ANGLE)."""
+    fa, fb = GRADIENT_EWELLOW_MIX
+    _, Cs, Hs = oklch(c["accent-subtle"])
+    Lr = oklch(c["surface-raised"])[0]
+    ember = in_range(oklch_hex(Lr, Cs * EMBER_TINT, Hs))
+    return {
+        "gradient-ewellow": {"kind": "linear", "angle": GRADIENT_ANGLE["gradient-ewellow"], "stops": [
+            [in_range(ok_mix(c["ewellow-400"], c["accent"], fa)), 1, 0],
+            [in_range(ok_mix(c["accent"], c["ewellow-600"], fb)), 1, 100]]},
+        "gradient-ember": {"kind": "linear", "angle": GRADIENT_ANGLE["gradient-ember"], "stops": [
+            [ember, 1, 0], [c["surface-base"], 1, 100]]},
+        "gradient-night": {"kind": "linear", "angle": GRADIENT_ANGLE["gradient-night"], "stops": [
+            [c["surface-raised"], 1, 0], [c["surface-base"], 1, 100]]},
+        "gradient-glow": {"kind": "radial", "at": "50% 0%", "stops": [
+            [c["accent"], GLOW_ALPHA, 0], [c["accent"], 0, 60]]},
+    }
 
 # ═══ the token set ═════════════════════════════════════════════════════════
 def _scale(px, pct):
@@ -852,7 +916,7 @@ def tokens(cfg):
     sc = active_scheme(dict(cfg, schemes=schemes))
     variant = sc["variant"]
     dark = variant == "dark"
-    accent = scheme_accent(sc, cfg)
+    accent = in_range(scheme_accent(sc, cfg))
     color, alpha, adjusted = scheme_colors(sc, accent)
     cfg.update({"accent": accent, "variant": variant, "scheme_name": sc["name"],
                 "scheme_slug": sc["slug"]})
@@ -868,7 +932,7 @@ def tokens(cfg):
     op = cfg["bar_opacity"]
     glass_solid = inc or red_t
     glass_alpha = 1.0 if glass_solid else (op / 100.0 if op < 100 else OPACITY["opacity-glass"])
-    tint = max((sc["palette"]["base05"], sc["palette"]["base07"]),
+    tint = max((in_range(sc["palette"]["base05"]), in_range(sc["palette"]["base07"])),
                key=lambda h: contrast(h, color["surface-base"]))
     ga = GLASS_ALPHA[variant]
     if glass_solid:
@@ -881,16 +945,14 @@ def tokens(cfg):
         alpha.update({"glass-base": glass_alpha, "glass-raised": glass_alpha,
                       "glass-border": ga["border"], "glass-hover": ga["hover"],
                       "glass-pressed": ga["pressed"]})
-    # glass-accent: accent-text in the dark; a deeper accent in the light,
-    # so it keeps 4.5:1 over a bright wallpaper (ewellow-900 by default)
-    color["glass-accent"] = color["accent-text"] if dark else ramp_at(accent, oklch(color["ewellow-900"])[0])
-    if "glass-accent" in (sc.get("overrides") or {}) and not (sc.get("builtin") and accent != sc.get("accent")):
-        color["glass-accent"] = sc["overrides"]["glass-accent"]
+    # glass-accent (scheme_colors): accent-text in the dark; ewellow-900 in
+    # the light, so it keeps 4.5:1 over a bright wallpaper
     if not glass_solid and op < 100:
         # The Glass contrast rule (Glass card), applied while Glass is in
         # use: at the preset, text-primary, text-secondary and glass-accent
         # hold 4.5:1 and status glyphs 3:1 over the glass fill composited on
-        # white AND black. Lightness moves away from the fill, hue stays —
+        # white AND black (test backgrounds only, never emitted). Lightness
+        # moves away from the fill, hue stays, inside black … neutral-0 —
         # the same direction that keeps them readable on the solid surfaces
         # above. (Below the preset Settings warns; nothing is blocked.)
         ga0 = OPACITY["opacity-glass"]
@@ -905,13 +967,14 @@ def tokens(cfg):
             L, C, H = oklch(color[role])
             for step in range(1, 101):
                 Ln = L + direction * step
-                if not 0 <= Ln <= 100:
-                    break
-                cand = oklch_hex(Ln, C, H)
+                edge = not L_FLOOR <= Ln <= L_CEIL
+                cand = at_l(color[role], Ln)          # at the edge: black / neutral-0
                 if min(contrast(cand, b) for b in backs) >= target:
                     adjusted.append({"role": role, "from": color[role], "to": cand,
                                      "why": "%g:1 over glass at %d%% (was %.2f:1)" % (target, GLASS_PRESET, worst)})
                     color[role] = cand
+                    break
+                if edge:
                     break
         for st in STATUS:
             if any(a["role"] == st and "glass" in a["why"] for a in adjusted):
@@ -987,9 +1050,9 @@ def tokens(cfg):
                "solid": glass_solid}
 
     shadow = {"shadow-none": None}
-    for k, per in SHADOW.items():
-        x, y, blur, col, a = per[variant]
-        shadow[k] = {"x": x, "y": y, "blur": blur, "color": col, "alpha": a}
+    ink = shadow_color(color, sc)
+    for k, ((x, y, blur), a) in SHADOW.items():
+        shadow[k] = {"x": x, "y": y, "blur": blur, "color": ink, "alpha": a[variant]}
 
     presets = {"corner": cfg["corner"], "density": cfg["density"], "stroke": cfg["stroke"]}
     a11y = {k: cfg[k] for k in ("reduce_motion", "reduce_transparency", "increase_contrast", "text_scale")}
@@ -999,7 +1062,7 @@ def tokens(cfg):
                                "reduce_transparency", "increase_contrast", "text_scale", "speed")}
     t = {"input": inp, "color": color, "alpha": alpha, "shape": shape, "size": size,
          "type": typ, "motion": motion, "opacity": opacity, "shadow": shadow,
-         "gradient": GRADIENT, "surface": surface, "bar": bar, "presets": presets,
+         "gradient": gradients(color), "surface": surface, "bar": bar, "presets": presets,
          "accessibility": a11y, "adjusted": adjusted,
          "brand": {str(s): color["ewellow-%d" % s] for s in RAMP_STEPS},
          "grey": {str(k): v for k, v in NEUTRAL.items()},
