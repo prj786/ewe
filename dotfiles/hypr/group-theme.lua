@@ -24,48 +24,44 @@
 -- stacked on each other. Ungrouped windows are untouched and keep the radius
 -- from Settings → Layout.
 --
--- THE COLOUR is still the live look: accent for the active tab, the token
--- file's card surface with a 10% breath of accent for idle ones,
--- so the strip belongs to the same family as the rest of the shell.
+-- THE COLOUR follows the Window card: a grouped window's ring is
+-- `accent-text` (the focused group) or `border-subtle`, and the tab strip
+-- marks the active tab with a solid `accent` fill and `on-accent` title;
+-- idle tabs sit on `surface-raised` with `text-muted` titles. A LOCKED group
+-- ("this stack won't take new windows") takes `accent-pressed`, a state of
+-- the same accent rather than another colour. Every value is a token read
+-- through colors.lua — the strip's height, type and padding included.
 
 package.loaded["colors"] = nil          -- always re-read the live accent/style
 local c = require("colors")
 
-local accent  = c.accent
-local tabIdle = c.mix(c.s_elevated, accent, 0.10)
--- Locked group = "this stack won't take new windows". The same accent
--- lightened, so it reads as a STATE of the accent, not a different colour.
-local locked  = c.mix(accent, "ffffff", 0.35)
-
 hl.config({
     group = {
         col = {
-            border_active          = c.rgba(accent,     0xee),
-            border_inactive        = c.rgba(c.s_stroke, 0xaa),
-            border_locked_active   = c.rgba(locked,     0xee),
-            border_locked_inactive = c.rgba(c.s_stroke, 0xaa),
+            border_active          = c.rgb(c.accent_text),
+            border_inactive        = c.rgb(c.border_subtle),
+            border_locked_active   = c.rgb(c.accent_pressed),
+            border_locked_inactive = c.rgb(c.border_subtle),
         },
         groupbar = {
             enabled          = true,
-            height           = 22,
+            height           = c.tab_height,
             indicator_height = 0,         -- the filled tab IS the indicator
             font_family      = "Geist",   -- Theme.fontSans — the DE face
-            font_size        = 12,
-            -- The regular weight is thin at this size against a saturated accent
-            -- fill, so the strip gets a weight step instead of relying on
-            -- colour alone: the active tab is the only bold thing on screen.
+            font_size        = c.tab_font_size,
+            -- The active tab is the one semibold title on the strip, so it is
+            -- marked by weight as well as by its fill.
             -- NOTE: `hyprctl getoption` reports these as "invalid type
             -- (internal error)" — that is a getoption display bug, not a
             -- rejection. They apply; verified by rendering.
-            font_weight_active   = 700,
-            font_weight_inactive = 500,
+            font_weight_active   = c.weight_semibold,
+            font_weight_inactive = c.weight_medium,
             render_titles    = true,
             stacked          = false,
             -- `gradients` is what makes the groupbar paint a FILL behind each
             -- tab at all — with it off the strip is bare text on the desktop
             -- and col.* is never drawn. Single-stop colours render FLAT, so
-            -- this is on for the fill, not for a gradient: the same one-stop
-            -- trick Theme.qml uses for barTop/barBottom.
+            -- this is on for the fill, not for a gradient.
             gradients                 = true,
             -- Square, all of it. The strip is the top edge of the card.
             rounding                  = 0,
@@ -73,20 +69,20 @@ hl.config({
             round_only_edges          = false,
             gradient_round_only_edges = false,
             -- Flush: no gap under the strip, none to the window's side edges.
-            -- gaps_in is the hairline seam BETWEEN tabs — 2px of desktop
-            -- showing through, since Hyprland has no separator colour and
-            -- adjacent idle tabs would otherwise fuse into one anonymous bar.
-            gaps_in          = 2,
+            -- gaps_in is the seam BETWEEN tabs (space-xxs) — desktop showing
+            -- through, since Hyprland has no separator colour and adjacent
+            -- idle tabs would otherwise fuse into one anonymous bar.
+            gaps_in          = c.tab_seam,
             gaps_out         = 0,
             keep_upper_gap   = false,
-            text_padding     = 10,
+            text_padding     = c.tab_padding,
             text_color          = c.rgb(c.accent_fg),
             text_color_inactive = c.rgb(c.s_fg_dim),
             col = {
-                active          = c.rgba(accent,  0xff),
-                inactive        = c.rgba(tabIdle, 0xdd),
-                locked_active   = c.rgba(locked,  0xff),
-                locked_inactive = c.rgba(tabIdle, 0xdd),
+                active          = c.rgb(c.accent),
+                inactive        = c.rgb(c.s_elevated),
+                locked_active   = c.rgb(c.accent_pressed),
+                locked_inactive = c.rgb(c.s_elevated),
             },
         },
     },

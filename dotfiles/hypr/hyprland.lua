@@ -81,18 +81,6 @@ end
 -- the knobs say — start-hyprland.sh exports EWE_NO_BLUR=1 there (virtio /
 -- llvmpipe and the NVIDIA Wayland path both render blur as flicker).
 
--- The window corner is the `rounded` token (10 at corner = medium), read from
--- the same token file colors.lua reads. colors.lua only exposes the control
--- radius (8), so the one number is picked up here; colors.lua's radius stays
--- the fallback for a missing or half-written token file.
-local function tok_rounded()
-    local f = home and io.open(home .. "/.config/quickshell/theme-tokens.json", "r")
-    if not f then return nil end
-    local t = f:read("*a") or ""
-    f:close()
-    return tonumber(t:match('"rounded"%s*:%s*(%d+)'))
-end
-
 hl.config({
     general = {
         -- The Window card's own figures: window-gap (8) around the screen
@@ -104,10 +92,10 @@ hl.config({
         border_size = 2,
 
         -- The window ring (Window card). Focused: the accent when
-        -- tint_borders is on (colors.lua reads user-theme.json, so this
-        -- tracks the shell live on every reload), otherwise the neutral
-        -- stroke. Other windows: border-subtle, so they recede. Solid: the
-        -- ring IS the accent, not a wash of it.
+        -- tint_borders is on (colors.lua reads the token file, so this
+        -- tracks the shell live on every reload), otherwise border-strong.
+        -- Other windows: border-subtle, so they recede. Solid: the ring IS
+        -- the accent, not a wash of it.
         col = {
             active_border   = c.tint_borders and c.rgb(c.accent) or c.stroke2,
             inactive_border = c.stroke3,
@@ -121,9 +109,9 @@ hl.config({
     decoration = {
         -- The corner radius is `rounded` (10), the radius panels and cards
         -- share, so a window sits in the same family as the shell's
-        -- surfaces (tok_rounded above). Settings → Layout still wins through
-        -- generated/user.lua.
-        rounding       = tok_rounded() or c.radius,
+        -- surfaces (colors.lua reads it off the token file). Settings →
+        -- Layout still wins through generated/user.lua.
+        rounding       = c.rounded,
         rounding_power = 2,
 
         -- No dim: an unfocused window stays fully bright (Window card).
