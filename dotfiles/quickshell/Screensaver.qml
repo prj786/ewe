@@ -5,12 +5,22 @@ import Quickshell.Wayland
 import Quickshell.Services.Mpris
 import Quickshell.Hyprland
 
-// Screensaver — decorative idle overlay across all outputs. NOT a lock: any
-// key/click/motion dismisses it (flip "Require password" on Settings →
-// Screensaver to idle straight into the real session lock instead). Timing is
-// owned by hypridle via the generated hypridle.conf, whose listeners call
-// `qs ipc call saver show` / `hide`; on-resume also hides it, so even if the
-// overlay misses an input the compositor's resume signal dismisses it.
+// Screensaver — the quiet idle overlay across all outputs (design system:
+// Screensaver). NOT a lock: any key/click/motion dismisses it (flip "Require
+// password" on Settings → Screensaver to idle straight into the real session
+// lock instead). Timing is owned by hypridle via the generated
+// hypridle.conf, whose listeners call `qs ipc call saver show` / `hide`;
+// on-resume also hides it, so even if the overlay misses an input the
+// compositor's resume signal dismisses it.
+//
+//   ground  `black`, and EWE DARK whatever the scheme (the decision list) —
+//           the neutral ramp is the same in every scheme, so the ink comes
+//           from its Ewe Dark steps
+//   clock   the display-xl style (fontSize6xl, weight 300) with tabular
+//           figures, over the date in fontSizeXl
+//   blank   nothing at all
+//   dim     the pre-lock warning: black at 55% over durDim (1.5 s), cleared
+//           at durBase the moment anything happens
 Scope {
     id: root
 
@@ -76,10 +86,15 @@ Scope {
             Rectangle {
                 id: dimRect
                 anchors.fill: parent
-                color: "black"
+                color: Theme.black
+                // 0.55 is the card's own figure; the token set has no
+                // opacity step for it (reported as a gap)
                 opacity: Globals.saverDimming ? 0.55 : 0
                 Behavior on opacity {
-                    NumberAnimation { duration: Globals.saverDimming ? 1500 : Theme.durBase; easing.type: Theme.ease }
+                    NumberAnimation {
+                        duration: Globals.saverDimming ? Theme.durDim : Theme.durBase
+                        easing.type: Globals.saverDimming ? Theme.easeDim : Theme.ease
+                    }
                 }
             }
         }
@@ -170,7 +185,7 @@ Scope {
             required property var modelData
             screen: modelData
             visible: Globals.saverActive
-            color: "black"
+            color: Theme.black
             exclusionMode: ExclusionMode.Ignore
             WlrLayershell.namespace: "quickshell:screensaver"
             WlrLayershell.layer: WlrLayer.Overlay
@@ -188,7 +203,7 @@ Scope {
                 focus: true
                 Keys.onPressed: w.dismiss()
                 opacity: Globals.saverActive ? 1 : 0
-                Behavior on opacity { NumberAnimation { duration: Theme.durSlow } }
+                Behavior on opacity { NumberAnimation { duration: Theme.durSlow; easing.type: Theme.easeSlow } }
 
                 MouseArea {
                     anchors.fill: parent
@@ -223,18 +238,25 @@ Scope {
                     }
                     Column {
                         anchors.centerIn: parent
-                        spacing: 10
+                        spacing: Theme.spaceS
                         Text {
                             anchors.horizontalCenter: parent.horizontalCenter
                             text: Qt.formatTime(clockRoot.now, "h:mm")
-                            color: Theme.fg1; opacity: 0.92
-                            font.family: Theme.fontDisplay; font.pixelSize: 132; font.weight: Font.Bold
+                            // Ewe Dark, whatever the scheme: the neutral ramp
+                            // is scheme-independent, so its dark steps are the
+                            // honest way to say "always dark" in tokens
+                            color: Theme.neutral50
+                            font.family: Theme.type.displayXl.family
+                            font.pixelSize: Theme.type.displayXl.size
+                            font.weight: Theme.type.displayXl.weight
+                            font.letterSpacing: Theme.type.displayXl.letterSpacing
+                            font.features: ({ "tnum": 1 })
                         }
                         Text {
                             anchors.horizontalCenter: parent.horizontalCenter
                             text: Qt.formatDate(clockRoot.now, "dddd, d MMMM")
-                            color: Theme.fg2
-                            font.family: Theme.fontText; font.pixelSize: 22
+                            color: Theme.neutral300
+                            font.family: Theme.fontSans; font.pixelSize: Theme.fontSizeXl
                         }
                     }
                 }

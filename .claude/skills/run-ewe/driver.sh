@@ -31,6 +31,14 @@
 #   HS_CONF=<file>               # use this ewe.conf instead (HS_SCHEME ignored)
 #   HS_WELCOME=1                 # let the first-run Welcome screen appear
 #   HS_SANDBOX=0                 # old behaviour: the live HOME and config
+#
+# PARALLEL RUNS: HS_WORK=<dir> gives a run its own state, sandbox and logs
+# (default /tmp/hs-driver — two checkouts driving at once must not share it).
+# The nested compositor is a window on the HOST, so when two runs are up the
+# host tiles them and each output shrinks (892x539 instead of 1920x1200).
+# HS_HEADLESS=1 swaps the window's output for a headless 1920x1200 one (SHOT)
+# before the shell starts, so screenshots keep their size whatever the host
+# does with the window (the window itself then shows nothing).
 set -u
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
@@ -111,6 +119,8 @@ EOF
   # HS_EXTRA_LUA=<file>: appended to the nested config — e.g. the glass blur
   # block from `ewe-conf`'s GLASS_LUA, to see translucent panels for real
   [ -n "${HS_EXTRA_LUA:-}" ] && [ -f "$HS_EXTRA_LUA" ] && cat "$HS_EXTRA_LUA" >> "$WORK/hypr-min.lua"
+  # HS_HEADLESS: the SHOT output's place, beside the window's output
+  [ "${HS_HEADLESS:-0}" = "1" ] && echo 'hl.monitor({ output = "SHOT", mode = "1920x1200@60", position = "1920x0", scale = 1 })' >> "$WORK/hypr-min.lua"
 
   local before after sock
   before="$(ls "$XDG_RUNTIME_DIR"/wayland-* 2>/dev/null)"
@@ -143,6 +153,17 @@ except Exception: pass" 2>/dev/null)"
   done
   [ -n "$nestsig" ] || die "could not resolve nested Hyprland instance signature"
 
+  # HS_HEADLESS=1: a headless SHOT output replaces the window's own, BEFORE
+  # the shell starts (it binds its windows to the screens it sees at load)
+  local shotout=""
+  if [ "${HS_HEADLESS:-0}" = "1" ]; then
+    HYPRLAND_INSTANCE_SIGNATURE="$nestsig" hyprctl output create headless SHOT >/dev/null 2>&1
+    sleep 0.5
+    HYPRLAND_INSTANCE_SIGNATURE="$nestsig" hyprctl eval 'hl.monitor({ output = "WAYLAND-1", disabled = true })' >/dev/null 2>&1
+    sleep 0.5
+    shotout=SHOT
+  fi
+
   # HS_PRIVATE_BUS=1: run the shell on its OWN session D-Bus (dbus-run-session).
   # The nested shell otherwise shares the host session bus + keyring, so panels
   # fill with the real user's calendar/mail/MPRIS/tray — exactly what must NOT
@@ -169,14 +190,14 @@ except Exception: pass" 2>/dev/null)"
       sleep 0.2
     done
   fi
-  { echo "HYPR_PID=$hpid"; echo "QS_PID=$qpid"; echo "QS_WRAP_PID=$qwrap"; echo "NEST_WD=$nestwd"; echo "NEST_SIG=$nestsig"; } > "$STATE"
+  { echo "HYPR_PID=$hpid"; echo "QS_PID=$qpid"; echo "QS_WRAP_PID=$qwrap"; echo "NEST_WD=$nestwd"; echo "NEST_SIG=$nestsig"; echo "SHOT_OUT=$shotout"; } > "$STATE"
   echo "up: nested compositor on $nestwd (hypr pid $hpid, sig $nestsig), shell qs pid $qpid"
   echo "    config loaded — try: driver.sh open settings  |  driver.sh spawn foot"
 }
 
 cmd_ipc()     { load; WAYLAND_DISPLAY="$NEST_WD" qs ipc --pid "$QS_PID" call "$@"; }
 cmd_targets() { load; WAYLAND_DISPLAY="$NEST_WD" qs ipc --pid "$QS_PID" show; }
-cmd_shot()    { load; WAYLAND_DISPLAY="$NEST_WD" grim "$OUTDIR/${1:-shell.png}" && echo "wrote $OUTDIR/${1:-shell.png}"; }
+cmd_shot()    { load; WAYLAND_DISPLAY="$NEST_WD" grim ${SHOT_OUT:+-o "$SHOT_OUT"} "$OUTDIR/${1:-shell.png}" && echo "wrote $OUTDIR/${1:-shell.png}"; }
 cmd_log()     { tail -n "${1:-25}" "$WORK/qs.log"; }
 cmd_hc()      { load; HYPRLAND_INSTANCE_SIGNATURE="$NEST_SIG" hyprctl "$@"; }
 cmd_spawn()   { load; HYPRLAND_INSTANCE_SIGNATURE="$NEST_SIG" hyprctl dispatch exec "$*" >/dev/null && echo "spawned: $*"; }
@@ -190,7 +211,7 @@ cmd_open() {
   # `up` every surface starts hidden, so toggle == open.
   WAYLAND_DISPLAY="$NEST_WD" qs ipc --pid "$QS_PID" call "$tgt" toggle
   sleep 2
-  WAYLAND_DISPLAY="$NEST_WD" grim "$OUTDIR/$out" && echo "wrote $OUTDIR/$out"
+  WAYLAND_DISPLAY="$NEST_WD" grim ${SHOT_OUT:+-o "$SHOT_OUT"} "$OUTDIR/$out" && echo "wrote $OUTDIR/$out"
   # close with `hide` (not a 2nd toggle — toggle can race) so the next open()/shot
   # starts from a hidden surface. The settle lets the close render before any
   # following screenshot.

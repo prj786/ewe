@@ -28,6 +28,10 @@ Item {
     property string source: Globals.faceUrl
     property string status: ""         // online · away · busy · offline
     property color ringColor: Theme.surfaceBase
+    // the placeholder's plate and letter — a surface pinned to Ewe Dark
+    // (Lock) passes its own
+    property color plateColor: av.initial !== "" ? Theme.accentSubtle : Theme.surfaceHover
+    property color inkColor: av.initial !== "" ? Theme.accentText : Theme.textSecondary
     width: size; height: size
 
     readonly property real shapeRadius: Globals.avatarShape === "circle" ? size / 2
@@ -42,13 +46,13 @@ Item {
     Rectangle {
         anchors.fill: parent
         radius: av.shapeRadius
-        color: av.initial !== "" ? Theme.accentSubtle : Theme.surfaceHover
+        color: av.plateColor
         antialiasing: true
         Text {
             anchors.centerIn: parent
             visible: !img.visible
             text: av.initial !== "" ? av.initial : Theme.icUser
-            color: av.initial !== "" ? Theme.accentText : Theme.textSecondary
+            color: av.inkColor
             font.family: av.initial !== "" ? Theme.fontSans : Theme.fontIcons
             font.pixelSize: Math.round(av.size * 0.45)
             font.weight: Theme.fontWeightSemibold

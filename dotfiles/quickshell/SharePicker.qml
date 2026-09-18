@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Effects
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
@@ -17,13 +18,29 @@ import Quickshell.Hyprland
 //     $fifo.windows  ← $XDPH_WINDOW_SHARING_LIST, one "<handle>[HC>]<class>
 //                      [HT>]<title>[HE>]<hyprAddress>[HA>]" per window
 //
-// We draw a modal on the focused monitor: every screen as a LIVE thumbnail
-// (ScreencopyView — the same capture the Overview uses) named by its model,
-// every shareable window with its live preview, and a region option (slurp).
-// One click writes the answer line and closes; Esc / Cancel writes an empty
-// line, which xdph reads as "cancelled". xdph's window handles are ITS
-// resource ids, so the list it hands us is the source of truth for windows —
-// we only use Hyprland.toplevels to find a preview for each address.
+// We draw a modal on the focused monitor (design system: Share picker):
+// every screen as a LIVE thumbnail (ScreencopyView — the same capture the
+// Overview uses) named by its model, every shareable window with its live
+// preview, and a region option (slurp). One click writes the answer line and
+// closes; Esc / Cancel writes an empty line, which xdph reads as
+// "cancelled". xdph's window handles are ITS resource ids, so the list it
+// hands us is the source of truth for windows — we only use
+// Hyprland.toplevels to find a preview for each address.
+//
+//   panel   at most panelLg + panelSm less spaceLg + spaceS (880) wide and
+//           spaceXl + spaceMd (80) from the screen edges, surfaceRaised with
+//           a borderWidth1 borderSubtle outline, the radiusRounded corner,
+//           shadowFloat, spaceMd + spaceS of padding and spaceMd + spaceXxs
+//           between sections, over `scrim`
+//   card    surfaceSunken inside a borderWidth1 borderSubtle outline on the
+//           radiusRounded corner, spaceS of padding, a 16:9 thumbnail on the
+//           radiusPrimary corner, the name in body semibold and the meta line
+//           in caption textMuted; hover surfaceHover with an accent edge
+//   footer  above a borderWidth1 divider: the "remember" checkbox, then
+//           "Select a region…" (secondary) and Cancel (ghost)
+//
+// NEW (the card): keyboard selection — the arrow keys walk the cards, Enter
+// shares the one with the ring, Esc cancels.
 Scope {
     id: root
 
@@ -110,6 +127,22 @@ Scope {
     }
     property bool hidden: false
 
+    // ── keyboard selection (new) ──────────────────────────────────────────
+    // One index over displays then windows, so the arrows walk the panel in
+    // reading order without the two grids having to know about each other.
+    property int sel: -1
+    readonly property int screenCount: root.open ? Quickshell.screens.length : 0
+    readonly property int cardCount: root.screenCount + (root.open ? root.windows.length : 0)
+    function step(d) {
+        if (root.cardCount === 0) return
+        root.sel = root.sel < 0 ? 0 : (root.sel + d + root.cardCount) % root.cardCount
+    }
+    function activate() {
+        if (root.sel < 0 || root.sel >= root.cardCount) return
+        if (root.sel < root.screenCount) root.answer("screen:" + Quickshell.screens[root.sel].name)
+        else root.answer("window:" + root.windows[root.sel - root.screenCount].handle)
+    }
+
     PanelWindow {
         id: win
         visible: root.open && !root.hidden
@@ -125,7 +158,7 @@ Scope {
         WlrLayershell.keyboardFocus: visible ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
         anchors { top: true; bottom: true; left: true; right: true }
 
-        Rectangle { anchors.fill: parent; color: Theme.shadow }
+        Rectangle { anchors.fill: parent; color: Theme.scrim }
         MouseArea { anchors.fill: parent; onClicked: root.answer("") }   // click outside = cancel
 
         Item {
@@ -133,49 +166,69 @@ Scope {
             anchors.fill: parent
             focus: true
             Keys.onEscapePressed: root.answer("")
-            Connections { target: win; function onVisibleChanged() { if (win.visible) keys.forceActiveFocus() } }
+            Keys.onRightPressed: root.step(1)
+            Keys.onDownPressed: root.step(1)
+            Keys.onLeftPressed: root.step(-1)
+            Keys.onUpPressed: root.step(-1)
+            Keys.onReturnPressed: root.activate()
+            Keys.onEnterPressed: root.activate()
+            Keys.onSpacePressed: root.activate()
+            Connections { target: win; function onVisibleChanged() {
+                if (win.visible) { root.sel = -1; keys.forceActiveFocus() }
+            } }
         }
 
         Rectangle {
             id: panel
             anchors.centerIn: parent
-            width: Math.min(900, parent.width - 80)
-            height: Math.min(body.implicitHeight + 48, parent.height - 80)
-            radius: Theme.radius
-            color: Theme.panel
-            border.color: Theme.stroke2
-            border.width: Theme.borderThin
+            // the card's bounds, in tokens
+            width: Math.min(Theme.panelLg + Theme.panelSm - Theme.spaceLg - Theme.spaceS,
+                            parent.width - 2 * (Theme.spaceXl + Theme.spaceMd))
+            height: Math.min(body.implicitHeight + 2 * (Theme.spaceMd + Theme.spaceS),
+                             parent.height - 2 * (Theme.spaceXl + Theme.spaceMd))
+            radius: Theme.radiusRounded
+            color: Theme.surfaceRaised
+            border.color: Theme.borderSubtle
+            border.width: Theme.borderWidth1
+            layer.enabled: true
+            layer.effect: Elevation {}
             MouseArea { anchors.fill: parent }       // eat clicks so they don't cancel
 
             // the body scrolls on a short screen instead of clipping the footer
             Flickable {
-                anchors.fill: parent; anchors.margins: 24
+                anchors.fill: parent; anchors.margins: Theme.spaceMd + Theme.spaceS
                 contentWidth: width; contentHeight: body.implicitHeight
                 clip: true; boundsBehavior: Flickable.StopAtBounds
             Column {
                 id: body
                 width: parent.width
-                spacing: 18
+                spacing: Theme.spaceMd + Theme.spaceXxs
 
                 Column {
-                    width: parent.width; spacing: 4
+                    width: parent.width; spacing: Theme.spaceXxs
                     Text {
                         text: "Share your screen"
-                        color: Theme.fg1; font.family: Theme.fontDisplay; font.pixelSize: Theme.fsLarge; font.weight: Font.Bold
+                        color: Theme.textPrimary
+                        font.family: Theme.type.h3.family
+                        font.pixelSize: Theme.type.h3.size
+                        font.weight: Theme.type.h3.weight
+                        font.letterSpacing: Theme.type.h3.letterSpacing
                     }
                     Text {
                         width: parent.width; wrapMode: Text.Wrap
-                        text: "An app wants to see your screen. Click what it may have — a whole display, one window, or a region."
-                        color: Theme.fg2; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
+                        text: "An app wants to see your screen. Pick a display, a window or a region; it is shared right away."
+                        color: Theme.textSecondary
+                        font.family: Theme.type.body.family
+                        font.pixelSize: Theme.type.body.size
                     }
                 }
 
                 // ── screens: live thumbnails, named by model ──
                 Column {
-                    width: parent.width; spacing: 10
-                    Text { text: "Displays"; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11; font.weight: Font.DemiBold; font.capitalization: Font.AllUppercase }
+                    width: parent.width; spacing: Theme.spaceS
+                    SectionTitle { text: "Displays" }
                     Flow {
-                        width: parent.width; spacing: 12
+                        width: parent.width; spacing: Theme.spaceS + Theme.spaceXs
                         Repeater {
                             // ONLY while the picker is open (2026-09-03). A
                             // ScreencopyView with a monitor as its captureSource
@@ -196,18 +249,23 @@ Scope {
                             Rectangle {
                                 id: scard
                                 required property var modelData
+                                required property int index
                                 readonly property real aspect: modelData.height > 0 ? modelData.width / modelData.height : 16 / 9
-                                width: Quickshell.screens.length > 2 ? (body.width - 24) / 3 : (body.width - 12) / 2
-                                height: thumb.height + 54
-                                radius: Theme.radiusInner
-                                color: sMa.containsMouse ? Theme.cardHover : Theme.card
-                                border.color: sMa.containsMouse ? Theme.accent : "transparent"; border.width: Theme.border
-                                Behavior on color { ColorAnimation { duration: Theme.durFast } }
+                                readonly property bool picked: root.sel === scard.index
+                                width: Quickshell.screens.length > 2
+                                       ? (body.width - 2 * (Theme.spaceS + Theme.spaceXs)) / 3
+                                       : (body.width - (Theme.spaceS + Theme.spaceXs)) / 2
+                                height: thumb.height + label.height + 3 * Theme.spaceS
+                                radius: Theme.radiusRounded
+                                color: (sMa.containsMouse || scard.picked) ? Theme.surfaceHover : Theme.surfaceSunken
+                                border.color: (sMa.containsMouse || scard.picked) ? Theme.accent : Theme.borderSubtle
+                                border.width: Theme.borderWidth1
+                                Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
                                 Rectangle {
                                     id: thumb
-                                    anchors { top: parent.top; left: parent.left; right: parent.right; margins: 8 }
-                                    height: Math.round((width) / scard.aspect)
-                                    radius: Theme.r(8); color: Theme.bg3; clip: true
+                                    anchors { top: parent.top; left: parent.left; right: parent.right; margins: Theme.spaceS }
+                                    height: Math.round(width / scard.aspect)
+                                    radius: Theme.radiusPrimary; color: Theme.surfaceBase; clip: true
                                     ScreencopyView {
                                         anchors.fill: parent
                                         // belt and braces: drop the source the moment
@@ -218,10 +276,34 @@ Scope {
                                     }
                                 }
                                 Column {
-                                    anchors { left: parent.left; right: parent.right; bottom: parent.bottom; margins: 10 }
-                                    spacing: 1
-                                    Text { width: parent.width; elide: Text.ElideRight; text: root.screenLabel(scard.modelData); color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold }
-                                    Text { text: scard.modelData.name + " · " + scard.modelData.width + "×" + scard.modelData.height; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 10 }
+                                    id: label
+                                    anchors { left: parent.left; right: parent.right; bottom: parent.bottom
+                                              margins: Theme.spaceS; bottomMargin: Theme.spaceS }
+                                    Text {
+                                        width: parent.width; elide: Text.ElideRight
+                                        text: root.screenLabel(scard.modelData)
+                                        color: Theme.textPrimary
+                                        font.family: Theme.type.bodyStrong.family
+                                        font.pixelSize: Theme.type.bodyStrong.size
+                                        font.weight: Theme.fontWeightSemibold
+                                    }
+                                    Text {
+                                        width: parent.width; elide: Text.ElideRight
+                                        text: scard.modelData.name + " · " + scard.modelData.width + "×" + scard.modelData.height
+                                        color: Theme.textMuted
+                                        font.family: Theme.type.caption.family
+                                        font.pixelSize: Theme.type.caption.size
+                                    }
+                                }
+                                // the focus ring sits outside the card's edge
+                                Rectangle {
+                                    anchors.fill: parent
+                                    anchors.margins: -(parent.border.width + Theme.focusWidth)
+                                    radius: Theme.radiusRounded
+                                    color: "transparent"
+                                    visible: scard.picked
+                                    border.color: Theme.focusRing; border.width: Theme.focusWidth
+                                    antialiasing: true
                                 }
                                 MouseArea { id: sMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.answer("screen:" + scard.modelData.name) }
                             }
@@ -231,32 +313,36 @@ Scope {
 
                 // ── windows: what xdph offers, previewed when we can match a toplevel ──
                 Column {
-                    width: parent.width; spacing: 10
+                    width: parent.width; spacing: Theme.spaceS
                     visible: root.windows.length > 0
-                    Text { text: "Windows"; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11; font.weight: Font.DemiBold; font.capitalization: Font.AllUppercase }
+                    SectionTitle { text: "Windows" }
                     Flickable {
                         width: parent.width
-                        height: Math.min(winFlow.implicitHeight, 260)
+                        height: Math.min(winFlow.implicitHeight, 2 * Theme.panelLg / 4 + Theme.panelSm / 4)
                         contentHeight: winFlow.implicitHeight
                         clip: true
                         Flow {
                             id: winFlow
-                            width: parent.width; spacing: 10
+                            width: parent.width; spacing: Theme.spaceS + Theme.spaceXs
                             Repeater {
                                 model: root.open ? root.windows : []
                                 Rectangle {
                                     id: wcard
                                     required property var modelData
-                                    width: (body.width - 30) / 4
-                                    height: 118
-                                    radius: Theme.radiusInner
-                                    color: wMa.containsMouse ? Theme.cardHover : Theme.card
-                                    border.color: wMa.containsMouse ? Theme.accent : "transparent"; border.width: Theme.border
-                                    Behavior on color { ColorAnimation { duration: Theme.durFast } }
+                                    required property int index
+                                    readonly property bool picked: root.sel === root.screenCount + wcard.index
+                                    width: (body.width - 3 * (Theme.spaceS + Theme.spaceXs)) / 4
+                                    height: wthumb.height + wlabel.height + 3 * Theme.spaceS
+                                    radius: Theme.radiusRounded
+                                    color: (wMa.containsMouse || wcard.picked) ? Theme.surfaceHover : Theme.surfaceSunken
+                                    border.color: (wMa.containsMouse || wcard.picked) ? Theme.accent : Theme.borderSubtle
+                                    border.width: Theme.borderWidth1
+                                    Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
                                     Rectangle {
                                         id: wthumb
-                                        anchors { top: parent.top; left: parent.left; right: parent.right; margins: 8 }
-                                        height: 70; radius: Theme.r(8); color: Theme.bg3; clip: true
+                                        anchors { top: parent.top; left: parent.left; right: parent.right; margins: Theme.spaceS }
+                                        height: Theme.control2xl + Theme.controlMd
+                                        radius: Theme.radiusPrimary; color: Theme.surfaceBase; clip: true
                                         ScreencopyView {
                                             id: wsc
                                             anchors.fill: parent
@@ -266,15 +352,40 @@ Scope {
                                         }
                                         Image {
                                             anchors.centerIn: parent; visible: !wsc.visible
-                                            width: 32; height: 32; sourceSize.width: 64; sourceSize.height: 64; mipmap: true
+                                            width: Theme.icon2xl; height: Theme.icon2xl
+                                            sourceSize.width: 2 * Theme.icon2xl; sourceSize.height: 2 * Theme.icon2xl
+                                            mipmap: true
                                             source: root.iconFor(wcard.modelData.cls)
                                         }
                                     }
                                     Column {
-                                        anchors { left: parent.left; right: parent.right; bottom: parent.bottom; margins: 8 }
-                                        spacing: 0
-                                        Text { width: parent.width; elide: Text.ElideRight; text: wcard.modelData.title; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: 11; font.weight: Font.DemiBold }
-                                        Text { width: parent.width; elide: Text.ElideRight; text: wcard.modelData.cls; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 10 }
+                                        id: wlabel
+                                        anchors { left: parent.left; right: parent.right; bottom: parent.bottom
+                                                  margins: Theme.spaceS; bottomMargin: Theme.spaceS }
+                                        Text {
+                                            width: parent.width; elide: Text.ElideRight
+                                            text: wcard.modelData.title
+                                            color: Theme.textPrimary
+                                            font.family: Theme.type.bodyStrong.family
+                                            font.pixelSize: Theme.type.bodyStrong.size
+                                            font.weight: Theme.fontWeightSemibold
+                                        }
+                                        Text {
+                                            width: parent.width; elide: Text.ElideRight
+                                            text: wcard.modelData.cls
+                                            color: Theme.textMuted
+                                            font.family: Theme.type.caption.family
+                                            font.pixelSize: Theme.type.caption.size
+                                        }
+                                    }
+                                    Rectangle {
+                                        anchors.fill: parent
+                                        anchors.margins: -(parent.border.width + Theme.focusWidth)
+                                        radius: Theme.radiusRounded
+                                        color: "transparent"
+                                        visible: wcard.picked
+                                        border.color: Theme.focusRing; border.width: Theme.focusWidth
+                                        antialiasing: true
                                     }
                                     MouseArea { id: wMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.answer("window:" + wcard.modelData.handle) }
                                 }
@@ -283,39 +394,79 @@ Scope {
                     }
                 }
 
-                // ── footer: remember · region · cancel ──
-                Item {
-                    width: parent.width; height: 36
-                    Row {
-                        anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; spacing: 8
-                        Rectangle {
-                            width: 18; height: 18; radius: Theme.r(5)
-                            anchors.verticalCenter: parent.verticalCenter
-                            color: root.allowToken ? Theme.accentFill : Theme.bg3
-                            border.color: root.allowToken ? Theme.accent : Theme.stroke1
-                            Text { anchors.centerIn: parent; visible: root.allowToken; text: Theme.icCheck; font.family: Theme.fontIcons; font.pixelSize: 11; color: Theme.accentOn }
-                            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.allowToken = !root.allowToken }
+                // ── footer: remember · region · cancel, above a divider ──
+                Column {
+                    width: parent.width
+                    spacing: Theme.spaceS + Theme.spaceXs
+                    Rectangle { width: parent.width; height: Theme.borderWidth1; color: Theme.borderSubtle }
+                    Item {
+                        width: parent.width; height: Theme.controlMd
+                        Row {
+                            anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter
+                            spacing: Theme.spaceS
+                            Rectangle {
+                                width: Theme.iconMd; height: Theme.iconMd
+                                radius: Theme.radiusSlight
+                                anchors.verticalCenter: parent.verticalCenter
+                                color: root.allowToken ? Theme.accent : Theme.surfaceSunken
+                                border.color: root.allowToken ? Theme.accent : Theme.borderStrong
+                                border.width: Theme.borderWidth1
+                                Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
+                                Text {
+                                    anchors.centerIn: parent; visible: root.allowToken
+                                    text: Theme.icCheck
+                                    font.family: Theme.fontIcons; font.pixelSize: Theme.iconXs
+                                    color: Theme.onAccent
+                                }
+                                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.allowToken = !root.allowToken }
+                            }
+                            Text {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: "Remember for this app. Don\u2019t ask next time."
+                                color: Theme.textSecondary
+                                font.family: Theme.type.body.family
+                                font.pixelSize: Theme.type.body.size
+                                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.allowToken = !root.allowToken }
+                            }
                         }
-                        Text {
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: "Remember for this app (no prompt next time)"
-                            color: Theme.fg2; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
-                            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.allowToken = !root.allowToken }
-                        }
-                    }
-                    Row {
-                        anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; spacing: 10
-                        Rectangle {
-                            width: 150; height: 36; radius: Theme.r(9)
-                            color: rMa.containsMouse ? Theme.cardHover : Theme.card
-                            Text { anchors.centerIn: parent; text: "Select a region…"; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsBody }
-                            MouseArea { id: rMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: { root.hidden = true; slurp.running = true } }
-                        }
-                        Rectangle {
-                            width: 100; height: 36; radius: Theme.r(9)
-                            color: cMa.containsMouse ? Theme.cardHover : Theme.card
-                            Text { anchors.centerIn: parent; text: "Cancel"; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsBody }
-                            MouseArea { id: cMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.answer("") }
+                        Row {
+                            anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
+                            spacing: Theme.spaceS
+                            Rectangle {
+                                width: regionTxt.implicitWidth + 2 * (Theme.spaceS + Theme.spaceXs)
+                                height: Theme.controlMd
+                                radius: Theme.radiusPrimary
+                                color: rMa.pressed ? Theme.surfacePressed
+                                     : rMa.containsMouse ? Theme.surfaceHover : Theme.surfaceRaised
+                                border.color: Theme.borderStrong; border.width: Theme.borderWidth1
+                                Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
+                                Text {
+                                    id: regionTxt
+                                    anchors.centerIn: parent; text: "Select a region…"
+                                    color: Theme.textPrimary
+                                    font.family: Theme.type.body.family
+                                    font.pixelSize: Theme.type.body.size
+                                    font.weight: Theme.fontWeightMedium
+                                }
+                                MouseArea { id: rMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: { root.hidden = true; slurp.running = true } }
+                            }
+                            Rectangle {
+                                width: cancelTxt.implicitWidth + 2 * (Theme.spaceS + Theme.spaceXs)
+                                height: Theme.controlMd
+                                radius: Theme.radiusPrimary
+                                color: cMa.pressed ? Theme.surfacePressed
+                                     : cMa.containsMouse ? Theme.surfaceHover : "transparent"
+                                Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
+                                Text {
+                                    id: cancelTxt
+                                    anchors.centerIn: parent; text: "Cancel"
+                                    color: Theme.textPrimary
+                                    font.family: Theme.type.body.family
+                                    font.pixelSize: Theme.type.body.size
+                                    font.weight: Theme.fontWeightMedium
+                                }
+                                MouseArea { id: cMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.answer("") }
+                            }
                         }
                     }
                 }
