@@ -41,7 +41,8 @@ import QtQuick
 //       slow). Nothing bounces — there is no OutBack anywhere.
 //   07  Type comes from `type.<style>`; build custom text from the scale
 //       tokens, always pairing a size with the line height of its step.
-//       Georgian is NEVER uppercased (labelCaps is MixedCase, on purpose).
+//       Georgian is NEVER uppercased: small group headers are the overline
+//       style, which spaces the letters and leaves their case alone.
 //   08  Icons are a font (Lucide, fontIcons): size and tint go through
 //       pixelSize and color, never a per-icon asset.
 //   09  Text, glyphs, badges and accent fills stay solid. Only bar, dock and
@@ -49,9 +50,10 @@ import QtQuick
 //   10  The apps map their framework onto the same tokens (design/tokens.css),
 //       so a QML surface and a Svelte pane are one design.
 //
-// The FLUENT names (bg1, card, brandBg, …) are still published at the bottom,
-// each pointing at its Ewe role per the Migration guide, so unmigrated
-// components keep working. Phase 6 deletes them.
+// Only Ewe names live here (design/system/guidelines/40-implementation.md).
+// The Fluent names the shell used before v3 (bg1, fg2, brandBg, radiusControl,
+// fsBody, barIconPx …) are gone; 20-migration.md and the "Theme.qml today →
+// Ewe" table in the implementation guide say what each became.
 QtObject {
     id: t
 
@@ -479,176 +481,20 @@ QtObject {
     // Never wrap a control-* token in it: those have grown already.
     function grow(px) { return Math.round(px * textScale / 100) }
 
-    // Corner scaler for the one-off radii components still carry (a 7px chip,
-    // a 9px thumbnail): `corner = "none"` collapses them all. Use it instead
-    // of a literal:  radius: Theme.r(8). TRUE CIRCLES are geometry, not radii
-    // — an avatar written as `width: 38; height: 38; radius: 19` keeps its
-    // literal, or it would fight the user's avatarShape preference.
+    // Corner scaler for a radius built from tokens — a surface concentric
+    // with the one around it, say:  radius: Theme.r(Theme.radiusRounded +
+    // Theme.spaceXs). `corner = "none"` collapses it to 0 with the ramp.
+    // TRUE CIRCLES are geometry, not radii (radius: width / 2), or they
+    // would fight the user's avatarShape preference.
     function r(n) { return brutalist ? 0 : n }
     // The radius an overlay needs to stay concentric with a container of
     // radius n once it has been inset by the rule it must not cover.
     function rIn(n, inset) {
-        var i = (inset === undefined) ? hoverInset : inset
+        // default: inset by the rule it must not cover, never 0, or a
+        // hover fill kisses a divider
+        var i = (inset === undefined) ? Math.max(1, borderWidth1) : inset
         return brutalist ? 0 : Math.max(0, r(n) - i)
     }
-
-    // ══ FLUENT NAMES (Migration guide) ════════════════════════════════════
-    // Every name the components used before the design system, pointing at
-    // its Ewe role so the shell keeps working while Phase 4 restyles it file
-    // by file. Phase 6 deletes this whole block — add nothing here.
-
-    // Backgrounds: six levels collapse onto four surfaces.
-    readonly property color bg1:         surfaceRaised
-    readonly property color bg1Hover:    surfaceHover
-    readonly property color bg1Pressed:  surfacePressed
-    readonly property color bg1Selected: accentSubtle
-    readonly property color bg2:         surfaceBase
-    readonly property color bg2Hover:    surfaceHover
-    readonly property color bg2Pressed:  surfacePressed
-    readonly property color bg2Selected: accentSubtle
-    readonly property color bg3:         surfaceBase
-    readonly property color bg3Hover:    surfaceHover
-    readonly property color bg3Pressed:  surfacePressed
-    readonly property color bg3Selected: accentSubtle
-    readonly property color bg4:         surfaceSunken
-    readonly property color bg4Hover:    surfaceHover
-    readonly property color bg4Pressed:  surfacePressed
-    readonly property color bg4Selected: accentSubtle
-    readonly property color bg5:         surfaceSunken
-    readonly property color bg5Hover:    surfaceHover
-    readonly property color bg5Pressed:  surfacePressed
-    readonly property color bg5Selected: accentSubtle
-    readonly property color bg6:         surfaceOverlay
-    readonly property color bgDisabled:  surfaceRaised
-
-    readonly property color card:         surfaceRaised
-    readonly property color cardHover:    surfaceHover
-    readonly property color cardPressed:  surfacePressed
-    readonly property color cardSelected: accentSubtle
-
-    readonly property color subtle:         "transparent"
-    readonly property color subtleHover:    surfaceHover
-    readonly property color subtlePressed:  surfacePressed
-    readonly property color subtleSelected: accentSubtle
-
-    readonly property color stroke1:          borderStrong
-    readonly property color stroke1Hover:     textMuted
-    readonly property color stroke1Pressed:   borderStrong
-    readonly property color stroke1Selected:  accentText
-    readonly property color stroke2:          borderSubtle
-    readonly property color stroke3:          borderSubtle
-    readonly property color strokeAccessible: borderStrong
-    readonly property color strokeDisabled:   borderSubtle
-    readonly property color strokeFocus1:     "transparent"   // removed: one ring, focusRing
-    readonly property color strokeFocus2:     focusRing
-
-    readonly property color fg1:        textPrimary
-    readonly property color fg2:        textSecondary
-    readonly property color fg2Hover:   textPrimary
-    readonly property color fg3:        textMuted
-    readonly property color fg3Hover:   textPrimary
-    readonly property color fg4:        textMuted
-    readonly property color fgDisabled: textDisabled
-    readonly property color fgInverted: onAccent
-    readonly property color fgOnBrand:  onAccent
-
-    readonly property color brandBg:                accent
-    readonly property color brandBgHover:           accentHover
-    readonly property color brandBgPressed:         accentPressed
-    readonly property color brandBgSelected:        accentPressed
-    readonly property color brandFg1:               accentText
-    readonly property color brandFg2:               accentText
-    readonly property color brandFgLink:            accentText
-    readonly property color brandFgLinkHover:       accentText
-    readonly property color brandStroke1:           focusRing
-    readonly property color brandStroke2:           ewellow900
-    readonly property color compoundBrandBg:        accent
-    readonly property color compoundBrandBgHover:   accentHover
-    readonly property color compoundBrandBgPressed: accentPressed
-    readonly property color compoundBrandFg:        accentText
-    readonly property color compoundBrandStroke:    focusRing
-    // a FILLED accent control and the ink on it
-    readonly property color accentFill: accent
-    readonly property color accentOn:   onAccent
-    // interactive: `link` reads on the ground, `linkSolid` is a fill
-    readonly property color link:      accentText
-    readonly property color linkSolid: accent
-
-    readonly property color successBg:     successSubtle
-    readonly property color successBorder: success
-    readonly property color warningBg:     warningSubtle
-    readonly property color warningBorder: warning
-    readonly property color dangerBg:      dangerSubtle
-    readonly property color dangerBorder:  danger
-    readonly property color infoBg:        infoSubtle
-    readonly property color infoBorder:    info
-
-    // Elevation's colour. A dim backdrop behind a dialog wants `scrim`
-    // instead — Phase 4 moves those call sites.
-    readonly property color shadow: _get(shadowFloat, "color", "#59000000")
-
-    // ── Bar & dock surfaces ───────────────────────────────────────────────
-    // Glass applies to the bar, the dock and the lock card only; every other
-    // panel stays solid, which is what keeps Quick settings and the launcher
-    // legible over a bright wallpaper.
-    readonly property color panel:       surfaceRaised
-    readonly property color barTop:      barGround
-    readonly property color barBottom:   barGround
-    readonly property color barFill:     barGround
-    readonly property color barBorder:   barOutline
-    readonly property color dockFill:    dockGround
-    readonly property color dockStroke:  dockOutline
-    // A bar module has no fill until you point at it; an OPEN one reads as
-    // pressed (the Bar card), not as selected.
-    readonly property color barHover:    barHoverFill
-    readonly property color barActive:   barPressedFill
-    readonly property int barItemRadius: radiusPrimary
-    readonly property int barItemHeight: barModule
-    // ONE rhythm for every glyph on the bar — status, tray apps, the tiling
-    // switch, Komble, plugin widgets: a barIconPx glyph centred in a
-    // barCellPx cell, barItemSpacing between cells. trayIconPx /
-    // trayItemSpacing are the same numbers under the names the plugin
-    // contract uses.
-    readonly property int barIconPx:       barIcon
-    readonly property int barCellPx:       barIconPx + spaceXxs
-    readonly property int trayIconPx:      barIconPx
-    readonly property int barItemSpacing:  spaceXs
-    readonly property int trayItemSpacing: spaceXs
-    readonly property int barItemPad:      spaceS
-
-    // ── Type (legacy names) ───────────────────────────────────────────────
-    readonly property string fontText:    fontSans
-    readonly property string fontDisplay: fontSans
-    readonly property int fsSmall: fontSizeS
-    readonly property int fsBody:  fontSizeMd
-    readonly property int fsLarge: fontSizeLg
-    readonly property int fsTitle: fontSize2xl
-    // NEVER uppercase: Qt would turn Georgian Mkhedruli into Mtavruli. Small
-    // capitalised group headers are the `overline` style, which carries the
-    // letter spacing and leaves the letters alone.
-    readonly property int labelCaps:      Font.MixedCase
-    readonly property real labelTracking: type.overline.letterSpacing
-    readonly property int labelWeight:    fontWeightMedium
-
-    // ── Metrics (legacy names) ────────────────────────────────────────────
-    readonly property int radius:        radiusRounded
-    readonly property int radiusInner:   radiusPrimary
-    readonly property int radiusControl: radiusPrimary
-    readonly property int radiusPill:    radiusFull
-    readonly property int outline:     borderWidth1
-    readonly property int border:      borderWidth1
-    readonly property int borderThin:  borderWidth1
-    readonly property int hairline:    borderWidth1
-    readonly property color cardStroke: borderSubtle
-    readonly property int cardBorder:   borderWidth1
-    // An overlay is inset by the rule it must not cover; the inset is a
-    // border width, never 0, or a hover fill kisses a divider.
-    readonly property int hoverInset:   Math.max(1, borderWidth1)
-    readonly property int shadowOffset: 0                      // removed: no offset shadows
-    readonly property int pad:           spaceS + spaceXs      // 12
-    readonly property int gap:           spaceS
-    readonly property int rowHeight:     controlMd
-    readonly property int controlHeight: controlMd
 
     // ── Icons — the SINGLE glyph table. Every component
     //    pulls its glyphs from here with font.family: Theme.fontIcons, so the
