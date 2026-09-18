@@ -25,7 +25,11 @@
 # Fluent aliases, --bar-alpha) are not. The type styles are checked as
 # classes (.body, .label …): size, line height, weight, tracking, italic.
 #
-# Nothing is tolerated. The light scrim and light shadows are the scheme's
+# One token is tolerated: --bar-height-lg. The owner's bar model
+# (2026-09-18) makes the bar its icons plus space-s above and below, so the
+# large bar is control-xl + 2 x space-s = 56, not the sheet's 64 (the
+# retired v3 large bar); tokens.json is left as published. Nothing else is
+# tolerated. The light scrim and light shadows are the scheme's
 # darkest ink (base05, #0b0a08) where the sheet writes rgba(20, 16, 8, a):
 # 9/255 apart in red, which at 32% (scrim) and 8-10% (shadows) is under
 # 3/255 on screen — inside the tolerance above. The engine keeps one ink
@@ -55,7 +59,7 @@ python3 - "$SPEC" "$SB/dark.css" "$SB/light.css" <<'PY' || exit 1
 import json, re, sys
 spec_path, dark_css, light_css = sys.argv[1:4]
 TOL, ATOL = 4, 0.02
-TOLERATED = set()                 # see the header: nothing is
+TOLERATED = {("dark", "--bar-height-lg"), ("light", "--bar-height-lg")}   # see the header
 spec = json.load(open(spec_path))
 
 def block(path, sel):

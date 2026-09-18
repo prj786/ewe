@@ -49,10 +49,13 @@ Settings can hide the tray, tiling, keyboard, sound, mic, network, Bluetooth, po
 - A dot (8px) marks "something new" without a number, as on the phone indicator.
 
 ## Sizes
-| Size | Bar | Modules | Glyphs | Text |
+The bar's size follows its icons (`[desktop.bar] icon_size`). It has no height of its own: it is its content plus `space-s` above and below, so taller content (a larger text size, Georgian) makes it taller. Text size 130% moves the icons one size up.
+
+| Icon size | Bar | Modules | Glyphs | Text |
 | --- | --- | --- | --- | --- |
-| Default | `bar-height` 48px | `control-lg` 32px | `icon-lg` 20px | 13px, 12px for layout and % |
-| Large | `bar-height-lg` 64px | `control-xl` 40px | `icon-xl` 24px | 15px, 13px |
+| Small | 44px | `control-md` 28px | `icon-md` 16px | 13px, 12px for layout and % |
+| Normal (default) | `bar-height` 48px | `control-lg` 32px | `icon-lg` 20px | 13px, 12px for layout and % |
+| Large | `bar-height-lg` 56px | `control-xl` 40px | `icon-xl` 24px | 15px, 13px |
 
 ## Module states
 | State | Look |
@@ -75,4 +78,4 @@ Settings can hide the tray, tiling, keyboard, sound, mic, network, Bluetooth, po
 - Each module is a button named with its state (“Battery, 72 percent, charging”, “Updates, 12 available”). Indicators that only show while they apply are announced when they appear.
 
 ## What a build provides
-`screen` · `size` · `opacity` · `visible` · `show` (per-module) · `plugins` (start, center, end) · `onModuleClick`.
+`screen` · `iconSize` · `opacity` · `visible` · `show` (per-module) · `plugins` (start, center, end) · `onModuleClick`.

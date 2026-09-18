@@ -82,7 +82,7 @@ def _scalar(v):
 SECTION_NOTES = {
     "desktop": "everything the Settings surfaces manage",
     "desktop.theme": "scheme + accent + look presets (corner/density/stroke) + bar_opacity; every token is derived by ewe-theme",
-    "desktop.bar": "the top bar: size = normal (48px) | large (64px); show = per-indicator visibility",
+    "desktop.bar": "the top bar: icon_size = small | normal | large (the bar is its icons plus padding: 44 / 48 / 56px); show = per-indicator visibility",
     "desktop.accessibility": "reduce_motion, reduce_transparency, increase_contrast (bools); text_scale = 100 | 115 | 130",
     "desktop.dock": "the bottom dock (autohide = intelligent hide)",
     "desktop.animations": "speed multiplies every duration; detail = per-leaf tuning",
@@ -285,10 +285,10 @@ THEME_MAP = [  # ewe.conf key ↔ user-theme.json key (with defaults)
     # the top bar (Settings → Layout → Top bar). `show` is a map of
     # indicator → bool; a missing key means shown, so {} is "everything"
     ("desktop.bar.enabled", "barEnabled", True),
+    # the bar's size follows its icons: small | normal | large (44 / 48 /
+    # 56px). The v3 `desktop.bar.size` is no longer written; ewe-theme still
+    # reads a `size = "large"` left in an older file as icon_size = large.
     ("desktop.bar.icon_size", "barIconSize", "normal"),
-    # v3: the bar is normal (48px, 32px modules) or large (64px, 40px);
-    # replaces icon_size, which ewe-theme still reads as a fallback
-    ("desktop.bar.size", "barSize", "normal"),
     ("desktop.bar.show", "barShow", {}),
     # accessibility modes (design/system/components/AccessibilityModes):
     # role remaps applied by ewe-theme; reduce_transparency also turns the
@@ -1788,7 +1788,6 @@ ENUMS = {
     "desktop.theme.corner": ("none", "small", "medium", "large", "round"),
     "desktop.theme.density": ("compact", "comfortable", "roomy"),
     "desktop.theme.stroke": ("none", "thin", "thick"),
-    "desktop.bar.size": ("normal", "large"),
     "desktop.bar.icon_size": ("small", "normal", "large"),
     "desktop.dock.icon_size": ("small", "medium", "large"),
     "desktop.accessibility.text_scale": (100, 115, 130),

@@ -2581,15 +2581,15 @@ Scope {
                     SectionTitle { text: "Bar and dock" }
                     Card {
                         SetRow {
-                            glyph: root.g(0xE435); title: "Bar size"
-                            desc: Number(root.tokIn("text_scale", 100)) >= 130 ? "Text size 130% uses the large bar." : "Normal is 48 pixels tall, large 64."
-                            dim: Number(root.tokIn("text_scale", 100)) >= 130
+                            glyph: root.g(0xE435); title: "Bar icons"
+                            desc: Number(root.tokIn("text_scale", 100)) >= 130
+                                  ? "The bar is as tall as its icons. Text size 130% makes them one size larger."
+                                  : "The bar is as tall as its icons: 44, 48 or 56 pixels."
                             Seg {
                                 anchors.verticalCenter: parent.verticalCenter
-                                dim: Number(root.tokIn("text_scale", 100)) >= 130
-                                options: [{ label: "Normal", value: "normal" }, { label: "Large", value: "large" }]
-                                value: root.tokIn("bar_size", "normal")
-                                onPicked: function (v) { root.confSet("desktop.bar.size", v) }
+                                options: [{ label: "Small", value: "small" }, { label: "Normal", value: "normal" }, { label: "Large", value: "large" }]
+                                value: root.tokIn("bar_icon_size", "normal")
+                                onPicked: function (v) { root.confSet("desktop.bar.icon_size", v) }
                             }
                         }
                         Divider {}

@@ -101,7 +101,7 @@ DEFAULTS = {"accent": "#eeb407", "scheme": "ewe-dark", "corner": "medium",
             # reported but changes nothing. It stays so old confs round-trip.
             "neutral_tint": 8,
             "bar_opacity": 100, "app_blur": False, "window_transparency": False,
-            "bar_size": "normal", "reduce_motion": False, "reduce_transparency": False,
+            "bar_icon_size": "normal", "reduce_motion": False, "reduce_transparency": False,
             "increase_contrast": False, "text_scale": 100, "speed": 1}
 # bar_opacity: how solid the TOP BAR, DOCK and LOCK CARD are, 0 … 100 (the
 # default). Below 100 they are Glass: the compositor blurs what is behind
@@ -413,12 +413,23 @@ STROKE = {"none": (0, 2), "thin": (1, 2), "thick": (2, 3)}
 FOCUS_WIDTH = 1             # 2 under Increase contrast
 FIELD_BORDER_WIDTH = 1      # fields/checkboxes/switches keep an outline at stroke = none
 SIZES = {"control-sm": 24, "control-xl": 40, "control-2xl": 48,
-         "bar-height": 48, "bar-height-lg": 64,
          "icon-xs": 12, "icon-sm": 14, "icon-md": 16, "icon-lg": 20, "icon-xl": 24,
          "icon-2xl": 32, "icon-3xl": 48, "icon-4xl": 64,
          "panel-sm": 360, "panel-md": 400, "panel-lg": 560, "window-gap": 8, "blur-glass": 24}
-BAR = {"normal": {"height": "bar-height", "module": "control-lg", "icon": "icon-lg"},
-       "large": {"height": "bar-height-lg", "module": "control-xl", "icon": "icon-xl"}}
+# The top bar (owner's model, 2026-09-18): its size follows its ICONS.
+# [desktop.bar] icon_size small | normal | large picks the glyph and the
+# module it sits in; the bar has no height of its own — it is its content
+# plus space-s above and below, so 44 / 48 / 56 (the shell grows it further
+# when its content is taller, e.g. a larger text size or Georgian). The
+# modules do not follow density: the bar has its own size setting (Look
+# presets). Text size 130% moves icon_size one step up. The v3
+# `[desktop.bar] size = large` is still read, as icon_size = large.
+BAR_STEPS = ("small", "normal", "large")
+BAR = {"small": ("control-md", "icon-md"), "normal": ("control-lg", "icon-lg"),
+       "large": ("control-xl", "icon-xl")}
+BAR_MODULE = {"control-md": DENSITY["comfortable"][0], "control-lg": DENSITY["comfortable"][1],
+              "control-xl": SIZES["control-xl"]}
+BAR_PAD = "space-s"
 TEXT_SCALES = (100, 115, 130)
 # shadow: (x, y, blur) and the alpha per variant. The colour is derived
 # (shadow_color): `black` in the dark, the scheme's darkest ink in the light.
@@ -659,10 +670,12 @@ def read_conf(path=None):
         if k in t:
             cfg[k] = t[k]
     bar = desk.get("bar") if isinstance(desk.get("bar"), dict) else {}
-    if bar.get("size") in BAR:
-        cfg["bar_size"] = bar["size"]
-    elif bar.get("icon_size") == "large":
-        cfg["bar_size"] = "large"          # the pre-v3 key, as a fallback
+    if bar.get("icon_size") in BAR:
+        cfg["bar_icon_size"] = bar["icon_size"]
+    # the v3 `size = large` (no longer written) reads as icon_size = large
+    # unless icon_size says something other than the default
+    if bar.get("size") == "large" and cfg["bar_icon_size"] == "normal":
+        cfg["bar_icon_size"] = "large"
     a11y = desk.get("accessibility") if isinstance(desk.get("accessibility"), dict) else {}
     for k in ("reduce_motion", "reduce_transparency", "increase_contrast"):
         cfg[k] = _truthy(a11y.get(k), False)
@@ -1003,7 +1016,9 @@ def tokens(cfg):
 
     # ── sizes, with Text size scaling the type scale ───────────────────────
     ts = cfg["text_scale"]
-    bar_size = "large" if ts == 130 else cfg["bar_size"]
+    bar_step = cfg["bar_icon_size"] if cfg["bar_icon_size"] in BAR else "normal"
+    if ts == 130:                      # Text size 130%: the icons one step up
+        bar_step = BAR_STEPS[min(BAR_STEPS.index(bar_step) + 1, len(BAR_STEPS) - 1)]
     size = {}
     for k, v in FONT_SIZE.items():
         size["font-size-" + k] = _scale(v, ts)
@@ -1013,12 +1028,20 @@ def tokens(cfg):
         size["space-" + k] = v
     size.update({"control-sm": SIZES["control-sm"], "control-md": ctrl_md, "control-lg": ctrl_lg,
                  "control-xl": SIZES["control-xl"], "control-2xl": SIZES["control-2xl"]})
-    for k in ("bar-height", "bar-height-lg", "icon-xs", "icon-sm", "icon-md", "icon-lg", "icon-xl",
+    for k in ("icon-xs", "icon-sm", "icon-md", "icon-lg", "icon-xl",
               "icon-2xl", "icon-3xl", "icon-4xl", "panel-sm", "panel-md", "panel-lg", "window-gap",
               "blur-glass"):
         size[k] = SIZES[k]
-    bar = {"size": bar_size, "height": size[BAR[bar_size]["height"]],
-           "module": size[BAR[bar_size]["module"]], "icon": size[BAR[bar_size]["icon"]]}
+    # the bar's heights are derived: module + space-s above and below.
+    # bar-height is the normal bar (48), bar-height-lg the large one (56 —
+    # tokens.json's 64 is the retired v3 large bar)
+    pad = size[BAR_PAD]
+    size["bar-height"] = BAR_MODULE[BAR["normal"][0]] + 2 * pad
+    size["bar-height-lg"] = BAR_MODULE[BAR["large"][0]] + 2 * pad
+    b_mod, b_ico = BAR[bar_step]
+    bar = {"icon_size": bar_step, "size": bar_step,
+           "height": BAR_MODULE[b_mod] + 2 * pad, "module": BAR_MODULE[b_mod],
+           "icon": size[b_ico], "padding": pad}
 
     # ── type: families, weights, tracking and the styles ───────────────────
     styles = {}
@@ -1065,7 +1088,7 @@ def tokens(cfg):
     a11y = {k: cfg[k] for k in ("reduce_motion", "reduce_transparency", "increase_contrast", "text_scale")}
     inp = {k: cfg[k] for k in ("accent", "scheme", "scheme_name", "scheme_slug", "variant", "corner",
                                "density", "stroke", "neutral_tint", "bar_opacity", "app_blur",
-                               "window_transparency", "bar_size", "reduce_motion",
+                               "window_transparency", "bar_icon_size", "reduce_motion",
                                "reduce_transparency", "increase_contrast", "text_scale", "speed")}
     t = {"input": inp, "color": color, "alpha": alpha, "shape": shape, "size": size,
          "type": typ, "motion": motion, "opacity": opacity, "shadow": shadow,

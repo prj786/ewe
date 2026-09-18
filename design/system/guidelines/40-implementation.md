@@ -386,7 +386,7 @@ This guide is for whoever updates the Ewe repositories to match this design syst
 | `[desktop.theme] stroke` | `thin` | `none` · `thin` · `thick`. Was `none`. |
 | `[desktop.theme] bar_opacity` | `100` | 0–100. The Glass preset is 80 (was 72). Settings warns below 80. |
 | `[desktop.theme] app_blur`, `window_transparency` | `false` | Unchanged; windows use `opacity-app` and `opacity-inactive`. |
-| `[desktop.bar] size` | `normal` | New: `normal` (48) · `large` (64). Replaces `icon_size`. |
+| `[desktop.bar] icon_size` | `normal` | `small` · `normal` · `large`. The bar is its icons plus `space-s` above and below (44 / 48 / 56). The v3 `size` key is no longer written; `size = large` still reads as `large`. |
 | `[desktop.dock] icon_size` | `medium` | `small` (40) · `medium` (48) · `large` (64). |
 | `[desktop.accessibility] reduce_motion` | `false` | New. |
 | `[desktop.accessibility] reduce_transparency` | `false` | New. |

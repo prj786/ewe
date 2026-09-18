@@ -60,7 +60,7 @@ assert d[\"motion\"][\"durFast\"]==150 and d[\"motion\"][\"durBase\"]==200 and d
 assert d[\"motion\"][\"easing\"][\"slow\"]==\"InOutCubic\"
 assert d[\"type\"][\"styles\"][\"body\"][\"size\"]==13 and d[\"type\"][\"styles\"][\"h1\"][\"weight\"]==600 and d[\"type\"][\"styles\"][\"mono\"][\"family\"]==\"mono\"
 assert d[\"type\"][\"sans\"][0]==\"Geist\"
-assert d[\"bar\"]=={\"size\":\"normal\",\"height\":48,\"module\":32,\"icon\":20}, d[\"bar\"]
+assert d[\"bar\"]=={\"icon_size\":\"normal\",\"size\":\"normal\",\"height\":48,\"module\":32,\"icon\":20,\"padding\":8}, d[\"bar\"]
 assert d[\"shadow\"][\"shadow-float\"][\"y\"]==2 and d[\"gradient\"][\"gradient-ember\"][\"css\"].startswith(\"linear-gradient(160deg\")
 assert d[\"scheme\"][\"slug\"]==\"ewe-dark\" and d[\"scheme\"][\"builtin\"] and d[\"scheme\"][\"palette\"][\"base00\"]==\"#0b0a08\"
 assert d[\"adjusted\"]==[], d[\"adjusted\"]
@@ -191,7 +191,7 @@ assert d[\"shadow\"][\"shadow-float\"][\"color\"].endswith(\"020202\")
 '"
 check "corner = round maps to large (6/8/12/16)" "[ \"$(echo "$show" | inp corner)\" = large ] && [ \"$(echo "$show" | shape slight)\" = 6 ] && [ \"$(echo "$show" | shape primary)\" = 12 ] && [ \"$(echo "$show" | shape rounded)\" = 16 ] && [ \"$(echo "$show" | shape radius-control)\" = 12 ]"
 check "stroke = none: outlines 0, hairlines (stroke-width alias) and field outlines stay 1, thick 2" "[ \"$(echo "$show" | shape border-width-1)\" = 0 ] && [ \"$(echo "$show" | shape outline-width)\" = 0 ] && [ \"$(echo "$show" | shape stroke-width)\" = 1 ] && [ \"$(echo "$show" | shape field-border-width)\" = 1 ] && [ \"$(echo "$show" | shape border-width-2)\" = 2 ]"
-check "bar icon_size = large is read as the large bar" "echo '$show' | jq_ 'd[\"bar\"][\"height\"]' | grep -qx 64 && echo '$show' | jq_ 'd[\"bar\"][\"icon\"]' | grep -qx 24"
+check "bar icon_size = large is the large bar: 40 modules, 24 glyphs, 56 tall" "echo '$show' | jq_ 'd[\"bar\"][\"height\"]' | grep -qx 56 && echo '$show' | jq_ 'd[\"bar\"][\"icon\"]' | grep -qx 24"
 $T scheme --no-hooks apply accent >/dev/null
 check "apply accent writes ewe-dark" "grep -q 'scheme = \"ewe-dark\"' '$CONF'"
 
@@ -465,7 +465,7 @@ C
 show="$($T show)"
 check "corner small / density roomy / stroke thick" "[ \"$(echo "$show" | shape primary)\" = 4 ] && [ \"$(echo "$show" | shape rounded)\" = 6 ] && [ \"$(echo "$show" | size control-md)\" = 32 ] && [ \"$(echo "$show" | size control-lg)\" = 40 ] && [ \"$(echo "$show" | shape border-width-1)\" = 2 ] && [ \"$(echo "$show" | shape border-width-2)\" = 3 ] && [ \"$(echo "$show" | shape focus-width)\" = 1 ] && [ \"$(echo "$show" | shape field-border-width)\" = 2 ]"
 check "presets never touch colours" "[ \"$(echo "$show" | role surface-raised)\" = '#151411' ]"
-check "bar size large: 64 / 40 / 24" "echo '$show' | jq_ 'd[\"bar\"]' | grep -q \"'height': 64, 'module': 40, 'icon': 24\""
+check "the v3 bar size = large still reads as icon_size large: 56 / 40 / 24, density ignored" "echo '$show' | jq_ 'd[\"bar\"]' | grep -q \"'height': 56, 'module': 40, 'icon': 24\""
 check "Glass at 80: glass roles carry the alpha, blur on, bar_alpha 0.8" "echo '$show' | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d[\"surface\"][\"bar_alpha\"]==0.8 and d[\"surface\"][\"blur\"] and d[\"surface\"][\"glass\"]; assert d[\"alpha\"][\"glass-base\"]==0.8 and d[\"alpha\"][\"glass-border\"]==0.1 and d[\"alpha\"][\"glass-pressed\"]==0.14; assert d[\"color\"][\"glass-border\"]==\"#fefdfc\"; assert d[\"css_vars\"][\"--glass-base\"]==\"rgba(11, 10, 8, 0.8)\" and d[\"css_vars\"][\"--bg-3-bar\"]==\"rgba(11, 10, 8, 0.8)\"'"
 cat > "$CONF" <<'C'
 schema = 1
@@ -494,7 +494,7 @@ C
 show="$($T show)"
 check "reduce transparency: bar solid, no blur, app blur and window transparency off" "echo '$show' | python3 -c 'import json,sys; d=json.load(sys.stdin); s=d[\"surface\"]; assert s[\"bar_alpha\"]==1.0 and not s[\"blur\"] and not s[\"app_blur\"] and s[\"app_alpha\"]==1.0 and s[\"inactive_alpha\"]==1.0 and s[\"solid\"]; assert d[\"color\"][\"glass-base\"]==d[\"color\"][\"surface-base\"] and d[\"color\"][\"glass-hover\"]==d[\"color\"][\"surface-hover\"]'"
 check "reduce motion + speed 2: durations halved, then base/slow become fast fades, no slide" "echo '$show' | python3 -c 'import json,sys; d=json.load(sys.stdin); m=d[\"motion\"]; assert m[\"durFast\"]==75 and m[\"durBase\"]==75 and m[\"durSlow\"]==75 and m[\"durDim\"]==750 and m[\"reduceMotion\"] and m[\"slideOffset\"]==0, m'"
-check "text size 130: the type scale grows, styles follow, the bar goes large, sizes stay" "[ \"$(echo "$show" | size font-size-md)\" = 17 ] && [ \"$(echo "$show" | size line-height-md)\" = 23 ] && [ \"$(echo "$show" | size fs-body)\" = 17 ] && echo '$show' | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d[\"type\"][\"styles\"][\"body\"][\"size\"]==17 and d[\"type\"][\"scale\"]==130; assert d[\"bar\"][\"height\"]==64; assert d[\"size\"][\"control-md\"]==28'"
+check "text size 130: the type scale grows, styles follow, the bar icons go one step up (normal → large, 56), sizes stay" "[ \"$(echo "$show" | size font-size-md)\" = 17 ] && [ \"$(echo "$show" | size line-height-md)\" = 23 ] && [ \"$(echo "$show" | size fs-body)\" = 17 ] && echo '$show' | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d[\"type\"][\"styles\"][\"body\"][\"size\"]==17 and d[\"type\"][\"scale\"]==130; assert d[\"bar\"][\"height\"]==56 and d[\"bar\"][\"icon_size\"]==\"large\"; assert d[\"size\"][\"control-md\"]==28'"
 cat > "$CONF" <<'C'
 schema = 1
 [desktop.animations]
@@ -540,7 +540,7 @@ bin/ewe-conf set --no-hooks desktop.theme.scheme '"gruvbox-dark-medium"' >/dev/n
 check "ewe-conf: user-theme.json says scheme, window border = the scheme accent" "grep -q '\"scheme\": \"gruvbox-dark-medium\"' '$SB/cfg/quickshell/user-theme.json' && grep -q 'active_border = \"rgba(fe8019ff)\"' '$SB/cfg/hypr/generated/user.lua'"
 bin/ewe-conf set --no-hooks desktop.theme.scheme '"ewe-dark"' >/dev/null
 check "ewe-conf: back to ewe-dark, border = desktop.theme.accent (ewellow by default)" "grep -q 'active_border = \"rgba(eeb407ff)\"' '$SB/cfg/hypr/generated/user.lua'"
-check "ewe-conf get: an unwritten v3 key answers its default" "[ \"$(bin/ewe-conf get desktop.theme.corner)\" = medium ] && [ \"$(bin/ewe-conf get desktop.bar.size)\" = normal ] && [ \"$(bin/ewe-conf get desktop.accessibility.text_scale)\" = 100 ] && [ \"$(bin/ewe-conf get desktop.accessibility.reduce_motion)\" = false ]"
+check "ewe-conf get: an unwritten v3 key answers its default" "[ \"$(bin/ewe-conf get desktop.theme.corner)\" = medium ] && [ \"$(bin/ewe-conf get desktop.bar.icon_size)\" = normal ] && [ \"$(bin/ewe-conf get desktop.accessibility.text_scale)\" = 100 ] && [ \"$(bin/ewe-conf get desktop.accessibility.reduce_motion)\" = false ]"
 r="$(bin/ewe-conf set --no-hooks desktop.theme.corner '"blob"' 2>&1 || true)"
 check "ewe-conf set: an unknown corner is refused, nothing written" "echo '$r' | grep -q 'bad-value' && ! grep -q 'blob' '$CONF'"
 r="$(bin/ewe-conf set --no-hooks desktop.accessibility.text_scale 120 2>&1 || true)"

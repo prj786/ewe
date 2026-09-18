@@ -225,7 +225,7 @@ Scope {
     }
 
     // ── a BAR MODULE (design system: Bar → Module states) ────────────────
-    // barModule tall (32, or 40 on the large bar), radiusPrimary, spaceS of
+    // barModule tall (28 / 32 / 40 by icon size), radiusPrimary, spaceS of
     // side padding, no fill until you point at it. Default glyphs are
     // textSecondary; hover takes surfaceHover and textPrimary, an open popup
     // surfacePressed — inside Glass those are the glass tints, which
@@ -256,8 +256,10 @@ Scope {
         signal tertiary()
         signal scrolled(real dy)
         implicitWidth: Math.max(Theme.barModule, inner.implicitWidth + 2 * si.padH)
-        implicitHeight: Theme.barModule
-        height: Theme.barModule
+        // barModule, or taller when its content is (a larger text size,
+        // Georgian) — the bar grows with it
+        implicitHeight: Math.max(Theme.barModule, inner.implicitHeight + 2 * Theme.spaceXxs)
+        height: implicitHeight
         Rectangle {
             anchors.fill: parent
             radius: Theme.radiusPrimary
@@ -329,8 +331,16 @@ Scope {
             visible: Globals.barVisible
             color: "transparent"
             // the strip plus its rule; nothing floats, so nothing needs room
-            // for a shadow (the Bar card gives the bar a line, not one)
+            // for a shadow (the Bar card gives the bar a line, not one). The
+            // strip is its content plus barPadding above and below: the rows
+            // report their height through Globals, and Theme.barHeight adds
+            // the padding (owner's bar model — the bar follows its icons).
             implicitHeight: Theme.barHeight + Theme.borderWidth1
+            Binding {
+                target: Globals; property: "barContentHeight"
+                value: Math.max(leftRow.implicitHeight, centerSlots.implicitHeight, rightRow.implicitHeight)
+                when: win.modelData === Quickshell.screens[0]
+            }
             exclusiveZone: Globals.barVisible ? Theme.barHeight : 0
             mask: Region { x: 0; y: 0; width: win.width; height: Theme.barHeight }
             WlrLayershell.namespace: "quickshell:bar"

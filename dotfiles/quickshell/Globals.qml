@@ -608,6 +608,9 @@ QtObject {
     // the Accent picker's presets [{name, hex, ink}] — the generator's list,
     // so Settings carries no colour of its own
     property var tokAccentPresets: []
+    // the tallest thing in the bar (its rows' implicit height), reported by
+    // Bar.qml: Theme.barHeight is this plus barPadding above and below
+    property int barContentHeight: 0
     // start-hyprland.sh exports EWE_NO_BLUR=1 in VMs and on NVIDIA, where the
     // compositor's blur is a known cost or glitch. Glass still applies there —
     // the fills stay translucent (Theme.barAlpha, the glass-* roles), only the
