@@ -85,10 +85,19 @@ Scope {
             // dock's sheep button (Launcher panel card, "Placement")
             readonly property int edgeGap: Theme.spaceS + Theme.spaceXs
             x: Math.max(edgeGap, Math.min(parent.width - width - edgeGap, Globals.launcherAnchorX - width / 2))
-            // the dock's own strip plus the card's spaceS + spaceXs gap above it
-            readonly property int dockGap: 90
+            // the dock's own strip (its items + spaceS padding each side,
+            // windowGap above the edge) plus the card's spaceS + spaceXs gap
+            // above it — follows the dock's size instead of a fixed 90
+            readonly property int dockGap: (Globals.dockIconSize === "small" ? Theme.controlXl
+                                          : Globals.dockIconSize === "large" ? Theme.barHeightLg : Theme.control2xl)
+                                         + 2 * Theme.spaceS + Theme.windowGap + edgeGap
+            // one grid tile, and a panel five rows tall, so the search field
+            // stays put while results come and go (the grid scrolls past it)
+            readonly property int tileH: Theme.controlXl + Theme.lineHeightXs + 2 * Theme.spaceS + Theme.spaceXs
+            readonly property int fullH: 2 * edgeGap + Theme.controlMd + 2 * edgeGap
+                                         + sectionTitle.implicitHeight + 5 * tileH + 4 * Theme.spaceXxs
             width: Theme.panelSm
-            height: Math.min(440, parent.height - dockGap - 2 * edgeGap)
+            height: Math.min(fullH, parent.height - dockGap - 2 * edgeGap)
             radius: Theme.radiusRounded
             color: Theme.surfaceRaised
             border.color: Theme.borderSubtle; border.width: Theme.borderWidth1
@@ -153,7 +162,7 @@ Scope {
                 }
 
                 // the card's own 12px gap, so the heading keeps no extra lead-in
-                SectionTitle { width: parent.width; first: true; text: root.query.trim() === "" ? "Pinned" : "Results" }
+                SectionTitle { id: sectionTitle; width: parent.width; first: true; text: root.query.trim() === "" ? "Pinned" : "Results" }
 
                 // ── empty states (design system: Empty state, compact) ──
                 Column {
@@ -236,7 +245,7 @@ Scope {
                                 id: tile
                                 required property var modelData
                                 width: grid.width / 4
-                                height: Theme.controlXl + Theme.lineHeightXs + 2 * Theme.spaceS + Theme.spaceXs
+                                height: box.tileH
                                 readonly property string did: (modelData.id || "") + (String(modelData.id).match(/\.desktop$/) ? "" : ".desktop")
                                 readonly property bool pinned: Globals.isPinned(tile.did)
                                 Rectangle {
@@ -265,14 +274,16 @@ Scope {
                                     }
                                 }
                                 MouseArea { id: tMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; acceptedButtons: Qt.LeftButton | Qt.MiddleButton; onClicked: function (mouse) { root.launch(tile.modelData, mouse.button === Qt.MiddleButton) } }
-                                // pin badge — top right, on hover; always on and
-                                // accent for a pinned app while searching
+                                // pin badge — top right, on hover; always on (and
+                                // accent) for a pinned app only while searching,
+                                // since every tile of the Pinned view is pinned
                                 Rectangle {
                                     anchors.right: parent.right; anchors.rightMargin: Theme.spaceS
                                     anchors.top: parent.top; anchors.topMargin: Theme.spaceXxs
                                     width: Theme.iconLg + Theme.spaceXxs; height: width
                                     radius: Theme.radiusFull
-                                    visible: tMa.containsMouse || pMa.containsMouse || tile.pinned
+                                    visible: tMa.containsMouse || pMa.containsMouse
+                                             || (tile.pinned && root.query.trim() !== "")
                                     color: tile.pinned ? Theme.accent : Theme.surfaceOverlay
                                     border.width: Theme.borderWidth1
                                     border.color: tile.pinned ? Theme.accent

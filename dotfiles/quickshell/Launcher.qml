@@ -342,9 +342,9 @@ Scope {
                                 radius: Theme.radiusPrimary
                                 // selection is a surface step, never an accent
                                 // fill: the row's own text has to stay readable
-                                color: row.sel ? Theme.surfaceHover
-                                     : rowMa.containsMouse ? Theme.surfaceHover : "transparent"
-                                opacity: row.sel ? 1 : (rowMa.containsMouse ? 0.55 : 1)
+                                // (pointing at a row selects it, so hover and the
+                                // keyboard selection are the same surfaceHover)
+                                color: row.sel || rowMa.containsMouse ? Theme.surfaceHover : "transparent"
                                 Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
                             }
                             Row {

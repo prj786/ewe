@@ -161,10 +161,17 @@ Scope {
             id: box
             focus: true
             readonly property int edgeGap: Theme.spaceS + Theme.spaceXs
-            readonly property int dockGap: 90
+            // the dock's own strip (items + spaceS padding, windowGap above
+            // the edge) plus the card's spaceS + spaceXs gap above it
+            readonly property int dockGap: (Globals.dockIconSize === "small" ? Theme.controlXl
+                                          : Globals.dockIconSize === "large" ? Theme.barHeightLg : Theme.control2xl)
+                                         + 2 * Theme.spaceS + Theme.windowGap + edgeGap
             x: Math.max(edgeGap, Math.min(parent.width - width - edgeGap, Globals.placesAnchorX - width / 2))
             width: Theme.panelMd
-            height: Math.min(470, parent.height - dockGap - 2 * edgeGap)
+            // at most panelMd + controlXl + spaceMd + spaceXs (a dozen rows)
+            // tall — what it has always been — and never past the screen
+            height: Math.min(Theme.panelMd + Theme.controlXl + Theme.spaceMd + Theme.spaceXs,
+                             parent.height - dockGap - 2 * edgeGap)
             // a fade plus a short rise from its own edge; Reduce motion zeroes
             // the offset through Theme.slideOffset, leaving the fade
             y: Math.max(edgeGap, parent.height - height - dockGap)
@@ -209,17 +216,20 @@ Scope {
             component IconBtn: Rectangle {
                 property string glyph: ""
                 property bool enabledState: true
+                property bool selected: false      // a selected ghost button: accentSubtle, accentText glyph
                 signal act()
                 width: Theme.controlMd; height: Theme.controlMd
                 radius: Theme.radiusPrimary
                 color: !enabledState ? "transparent"
+                     : selected ? Theme.accentSubtle
                      : ibMa.pressed ? Theme.surfacePressed
                      : ibMa.containsMouse ? Theme.surfaceHover : "transparent"
                 Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
                 Text {
                     anchors.centerIn: parent; text: parent.glyph
                     font.family: Theme.fontIcons; font.pixelSize: Theme.iconMd
-                    color: parent.enabledState ? Theme.textPrimary : Theme.textDisabled
+                    color: !parent.enabledState ? Theme.textDisabled
+                         : parent.selected ? Theme.accentText : Theme.textPrimary
                 }
                 MouseArea { id: ibMa; anchors.fill: parent; hoverEnabled: true; enabled: parent.enabledState; cursorShape: Qt.PointingHandCursor; onClicked: parent.act() }
             }
@@ -323,13 +333,14 @@ Scope {
                     width: parent.width; height: Theme.controlMd; spacing: Theme.spaceXs
                     IconBtn { glyph: Theme.icBack; enabledState: root.cwd !== "/" && root.cwd !== ""; anchors.verticalCenter: parent.verticalCenter; onAct: root.enter(root.parentOf(root.cwd)) }
                     IconBtn { glyph: Theme.icHome; anchors.verticalCenter: parent.verticalCenter; onAct: root.enter(root.home) }
-                    // the path, read-only: transparent fill, borderSubtle
+                    // the path in a small field: the Text field box (sunken,
+                    // borderStrong), Geist Mono 12px (Places card #2)
                     Rectangle {
                         width: parent.width - 3 * Theme.controlMd - 3 * Theme.spaceXs
                         height: Theme.controlMd; radius: Theme.radiusPrimary
                         anchors.verticalCenter: parent.verticalCenter
                         color: Theme.surfaceSunken
-                        border.color: Theme.borderSubtle; border.width: Theme.fieldBorderWidth
+                        border.color: Theme.borderStrong; border.width: Theme.fieldBorderWidth
                         Text {
                             anchors.left: parent.left; anchors.right: parent.right
                             anchors.leftMargin: Theme.spaceS; anchors.rightMargin: Theme.spaceS
@@ -340,12 +351,19 @@ Scope {
                             elide: Text.ElideLeft
                         }
                     }
-                    IconBtn { glyph: (Globals.isPinnedPlace(root.cwd) ? Theme.icStar : Theme.icPin); enabledState: root.cwd !== ""; anchors.verticalCenter: parent.verticalCenter; onAct: Globals.togglePinPlace(root.cwd) }
+                    IconBtn { glyph: (Globals.isPinnedPlace(root.cwd) ? Theme.icStar : Theme.icPin); selected: Globals.isPinnedPlace(root.cwd); enabledState: root.cwd !== ""; anchors.verticalCenter: parent.verticalCenter; onAct: Globals.togglePinPlace(root.cwd) }
                 }
 
                 Flickable {
+                    id: list
                     width: parent.width; height: parent.height - y
                     contentHeight: col.implicitHeight; clip: true; boundsBehavior: Flickable.StopAtBounds
+                    // keep the keyboard selection on screen
+                    function reveal(row) {
+                        var y = row.mapToItem(col, 0, 0).y
+                        if (y < contentY) contentY = y
+                        else if (y + row.height > contentY + height) contentY = y + row.height - height
+                    }
                     Column {
                         id: col
                         width: parent.width; spacing: Theme.spaceXxs
@@ -355,9 +373,11 @@ Scope {
                         Repeater {
                             model: (Globals.pinnedPlaces || [])
                             delegate: FsRow {
+                                id: pinRow
                                 required property var modelData
                                 required property int index
                                 width: col.width
+                                onRSelectedChanged: if (rSelected) list.reveal(pinRow)
                                 rName: root.baseName(modelData); rPath: modelData
                                 rIsDir: root.pinTypes[modelData] === true; rPinned: true
                                 rSelected: root.sel === index
@@ -370,9 +390,11 @@ Scope {
                         Repeater {
                             model: root.entries
                             delegate: FsRow {
+                                id: entRow
                                 required property var modelData
                                 required property int index
                                 width: col.width
+                                onRSelectedChanged: if (rSelected) list.reveal(entRow)
                                 rName: modelData.name; rPath: modelData.path
                                 rIsDir: modelData.isDir; rSize: modelData.isDir ? -1 : modelData.size
                                 rSelected: root.sel === (Globals.pinnedPlaces || []).length + index
