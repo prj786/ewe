@@ -328,8 +328,9 @@ QtObject {
     // ── User-chosen accent colour ─────────────────────────────────────────────
     // Single mutable source the Settings → Theme pane writes; Theme.accent binds to
     // it so the whole shell recolours live. Persisted to ~/.config/quickshell/
-    // user-theme.json and re-read here at startup (default = system blue).
-    property color accentColor: "#eeb407"
+    // user-theme.json and re-read here at startup. Until someone picks one it
+    // is the accent the token file was built from (no colour of its own here).
+    property color accentColor: (g.tokColor && g.tokColor["accent"]) ? g.tokColor["accent"] : "transparent"
     // false = user-theme.json carries no accent, i.e. nobody has ever picked
     // one in the shell. Theme.accent then falls back to the accent in
     // ewe.conf [desktop.theme], which is what the token file was built from.
@@ -572,16 +573,13 @@ QtObject {
     property var prefsRaw: ({})
 
     // ── Generated theme tokens (ewe.conf -> `ewe-theme build`) ────────────────
-    // What the looks ARE, as data: {flock: {color, shape, voice}, ...}. Theme.qml
-    // reads its tokens out of here, so the accent is changed in ewe.conf and
-    // the whole shell follows without touching QML. The values compiled into
-    // Theme.qml stay as the FALLBACK — a missing or unparsable file degrades to
-    // the shipped look rather than to a colourless shell.
-    // The FLUENT maps, straight off the top level of theme-tokens.json: six
-    // background levels each with their own states, a card ladder, three
-    // stroke weights, `subtle` for a thing with no fill until you point at
-    // it. The file's `themes` block is the old five-colour sub-object and no
-    // longer has a reader here — every component moved 2026-09-04.
+    // The Ewe token set as data, one block per kind: colour roles, shape
+    // (radii and outline widths), sizes (type scale, spacing, controls,
+    // icons, panels). Theme.qml reads its tokens out of here, so the scheme
+    // and the accent are changed in ewe.conf and the whole shell follows
+    // without touching QML. The values compiled into Theme.qml stay as the
+    // FALLBACK — a missing or unparsable file degrades to Ewe Dark rather
+    // than to a colourless shell.
     property var tokColor: ({})
     property var tokShape: ({})
     property var tokSize:  ({})
