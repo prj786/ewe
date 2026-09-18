@@ -236,9 +236,7 @@ Scope {
     function jump(tl) {
         // by ADDRESS, so a window on another workspace (a "Jump to" result)
         // takes you there; the foreign-toplevel activate does not switch
-        var a = root.addrOf(tl)
-        if (a !== "") Hyprland.dispatch('hl.dsp.focus({ window = "address:' + a + '" })')
-        else if (tl && tl.wayland) tl.wayland.activate()
+        Globals.focusToplevel(tl)
         root.close()
     }
     function addrOf(tl) {

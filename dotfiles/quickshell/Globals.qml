@@ -96,20 +96,10 @@ QtObject {
     property bool settingsAppInstalled: false
     property string settingsAppBin: "ewe-settings"
     // an already-open Settings/Komble window is FOCUSED, never doubled —
-    // clicking the gear twice should land you on the window you had
-    function focusWindowByClass(klass) {
-        var tls = Hyprland.toplevels ? Hyprland.toplevels.values : []
-        for (var i = 0; i < tls.length; i++) {
-            var t = tls[i]
-            var o = t.lastIpcObject
-            var c = (o && (o.class || o.initialClass)) || (t.wayland && t.wayland.appId) || ""
-            if (c.toLowerCase() !== klass) continue
-            if (t.wayland) t.wayland.activate()
-            else if (o && o.address) Hyprland.dispatch('hl.dsp.focus({ window = "address:' + o.address + '" })')
-            return true
-        }
-        return false
-    }
+    // clicking the gear twice should land you on the window you had. Goes
+    // through focusAppWindow (by address), so the window's workspace comes
+    // with it.
+    function focusWindowByClass(klass) { return g.focusAppWindow([klass]) }
     // ── ewe-sync state (RFC-006) ──────────────────────────────────────────
     // The account app owns the state machine; it pokes the value in here on
     // every change (qs ipc call sync state …), the same out-of-process
@@ -160,29 +150,15 @@ QtObject {
         if (g.syncAppInstalled) Quickshell.execDetached(["ewe-sync"])
     }
     // ── Focus-or-launch ────────────────────────────────────────────────────
-    // Clicking an app that already has a window JUMPS to it (activate = focus
-    // + workspace switch) instead of spawning a second instance — for
+    // Clicking an app that already has a window JUMPS to it (focus +
+    // workspace switch) instead of spawning a second instance — for
     // single-instance apps (Slack, Komble, browsers) a relaunch just pings the
-    // existing process and looks like "nothing happened". Both launchers call
-    // this first; middle-click still forces a fresh instance. Prefers the
-    // window that was most recently active when an app has several.
+    // existing process and looks like "nothing happened". Every launcher
+    // calls this first; middle-click still forces a fresh instance. Prefers
+    // the window that was most recently focused when an app has several.
     function activateAppWindow(entry) {
-        if (!entry) return false
-        var tls = Hyprland.toplevels ? Hyprland.toplevels.values : []
-        var best = null
-        for (var i = 0; i < tls.length; i++) {
-            var t = tls[i]
-            var o = t.lastIpcObject
-            var c = (o && (o.class || o.initialClass)) || (t.wayland && t.wayland.appId) || ""
-            if (c === "") continue
-            var e = DesktopEntries.heuristicLookup(c)
-            if (!e || e.id !== entry.id) continue
-            if (!best || t.activated) best = t
-        }
-        if (!best) return false
-        if (best.wayland) best.wayland.activate()
-        else if (best.address) Hyprland.dispatch('hl.dsp.focus({ window = "address:' + best.address + '" })')
-        return true
+        if (!entry || !entry.id) return false
+        return g.focusAppWindow([entry.id])
     }
 
     // ── Focus the window a notification came from ─────────────────────────
@@ -223,11 +199,24 @@ QtObject {
             if (!best || rank < bestRank) { best = t; bestRank = rank }
         }
         if (!best) return false
-        var addr = String((best.lastIpcObject && best.lastIpcObject.address) || best.address || "")
-        if (addr !== "") {
-            if (addr.indexOf("0x") !== 0) addr = "0x" + addr
-            Hyprland.dispatch('hl.dsp.focus({ window = "address:' + addr + '" })')
-        } else if (best.wayland) best.wayland.activate()
+        return g.focusToplevel(best)
+    }
+    // ── Focus one window ──────────────────────────────────────────────────
+    // THE way the shell brings a window forward (bar, dock, Overview,
+    // launchers, notifications, the app openers above). By ADDRESS, so
+    // Hyprland switches to the window's workspace; the foreign-toplevel
+    // activate (t.wayland.activate()) is ignored for a window on another
+    // workspace under Hyprland 0.56, and is only the fallback for a
+    // toplevel whose IPC object has not arrived yet.
+    function focusToplevel(t) {
+        if (!t) return false
+        var a = String(t.address || (t.lastIpcObject && t.lastIpcObject.address) || "")
+        if (a === "") {
+            if (t.wayland) { t.wayland.activate(); return true }
+            return false
+        }
+        if (a.indexOf("0x") !== 0) a = "0x" + a   // Hyprland events sometimes omit the 0x
+        Hyprland.dispatch('hl.dsp.focus({ window = "address:' + a + '" })')
         return true
     }
 

@@ -26,25 +26,6 @@ Scope {
     function clsOf(t) { return (t && t.lastIpcObject && t.lastIpcObject.class) ? t.lastIpcObject.class : (t && t.wayland ? (t.wayland.appId || "") : "") }
     function iconFor(t) { var e = DesktopEntries.heuristicLookup(root.clsOf(t)); return Quickshell.iconPath(e && e.icon ? e.icon : root.clsOf(t), "application-x-executable") }
     function goWorkspace(id) { Hyprland.dispatch("hl.dsp.focus({workspace=" + id + "})") }
-    // Focus a window by ADDRESS, which also switches to its workspace. The
-    // foreign-toplevel activate (t.wayland.activate()) does not under
-    // Hyprland 0.56: a tile for a window on another workspace did nothing.
-    function focusToplevel(t) {
-        var a = t ? String(t.address || (t.lastIpcObject && t.lastIpcObject.address) || "") : ""
-        if (a === "") { if (t && t.wayland) t.wayland.activate(); return false }
-        if (a.indexOf("0x") !== 0) a = "0x" + a
-        Hyprland.dispatch('hl.dsp.focus({ window = "address:' + a + '" })')
-        return true
-    }
-    function focusClass(klass) {
-        var tls = Hyprland.toplevels ? Hyprland.toplevels.values : []
-        for (var i = 0; i < tls.length; i++) {
-            var o = tls[i].lastIpcObject
-            var c = String((o && (o.class || o.initialClass)) || (tls[i].wayland && tls[i].wayland.appId) || "").toLowerCase()
-            if (c === klass) return root.focusToplevel(tls[i])
-        }
-        return false
-    }
 
     // the Pen: windows stashed on the special workspace (id < 0) — Super+Z
     readonly property var penWins: {
@@ -293,7 +274,7 @@ Scope {
                 DockBtn { a11yName: "Overview"; glyph: Theme.icStack; anchors.verticalCenter: parent.verticalCenter; onGo: Quickshell.execDetached(["qs", "ipc", "call", "overview", "toggle"]) }
                 // store button → Komble (the software manager) when installed;
                 // the in-shell quick-installer panel is only the fallback.
-                DockBtn { id: storeBtn; a11yName: "Komble"; glyph: Theme.icStore; activeState: Globals.storeOpen; anchors.verticalCenter: parent.verticalCenter; onGo: { if (Globals.kombleInstalled) { if (!root.focusClass("komble")) Quickshell.execDetached(["komble"]) } else { Globals.storeAnchorX = storeBtn.mapToItem(null, storeBtn.width / 2, 0).x; Globals.launcherOpen = false; Globals.placesOpen = false; Globals.mediaOpen = false; Globals.storeOpen = !Globals.storeOpen } } }
+                DockBtn { id: storeBtn; a11yName: "Komble"; glyph: Theme.icStore; activeState: Globals.storeOpen; anchors.verticalCenter: parent.verticalCenter; onGo: { if (Globals.kombleInstalled) { if (!Globals.focusAppWindow(["komble"])) Quickshell.execDetached(["komble"]) } else { Globals.storeAnchorX = storeBtn.mapToItem(null, storeBtn.width / 2, 0).x; Globals.launcherOpen = false; Globals.placesOpen = false; Globals.mediaOpen = false; Globals.storeOpen = !Globals.storeOpen } } }
                 DockBtn { id: placesBtn; a11yName: "Places"; glyph: Theme.icFolder; activeState: Globals.placesOpen; anchors.verticalCenter: parent.verticalCenter; onGo: { Globals.placesAnchorX = placesBtn.mapToItem(null, placesBtn.width / 2, 0).x; Globals.launcherOpen = false; Globals.storeOpen = false; Globals.mediaOpen = false; Globals.placesOpen = !Globals.placesOpen } }
                 // now-playing — only exists while an MPRIS player does (MediaPlayer.qml resolves it)
                 DockBtn { id: mediaBtn; a11yName: "Media player"; visible: Globals.mediaPlayer !== null; glyph: Theme.icMusic; activeState: Globals.mediaOpen; anchors.verticalCenter: parent.verticalCenter; onGo: { Globals.mediaAnchorX = mediaBtn.mapToItem(null, mediaBtn.width / 2, 0).x; Globals.launcherOpen = false; Globals.storeOpen = false; Globals.placesOpen = false; Globals.mediaOpen = !Globals.mediaOpen } }
@@ -359,8 +340,8 @@ Scope {
                                             var a = String(modelData.address || "")
                                             if (a !== "" && a.indexOf("0x") !== 0) a = "0x" + a
                                             if (a !== "") Hyprland.dispatch('hl.dsp.window.move({ workspace = ' + ws + ', window = "address:' + a + '", follow = false })')
-                                            root.focusToplevel(modelData)
-                                        } else root.focusToplevel(modelData)
+                                            Globals.focusToplevel(modelData)
+                                        } else Globals.focusToplevel(modelData)
                                     }
                                 }
                             }
@@ -428,7 +409,7 @@ Scope {
                                     MouseArea {
                                         id: tileMa
                                         anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                                        onClicked: root.focusToplevel(modelData)
+                                        onClicked: Globals.focusToplevel(modelData)
                                     }
                                 }
                             }

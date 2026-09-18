@@ -200,7 +200,14 @@ cmd_targets() { load; WAYLAND_DISPLAY="$NEST_WD" qs ipc --pid "$QS_PID" show; }
 cmd_shot()    { load; WAYLAND_DISPLAY="$NEST_WD" grim ${SHOT_OUT:+-o "$SHOT_OUT"} "$OUTDIR/${1:-shell.png}" && echo "wrote $OUTDIR/${1:-shell.png}"; }
 cmd_log()     { tail -n "${1:-25}" "$WORK/qs.log"; }
 cmd_hc()      { load; HYPRLAND_INSTANCE_SIGNATURE="$NEST_SIG" hyprctl "$@"; }
-cmd_spawn()   { load; HYPRLAND_INSTANCE_SIGNATURE="$NEST_SIG" hyprctl dispatch exec "$*" >/dev/null && echo "spawned: $*"; }
+# Hyprland 0.56 (Lua config) rejects the old `dispatch exec <cmd>` form: a
+# dispatch is a Lua expression, so the command goes in as a Lua string
+# (backslashes and double quotes escaped).
+cmd_spawn()   {
+  load
+  local cmd="$*"; cmd="${cmd//\\/\\\\}"; cmd="${cmd//\"/\\\"}"
+  HYPRLAND_INSTANCE_SIGNATURE="$NEST_SIG" hyprctl dispatch "hl.dsp.exec_cmd(\"$cmd\")" >/dev/null && echo "spawned: $*"
+}
 cmd_check()   { command -v luac >/dev/null || die "luac not found"; ( cd "$REPO/dotfiles/hypr" && luac -p hyprland.lua colors.lua && echo "lua config: syntax OK" ); }
 
 cmd_open() {
