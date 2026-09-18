@@ -48,9 +48,15 @@ Item {
             unloadImage(loaded); loaded = root.source; loadImage(root.source)
         }
         onImageLoaded: probeIcon()
+        // A Canvas has no 2D context until its scene graph is up (a headless
+        // or not-yet-exposed output hands back null — `getContext`/`clearRect`
+        // TypeErrors). Wait for it, then probe; the icon shows untinted
+        // meanwhile, which is the safe default.
+        onAvailableChanged: if (available) reprobe()
         function probeIcon() {
-            if (!isImageLoaded(root.source)) return
+            if (!available || !isImageLoaded(root.source)) return
             var ctx = getContext("2d")
+            if (!ctx) return
             ctx.clearRect(0, 0, width, height)
             ctx.drawImage(root.source, 0, 0, width, height)
             var d = ctx.getImageData(0, 0, width, height).data
