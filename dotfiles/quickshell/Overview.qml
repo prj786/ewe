@@ -234,8 +234,11 @@ Scope {
     // ── actions ──
     function launchApp(a) { Globals.launchEntry(a, false); root.close() }
     function jump(tl) {
-        if (tl && tl.wayland) tl.wayland.activate()
-        else if (tl && tl.address) Hyprland.dispatch('hl.dsp.focus({ window = "address:' + tl.address + '" })')
+        // by ADDRESS, so a window on another workspace (a "Jump to" result)
+        // takes you there; the foreign-toplevel activate does not switch
+        var a = root.addrOf(tl)
+        if (a !== "") Hyprland.dispatch('hl.dsp.focus({ window = "address:' + a + '" })')
+        else if (tl && tl.wayland) tl.wayland.activate()
         root.close()
     }
     function addrOf(tl) {

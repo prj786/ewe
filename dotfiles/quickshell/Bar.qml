@@ -27,6 +27,66 @@ Scope {
     // modules below read these instead of the plain roles.
     readonly property color inkAccent: Theme.glass ? Theme.glassAccent : Theme.accentText
     readonly property color inkMuted:  Theme.glass ? Theme.textSecondary : Theme.textMuted
+    // ── tray left-click: activate, then bring the app's window forward ─────
+    // SNI Activate alone reaches the app, which then asks the compositor to
+    // raise its window — and Hyprland ignores that request for a window on
+    // another workspace (focus_on_activate is off), so clicking Komble's tray
+    // icon from workspace 2 while Komble sat on workspace 4 did nothing
+    // visible. activate() stays (it is what re-opens a window an app hid to
+    // its tray); when the app already has a Hyprland window, that window is
+    // then focused by address, which switches to its workspace.
+    function trayClient(item) {
+        var keys = [item.id, item.title].map(function (k) { return String(k || "").toLowerCase() })
+                                        .filter(function (k) { return k !== "" })
+        if (keys.length === 0) return null
+        var tls = Hyprland.toplevels ? Hyprland.toplevels.values : []
+        var best = null, bestRank = 1e9
+        for (var i = 0; i < tls.length; i++) {
+            var t = tls[i], o = t.lastIpcObject
+            var c = String((o && (o.class || o.initialClass)) || (t.wayland && t.wayland.appId) || "").toLowerCase()
+            if (c === "") continue
+            // "komble" matches class komble, Komble or org.example.komble
+            var tail = c.split(".").pop()
+            var hit = keys.some(function (k) { return c === k || tail === k || k.split(".").pop() === tail })
+            if (!hit) continue
+            // several windows: the one used most recently
+            var rank = (o && o.focusHistoryID !== undefined) ? o.focusHistoryID : 1e8
+            if (!best || rank < bestRank) { best = t; bestRank = rank }
+        }
+        return best
+    }
+    // Focus a window by ADDRESS: Hyprland switches to its workspace. The
+    // foreign-toplevel activate (t.wayland.activate()) does not — it leaves
+    // you on your workspace with nothing to show for the click.
+    function focusToplevel(t) {
+        var a = t ? String(t.address || (t.lastIpcObject && t.lastIpcObject.address) || "") : ""
+        if (a === "") return false
+        if (a.indexOf("0x") !== 0) a = "0x" + a
+        Hyprland.dispatch('hl.dsp.focus({ window = "address:' + a + '" })')
+        return true
+    }
+    function focusClass(klass) {
+        var tls = Hyprland.toplevels ? Hyprland.toplevels.values : []
+        for (var i = 0; i < tls.length; i++) {
+            var o = tls[i].lastIpcObject
+            var c = String((o && (o.class || o.initialClass)) || (tls[i].wayland && tls[i].wayland.appId) || "").toLowerCase()
+            if (c === klass) return bar.focusToplevel(tls[i])
+        }
+        return false
+    }
+    function trayActivate(item) {
+        item.activate()
+        bar.focusToplevel(bar.trayClient(item))
+    }
+    // Updates: Komble on its Updates page. An open Komble window is brought
+    // forward first — `komble --updates` alone only pings the running
+    // instance, whose raise request Hyprland ignores on another workspace.
+    function openUpdates() {
+        if (!Globals.kombleInstalled) { Globals.openStore(); return }
+        bar.focusClass("komble")
+        Quickshell.execDetached(["komble", "--updates"])
+    }
+
     function appClass() {
         var t = Hyprland.activeToplevel
         // lastIpcObject.class is the richest source but can lag a focus change /
@@ -479,7 +539,7 @@ Scope {
                                             var key = String(it.id || it.title || "").toLowerCase()
                                             var menuOnLeft = ["nextcloud"].some(function (k) { return key.indexOf(k) >= 0 })
                                             if (it.hasMenu && (it.onlyMenu || menuOnLeft)) trayDelegate.openMenu()
-                                            else it.activate()
+                                            else bar.trayActivate(it)
                                         }
                                     }
                                     onWheel: function (w) { trayDelegate.modelData.scroll(w.angleDelta.y, false) }
@@ -518,10 +578,7 @@ Scope {
                                 : Globals.updatesTotal > 0 ? "Updates, " + Globals.updatesTotal + " available" : "Updates, up to date"
                         readonly property bool updating: Globals.updatesBusy || Globals.updatesWorking
                         anchors.verticalCenter: parent.verticalCenter
-                        onActivated: {
-                            if (Globals.kombleInstalled) Quickshell.execDetached(["komble", "--updates"])
-                            else Globals.openStore()
-                        }
+                        onActivated: bar.openUpdates()
                         onTertiary: Globals.checkUpdates()
                         Text {
                             visible: updItem.updating
