@@ -2613,8 +2613,8 @@ Scope {
                         Empty {
                             visible: root.agenda.length === 0
                             ic: Theme.icCalendar
-                            title: Agenda.connected ? "No upcoming events" : "No calendar connected"
-                            desc: Agenda.connected ? "Your week is clear." : "Sign in to Nextcloud or Google to see events here."
+                            title: Agenda.hintTitle
+                            desc: Agenda.hintBody
                             QsBtn {
                                 visible: !Agenda.connected
                                 size: "md"; label: "Open Settings"
