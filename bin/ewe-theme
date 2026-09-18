@@ -1844,12 +1844,14 @@ def design_tokens(cfg, slug=None):
 
 def cmd_build(a):
     cfg, src = read_conf(a.conf)
-    t = tokens(cfg)
     written, skipped = [], []
     scheme = getattr(a, "scheme", None)
     selector = getattr(a, "selector", None) or ":root"
-    # `--scheme` is a design-time build (the website, a check): it never
-    # rewrites this machine's token file unless --json is given explicitly
+    # `--scheme` is a design-time build (the website, the greeter, a check):
+    # both files are that scheme at the DEFAULTS, never this machine's knobs,
+    # and it never rewrites this machine's token file unless --json is given
+    # explicitly (phase 30 writes the greeter's Ewe Dark roles that way).
+    t = design_tokens(cfg, scheme) if scheme else tokens(cfg)
     jp = a.json if a.json is not None else (None if scheme else OUT_JSON)
     if jp is None or jp == "/dev/null":
         skipped.append("json (asked to discard)")

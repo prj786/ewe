@@ -155,6 +155,18 @@ phase_services() {
         sudo_run install -d /etc/xdg/quickshell/ewe-greeter
         sudo_run install -m 644 "$DOTREPO/system/greeter/shell.qml" /etc/xdg/quickshell/ewe-greeter/shell.qml \
             && ok "installed Quickshell greeter (/etc/xdg/quickshell/ewe-greeter)"
+        # Its colours: Ewe Dark's roles, derived by the same bin/ewe-theme the
+        # desktop uses (the greeter user reads no dotfiles, so no ewe.conf:
+        # --conf /dev/null is the defaults) and read by shell.qml beside it.
+        local gtok; gtok="$(mktemp)"
+        if run sh -c '"$1" --conf /dev/null build --scheme ewe-dark --json "$2" --css /dev/null >/dev/null' \
+                ewe-theme "$DOTREPO/bin/ewe-theme" "$gtok"; then
+            sudo_run install -m 644 "$gtok" /etc/xdg/quickshell/ewe-greeter/theme-tokens.json \
+                && ok "installed the greeter's Ewe Dark tokens (ewe-theme build --scheme ewe-dark)"
+        else
+            warn "ewe-theme could not build the greeter's tokens — it falls back to plain black and white"
+        fi
+        rm -f "$gtok"
         # The greeter's type: Geist + Geist Mono (design system v3). The DE
         # finds them through the user's fontconfig (dotfiles/quickshell/fonts/
         # geist), which the `greeter` user never reads, so the same files and

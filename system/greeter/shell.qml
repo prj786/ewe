@@ -18,22 +18,44 @@ FloatingWindow {
     implicitHeight: 1080
     color: pal.bg
 
-    // ── palette (mirrors Theme.qml defaults; greeter runs as the system
-    //    `greeter` user so it can't read the user's accent — use the default). ──
+    // ── palette: Ewe Dark, from the one source ──────────────────────────────
+    // The greeter runs as the system `greeter` user, which reads none of the
+    // person's dotfiles, so it wears the built-in Ewe Dark scheme (the lock
+    // screen and power menu do too). Phase 30 writes those roles next to
+    // this file at install time with
+    //     ewe-theme --conf /dev/null build --scheme ewe-dark --json …/theme-tokens.json
+    // — the same generator, the same derivation, no copied hex. A missing
+    // file (a hand-copied greeter) falls back to plain black and white.
+    FileView {
+        id: tokFile
+        path: String(Qt.resolvedUrl("theme-tokens.json")).replace(/^file:\/\//, "")
+        blockLoading: true
+        printErrors: false
+    }
     QtObject {
         id: pal
-        readonly property color bg: "#0e0e10"
-        readonly property color fg: "#e6e6e6"
-        readonly property color fgDim: "#8a8a8e"
-        readonly property color field: "#1c1c1f"
-        readonly property color stroke: "#3a3a3e"
-        readonly property color accent: "#0a84ff"
-        readonly property color danger: "#ff453a"
+        readonly property var tok: { try { return JSON.parse(tokFile.text()) } catch (e) { return ({}) } }
+        function role(k, fb) { return (tok.color && tok.color[k]) || fb }
+        function shape(k, fb) { return (tok.shape && tok.shape[k] !== undefined) ? tok.shape[k] : fb }
+        readonly property color bg:      role("surface-base", "black")
+        readonly property color fg:      role("text-primary", "white")
+        readonly property color fgDim:   role("text-muted", "gray")
+        readonly property color field:   role("surface-sunken", "black")   // the password box (Text field)
+        readonly property color raised:  role("surface-raised", "black")   // the avatar disc, the session list
+        readonly property color hover:   role("surface-hover", "dimgray")
+        readonly property color stroke:  role("border-subtle", "dimgray")
+        readonly property color fieldStroke: role("border-strong", "gray")
+        readonly property color focus:   role("focus-ring", "white")
+        readonly property color accent:  role("accent-text", "white")     // accent ink: the arrow, the chosen session
+        readonly property color danger:  role("danger", "red")
+        readonly property int radiusControl: shape("primary", 8)
+        readonly property int radiusPanel:   shape("rounded", 10)
+        readonly property int focusWidth:    shape("focus-width", 1)
         // Geist + Geist Mono, installed system-wide by phase 30
         // (/usr/share/fonts/ewe); /etc/fonts/conf.d/60-ewe-geist.conf puts
         // Noto Sans Georgian next in both stacks (Geist has no Georgian).
-        readonly property string fontText: "Geist"
-        readonly property string fontMono: "Geist Mono"
+        readonly property string fontText: (tok.type && tok.type.sans && tok.type.sans[0]) || "Geist"
+        readonly property string fontMono: (tok.type && tok.type.mono && tok.type.mono[0]) || "Geist Mono"
     }
 
     // cage shows the greeter as ONE surface stretched across every connected
@@ -179,7 +201,7 @@ FloatingWindow {
 
                 Rectangle {
                     anchors.fill: parent; radius: 64
-                    color: pal.field; border.color: pal.stroke; border.width: 1
+                    color: pal.raised; border.color: pal.stroke; border.width: 1
                     // brand fallback: the sheep mark (payload path first, then
                     // the packaged one); a bare initial only if both are absent
                     Image {
@@ -237,10 +259,11 @@ FloatingWindow {
             // password field
             Rectangle {
                 anchors.horizontalCenter: parent.horizontalCenter
-                width: 300; height: 46; radius: 12
+                width: 300; height: 46; radius: pal.radiusControl
                 color: pal.field
-                border.color: pw.activeFocus ? pal.accent : (win.failed ? pal.danger : pal.stroke)
-                border.width: pw.activeFocus || win.failed ? 2 : 1
+                // Text field: the border itself turns focus-ring, danger on error
+                border.color: pw.activeFocus ? pal.focus : (win.failed ? pal.danger : pal.fieldStroke)
+                border.width: pw.activeFocus ? Math.max(1, pal.focusWidth) : 1
                 Behavior on border.color { ColorAnimation { duration: 120 } }
 
                 TextInput {
@@ -255,7 +278,7 @@ FloatingWindow {
                     Text {
                         anchors.verticalCenter: parent.verticalCenter
                         visible: pw.text.length === 0
-                        text: "enter password"; color: pal.fgDim; font: pw.font
+                        text: "Password"; color: pal.fgDim; font: pw.font
                     }
                 }
                 // submit arrow ("…" while checking)
@@ -298,8 +321,8 @@ FloatingWindow {
                 id: menu
                 visible: win.sessionMenuOpen && win.sessions.length > 0
                 anchors.bottom: trigger.top; anchors.bottomMargin: 6; anchors.right: parent.right
-                width: trigger.width; height: menuCol.height + 10; radius: 10
-                color: pal.field; border.color: pal.stroke; border.width: 1
+                width: trigger.width; height: menuCol.height + 10; radius: pal.radiusPanel
+                color: pal.raised; border.color: pal.stroke; border.width: 1
                 Column {
                     id: menuCol; width: parent.width; y: 5
                     Repeater {
@@ -308,7 +331,7 @@ FloatingWindow {
                             required property var modelData
                             required property int index
                             width: parent.width; height: 32
-                            color: smA.containsMouse ? Qt.rgba(1,1,1,0.06) : "transparent"
+                            color: smA.containsMouse ? pal.hover : "transparent"
                             Text {
                                 anchors.left: parent.left; anchors.leftMargin: 12; anchors.right: parent.right; anchors.rightMargin: 12
                                 anchors.verticalCenter: parent.verticalCenter
@@ -326,8 +349,8 @@ FloatingWindow {
             // trigger button
             Rectangle {
                 id: trigger
-                anchors.fill: parent; radius: 10
-                color: trA.containsMouse ? Qt.rgba(1,1,1,0.06) : "transparent"
+                anchors.fill: parent; radius: pal.radiusControl
+                color: trA.containsMouse ? pal.hover : "transparent"
                 border.color: pal.stroke; border.width: 1
                 Text {
                     anchors.left: parent.left; anchors.leftMargin: 12; anchors.right: chev.left; anchors.verticalCenter: parent.verticalCenter
