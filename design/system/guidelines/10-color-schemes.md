@@ -79,7 +79,7 @@ The commands exist today; `overrides`, `builtin` and `set overrides.<role>` are 
 
 ## How roles are derived
 
-Every role comes from one palette entry, a mix of two, or the accent. Mixes use OKLCH, so hue stays steady.
+Every role comes from one palette entry, a mix of two, or a step of the accent ramp (`ewellow-50`…`ewellow-950`, regenerated from the accent). Mixes use OKLCH, so hue stays steady.
 
 | Role | Dark scheme | Light scheme |
 | --- | --- | --- |
@@ -88,24 +88,26 @@ Every role comes from one palette entry, a mix of two, or the accent. Mixes use 
 | `surface-overlay` | halfway from `base01` to `base02` | `base07` |
 | `surface-sunken` | `base10`, or `base00` darkened | `base10`, or `base00` darkened |
 | `surface-hover` | `base02` | `base02` |
-| `surface-pressed` | `base02` moved 8 L toward `base05` | `base02` moved 8 L toward `base05` |
+| `surface-pressed` | `base02` moved 8 L toward `base05` | `base02` moved 6 L toward `base05` |
 | `surface-selected` | `base02` | `base07` |
-| `border-subtle` | `base02` | halfway from `base02` to `base03` |
+| `border-subtle` | `base02` | 30% of the way from `base02` to `base03` |
 | `border-strong` | halfway from `base03` to `base04` | halfway from `base03` to `base04` |
 | `text-primary` | `base05` | `base05` |
 | `text-secondary` | `base06` | `base06` |
 | `text-muted` | `base04` | `base04` |
 | `text-disabled` | `base03` | `base03` |
-| `accent`, `accent-hover`, `accent-pressed` | accent, then 4 L lighter, then 10 L darker | accent, then 10 L darker, then 20 L darker |
-| `accent-subtle` | accent at 27 L, low chroma | accent at 97 L, low chroma |
-| `accent-text`, `focus-ring` | accent at 84 L | accent at 49 L (text), 60 L (ring) |
-| `on-accent` | black or white, whichever contrasts more with `accent` | same |
+| `accent`, `accent-hover`, `accent-pressed` | the accent (`ewellow-500`), `ewellow-400`, `ewellow-600` | the accent, `ewellow-600`, `ewellow-700` |
+| `accent-subtle` | `ewellow-950` | `ewellow-50` |
+| `accent-text`, `focus-ring`, `glass-accent` | `ewellow-400` | `ewellow-800`, `ewellow-700`, `ewellow-900` |
+| `on-accent` | `black` or `neutral-0`, whichever contrasts more with `accent` | same |
 | `success`, `warning`, `danger`, `info` | palette colors when `semantic = true`, else Ewe's | same |
 | `*-subtle` | the status color at 27 L, low chroma | the status color at 95 L, low chroma |
-| `on-status` | black or white, whichever contrasts more | same |
+| `on-status` | `black` or `neutral-0`, whichever contrasts more | same |
 | `scrim` | `base11` at 64% opacity | `base05` at 32% opacity |
 
-Gradients, shadows, type, spacing, radii and sizes don't change with the scheme.
+One black, one white: no color is darker than `black` or lighter than `neutral-0`. A derived value beyond them, an imported `#000000` or `#ffffff` included, becomes `black` or `neutral-0`.
+
+Shadows and gradients follow the scheme too. Shadows are `black` (dark) or `base05` (light) at the shadow tokens' alphas. `gradient-ewellow` runs from halfway between `ewellow-400` and the accent to a quarter of the way from the accent to `ewellow-600`; `gradient-night` from `surface-raised` to `surface-base`; `gradient-ember` the same, its first stop tinted with the hue of `accent-subtle`; `gradient-glow` is the accent. Type, spacing, radii and sizes don't change with the scheme.
 
 ## Guarantees the generator keeps
 
@@ -113,7 +115,7 @@ A scheme can look like anything, but it can't make the desktop unusable. After d
 
 - `text-primary`, `text-secondary`, `text-muted`, `accent-text` and the status colors reach 4.5:1 on every surface role.
 - `border-strong` and `focus-ring` reach 3:1 on every surface role.
-- Surfaces stay apart: `surface-raised`, `surface-overlay` and `surface-hover` each differ from the surface below by at least 2 L, so layers never merge into one flat color.
+- Surfaces stay apart: `surface-raised`, `surface-overlay` and `surface-hover` each differ from the surface below by at least 2 L, so layers never merge into one flat color, as far as the range from `black` to `neutral-0` allows. A surface already at the end of that range stays there (Ewe Light's `surface-overlay` is `neutral-0`, 1.25 L above `surface-raised`).
 - If the accent's hue is within 20° of `warning`, `warning` turns toward red so the two never look alike.
 - When it fixes something, the scheme card in Settings says which role moved and why, and `ewe-theme scheme show` lists it.
 
