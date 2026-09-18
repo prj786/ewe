@@ -605,6 +605,9 @@ QtObject {
     property var tokGradient: ({})
     property var tokBar: ({})
     property var tokA11y: ({})
+    // the Accent picker's presets [{name, hex, ink}] — the generator's list,
+    // so Settings carries no colour of its own
+    property var tokAccentPresets: []
     // start-hyprland.sh exports EWE_NO_BLUR=1 in VMs and on NVIDIA, where the
     // compositor's blur is a known cost or glitch. Glass still applies there —
     // the fills stay translucent (Theme.barAlpha, the glass-* roles), only the
@@ -630,6 +633,7 @@ QtObject {
                     if (j && j.gradient && typeof j.gradient === "object") g.tokGradient = j.gradient
                     if (j && j.bar && typeof j.bar === "object") g.tokBar = j.bar
                     if (j && j.accessibility && typeof j.accessibility === "object") g.tokA11y = j.accessibility
+                    if (j && Array.isArray(j.accent_presets)) g.tokAccentPresets = j.accent_presets
                 } catch (e) {}
             }
         }

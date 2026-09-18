@@ -323,6 +323,13 @@ REF_RAMP = {50: "#fff6e4", 100: "#ffedc6", 200: "#ffdf9a", 300: "#fdcf64", 400: 
             500: EWELLOW, 600: "#ce9707", 700: "#a77607", 800: "#805708", 900: "#5a3b09",
             950: "#352206"}
 RAMP_STEPS = list(REF_RAMP)
+# The Accent picker's presets (components/AccentPicker): values a person can
+# PICK as their accent, not roles. Chosen so each makes a readable accent in
+# both built-in schemes; emitted as `accent_presets` so the shell's picker
+# carries no colour of its own.
+ACCENT_PRESETS = [("Ewellow", EWELLOW), ("Amber", "#f08a3c"), ("Coral", "#e5675b"),
+                  ("Rose", "#d86fb3"), ("Iris", "#9a8cf0"), ("Sky", "#62a8f5"),
+                  ("Teal", "#4cc1b0"), ("Moss", "#7cc36a"), ("Stone", "#a8a49d")]
 # Ewe's own status colours, used when a scheme says `semantic: false`.
 # Warning is orange so it never reads as the brand gold.
 EWE_STATUS = {
@@ -1682,6 +1689,8 @@ def gen_json(t):
         "accessibility": t["accessibility"], "adjusted": t["adjusted"],
         "brand": t["brand"], "grey": t["grey"],
         "scheme": t["scheme"],          # colorscheme.sh reads the palette for kitty's ANSI
+        # the Accent picker's swatches, each with the ink its check mark takes
+        "accent_presets": [{"name": n, "hex": h, "ink": on_color(h)} for n, h in ACCENT_PRESETS],
         "themes": legacy(t),
     }
     return json.dumps(doc, indent=2) + "\n"

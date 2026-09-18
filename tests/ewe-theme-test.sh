@@ -120,6 +120,8 @@ for v in ('dark', 'light'):
     allowed |= {c[-6:] and '#' + c[-6:] for c in d['color'].values() if c.startswith('#')}
     for g in d['gradient'].values():
         allowed |= {s[0] for s in g['stops']}
+    # the Accent picker's presets are foundations too (values to pick, not roles)
+    allowed |= {p['hex'] for p in d.get('accent_presets', [])} | {p['ink'] for p in d.get('accent_presets', [])}
     for f in ('one-%s.css' % v, 'one-%s.json' % v):
         text = open('%s/%s' % (sb, f)).read()
         text = re.sub(r'/\\*.*?\\*/', '', text, flags=re.S)     # the header's example accent
@@ -130,6 +132,11 @@ for v in ('dark', 'light'):
         out = sorted(c for c in found if not okL('#020202') - 1e-6 <= okL(c) <= okL('#fefdfc') + 1e-6)
         assert not out, (f, 'outside black .. neutral-0', out)
 PY"
+check "accent presets: the Accent picker's nine, ewellow first, each with its ink" "python3 -c '
+import json; d=json.load(open(\"$SB/one-dark.json\")); p=d[\"accent_presets\"]
+assert [x[\"name\"] for x in p]==[\"Ewellow\",\"Amber\",\"Coral\",\"Rose\",\"Iris\",\"Sky\",\"Teal\",\"Moss\",\"Stone\"], p
+assert p[0][\"hex\"]==\"#eeb407\" and all(x[\"ink\"] in (\"#020202\",\"#fefdfc\") for x in p)
+'"
 lst="$($T scheme list)"
 check "list: both built-ins first, marked builtin, ewe-dark current" "echo '$lst' | python3 -c 'import json,sys; d=json.load(sys.stdin); s=d[\"schemes\"]; assert [x[\"slug\"] for x in s[:2]]==[\"ewe-dark\",\"ewe-light\"]; assert all(x[\"builtin\"] for x in s[:2]); assert s[0][\"current\"] and not s[1][\"current\"]; assert d[\"current\"]==\"ewe-dark\"'"
 r="$($T scheme --no-hooks set accent '#ff0000' || true)"
