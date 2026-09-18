@@ -33,7 +33,7 @@ QtObject {
     // roles, the public Globals subset in docs/PLUGINS.md). ewe-plugin refuses
     // a manifest whose apiVersion differs, so an old plugin fails at install,
     // not at login.
-    readonly property int apiVersion: 1
+    readonly property int apiVersion: 2
 
     // Same idiom as Globals.eweConf: the payload's bin/, reached through the
     // ~/.config/quickshell symlink (the kernel resolves the link before the

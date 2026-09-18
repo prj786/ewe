@@ -122,7 +122,7 @@ A plugin is a git repository with `manifest.json` at its root:
   "id": "acme.weather",
   "name": "Weather",
   "version": "0.1.0",
-  "apiVersion": 1,
+  "apiVersion": 2,
   "description": "Current conditions in the bar, forecast in a panel.",
   "homepage": "https://github.com/acme/ewe-weather",
   "author": "acme",
@@ -137,7 +137,7 @@ A plugin is a git repository with `manifest.json` at its root:
 | `schemaVersion` | `1` |
 | `id` | `<namespace>.<name>`, lowercase `[a-z0-9_-]`, at least one dot. `ewe.` is reserved for the plugins ewe ships. The install directory is named after it. |
 | `name`, `version` | non-empty strings; `version` is what `list` shows |
-| `apiVersion` | the shell's plugin API this plugin was written against (`1`); a mismatch is refused at install, not at login |
+| `apiVersion` | the shell's plugin API this plugin was written against (`2`); a mismatch is refused at install, not at login |
 | `kinds` | one or more of `service`, `panel`, `overlay`, `menu`, `bar-widget`, `desktop-widget` |
 | `desktopWidget` | optional, for `desktop-widget`: `{ "x": 48, "y": 64, "layer": "desktop" }` — the default place; the user's own placement in ewe.conf wins |
 | `settings` | optional: `[{ "key", "type", "default", "label", "choices"?, "min"?, "max"? }]` with `type` one of `bool`, `int`, `string`, `choice`, `color`. The values reach every entry point as `settings` and render as a form in Komble |
@@ -205,6 +205,13 @@ shown), so a widget can be hidden without disabling its plugin.
 A plugin's QML says `import qs` and sees the shell's modules like any
 first-party file. Of those, this is **public** — it will not change without
 `apiVersion` moving:
+
+API history: **2** is the Ewe design system v3 (the Fluent-era `Theme`
+names — `bg1`, `fg1`, `stroke2`, `brandBg`, `radiusControl`, `fsBody`… —
+are gone; the website's plugin API page has the rename table). **1** was the
+Fluent-era surface; a plugin still saying `"apiVersion": 1` is refused at
+install and needs its Theme names updated.
+
 
 - **`Theme`** — the Ewe design system v3 tokens, under their QML names
   (`design/system/guidelines/40-implementation.md`): colour roles

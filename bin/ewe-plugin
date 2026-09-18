@@ -8,7 +8,7 @@ A plugin is a git repository whose root holds a manifest.json:
       "id": "acme.weather",              <namespace>.<name>, lowercase; "ewe." is reserved
       "name": "Weather",
       "version": "0.1.0",
-      "apiVersion": 1,                   the shell's plugin API (PluginHost.apiVersion)
+      "apiVersion": 2,                   the shell's plugin API (PluginHost.apiVersion)
       "kinds": ["panel", "service"],
       "entryPoints": { "panel": "Panel.qml", "service": "Service.qml" },
       "description": "…", "homepage": "…", "author": "…"      (optional)
@@ -80,7 +80,7 @@ import sys
 import time
 import tomllib
 
-API_VERSION = 1
+API_VERSION = 2
 SCHEMA = 1
 KINDS = ("service", "panel", "overlay", "menu", "bar-widget", "desktop-widget")
 # a plugin's declared options -- what Komble renders as a form and the shell
