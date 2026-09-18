@@ -50,6 +50,12 @@ if [ "$PURGE" = "1" ]; then
         systemctl is-enabled "$u" >/dev/null 2>&1 && sudo_run systemctl disable "$u"
     done
     warn "purge: display manager disabled — re-enable one before next boot or you'll land on a TTY."
+    # the greeter's system-wide Geist (phase 30)
+    if [ -d /usr/share/fonts/ewe ] || [ -e /etc/fonts/conf.d/60-ewe-geist.conf ]; then
+        sudo_run rm -rf /usr/share/fonts/ewe && ok "removed /usr/share/fonts/ewe (the greeter's Geist)"
+        sudo_run rm -f /etc/fonts/conf.d/60-ewe-geist.conf
+        command -v fc-cache >/dev/null 2>&1 && { sudo_run fc-cache -f || true; }
+    fi
 fi
 
 ok "uninstall done (packages left installed; use your package manager to remove them)"

@@ -29,8 +29,11 @@ FloatingWindow {
         readonly property color stroke: "#3a3a3e"
         readonly property color accent: "#0a84ff"
         readonly property color danger: "#ff453a"
-        readonly property string fontText: "Inter"
-        readonly property string fontMono: "JetBrainsMono Nerd Font"
+        // Geist + Geist Mono, installed system-wide by phase 30
+        // (/usr/share/fonts/ewe); /etc/fonts/conf.d/60-ewe-geist.conf puts
+        // Noto Sans Georgian next in both stacks (Geist has no Georgian).
+        readonly property string fontText: "Geist"
+        readonly property string fontMono: "Geist Mono"
     }
 
     // cage shows the greeter as ONE surface stretched across every connected

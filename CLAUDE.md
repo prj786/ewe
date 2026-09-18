@@ -243,8 +243,10 @@ adds that folder with a relative `<dir>` (no installer change) and prefers
 **Noto Sans Georgian** (noto-fonts) next in every stack — Geist has no
 Georgian glyphs, and Georgian is NEVER uppercased (`Theme.labelCaps` is
 MixedCase for good). GTK, kitty (with the Nerd PUA mapped to Symbols Nerd
-Font Mono), Zed, mpv, the groupbar and Helium follow; the greeter keeps
-Inter because it runs from /etc as another user. `Theme.qml` is now one
+Font Mono), Zed, mpv, the groupbar and Helium follow; the greeter (another user, reads no dotfiles) gets them system-wide: phase 30 copies
+the geist/ files + OFL to `/usr/share/fonts/ewe/` and
+`system/fontconfig/60-ewe-geist.conf` (Noto Sans Georgian next) to
+`/etc/fonts/conf.d/`; `uninstall.sh --purge` removes both. `Theme.qml` is now one
 property per v3 token (QML names from `40-implementation.md`), plus
 `Theme.type.<style>` (both `body-strong` and `bodyStrong`), the motion
 table (`durFast/Base/Slow/Dim`, OutCubic + InOutCubic, no OutBack), the
