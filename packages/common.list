@@ -162,9 +162,6 @@ ttf-nerd-fonts-symbols-mono  # Nerd glyphs for the prompt, now that kitty sets G
 # The DE faces, Geist and Geist Mono (OFL), are NOT in the Arch repos: the
 # variable fonts ship in dotfiles/quickshell/fonts/geist/ and dotfiles/fontconfig
 # adds that folder to the font path.
-inter-font              # the pre-v3 DE face; kept installed until the design-system
-                        # clean-up (Phase 6) decides, so anything still naming Inter
-                        # renders (the greeter does)
 sound-theme-freedesktop  # event chimes (notifications, volume, shutter) — Globals.playSound
 ttf-ubuntu-font-family  # the pre-2026-09 DE face; kept installed for now so documents
                         # and configs that still name Ubuntu keep rendering
