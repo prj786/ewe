@@ -503,7 +503,30 @@ C
 show="$($T show)"
 check "reduce transparency: bar solid, no blur, app blur and window transparency off" "echo '$show' | python3 -c 'import json,sys; d=json.load(sys.stdin); s=d[\"surface\"]; assert s[\"bar_alpha\"]==1.0 and not s[\"blur\"] and not s[\"app_blur\"] and s[\"app_alpha\"]==1.0 and s[\"inactive_alpha\"]==1.0 and s[\"solid\"]; assert d[\"color\"][\"glass-base\"]==d[\"color\"][\"surface-base\"] and d[\"color\"][\"glass-hover\"]==d[\"color\"][\"surface-hover\"]'"
 check "reduce motion + speed 2: durations halved, then base/slow become fast fades, no slide" "echo '$show' | python3 -c 'import json,sys; d=json.load(sys.stdin); m=d[\"motion\"]; assert m[\"durFast\"]==75 and m[\"durBase\"]==75 and m[\"durSlow\"]==75 and m[\"durDim\"]==750 and m[\"reduceMotion\"] and m[\"slideOffset\"]==0, m'"
-check "text size 130: the type scale grows, styles follow, the bar icons go one step up (normal → large, 56), sizes stay" "[ \"$(echo "$show" | size font-size-md)\" = 17 ] && [ \"$(echo "$show" | size line-height-md)\" = 23 ] && echo '$show' | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d[\"type\"][\"styles\"][\"body\"][\"size\"]==17 and d[\"type\"][\"scale\"]==130; assert d[\"bar\"][\"height\"]==56 and d[\"bar\"][\"icon_size\"]==\"large\"; assert d[\"size\"][\"control-md\"]==28'"
+check "text size 130: the type scale grows, styles follow, the bar icons go one step up (normal → large, 56)" "[ \"$(echo "$show" | size font-size-md)\" = 17 ] && [ \"$(echo "$show" | size line-height-md)\" = 23 ] && echo '$show' | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d[\"type\"][\"styles\"][\"body\"][\"size\"]==17 and d[\"type\"][\"scale\"]==130; assert d[\"bar\"][\"height\"]==56 and d[\"bar\"][\"icon_size\"]==\"large\"'"
+check "text size 130: controls grow with the type (whole px), icons, spacing, panels and dock cells stay" "echo '$show' | python3 -c '
+import json,sys; d=json.load(sys.stdin); z=d[\"size\"]
+assert (z[\"control-sm\"],z[\"control-md\"],z[\"control-lg\"],z[\"control-xl\"],z[\"control-2xl\"])==(31,36,42,52,62), z
+assert all(isinstance(z[k],int) for k in z if k.startswith(\"control-\"))
+assert z[\"line-height-xs\"]==18                     # the badge: line-height-xs + 2 x border-width-1
+assert (z[\"icon-lg\"],z[\"space-s\"],z[\"panel-md\"])==(20,8,400), z
+assert d[\"dock\"][\"cell\"]=={\"small\":40,\"medium\":48,\"large\":64}, d[\"dock\"]
+assert d[\"css_vars\"][\"--control-md\"]==\"36px\" and d[\"css_vars\"][\"--line-height-xs\"]==\"18px\"
+'"
+cat > "$CONF" <<'C'
+schema = 1
+[desktop.theme]
+density = "roomy"
+[desktop.accessibility]
+text_scale = 115
+C
+show="$($T show)"
+base_ctrl="$($T --conf /dev/null show | python3 -c 'import json,sys; z=json.load(sys.stdin)["size"]; print(z["control-sm"],z["control-md"],z["control-lg"],z["control-xl"],z["control-2xl"])')"
+check "text size 115 on roomy: the preset's heights, then scaled and rounded (32→37, 40→46); 100 leaves them alone" "echo '$show' | python3 -c '
+import json,sys; z=json.load(sys.stdin)[\"size\"]
+assert (z[\"control-sm\"],z[\"control-md\"],z[\"control-lg\"],z[\"control-xl\"],z[\"control-2xl\"])==(28,37,46,46,55), z
+assert z[\"font-size-md\"]==15 and z[\"line-height-xs\"]==16
+' && [ \"$base_ctrl\" = '24 28 32 40 48' ]"
 cat > "$CONF" <<'C'
 schema = 1
 [desktop.animations]

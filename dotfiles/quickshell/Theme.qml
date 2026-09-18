@@ -436,12 +436,15 @@ QtObject {
 
     // ── Dock size ([desktop.dock] icon_size, Dock card "Sizes") ───────────
     // dockCell is a button/workspace box edge: small 40 · medium 48 · large
-    // 64. The dock is that plus spaceS of padding above and below, and sits
+    // 64 — the generator's `dock` block, which Text size leaves alone (the
+    // dock holds no text; the control tokens it was named after grow). The
+    // dock is that plus spaceS of padding above and below, and sits
     // windowGap above the screen edge — dockClearance is everything it takes
     // from the bottom of the screen, what the panels that open above it and
     // the Overview pager keep clear of.
-    readonly property int dockCell: Globals.dockIconSize === "small" ? controlXl
-                                  : Globals.dockIconSize === "large" ? icon4xl : control2xl
+    readonly property var _dockCells: (Globals.tokDock && Globals.tokDock.cell) || ({ small: 40, medium: 48, large: 64 })
+    readonly property int dockCell: Globals.dockIconSize === "small" ? _dockCells.small
+                                  : Globals.dockIconSize === "large" ? _dockCells.large : _dockCells.medium
     readonly property int dockHeight: dockCell + 2 * spaceS
     readonly property int dockClearance: dockHeight + windowGap
 
@@ -468,10 +471,12 @@ QtObject {
 
     function withAlpha(c, a) { return Qt.rgba(c.r, c.g, c.b, a) }
     // Text size (Accessibility modes): "controls grow to fit their text
-    // instead of clipping". The size tokens stay put at every text size (the
-    // generator scales type only), so a container whose width is set by the
-    // text it holds — Quick settings' two-up tiles — widens in step with the
-    // type instead:  width: Theme.grow(Theme.panelMd)  (400 → 460 → 520).
+    // instead of clipping". The generator already scales the type AND the
+    // control heights (control-*, so buttons, fields and rows) with it;
+    // panels, icons and spacing stay put. A container whose WIDTH is set by
+    // the text it holds — Quick settings' two-up tiles — widens in step
+    // through this:  width: Theme.grow(Theme.panelMd)  (400 → 460 → 520).
+    // Never wrap a control-* token in it: those have grown already.
     function grow(px) { return Math.round(px * textScale / 100) }
 
     // Corner scaler for the one-off radii components still carry (a 7px chip,

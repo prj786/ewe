@@ -602,6 +602,8 @@ QtObject {
     property var tokShadow: ({})
     property var tokGradient: ({})
     property var tokBar: ({})
+    // the dock's cells per icon size, unscaled by Text size
+    property var tokDock: ({})
     property var tokA11y: ({})
     // the Accent picker's presets [{name, hex, ink}] — the generator's list,
     // so Settings carries no colour of its own
@@ -633,6 +635,7 @@ QtObject {
                     if (j && j.shadow && typeof j.shadow === "object") g.tokShadow = j.shadow
                     if (j && j.gradient && typeof j.gradient === "object") g.tokGradient = j.gradient
                     if (j && j.bar && typeof j.bar === "object") g.tokBar = j.bar
+                    if (j && j.dock && typeof j.dock === "object") g.tokDock = j.dock
                     if (j && j.accessibility && typeof j.accessibility === "object") g.tokA11y = j.accessibility
                     if (j && Array.isArray(j.accent_presets)) g.tokAccentPresets = j.accent_presets
                 } catch (e) {}

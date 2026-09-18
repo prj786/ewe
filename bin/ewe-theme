@@ -1015,6 +1015,14 @@ def tokens(cfg):
              "focus-width": focus_w, "field-border-width": field_bw}
 
     # ── sizes, with Text size scaling the type scale ───────────────────────
+    # Text size (Accessibility modes): "Type scales; controls grow to fit
+    # their text instead of clipping." So everything text SITS IN scales with
+    # it, rounded to whole pixels: the control heights (buttons, fields,
+    # rows, tabs, segmented controls, the list-row minimums — all of them
+    # control-*) and, through line-height-xs, the badge. Icons, spacing,
+    # radii, panels and the bar's own steps stay put; the bar answers Text
+    # size by moving one icon step up at 130%, and the dock keeps its cells
+    # (the `dock` block below), because neither holds text.
     ts = cfg["text_scale"]
     bar_step = cfg["bar_icon_size"] if cfg["bar_icon_size"] in BAR else "normal"
     if ts == 130:                      # Text size 130%: the icons one step up
@@ -1026,8 +1034,9 @@ def tokens(cfg):
         size["line-height-" + k] = _scale(v, ts)
     for k, v in SPACING.items():
         size["space-" + k] = v
-    size.update({"control-sm": SIZES["control-sm"], "control-md": ctrl_md, "control-lg": ctrl_lg,
-                 "control-xl": SIZES["control-xl"], "control-2xl": SIZES["control-2xl"]})
+    size.update({"control-sm": _scale(SIZES["control-sm"], ts), "control-md": _scale(ctrl_md, ts),
+                 "control-lg": _scale(ctrl_lg, ts), "control-xl": _scale(SIZES["control-xl"], ts),
+                 "control-2xl": _scale(SIZES["control-2xl"], ts)})
     for k in ("icon-xs", "icon-sm", "icon-md", "icon-lg", "icon-xl",
               "icon-2xl", "icon-3xl", "icon-4xl", "panel-sm", "panel-md", "panel-lg", "window-gap",
               "blur-glass"):
@@ -1038,6 +1047,10 @@ def tokens(cfg):
     pad = size[BAR_PAD]
     size["bar-height"] = BAR_MODULE[BAR["normal"][0]] + 2 * pad
     size["bar-height-lg"] = BAR_MODULE[BAR["large"][0]] + 2 * pad
+    # the dock's cell per [desktop.dock] icon_size (Dock card "Sizes"): the
+    # unscaled control-xl / control-2xl and icon-4xl, whatever Text size says
+    dock = {"cell": {"small": SIZES["control-xl"], "medium": SIZES["control-2xl"],
+                     "large": SIZES["icon-4xl"]}}
     b_mod, b_ico = BAR[bar_step]
     bar = {"icon_size": bar_step, "size": bar_step,
            "height": BAR_MODULE[b_mod] + 2 * pad, "module": BAR_MODULE[b_mod],
@@ -1092,7 +1105,7 @@ def tokens(cfg):
                                "reduce_transparency", "increase_contrast", "text_scale", "speed")}
     t = {"input": inp, "color": color, "alpha": alpha, "shape": shape, "size": size,
          "type": typ, "motion": motion, "opacity": opacity, "shadow": shadow,
-         "gradient": gradients(color), "surface": surface, "bar": bar, "presets": presets,
+         "gradient": gradients(color), "surface": surface, "bar": bar, "dock": dock, "presets": presets,
          "accessibility": a11y, "adjusted": adjusted,
          "brand": {str(s): color["ewellow-%d" % s] for s in RAMP_STEPS},
          "grey": {str(k): v for k, v in NEUTRAL.items()},
@@ -1594,7 +1607,7 @@ def gen_json(t):
         "type": t["type"], "motion": t["motion"], "opacity": t["opacity"],
         "shadow": {k: shadow_qml(v) for k, v in t["shadow"].items()},
         "gradient": {k: dict(v, css=gradient_css(v)) for k, v in t["gradient"].items()},
-        "surface": t["surface"], "bar": t["bar"], "presets": t["presets"],
+        "surface": t["surface"], "bar": t["bar"], "dock": t["dock"], "presets": t["presets"],
         "accessibility": t["accessibility"], "adjusted": t["adjusted"],
         "brand": t["brand"], "grey": t["grey"],
         "scheme": t["scheme"],          # colorscheme.sh reads the palette for kitty's ANSI
@@ -1714,7 +1727,7 @@ def cmd_show(a):
     # accent without being rebuilt.
     out({"ok": True, "conf": src, "input": t["input"], "color": t["color"],
          "alpha": t["alpha"], "shape": t["shape"], "size": t["size"], "type": t["type"],
-         "motion": t["motion"], "opacity": t["opacity"], "surface": t["surface"], "bar": t["bar"],
+         "motion": t["motion"], "opacity": t["opacity"], "surface": t["surface"], "bar": t["bar"], "dock": t["dock"],
          "presets": t["presets"], "accessibility": t["accessibility"], "brand": t["brand"],
          "scheme": t["scheme"], "adjusted": t["adjusted"], "accent_presets": accent_presets(),
          "css_vars": css_vars(t)})

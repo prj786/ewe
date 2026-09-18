@@ -1626,7 +1626,7 @@ Scope {
             Item {
                 id: rail
                 // 196px; wider in step with Text size, so labels keep fitting
-                width: Theme.grow(7 * Theme.controlMd)
+                width: 7 * Theme.controlMd
                 anchors.top: parent.top; anchors.bottom: parent.bottom; anchors.left: parent.left
                 Column {
                     id: railCol
