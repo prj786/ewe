@@ -459,6 +459,12 @@ QtObject {
     readonly property int  textScale:         _ax("text_scale", 100)
 
     function withAlpha(c, a) { return Qt.rgba(c.r, c.g, c.b, a) }
+    // Text size (Accessibility modes): "controls grow to fit their text
+    // instead of clipping". The size tokens stay put at every text size (the
+    // generator scales type only), so a container whose width is set by the
+    // text it holds — Quick settings' two-up tiles — widens in step with the
+    // type instead:  width: Theme.grow(Theme.panelMd)  (400 → 460 → 520).
+    function grow(px) { return Math.round(px * textScale / 100) }
 
     // Corner scaler for the one-off radii components still carry (a 7px chip,
     // a 9px thumbnail): `corner = "none"` collapses them all. Use it instead

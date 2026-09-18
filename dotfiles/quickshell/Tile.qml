@@ -23,7 +23,8 @@ import QtQuick
 // TWO independent states, never conflated: `active` is the SERVICE ("Wi-Fi
 // is on"), `opened` is its list being expanded. The split button is what
 // lets Wi-Fi be switched off without ever opening the network list.
-// Sized for a two-up Row: half the parent minus the Row's own spacing.
+// Sized for a two-up Row: half the parent minus the Row's own spacing; at a
+// larger text size the tile grows to fit its text (see height below).
 Rectangle {
     id: tile
     property string ic: ""
@@ -44,7 +45,22 @@ Rectangle {
 
     width: parent ? (parent.width - (parent.spacing !== undefined ? parent.spacing : tile.gap)) / 2
                   : Theme.panelSm / 2
-    height: tile.small ? Theme.control2xl : Theme.control2xl + Theme.spaceS
+    // Text size (Accessibility modes): a tile GROWS to fit its text instead
+    // of clipping it. The title wraps to two lines and the status to two;
+    // the tile is its resting height or its text plus spaceS above and
+    // below, whichever is taller — and as tall as the tallest tile in its
+    // row, so a two-up row stays one row.
+    readonly property int _rest: tile.small ? Theme.control2xl : Theme.control2xl + Theme.spaceS
+    readonly property int _need: tile.small ? tile._rest
+                                : Math.max(tile._rest, texts.implicitHeight + 2 * (Theme.spaceS + tile.border.width))
+    readonly property int _rowNeed: {
+        var m = tile._need
+        var sib = tile.parent ? tile.parent.children : []
+        for (var i = 0; i < sib.length; i++)
+            if (sib[i] !== tile && sib[i].visible && sib[i]._need !== undefined) m = Math.max(m, sib[i]._need)
+        return m
+    }
+    height: tile._rowNeed
     radius: Theme.radiusRounded
     color: tile.active ? Theme.accentSubtle : Theme.surfaceOverlay
     // `on` drops the outline; an open detail zone draws a heavy accent edge
@@ -102,6 +118,7 @@ Rectangle {
                 }
             }
             Column {
+                id: texts
                 visible: !tile.small
                 width: parent.width - circle.width - parent.spacing
                 anchors.verticalCenter: parent.verticalCenter
@@ -112,6 +129,10 @@ Rectangle {
                     font.family: Theme.type.bodyStrong.family
                     font.pixelSize: Theme.type.bodyStrong.size
                     font.weight: Theme.type.bodyStrong.weight
+                    lineHeight: Theme.type.bodyStrong.lineHeight
+                    lineHeightMode: Text.FixedHeight
+                    wrapMode: Text.WrapAtWordBoundaryOrAnywhere
+                    maximumLineCount: 2
                     elide: Text.ElideRight
                 }
                 Text {
@@ -123,6 +144,10 @@ Rectangle {
                     font.family: Theme.type.caption.family
                     font.pixelSize: Theme.type.caption.size
                     font.weight: Theme.type.caption.weight
+                    lineHeight: Theme.type.caption.lineHeight
+                    lineHeightMode: Text.FixedHeight
+                    wrapMode: Text.WrapAtWordBoundaryOrAnywhere
+                    maximumLineCount: 2
                     elide: Text.ElideRight
                 }
             }

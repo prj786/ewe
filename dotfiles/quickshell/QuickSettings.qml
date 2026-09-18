@@ -12,7 +12,8 @@ import Quickshell.Bluetooth
 // settings tile, Switch, Slider, List row, Section header, Agenda,
 // Notification center, Power menu, Dialog, Empty state).
 //
-//   panel    panelMd wide (the icon rail plus the card's panelSm of content),
+//   panel    panelMd wide (the icon rail plus the card's panelSm of content;
+//            wider in step with Text size, Theme.grow),
 //            surfaceRaised with a borderWidth1 borderSubtle outline, the
 //            radiusRounded corner and the shadowFloat elevation, spaceXs
 //            below the bar at the right edge, spaceS + spaceXs of padding and
@@ -828,7 +829,8 @@ Scope {
             id: panel
             readonly property int pad: Theme.spaceS + Theme.spaceXs
             readonly property int railW: Theme.controlLg + 2 * Theme.spaceS
-            width: Theme.panelMd
+            // grows with Text size, so two tiles still fit side by side
+            width: Theme.grow(Theme.panelMd)
             // the layer already sits below the bar's exclusive zone: spaceXs
             // below it, windowGap in from the right edge
             y: Theme.spaceXs
