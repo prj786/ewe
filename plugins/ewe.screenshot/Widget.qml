@@ -9,24 +9,26 @@ import qs
 Item {
     id: root
     property var settings: ({})
-    // the tray's cell: 16 px glyph in an 18 px slot, like every app icon beside it
-    implicitWidth: Theme.trayIconPx + 2
-    implicitHeight: Theme.barItemHeight
+    // a glyph-only bar module (Bar card): barModule square, radiusPrimary,
+    // no fill until you point at it; the bar* roles already follow Glass
+    implicitWidth: Theme.barModule
+    implicitHeight: Theme.barModule
     readonly property string script: Qt.resolvedUrl("screenshot.sh").toString().replace(/^file:\/\//, "")
     function shoot(mode) {
         Quickshell.execDetached(["sh", "-c", 'EWE_SHOT_COPY="$2" exec "$1" "$3"', "_", root.script, root.settings.copy === false ? "0" : "1", mode])
     }
 
     Rectangle {
-        anchors.centerIn: parent; width: parent.width + 6; height: parent.width + 6; radius: Theme.radiusControl
-        color: ma.containsMouse ? Theme.subtleHover : "transparent"
-        Behavior on color { ColorAnimation { duration: 130 } }
+        anchors.fill: parent; radius: Theme.radiusPrimary
+        color: ma.pressed ? Theme.barPressedFill : ma.containsMouse ? Theme.barHoverFill : "transparent"
+        Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
     }
     Text {
         anchors.centerIn: parent
         text: Theme.icCamera
-        font.family: Theme.fontIcons; font.pixelSize: Theme.trayIconPx
-        color: ma.containsMouse ? Theme.fg1 : Theme.fg2
+        font.family: Theme.fontIcons; font.pixelSize: Theme.barIcon
+        color: ma.containsMouse ? Theme.textPrimary : Theme.textSecondary
+        Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
     }
     MouseArea {
         id: ma; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor

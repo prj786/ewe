@@ -57,18 +57,22 @@ Scope {
         WlrLayershell.layer: WlrLayer.Overlay
         WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
         anchors { bottom: true; right: true }
-        implicitWidth: 360
-        implicitHeight: 240
+        implicitWidth: stack.width + 2 * Theme.spaceMd
+        implicitHeight: stack.height + 2 * Theme.spaceMd
         mask: Region { item: stack }
 
         Item {
             id: stack
-            width: 280 + 16          // top card + room for the offset peeks
-            height: 180 + 16
+            // the top card is a screen-shaped thumbnail; each card behind it
+            // peeks spaceS further down and right
+            readonly property int cardW: Theme.panelSm - 2 * Theme.spaceLg
+            readonly property int cardH: Math.round(cardW * 9 / 16)
+            width: cardW + 2 * Theme.spaceS
+            height: cardH + 2 * Theme.spaceS
             anchors.bottom: parent.bottom
-            anchors.bottomMargin: 16
-            x: root.shown ? (win.width - width - 16) : (win.width + 16)
-            Behavior on x { NumberAnimation { duration: Theme.durSlow; easing.type: Theme.ease } }
+            anchors.bottomMargin: Theme.spaceMd
+            x: root.shown ? (win.width - width - Theme.spaceMd) : (win.width + Theme.spaceMd)
+            Behavior on x { NumberAnimation { duration: Theme.durSlow; easing.type: Theme.easeSlow } }
 
             // back peek cards (drawn first → behind), offset down-right
             Repeater {
@@ -76,31 +80,34 @@ Scope {
                 delegate: Rectangle {
                     required property int index
                     readonly property int depth: root.peeks - index   // 1 (nearest) .. 2 (farthest)
-                    width: 280; height: 180
-                    x: depth * 8
-                    y: depth * 8
-                    radius: Theme.r(12)
-                    color: Theme.bg3
-                    border.color: Theme.stroke2
-                    border.width: Theme.borderThin
+                    width: stack.cardW; height: stack.cardH
+                    x: depth * Theme.spaceS
+                    y: depth * Theme.spaceS
+                    radius: Theme.radiusRounded
+                    color: Theme.surfaceBase
+                    border.color: Theme.borderSubtle
+                    border.width: Theme.borderWidth1
                 }
             }
 
-            // top card — the newest capture
+            // top card — the newest capture (a Card: surfaceRaised, a
+            // borderSubtle outline, radiusRounded, the float shadow)
             Rectangle {
                 id: topCard
-                width: 280; height: 180
-                radius: Theme.r(12)
-                color: Theme.bg1
-                border.color: Theme.stroke2
-                border.width: Theme.borderThin
+                width: stack.cardW; height: stack.cardH
+                radius: Theme.radiusRounded
+                color: Theme.surfaceRaised
+                border.color: Theme.borderSubtle
+                border.width: Theme.borderWidth1
                 clip: true
+                layer.enabled: true
+                layer.effect: Elevation {}
 
                 Image {
                     id: img
-                    x: 6; y: 6
-                    width: parent.width - 12
-                    height: parent.height - 12
+                    x: Theme.spaceXs + Theme.spaceXxs; y: x
+                    width: parent.width - 2 * x
+                    height: parent.height - 2 * y
                     fillMode: Image.PreserveAspectFit
                     source: root.n > 0 ? "file://" + root.paths[root.n - 1] : ""
                     asynchronous: true
@@ -134,27 +141,29 @@ Scope {
                     onClicked: if (root.n > 0) Quickshell.execDetached(["sh", "-c", "wl-copy --type image/png < '" + root.paths[root.n - 1] + "'"])
                 }
 
-                // count badge (shows the real total, even when >3 cards)
-                Rectangle {
+                // count badge (shows the real total, even when >3 cards):
+                // the shell's solid accent Badge
+                Badge {
                     visible: root.n > 1
-                    anchors.left: parent.left; anchors.top: parent.top; anchors.margins: 6
-                    width: Math.max(20, cnt.implicitWidth + 12); height: 20; radius: 10
-                    color: Theme.accentFill
-                    Text { id: cnt; anchors.centerIn: parent; text: root.n; color: Theme.accentOn; font.family: Theme.fontText; font.pixelSize: 11; font.weight: Font.Bold }
+                    anchors.left: parent.left; anchors.top: parent.top; anchors.margins: Theme.spaceS
+                    count: root.n
+                    tone: "accent"; solid: true
                 }
 
-                // hover hint
+                // hover hint: a Tag (sm) on the overlay surface, readable
+                // over any screenshot in either scheme
                 Rectangle {
-                    anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 6
-                    width: hintTxt.implicitWidth + 14; height: 20; radius: 10
-                    color: Theme.shadow
+                    anchors.right: parent.right; anchors.top: parent.top; anchors.margins: Theme.spaceS
+                    width: hintTxt.implicitWidth + 2 * Theme.spaceS; height: Theme.controlSm; radius: Theme.radiusFull
+                    color: Theme.surfaceOverlay
+                    border.color: Theme.borderSubtle; border.width: Theme.borderWidth1
                     visible: ma.containsMouse
                     Text {
                         id: hintTxt
                         anchors.centerIn: parent
-                        text: root.n > 1 ? "drag all ↗" : "drag · click=copy"
-                        color: Theme.fg1
-                        font.family: Theme.fontText; font.pixelSize: 10
+                        text: root.n > 1 ? "Drag all" : "Drag, or click to copy"
+                        color: Theme.textPrimary
+                        font.family: Theme.type.caption.family; font.pixelSize: Theme.type.caption.size
                     }
                 }
             }
