@@ -4,11 +4,15 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Services.Pipewire
 
-// Settings — a universal, themed settings window (Super+, · Quick Settings gear ·
-// Launcher "Settings"). A real toplevel window (movable/resizable/closable);
-// sidebar nav + content. Panes: System/Diagnostics, Displays, Networking,
-// Default Apps, Keyboard & Mouse, Shortcuts, Layout, Theme, Wallpaper, Dock,
-// User. All colours from Theme.qml.
+// Settings — the in-shell settings window (Super+, · the Quick settings gear
+// · Launcher "Settings") for a machine without the ewe-settings app. A real
+// toplevel window (movable/resizable/closable): the side navigation on the
+// window's ground, the page in a raised pane (design system: App shell,
+// Side navigation, Settings page, Look presets, Accessibility modes).
+// Panes: System, Displays, Network, Default apps, Keyboard and mouse,
+// Shortcuts, Layout, Appearance, Wallpaper, Screensaver, Power, Dock,
+// Startup, User, Accessibility. Tokens only: every colour, size, radius and
+// duration is a Theme role.
 //
 // Hyprland is Lua-configured, so live changes go through `hyprctl eval 'hl…'`
 // (plain `hyprctl keyword` is rejected). Persistent changes are written to
@@ -22,21 +26,25 @@ Scope {
     property int pane: 0
     // key is the stable identity: probe triggers and the pane component are
     // looked up by it, so inserting a nav item never silently renumbers others
+    // `desc` is the page's one-line description (Settings page card). The
+    // ORDER is public: `qs ipc call settings pane N` deep-links by index, so
+    // a new page goes at the end (Accessibility did).
     readonly property var navItems: [
-        { key: "system",    ic: 0xE0A9, label: "System" },
-        { key: "displays",  ic: 0xE11D, label: "Displays" },
-        { key: "network",   ic: 0xE1AE, label: "Networking" },
-        { key: "defaults",  ic: 0xE426, label: "Default Apps" },
-        { key: "input",     ic: 0xE284, label: "Keyboard & Mouse" },
-        { key: "shortcuts", ic: 0xE09A, label: "Shortcuts" },
-        { key: "layout",    ic: 0xE1C1, label: "Layout" },
-        { key: "theme",     ic: 0xE1DD, label: "Theme" },
-        { key: "wallpaper", ic: 0xE0F6, label: "Wallpaper" },
-        { key: "saver",     ic: 0xE410, label: "Screensaver" },
-        { key: "power",     ic: 0xE140, label: "Power" },
-        { key: "dock",      ic: 0xE4CF, label: "Dock" },
-        { key: "startup",   ic: 0xE286, label: "Startup" },
-        { key: "user",      ic: 0xE19F, label: "User" }
+        { key: "system",    ic: 0xE0A9, label: "System",        desc: "Sound, desktop portals and the state of this machine." },
+        { key: "displays",  ic: 0xE11D, label: "Displays",      desc: "Arrange your displays and choose how they look." },
+        { key: "network",   ic: 0xE1AE, label: "Network",       desc: "Wired, Wi-Fi, VPN and SSH connections." },
+        { key: "defaults",  ic: 0xE426, label: "Default apps",  desc: "The apps that open links, mail, text, pictures, video and folders." },
+        { key: "input",     ic: 0xE284, label: "Keyboard and mouse", desc: "Layouts, typing, the pointer and the touchpad." },
+        { key: "shortcuts", ic: 0xE09A, label: "Shortcuts",     desc: "Every keyboard shortcut on this desktop." },
+        { key: "layout",    ic: 0xE1C1, label: "Layout",        desc: "Space between windows, their border and their corners." },
+        { key: "theme",     ic: 0xE1DD, label: "Appearance",    desc: "Scheme, accent color, corners, density and the bar." },
+        { key: "wallpaper", ic: 0xE0F6, label: "Wallpaper",     desc: "Pictures and videos behind your windows." },
+        { key: "saver",     ic: 0xE410, label: "Screensaver",   desc: "What happens when you step away." },
+        { key: "power",     ic: 0xE140, label: "Power",         desc: "The lid, the battery and what keeps this machine awake." },
+        { key: "dock",      ic: 0xE4CF, label: "Dock",          desc: "The launcher, Overview and workspaces at the bottom." },
+        { key: "startup",   ic: 0xE286, label: "Startup",       desc: "Apps that start when you sign in." },
+        { key: "user",      ic: 0xE19F, label: "User",          desc: "Your name, your picture and your accounts." },
+        { key: "accessibility", ic: 0xE297, label: "Accessibility", desc: "Motion, transparency, contrast and text size for the whole desktop." }
     ]
     readonly property string paneKey: navItems[pane].key
     // Run the active pane's probes. Called on pane change AND on window open —
@@ -94,10 +102,13 @@ Scope {
     function cleanExec(s) { return String(s || "").replace(/%[a-zA-Z]/g, "").trim() }
 
     // ── persisted override state ───────────────────────────────────────────────
-    property int  gapsIn: 6
-    property int  gapsOut: 14
-    property int  borderSize: 1
-    property int  rounding: 12      // decoration.rounding (window corner radius)
+    // hyprland.lua's shipped values (Window card): window-gap around the
+    // screen, half of it between windows, a border-width-2 ring and the
+    // `rounded` corner. The live values replace these once layoutProc runs.
+    property int  gapsIn: Theme.spaceXs
+    property int  gapsOut: Theme.windowGap
+    property int  borderSize: Theme.borderWidth2
+    property int  rounding: Theme.radiusRounded   // decoration.rounding (window corner radius)
 
     function hex6(c) { var s = String(c).replace("#", ""); return s.length === 8 ? s.slice(2) : s }
 
@@ -159,6 +170,33 @@ Scope {
     // and nothing on screen moves.
     Process { id: shapeWriter }
     function shapeWrite(argv) { shapeWriter.running = false; shapeWriter.command = argv; shapeWriter.running = true }
+    // One ewe.conf key, hooks on (the theme hook rebuilds the tokens and the
+    // shell follows): the look presets, the bar, Glass and the accessibility
+    // modes, which live only in ewe.conf.
+    function confSet(key, value) { root.shapeWrite([Globals.eweConf, "set", key, String(value)]) }
+    // Schemes: the built-ins and the person's own, from `ewe-theme scheme
+    // list`; picking one runs `scheme apply` (it writes ewe.conf through
+    // ewe-conf with hooks, so the desktop follows).
+    readonly property string eweTheme: Globals.eweConf.replace(/ewe-conf$/, "ewe-theme")
+    property var schemeOptions: [{ label: "Ewe Dark", value: "ewe-dark" }, { label: "Ewe Light", value: "ewe-light" }]
+    property Process _schemeList: Process {
+        running: true
+        command: [root.eweTheme, "scheme", "list"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                try {
+                    var j = JSON.parse(this.text), o = []
+                    for (var i = 0; i < (j.schemes || []).length; i++)
+                        o.push({ label: j.schemes[i].name + (j.schemes[i].variant === "light" ? " (light)" : " (dark)"), value: j.schemes[i].slug })
+                    if (o.length) root.schemeOptions = o
+                } catch (e) {}
+            }
+        }
+    }
+    function applyScheme(slug) { root.shapeWrite([root.eweTheme, "scheme", "apply", slug]); schemeRelist.restart() }
+    Timer { id: schemeRelist; interval: 1500; onTriggered: { root._schemeList.running = false; root._schemeList.running = true } }
+    // A key's current value, as the generator read it (theme-tokens.json).
+    function tokIn(k, fb) { var v = Globals.tokInput ? Globals.tokInput[k] : undefined; return (v === undefined || v === null) ? fb : v }
 
     // ── Animations (speed multiplier → Hyprland animation overrides) ────────────
     // Scaling the per-leaf `speed` (duration in ds): higher multiplier → smaller
@@ -278,15 +316,15 @@ Scope {
             parts.push("screensaver at " + mins(Globals.saverMin) + " min")
             parts.push(Globals.saverLockAfterMin > 0
                 ? "lock at " + mins(Globals.saverMin + Globals.saverLockAfterMin) + " min"
-                : "no auto-lock")
+                : "no automatic lock")
         } else if (Globals.saverEnabled) {
             parts.push("lock at " + mins(Globals.saverMin) + " min")
         } else {
             parts.push("lock at " + mins(5) + " min")
         }
         parts.push("suspend at 15 min on battery")
-        parts.push("no display power-off")
-        return parts.join(" · ") + (Globals.lowPower ? "   (battery timeline)" : "")
+        parts.push("the display stays on")
+        return parts.join(" · ") + (Globals.lowPower ? " (on battery)" : "")
     }
     property Connections _idlePowerHook: Connections {
         target: Globals
@@ -388,7 +426,7 @@ Scope {
     property var keepSpecs: null
     property int revertLeft: 0
 
-    function flashApplied(msg) { root.appliedMsg = msg || "Applied"; appliedClear.restart() }
+    function flashApplied(msg) { root.appliedMsg = msg || "Saved"; appliedClear.restart() }
     function clearError() { root.errorMsg = ""; HyprMon.lastError = "" }
     Timer { id: appliedClear; interval: 2200; onTriggered: root.appliedMsg = "" }
     Timer {
@@ -443,7 +481,7 @@ Scope {
         // commit what is actually live (re-queried after the apply) rather than
         // the requested specs — so e.g. a "preferred" mode used to re-enable a
         // display is stored as the explicit mode the compositor picked
-        HyprMon.commit(HyprMon.snapshot()); root.flashApplied("Saved")
+        HyprMon.commit(HyprMon.snapshot()); root.flashApplied("Display settings kept")
     }
     function doRevert() {
         revertCountdown.stop()
@@ -461,7 +499,7 @@ Scope {
     function setPrimary(name) {
         var specs = HyprMon.snapshot()
         for (var i = 0; i < specs.length; i++) specs[i].primary = (specs[i].name === name)
-        HyprMon.commit(specs); root.flashApplied("Primary display saved")
+        HyprMon.commit(specs); root.flashApplied("Primary display changed")
     }
     function autoArrange() {
         var all = HyprMon.snapshot()
@@ -916,7 +954,7 @@ Scope {
     // XKB group-toggle shortcut presets (kb_options grp:*). Super+Space is the
     // DE's own Hyprland bind (switchxkblayout) and always works in addition.
     readonly property var grpOptions: [
-        { label: "Super+Space only (DE bind)", value: "" },
+        { label: "Only Super+Space", value: "" },
         { label: "Alt+Shift", value: "grp:alt_shift_toggle" },
         { label: "Ctrl+Alt", value: "grp:ctrl_alt_toggle" },
         { label: "Ctrl+Shift", value: "grp:ctrl_shift_toggle" },
@@ -1057,28 +1095,24 @@ Scope {
     }
     function wpAssign(path) {
         if (root.wpIsVideo(path) && root.wpVideoBackend === "") {
-            root.errorMsg = "Video wallpapers need mpvpaper — install it with: sudo pacman -S mpvpaper"
+            root.errorMsg = "Video wallpapers need mpvpaper. Install it with sudo pacman -S mpvpaper."
             return
         }
         if (root.wpIsGif(path) && root.wpImgBackend === "swaybg")
-            root.errorMsg = "GIFs will be static with swaybg — install swww (sudo pacman -S awww) for animation"
+            root.errorMsg = "GIFs stay still with swaybg. Install swww (sudo pacman -S awww) to animate them."
         var m
         if (root.wpTarget === "*") m = { "*": path }   // "all displays" replaces per-monitor picks
         else { m = {}; for (var k in root.wpMap) m[k] = root.wpMap[k]; m[root.wpTarget] = path }
         root.wpMap = m
         root.wpWrite()
-        root.flashApplied("Wallpaper set")
+        root.flashApplied("Wallpaper changed")
     }
     // file picking + drag-and-drop live in the shared FileDropTarget component
     // (instantiated by the Wallpaper and User panes)
 
-    // accent presets
-    readonly property var accents: [
-        { name: "Blue", hex: "#0a84ff" }, { name: "Indigo", hex: "#5e5ce6" }, { name: "Purple", hex: "#bf5af2" },
-        { name: "Pink", hex: "#ff375f" }, { name: "Red", hex: "#ff453a" }, { name: "Orange", hex: "#ff9f0a" },
-        { name: "Yellow", hex: "#ffd60a" }, { name: "Green", hex: "#30d158" }, { name: "Teal", hex: "#40c8e0" },
-        { name: "Graphite", hex: "#8e8e93" }
-    ]
+    // accent presets: the Accent picker's colours, from the generator
+    // ([{name, hex, ink}]) so this file carries none of its own
+    readonly property var accents: Globals.tokAccentPresets
 
     // ── User: AccountsService identity + session facts ────────────────────────
     property string userRealName: ""
@@ -1122,8 +1156,8 @@ Scope {
         stdout: StdioCollector {
             onStreamFinished: {
                 var t = this.text.trim()
-                if (t !== "") root.errorMsg = "Could not update the display name: " + t.split("\n")[0]
-                else { root.flashApplied("Name updated"); userInfoProbe.running = false; userInfoProbe.running = true }
+                if (t !== "") root.errorMsg = "Couldn't change your name: " + t.split("\n")[0]
+                else { root.flashApplied("Name changed"); userInfoProbe.running = false; userInfoProbe.running = true }
             }
         }
     }
@@ -1144,7 +1178,7 @@ Scope {
     function saveAvatar() {
         cropCanvas.grabToImage(function (res) {
             var tmp = root.home + "/.cache/ewe-avatar.png"
-            if (!res.saveToFile(tmp)) { root.errorMsg = "Could not write the cropped image."; root.avatarCropSrc = ""; return }
+            if (!res.saveToFile(tmp)) { root.errorMsg = "Couldn't save the cropped picture."; root.avatarCropSrc = ""; return }
             avatarSave.command = ["sh", "-c",
                 'if cp "$1" "$HOME/.face"; then busctl call org.freedesktop.Accounts /org/freedesktop/Accounts/User$(id -u) org.freedesktop.Accounts.User SetIconFile s "$HOME/.face" >/dev/null 2>&1 || echo ACCOUNTS-FAIL; else echo CP-FAIL; fi',
                 "qs-settings", tmp]
@@ -1157,9 +1191,9 @@ Scope {
         stdout: StdioCollector {
             onStreamFinished: {
                 var out = this.text.trim()
-                if (out.indexOf("CP-FAIL") >= 0) root.errorMsg = "Could not save ~/.face (check permissions)."
-                else if (out.indexOf("ACCOUNTS-FAIL") >= 0) { root.errorMsg = "Avatar saved to ~/.face, but AccountsService rejected the update — the login screen may keep the old icon."; Globals.recheckFace() }
-                else { root.flashApplied("Avatar updated"); Globals.recheckFace() }
+                if (out.indexOf("CP-FAIL") >= 0) root.errorMsg = "Couldn't save ~/.face. Check its permissions."
+                else if (out.indexOf("ACCOUNTS-FAIL") >= 0) { root.errorMsg = "Picture saved to ~/.face, but AccountsService refused it. The sign-in screen may keep the old one."; Globals.recheckFace() }
+                else { root.flashApplied("Picture changed"); Globals.recheckFace() }
             }
         }
     }
@@ -1179,7 +1213,7 @@ Scope {
         id: gPhotoFetch
         stdout: StdioCollector {
             onStreamFinished: {
-                if (this.text.indexOf("DL-OK") < 0) { root.errorMsg = "Could not download the Google profile photo."; return }
+                if (this.text.indexOf("DL-OK") < 0) { root.errorMsg = "Couldn't download your Google profile photo. Check your connection and try again."; return }
                 avatarSave.command = ["sh", "-c",
                     'if cp "$1" "$HOME/.face"; then busctl call org.freedesktop.Accounts /org/freedesktop/Accounts/User$(id -u) org.freedesktop.Accounts.User SetIconFile s "$HOME/.face" >/dev/null 2>&1 || echo ACCOUNTS-FAIL; else echo CP-FAIL; fi',
                     "qs-settings", root.home + "/.cache/ewe-avatar.png"]
@@ -1203,10 +1237,12 @@ Scope {
         // signal below already fired — sync the level at birth
         Component.onCompleted: if (Globals.settingsOpen) visible = true
         title: "ewe settings"
-        implicitWidth: 880
-        implicitHeight: 620
-        minimumSize: Qt.size(720, 480)
-        color: Theme.bg1
+        // the size hyprland.lua's window rule opens it at; the floor is two
+        // panels wide, so the rail never has to collapse (Side navigation)
+        implicitWidth: Theme.panelLg + Theme.panelSm - Theme.spaceLg - Theme.spaceS
+        implicitHeight: Theme.panelLg + Theme.control2xl + Theme.spaceMd - Theme.spaceXs
+        minimumSize: Qt.size(2 * Theme.panelSm, Theme.panelLg - Theme.spaceXl - Theme.spaceMd)
+        color: Theme.surfaceBase
         Connections {
             target: Globals
             function onSettingsOpenChanged() { if (win.visible !== Globals.settingsOpen) win.visible = Globals.settingsOpen }
@@ -1229,152 +1265,528 @@ Scope {
                 id: keyGrab
                 anchors.fill: parent; focus: true
                 Keys.onEscapePressed: Globals.settingsOpen = false
+                // Side navigation: Ctrl+1 … Ctrl+9 jump to the first nine pages
+                Keys.onPressed: function (e) {
+                    if ((e.modifiers & Qt.ControlModifier) && e.key >= Qt.Key_1 && e.key <= Qt.Key_9) {
+                        var n = e.key - Qt.Key_1
+                        if (n < root.navItems.length) root.pane = n
+                        e.accepted = true
+                    }
+                }
                 Connections { target: Globals; function onSettingsOpenChanged() { if (Globals.settingsOpen) keyGrab.forceActiveFocus() } }
             }
 
-            // ════════ reusable bits ════════
-            component Dot: Rectangle { property string state: "info"; width: 9; height: 9; radius: 5; color: state === "ok" ? Theme.success : state === "bad" ? Theme.danger : Theme.fg3 }
+            // ════════ the page's parts (design system: Settings page) ════════
+            // Text in the type styles. TBody is the body style in textPrimary,
+            // TCaption the caption style in textMuted, TMono values that change
+            // in place (tabular figures).
+            component TBody: Text {
+                color: Theme.textPrimary
+                font.family: Theme.type.body.family
+                font.pixelSize: Theme.type.body.size
+                font.weight: Theme.type.body.weight
+            }
+            component TStrong: TBody { font.weight: Theme.type.bodyStrong.weight }
+            component TCaption: Text {
+                color: Theme.textMuted
+                font.family: Theme.type.caption.family
+                font.pixelSize: Theme.type.caption.size
+                font.weight: Theme.type.caption.weight
+            }
+            component TMono: Text {
+                color: Theme.textSecondary
+                font.family: Theme.type.mono.family
+                font.pixelSize: Theme.type.mono.size
+                font.weight: Theme.type.mono.weight
+                font.features: ({ "tnum": 1 })
+            }
+            // a paragraph under a list: what a setting does, where it is kept
+            component Note: TCaption {
+                width: parent ? parent.width : 0
+                wrapMode: Text.WordWrap
+            }
+            // a status dot: ok · bad · info
+            component Dot: Rectangle {
+                property string state: "info"
+                width: Theme.spaceS; height: Theme.spaceS; radius: Theme.radiusFull
+                color: state === "ok" ? Theme.success : state === "bad" ? Theme.danger : Theme.textMuted
+            }
+            // the rule between two rows of a list well
+            component Divider: Rectangle {
+                width: parent ? parent.width : 0; height: Theme.borderWidth1
+                color: Theme.borderSubtle
+            }
+            // The list well a group of rows sits in. Inside the raised pane,
+            // lists take surfaceOverlay (App shell), with the borderSubtle
+            // outline, the radiusRounded corner and spaceS + spaceXs inside.
             component Card: Rectangle {
                 default property alias content: inner.data
+                property alias spacing: inner.spacing
                 width: parent ? parent.width : 0
-                implicitHeight: inner.implicitHeight + 24
-                radius: Theme.radiusInner; color: Theme.card
-                Column { id: inner; anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 12; spacing: 8 }
-            }
-            // SectionTitle, Slider and Toggle are the shared qmldir components.
-            component KV: Item {
-                property string k: ""; property string v: ""; property string dot: ""
-                property bool action: false; property string actionLabel: ""
-                signal act()
-                width: parent ? parent.width : 0; height: 26
-                Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: k; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
-                Row {
-                    anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; spacing: 8
-                    Text { anchors.verticalCenter: parent.verticalCenter; visible: !action && v !== ""; text: v; color: Theme.fg2; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; elide: Text.ElideRight; width: Math.min(implicitWidth, 340) }
-                    Rectangle { visible: action; anchors.verticalCenter: parent.verticalCenter; width: alab.implicitWidth + 18; height: 22; radius: Theme.r(7); color: aMa.containsMouse ? Theme.accentFill : Theme.card; Behavior on color { ColorAnimation { duration: 120 } }
-                        Text { id: alab; anchors.centerIn: parent; text: actionLabel; color: aMa.containsMouse ? Theme.accentOn : Theme.fg1; font.family: Theme.fontText; font.pixelSize: 11; font.weight: Font.DemiBold }
-                        MouseArea { id: aMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: act() } }
-                    Dot { anchors.verticalCenter: parent.verticalCenter; visible: dot !== ""; state: dot }
-                }
-            }
-            component Pill: Rectangle {
-                property string label: ""; property bool primary: false
-                signal go()
-                width: pl.implicitWidth + 22; height: 28; radius: Theme.radiusControl
-                color: (plMa.containsMouse || primary) ? Theme.accentFill : Theme.card
-                Behavior on color { ColorAnimation { duration: 120 } }
-                activeFocusOnTab: true
-                border.color: activeFocus ? Theme.fg1 : "transparent"; border.width: activeFocus ? 1 : 0
-                Keys.onSpacePressed: go()
-                Keys.onReturnPressed: go()
-                Text { id: pl; anchors.centerIn: parent; text: label; color: (plMa.containsMouse || primary) ? Theme.accentOn : Theme.fg1; font.family: Theme.fontText; font.pixelSize: 11; font.weight: Font.DemiBold }
-                MouseArea { id: plMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: go() }
-            }
-            // ToggleRow — label (+ optional sub-caption) left, Toggle right
-            component ToggleRow: Item {
-                property string title: ""; property string sub: ""; property bool on: false; property bool dim: false
-                signal toggled()
-                width: parent ? parent.width : 0; height: sub !== "" ? 34 : 28
-                opacity: dim ? 0.45 : 1
+                implicitHeight: inner.implicitHeight + 2 * (Theme.spaceS + Theme.spaceXs)
+                radius: Theme.radiusRounded
+                color: Theme.surfaceOverlay
+                border.color: Theme.borderSubtle; border.width: Theme.borderWidth1
                 Column {
-                    anchors.left: parent.left; anchors.right: trTog.left; anchors.rightMargin: 10; anchors.verticalCenter: parent.verticalCenter; spacing: 1
-                    Text { text: title; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; elide: Text.ElideRight; width: parent.width }
-                    Text { visible: sub !== ""; text: sub; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 10; elide: Text.ElideRight; width: parent.width }
+                    id: inner
+                    anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top
+                    anchors.margins: Theme.spaceS + Theme.spaceXs
+                    spacing: Theme.spaceS
                 }
-                Toggle { id: trTog; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; on: parent.on; onToggled: if (!parent.dim) parent.toggled() }
             }
-            // DropRow moved to the shared DropRow.qml (qmldir) so Quick Settings
-            // uses the same dropdown; exclusive-open state lives in Globals.openDd.
-
-            // ════════ layout: sidebar + content ════════
-            Row {
-                anchors.fill: parent; spacing: 0
+            // Inline alert (warning · danger · info · success · neutral): a
+            // lasting state of the page, in the tone's -subtle ground.
+            component Alert: Rectangle {
+                id: al
+                property string tone: "warning"
+                property string title: ""
+                property string text: ""
+                readonly property color ink: al.tone === "danger" ? Theme.danger : al.tone === "info" ? Theme.info
+                                           : al.tone === "success" ? Theme.success : al.tone === "neutral" ? Theme.textSecondary
+                                           : Theme.warning
+                width: parent ? parent.width : 0
+                implicitHeight: alCol.implicitHeight + 2 * Theme.spaceS
+                radius: Theme.radiusPrimary
+                color: al.tone === "danger" ? Theme.dangerSubtle : al.tone === "info" ? Theme.infoSubtle
+                     : al.tone === "success" ? Theme.successSubtle : al.tone === "neutral" ? Theme.surfaceRaised
+                     : Theme.warningSubtle
+                border.color: al.tone === "neutral" ? Theme.borderSubtle : "transparent"
+                border.width: Theme.borderWidth1
+                Text {
+                    id: alIc
+                    anchors.left: parent.left; anchors.leftMargin: Theme.spaceS + Theme.spaceXs
+                    anchors.top: parent.top; anchors.topMargin: Theme.spaceS + Theme.borderWidth1
+                    text: al.tone === "info" ? Theme.icBell : al.tone === "success" ? Theme.icCheck : Theme.icWarning
+                    font.family: Theme.fontIcons; font.pixelSize: Theme.iconMd; color: al.ink
+                }
+                Column {
+                    id: alCol
+                    anchors.left: alIc.right; anchors.leftMargin: Theme.spaceS
+                    anchors.right: parent.right; anchors.rightMargin: Theme.spaceS + Theme.spaceXs
+                    anchors.top: parent.top; anchors.topMargin: Theme.spaceS
+                    spacing: Theme.spaceXxs
+                    TBody { visible: al.title !== ""; width: parent.width; text: al.title; color: al.ink; font.weight: Theme.fontWeightMedium; wrapMode: Text.WordWrap }
+                    TBody { visible: al.text !== ""; width: parent.width; text: al.text; wrapMode: Text.WordWrap }
+                }
+            }
+            // Button (design system: Button): secondary by default — the
+            // surfaceRaised fill behind a borderStrong outline — `primary` is
+            // the accent fill, `ghost` has neither. controlMd tall, or
+            // controlSm with `size: "sm"`; spaceS + spaceXs of padding.
+            component Pill: Rectangle {
+                id: pb
+                property string label: ""
+                property string glyph: ""
+                property bool primary: false
+                property bool ghost: false
+                property bool disabled: false
+                property string size: "md"
+                signal go()
+                readonly property bool _sm: pb.size === "sm"
+                width: pbRow.implicitWidth + 2 * (pb._sm ? Theme.spaceS : Theme.spaceS + Theme.spaceXs)
+                height: pb._sm ? Theme.controlSm : Theme.controlMd
+                radius: Theme.radiusPrimary
+                color: pb.disabled ? (pb.ghost ? "transparent" : Theme.surfaceRaised)
+                     : pb.primary ? (plMa.pressed ? Theme.accentPressed : plMa.containsMouse ? Theme.accentHover : Theme.accent)
+                     : plMa.pressed ? Theme.surfacePressed : plMa.containsMouse ? Theme.surfaceHover
+                     : pb.ghost ? "transparent" : Theme.surfaceRaised
+                border.width: (pb.primary || pb.ghost) && !pb.disabled ? 0 : Theme.borderWidth1
+                border.color: pb.disabled ? Theme.borderSubtle : Theme.borderStrong
+                Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
+                activeFocusOnTab: !pb.disabled
+                Keys.onSpacePressed: if (!pb.disabled) pb.go()
+                Keys.onReturnPressed: if (!pb.disabled) pb.go()
+                // the focus ring sits a border width outside the button
                 Rectangle {
-                    width: 210; height: parent.height; color: Theme.bg3
-                    Column {
-                        anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 14; spacing: 12
-                        Text { text: "Settings"; color: Theme.fg1; font.family: Theme.fontDisplay; font.pixelSize: Theme.fsLarge; font.weight: Font.Bold; bottomPadding: 2 }
-                        Column {
-                            width: parent.width; spacing: 2
-                            Repeater {
-                                model: root.navItems
-                                delegate: Rectangle {
-                                    required property var modelData
-                                    required property int index
-                                    width: parent.width; height: 36; radius: Theme.radiusInner
-                                    readonly property bool sel: root.pane === index
-                                    color: sel ? Theme.accentFill : (nMa.containsMouse ? Theme.subtleHover : Theme.subtle)
-                                    Behavior on color { ColorAnimation { duration: 120 } }
-                                    Row {
-                                        anchors.left: parent.left; anchors.leftMargin: 11; anchors.verticalCenter: parent.verticalCenter; spacing: 11
-                                        Text { anchors.verticalCenter: parent.verticalCenter; width: 18; text: root.g(modelData.ic); font.family: Theme.fontIcons; font.pixelSize: 15; color: parent.parent.sel ? Theme.accentOn : Theme.fg1 }
-                                        Text { anchors.verticalCenter: parent.verticalCenter; text: modelData.label; color: parent.parent.sel ? Theme.accentOn : Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: parent.parent.sel ? Font.DemiBold : Font.Medium }
-                                    }
-                                    MouseArea { id: nMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.pane = index }
-                                }
+                    anchors.fill: parent
+                    anchors.margins: -(Theme.borderWidth1 + Theme.focusWidth)
+                    radius: Theme.radiusPrimary + Theme.borderWidth1 + Theme.focusWidth
+                    color: "transparent"; visible: pb.activeFocus
+                    border.color: Theme.focusRing; border.width: Theme.focusWidth
+                }
+                Row {
+                    id: pbRow
+                    anchors.centerIn: parent; spacing: Theme.spaceXs
+                    Text {
+                        visible: pb.glyph !== ""
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: pb.glyph; font.family: Theme.fontIcons
+                        font.pixelSize: pb._sm ? Theme.iconSm : Theme.iconMd
+                        color: pl.color
+                    }
+                    Text {
+                        id: pl
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: pb.label
+                        color: pb.disabled ? Theme.textDisabled : pb.primary ? Theme.onAccent : Theme.textPrimary
+                        font.family: Theme.type.body.family
+                        font.pixelSize: pb._sm ? Theme.fontSizeS : Theme.fontSizeMd
+                        font.weight: Theme.fontWeightMedium
+                    }
+                }
+                MouseArea { id: plMa; anchors.fill: parent; enabled: !pb.disabled; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: pb.go() }
+            }
+            // a ghost icon-only button (a row's remove ×)
+            component IconBtn: Rectangle {
+                id: ib
+                property string glyph: Theme.icClose
+                property bool danger: false
+                signal go()
+                width: Theme.controlSm; height: Theme.controlSm; radius: Theme.radiusPrimary
+                color: ibMa.pressed ? Theme.surfacePressed : ibMa.containsMouse ? Theme.surfaceHover : "transparent"
+                border.color: ib.activeFocus ? Theme.focusRing : "transparent"; border.width: Theme.focusWidth
+                activeFocusOnTab: true
+                Keys.onSpacePressed: ib.go()
+                Keys.onReturnPressed: ib.go()
+                Text {
+                    anchors.centerIn: parent; text: ib.glyph
+                    font.family: Theme.fontIcons; font.pixelSize: Theme.iconSm
+                    color: ib.danger && ibMa.containsMouse ? Theme.danger : Theme.textSecondary
+                }
+                MouseArea { id: ibMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: ib.go() }
+            }
+            // a link-styled action beside a section header ("Add VPN…")
+            component LinkBtn: TBody {
+                id: lb
+                signal go()
+                color: Theme.accentText
+                font.weight: Theme.fontWeightMedium
+                font.underline: lbMa.containsMouse
+                activeFocusOnTab: true
+                Keys.onSpacePressed: lb.go()
+                Keys.onReturnPressed: lb.go()
+                MouseArea { id: lbMa; anchors.fill: parent; anchors.margins: -Theme.spaceXs; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: lb.go() }
+            }
+            // Segmented control (design system: Segmented control): a sunken
+            // well, the selected segment on surfaceSelected. `fill` splits the
+            // row's width equally; `dim` disables every segment.
+            component Seg: Rectangle {
+                id: seg
+                property var options: []           // [{ label, value }]
+                property var value
+                property bool dim: false
+                property bool fill: false
+                signal picked(var v)
+                readonly property int _in: Theme.spaceXxs + Theme.borderWidth1
+                implicitWidth: segRow.implicitWidth + 2 * seg._in
+                width: seg.fill && parent ? parent.width : implicitWidth
+                height: Theme.controlMd
+                radius: Theme.radiusPrimary
+                color: Theme.surfaceSunken
+                border.color: Theme.borderSubtle; border.width: Theme.borderWidth1
+                Row {
+                    id: segRow
+                    x: seg._in; y: seg._in
+                    height: seg.height - 2 * seg._in
+                    spacing: Theme.spaceXxs
+                    Repeater {
+                        model: seg.options
+                        delegate: Rectangle {
+                            id: sgi
+                            required property var modelData
+                            required property int index
+                            readonly property bool sel: String(seg.value) === String(sgi.modelData.value)
+                            width: seg.fill ? (seg.width - 2 * seg._in - (seg.options.length - 1) * segRow.spacing) / seg.options.length
+                                            : sgl.implicitWidth + 2 * Theme.spaceS
+                            height: segRow.height
+                            radius: Theme.radiusSecondary
+                            color: sgi.sel ? Theme.surfaceSelected : "transparent"
+                            border.color: sgi.activeFocus ? Theme.focusRing : sgi.sel ? Theme.borderSubtle : "transparent"
+                            border.width: sgi.activeFocus ? Theme.focusWidth : Theme.borderWidth1
+                            activeFocusOnTab: !seg.dim
+                            Keys.onSpacePressed: if (!seg.dim && !sgi.sel) seg.picked(sgi.modelData.value)
+                            Keys.onReturnPressed: if (!seg.dim && !sgi.sel) seg.picked(sgi.modelData.value)
+                            Text {
+                                id: sgl
+                                anchors.centerIn: parent
+                                text: sgi.modelData.label
+                                color: seg.dim ? Theme.textDisabled : (sgi.sel || sgMa.containsMouse) ? Theme.textPrimary : Theme.textSecondary
+                                font.family: Theme.type.label.family
+                                font.pixelSize: Theme.type.label.size
+                                font.weight: Theme.type.label.weight
+                            }
+                            MouseArea {
+                                id: sgMa; anchors.fill: parent; enabled: !seg.dim; hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: if (!sgi.sel) seg.picked(sgi.modelData.value)
                             }
                         }
                     }
-                    Rectangle {
-                        anchors.left: parent.left; anchors.bottom: parent.bottom; anchors.margins: 14
-                        width: 30; height: 30; radius: 15; color: xMa.containsMouse ? Theme.cardHover : Theme.card
-                        Text { anchors.centerIn: parent; text: Theme.icClose; font.family: Theme.fontIcons; font.pixelSize: 14; color: Theme.fg1 }
-                        MouseArea { id: xMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: Globals.settingsOpen = false }
-                    }
-                    // version badge (bottom-right of the sidebar)
+                }
+            }
+            // A setting row (Settings page, "Rows"): an optional controlLg icon
+            // tile, the setting's name and what it does, and its control on
+            // the right. The text wraps, so the row grows at a larger text
+            // size instead of clipping.
+            component SetRow: Item {
+                id: sr
+                property string glyph: ""
+                property string title: ""
+                property string desc: ""
+                property bool dim: false
+                default property alias control: srCtl.data
+                width: parent ? parent.width : 0
+                implicitHeight: Math.max(Theme.controlLg, srTexts.implicitHeight, srCtl.implicitHeight) + 2 * Theme.spaceXs
+                Rectangle {
+                    id: srTile
+                    visible: sr.glyph !== ""
+                    width: visible ? Theme.controlLg : 0; height: Theme.controlLg
+                    anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter
+                    radius: Theme.radiusPrimary
+                    color: Theme.surfaceHover
                     Text {
-                        anchors.right: parent.right; anchors.bottom: parent.bottom; anchors.margins: 16
-                        text: "ewe " + Globals.version
-                        color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 10
+                        anchors.centerIn: parent; text: sr.glyph
+                        font.family: Theme.fontIcons; font.pixelSize: Theme.iconMd
+                        color: sr.dim ? Theme.textDisabled : Theme.textPrimary
                     }
                 }
-                Rectangle { width: 1; height: parent.height; color: Theme.stroke3 }
-                Item {
-                    width: parent.width - 211; height: parent.height
-                    Text { anchors.left: parent.left; anchors.top: parent.top; anchors.margins: 20; text: root.navItems[root.pane].label; color: Theme.fg1; font.family: Theme.fontDisplay; font.pixelSize: Theme.fsTitle; font.weight: Font.Bold }
-                    Flickable {
-                        anchors.fill: parent; anchors.topMargin: 60; anchors.margins: 20
-                        contentHeight: paneLoader.item ? paneLoader.item.implicitHeight : 0
-                        clip: true; boundsBehavior: Flickable.StopAtBounds
-                        Loader { id: paneLoader; width: parent.width; sourceComponent: ({ system: cSystem, displays: cDisplays, network: cNetwork, defaults: cDefaults, input: cKeyboard, shortcuts: cShortcuts, layout: cLayout, theme: cTheme, wallpaper: cWallpaper, saver: cSaver, power: cPower, dock: cDock, startup: cStartup, user: cUser })[root.paneKey] }
+                Column {
+                    id: srTexts
+                    anchors.left: srTile.right; anchors.leftMargin: sr.glyph !== "" ? Theme.spaceS + Theme.spaceXs : 0
+                    anchors.right: srCtl.left; anchors.rightMargin: Theme.spaceMd
+                    anchors.verticalCenter: parent.verticalCenter
+                    TBody { width: parent.width; text: sr.title; color: sr.dim ? Theme.textDisabled : Theme.textPrimary; wrapMode: Text.WordWrap }
+                    TCaption { visible: sr.desc !== ""; width: parent.width; text: sr.desc; color: sr.dim ? Theme.textDisabled : Theme.textMuted; wrapMode: Text.WordWrap }
+                }
+                Row {
+                    id: srCtl
+                    anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
+                    spacing: Theme.spaceS
+                }
+            }
+            // a name and its value (a fact, not a setting), with an optional
+            // status dot or one small action
+            component KV: Item {
+                id: kv
+                property string k: ""; property string v: ""; property string dot: ""
+                property bool action: false; property string actionLabel: ""
+                signal act()
+                width: parent ? parent.width : 0
+                implicitHeight: Math.max(Theme.controlMd, kt.implicitHeight, kvRight.implicitHeight)
+                TBody {
+                    id: kt
+                    anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter
+                    width: Math.min(implicitWidth, kv.width / 2)
+                    text: kv.k; elide: Text.ElideRight
+                }
+                Row {
+                    id: kvRight
+                    anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
+                    spacing: Theme.spaceS
+                    TBody {
+                        anchors.verticalCenter: parent.verticalCenter
+                        visible: !kv.action && kv.v !== ""
+                        width: Math.min(implicitWidth, kv.width - kt.width - Theme.spaceMd - (kv.dot !== "" ? Theme.spaceMd : 0))
+                        text: kv.v; color: Theme.textSecondary; elide: Text.ElideRight
+                    }
+                    Pill { visible: kv.action; anchors.verticalCenter: parent.verticalCenter; size: "sm"; label: kv.actionLabel; onGo: kv.act() }
+                    Dot { anchors.verticalCenter: parent.verticalCenter; visible: kv.dot !== ""; state: kv.dot }
+                }
+            }
+            // a switch row: name + optional description, the Switch at the
+            // right. `dim` is the disabled state (a switch that can't apply).
+            component ToggleRow: Item {
+                id: tr
+                property string title: ""; property string sub: ""; property bool on: false; property bool dim: false
+                signal toggled()
+                width: parent ? parent.width : 0
+                implicitHeight: Math.max(Theme.controlLg, trTexts.implicitHeight + 2 * Theme.spaceXs)
+                Column {
+                    id: trTexts
+                    anchors.left: parent.left; anchors.right: trTog.left; anchors.rightMargin: Theme.spaceMd
+                    anchors.verticalCenter: parent.verticalCenter
+                    TBody { width: parent.width; text: tr.title; color: tr.dim ? Theme.textDisabled : Theme.textPrimary; wrapMode: Text.WordWrap }
+                    TCaption { visible: tr.sub !== ""; width: parent.width; text: tr.sub; color: tr.dim ? Theme.textDisabled : Theme.textMuted; wrapMode: Text.WordWrap }
+                }
+                Toggle { id: trTog; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; on: tr.on; disabled: tr.dim; onToggled: if (!tr.dim) tr.toggled() }
+            }
+            // a text field's box (Text field): surfaceSunken behind a
+            // borderStrong outline; hover textMuted, focus focusRing. The
+            // outline is fieldBorderWidth, so it survives `stroke = none`.
+            component FieldBox: Rectangle {
+                property bool focused: false
+                property bool hovered: fbHov.hovered
+                height: Theme.controlMd
+                radius: Theme.radiusPrimary
+                color: Theme.surfaceSunken
+                border.width: Theme.fieldBorderWidth
+                border.color: focused ? Theme.focusRing : hovered ? Theme.textMuted : Theme.borderStrong
+                Behavior on border.color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
+                HoverHandler { id: fbHov }
+            }
+            // DropRow, Slider, Toggle, ListRow and SectionTitle are the shared
+            // qmldir components (Select, Slider, Switch, List row, Section header).
+
+            // ════════ layout: side navigation + the page pane ════════
+            // Side navigation: 196px (7 × controlMd) on the window's
+            // surfaceBase, spaceS + spaceXs × spaceS padding, spaceMd between
+            // groups; items controlMd tall on the radiusSecondary corner. The
+            // selected item is an accentSubtle FILL (no edge bar), its label
+            // textPrimary at medium weight and its icon accentText.
+            Item {
+                id: rail
+                width: 7 * Theme.controlMd
+                anchors.top: parent.top; anchors.bottom: parent.bottom; anchors.left: parent.left
+                Column {
+                    id: railCol
+                    anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top
+                    anchors.leftMargin: Theme.spaceS; anchors.rightMargin: Theme.spaceS
+                    anchors.topMargin: Theme.spaceS + Theme.spaceXs
+                    spacing: Theme.spaceMd
+                    // brand: the sheep mark and the app name
+                    Row {
+                        height: Theme.controlLg; spacing: Theme.spaceS
+                        leftPadding: Theme.spaceS
+                        Item {
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: Theme.iconXl; height: Theme.iconXl
+                            Image {
+                                id: railMark
+                                anchors.fill: parent
+                                source: Qt.resolvedUrl("assets/sheep.svg")
+                                sourceSize.width: 2 * Theme.iconXl; sourceSize.height: 2 * Theme.iconXl
+                                visible: false
+                            }
+                            MultiEffect { anchors.fill: railMark; source: railMark; colorization: 1; colorizationColor: Theme.textPrimary }
+                        }
+                        Text {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: "Settings"; color: Theme.textPrimary
+                            font.family: Theme.type.h4.family; font.pixelSize: Theme.type.h4.size; font.weight: Theme.type.h4.weight
+                        }
+                    }
+                    Column {
+                        width: parent.width; spacing: Theme.spaceXxs
+                        Repeater {
+                            model: root.navItems
+                            delegate: Rectangle {
+                                id: navItem
+                                required property var modelData
+                                required property int index
+                                readonly property bool sel: root.pane === navItem.index
+                                width: parent.width; height: Theme.controlMd; radius: Theme.radiusSecondary
+                                color: navItem.sel ? Theme.accentSubtle : nMa.containsMouse ? Theme.surfaceHover : "transparent"
+                                Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
+                                border.color: navItem.activeFocus ? Theme.focusRing : "transparent"
+                                border.width: Theme.focusWidth
+                                activeFocusOnTab: true
+                                Keys.onSpacePressed: root.pane = navItem.index
+                                Keys.onReturnPressed: root.pane = navItem.index
+                                // Up and Down move between the items (focus; Enter opens)
+                                Keys.onUpPressed: if (navItem.index > 0) navItem.nextItemInFocusChain(false).forceActiveFocus()
+                                Keys.onDownPressed: if (navItem.index < root.navItems.length - 1) navItem.nextItemInFocusChain(true).forceActiveFocus()
+                                Row {
+                                    anchors.left: parent.left; anchors.leftMargin: Theme.spaceS
+                                    anchors.right: parent.right; anchors.rightMargin: Theme.spaceS
+                                    anchors.verticalCenter: parent.verticalCenter; spacing: Theme.spaceS
+                                    Text {
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        width: Theme.iconMd; horizontalAlignment: Text.AlignHCenter
+                                        text: root.g(navItem.modelData.ic); font.family: Theme.fontIcons; font.pixelSize: Theme.iconMd
+                                        color: navItem.sel ? Theme.accentText : nMa.containsMouse ? Theme.textPrimary : Theme.textSecondary
+                                    }
+                                    TBody {
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        width: parent.width - Theme.iconMd - parent.spacing
+                                        text: navItem.modelData.label; elide: Text.ElideRight
+                                        color: (navItem.sel || nMa.containsMouse) ? Theme.textPrimary : Theme.textSecondary
+                                        font.weight: navItem.sel ? Theme.fontWeightMedium : Theme.type.body.weight
+                                    }
+                                }
+                                MouseArea { id: nMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.pane = navItem.index }
+                            }
+                        }
+                    }
+                }
+                // footer: close, and the version in the mono caption
+                Column {
+                    anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
+                    anchors.leftMargin: Theme.spaceS; anchors.rightMargin: Theme.spaceS
+                    anchors.bottomMargin: Theme.spaceS + Theme.spaceXs
+                    spacing: Theme.spaceXxs
+                    Pill { ghost: true; glyph: Theme.icClose; label: "Close"; onGo: Globals.settingsOpen = false }
+                    Text {
+                        leftPadding: Theme.spaceS; topPadding: Theme.spaceXs
+                        text: "ewe " + Globals.version
+                        color: Theme.textMuted
+                        font.family: Theme.fontMono; font.pixelSize: Theme.fontSizeXs
                     }
                 }
             }
+            // the pane (App shell): inset spaceS from the window's edges,
+            // surfaceRaised with the borderSubtle outline and radiusRounded;
+            // the page title and its description, then the page, spaceMd + spaceS
+            // (24) from the sides.
+            Rectangle {
+                id: pagePane
+                anchors.left: rail.right; anchors.right: parent.right
+                anchors.top: parent.top; anchors.bottom: parent.bottom
+                anchors.topMargin: Theme.spaceS; anchors.bottomMargin: Theme.spaceS; anchors.rightMargin: Theme.spaceS
+                radius: Theme.radiusRounded
+                color: Theme.surfaceRaised
+                border.color: Theme.borderSubtle; border.width: Theme.borderWidth1
+                Column {
+                    id: pageHead
+                    anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top
+                    anchors.leftMargin: Theme.spaceMd + Theme.spaceS; anchors.rightMargin: Theme.spaceMd + Theme.spaceS
+                    anchors.topMargin: Theme.spaceMd
+                    spacing: Theme.spaceXxs
+                    Text {
+                        width: parent.width
+                        text: root.navItems[root.pane].label; color: Theme.textPrimary
+                        font.family: Theme.type.h2.family; font.pixelSize: Theme.type.h2.size
+                        font.weight: Theme.type.h2.weight; font.letterSpacing: Theme.type.h2.letterSpacing
+                        elide: Text.ElideRight
+                    }
+                    TBody { width: parent.width; text: root.navItems[root.pane].desc || ""; color: Theme.textSecondary; wrapMode: Text.WordWrap }
+                }
+                Flickable {
+                    id: pageFlick
+                    anchors.left: parent.left; anchors.right: parent.right
+                    anchors.top: pageHead.bottom; anchors.bottom: parent.bottom
+                    anchors.topMargin: Theme.spaceS + Theme.spaceXs
+                    anchors.leftMargin: Theme.spaceMd + Theme.spaceS; anchors.rightMargin: Theme.spaceMd + Theme.spaceS
+                    anchors.bottomMargin: Theme.borderWidth1
+                    contentHeight: paneLoader.item ? paneLoader.item.implicitHeight + Theme.spaceMd : 0
+                    clip: true; boundsBehavior: Flickable.StopAtBounds
+                    Loader { id: paneLoader; width: parent.width; sourceComponent: ({ system: cSystem, displays: cDisplays, network: cNetwork, defaults: cDefaults, input: cKeyboard, shortcuts: cShortcuts, layout: cLayout, theme: cTheme, wallpaper: cWallpaper, saver: cSaver, power: cPower, dock: cDock, startup: cStartup, user: cUser, accessibility: cAccessibility })[root.paneKey] }
+                }
+            }
 
-            // ════════ PANE 0 — System / Diagnostics ════════
+            // ════════ PANE 0 — System ════════
             Component {
                 id: cSystem
                 Column {
-                    spacing: 14
-                    SectionTitle { text: "AUDIO" }
+                    spacing: Theme.spaceS
+                    SectionTitle { text: "Sound" }
                     Card {
                         id: audioCard
                         PwObjectTracker { objects: Pipewire.defaultAudioSink ? [Pipewire.defaultAudioSink] : [] }
                         property var sink: Pipewire.defaultAudioSink
                         property bool muted: sink && sink.audio ? sink.audio.muted : false
                         KV { k: "Output"; v: audioCard.sink ? (audioCard.sink.description || audioCard.sink.nickname || audioCard.sink.name) : "—"; dot: audioCard.sink ? (audioCard.muted ? "bad" : "ok") : "bad" }
-                        KV { k: "Volume"; v: (audioCard.sink && audioCard.sink.audio ? Math.round(audioCard.sink.audio.volume * 100) : 0) + "%" + (audioCard.muted ? "  ·  muted" : "") }
+                        KV { k: "Volume"; v: (audioCard.sink && audioCard.sink.audio ? Math.round(audioCard.sink.audio.volume * 100) : 0) + "%" + (audioCard.muted ? " · muted" : "") }
                         KV { k: "Muted"; action: audioCard.muted; actionLabel: "Unmute"; v: audioCard.muted ? "" : "No"; dot: audioCard.muted ? "bad" : "ok"; onAct: Quickshell.execDetached(["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "0"]) }
                     }
-                    SectionTitle { text: "DESKTOP PORTALS  ·  lets apps open links/files & the browser open apps back" }
+                    SectionTitle { text: "Desktop portals" }
+                    Note { text: "They let apps open links and files, and let the browser open apps back." }
                     Card {
                         KV { k: "graphical-session.target"; v: root.diag.gsession || "?"; dot: root.diag.gsession === "active" ? "ok" : "bad" }
                         KV { k: "xdg-desktop-portal"; v: root.diag.portal || "?"; dot: root.diag.portal === "active" ? "ok" : "bad" }
-                        KV { k: "portal: hyprland"; v: root.diag.portal_hypr || "?"; dot: root.diag.portal_hypr === "active" ? "ok" : "bad" }
-                        KV { k: "portal: gtk"; v: root.diag.portal_gtk || "?"; dot: root.diag.portal_gtk === "active" ? "ok" : "bad" }
-                        KV { k: "App link handoff (OpenURI)"; v: root.diag.handoff === "ok" ? "working" : "unavailable"; dot: root.diag.handoff === "ok" ? "ok" : "bad" }
+                        KV { k: "Portal: Hyprland"; v: root.diag.portal_hypr || "?"; dot: root.diag.portal_hypr === "active" ? "ok" : "bad" }
+                        KV { k: "Portal: GTK"; v: root.diag.portal_gtk || "?"; dot: root.diag.portal_gtk === "active" ? "ok" : "bad" }
+                        KV { k: "Opening links in apps (OpenURI)"; v: root.diag.handoff === "ok" ? "Working" : "Unavailable"; dot: root.diag.handoff === "ok" ? "ok" : "bad" }
                         KV { k: "Default browser"; v: root.appNameForId(root.diag.browser) }
                     }
-                    SectionTitle { text: "SYSTEM" }
+                    SectionTitle { text: "System" }
                     Card {
-                        KV { k: "GPU driver"; v: root.diag.gpu || "?"; dot: "info" }
-                        KV { k: "VPN"; v: Globals.vpnActive ? "connected" : "off"; dot: Globals.vpnActive ? "ok" : "info" }
-                        KV { k: "Idle policy"; v: root.idlePolicyText(); dot: "info" }
+                        KV { k: "Graphics driver"; v: root.diag.gpu || "?"; dot: "info" }
+                        KV { k: "VPN"; v: Globals.vpnActive ? "Connected" : "Off"; dot: Globals.vpnActive ? "ok" : "info" }
+                        KV { k: "When idle"; v: root.idlePolicyText(); dot: "info" }
                         KV { k: "Memory"; v: root.diag.mem || "?"; dot: "info" }
                         KV { k: "Disk /"; v: root.diag.disk || "?"; dot: "info" }
                     }
-                    Pill { label: "Re-run checks"; onGo: root.refresh() }
-                    Item { width: 1; height: 8 }
+                    Pill { label: "Check again"; glyph: Theme.icRefresh; onGo: root.refresh() }
                 }
             }
 
@@ -1382,19 +1794,20 @@ Scope {
             Component {
                 id: cDisplays
                 Column {
-                    spacing: 14
+                    spacing: Theme.spaceS
                     Card {
                         visible: HyprMon.monitors.length === 0
-                        Text { width: parent.width; text: HyprMon.loading ? "Querying displays…" : "No displays reported by Hyprland."; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
+                        TBody { width: parent.width; text: HyprMon.loading ? "Looking for displays…" : "Hyprland reports no displays"; color: Theme.textSecondary }
                     }
-                    SectionTitle { visible: HyprMon.monitors.length > 0; text: "ARRANGEMENT  ·  drag a display; edges snap together" }
+                    SectionTitle { visible: HyprMon.monitors.length > 0; text: "Arrangement" }
+                    Note { visible: HyprMon.monitors.length > 0; text: "Drag a display to move it; edges snap together." }
                     Card {
                         visible: HyprMon.monitors.length > 0
                         Item {
                             id: arena
-                            width: parent.width; height: 200
+                            width: parent.width; height: Theme.panelSm / 2 + Theme.spaceMd + Theme.spaceS
                             readonly property var specs: root.dispSpecs.filter(function (s) { return !s.disabled })
-                            readonly property real pad: 14
+                            readonly property real pad: Theme.spaceS + Theme.spaceXs
                             readonly property real spanW: { var mx = 1; for (var i = 0; i < specs.length; i++) mx = Math.max(mx, specs[i].x + root.specW(specs[i])); return mx }
                             readonly property real spanH: { var mx = 1; for (var i = 0; i < specs.length; i++) mx = Math.max(mx, specs[i].y + root.specH(specs[i])); return mx }
                             readonly property real factor: Math.min((width - 2 * pad) / spanW, (height - 2 * pad) / spanH)
@@ -1403,21 +1816,23 @@ Scope {
                                 delegate: Rectangle {
                                     id: monBox
                                     required property var modelData
-                                    width: root.specW(modelData) * arena.factor; height: root.specH(modelData) * arena.factor; radius: Theme.r(8)
+                                    width: root.specW(modelData) * arena.factor; height: root.specH(modelData) * arena.factor
+                                    radius: Theme.radiusPrimary
                                     x: arena.pad + modelData.x * arena.factor
                                     y: arena.pad + modelData.y * arena.factor
-                                    color: dragMa.drag.active ? Theme.cardHover : (root.isLaptop(modelData) ? Theme.card : Theme.bg1)
-                                    border.color: dragMa.drag.active ? Theme.accent : Theme.stroke1; border.width: dragMa.drag.active ? 2 : 1
-                                    Column { anchors.centerIn: parent; spacing: 1
-                                        Row { anchors.horizontalCenter: parent.horizontalCenter; spacing: 5
-                                            Text { anchors.verticalCenter: parent.verticalCenter; text: monBox.modelData.name; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold }
-                                            Text { anchors.verticalCenter: parent.verticalCenter; visible: monBox.modelData.primary; text: Theme.icStar; font.family: Theme.fontIcons; font.pixelSize: 10; color: Theme.accent }
+                                    color: dragMa.drag.active ? Theme.accentSubtle : dragMa.containsMouse ? Theme.surfaceHover : Theme.surfaceRaised
+                                    border.color: dragMa.drag.active ? Theme.accentText : Theme.borderStrong
+                                    border.width: dragMa.drag.active ? Theme.borderWidth2 : Theme.borderWidth1
+                                    Column { anchors.centerIn: parent; spacing: Theme.spaceXxs
+                                        Row { anchors.horizontalCenter: parent.horizontalCenter; spacing: Theme.spaceXs
+                                            TStrong { anchors.verticalCenter: parent.verticalCenter; text: monBox.modelData.name }
+                                            Text { anchors.verticalCenter: parent.verticalCenter; visible: monBox.modelData.primary; text: Theme.icStar; font.family: Theme.fontIcons; font.pixelSize: Theme.iconXs; color: Theme.accentText }
                                         }
-                                        Text { anchors.horizontalCenter: parent.horizontalCenter; text: HyprMon.modeRes(monBox.modelData.mode).replace("x", "×") + " @ " + Math.round(HyprMon.modeHz(monBox.modelData.mode)) + "Hz"; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 10 }
-                                        Text { anchors.horizontalCenter: parent.horizontalCenter; text: "scale " + Number(monBox.modelData.scale).toFixed(2) + "×"; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 10 }
+                                        TCaption { anchors.horizontalCenter: parent.horizontalCenter; text: HyprMon.modeRes(monBox.modelData.mode).replace("x", " × ") + " · " + Math.round(HyprMon.modeHz(monBox.modelData.mode)) + " Hz" }
+                                        TCaption { anchors.horizontalCenter: parent.horizontalCenter; text: Math.round(Number(monBox.modelData.scale) * 100) + "%" }
                                     }
                                     MouseArea {
-                                        id: dragMa; anchors.fill: parent; cursorShape: Qt.SizeAllCursor
+                                        id: dragMa; anchors.fill: parent; cursorShape: Qt.SizeAllCursor; hoverEnabled: true
                                         drag.target: monBox; drag.axis: Drag.XAndYAxis
                                         drag.minimumX: 0; drag.maximumX: arena.width - monBox.width
                                         drag.minimumY: 0; drag.maximumY: arena.height - monBox.height
@@ -1427,13 +1842,13 @@ Scope {
                             }
                         }
                         Row {
-                            spacing: 8
-                            Pill { label: "Auto-arrange left → right"; onGo: root.autoArrange() }
-                            Pill { label: "Reset displays"; onGo: { HyprMon.resetDisplays(); root.flashApplied("Saved profile re-applied") } }
+                            spacing: Theme.spaceS
+                            Pill { label: "Arrange left to right"; onGo: root.autoArrange() }
+                            Pill { label: "Reset displays"; onGo: { HyprMon.resetDisplays(); root.flashApplied("Saved profile applied again") } }
                         }
-                        Text { width: parent.width; visible: !HyprMon.profiles[HyprMon.currentKey()]; text: "No saved profile for this display set yet — change any setting (or drag a display) to create one."; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
+                        Note { visible: !HyprMon.profiles[HyprMon.currentKey()]; text: "This set of displays has no saved profile yet. Change any setting, or drag a display, to create one." }
                     }
-                    SectionTitle { visible: HyprMon.monitors.length > 0; text: "MONITORS" }
+                    SectionTitle { visible: HyprMon.monitors.length > 0; text: "Displays" }
                     Repeater {
                         model: root.dispSpecs
                         delegate: Card {
@@ -1447,215 +1862,235 @@ Scope {
                             readonly property var mirrorOpts: { var out = [{ label: "Off", value: "" }], ss = root.dispSpecs; for (var i = 0; i < ss.length; i++) if (ss[i].name !== modelData.name && !ss[i].disabled) out.push({ label: ss[i].name, value: ss[i].name }); return out }
                             readonly property int enabledCount: { var n = 0, ss = root.dispSpecs; for (var i = 0; i < ss.length; i++) if (!ss[i].disabled) n++; return n }
                             Item {
-                                width: parent.width; height: 24
-                                Row {
-                                    anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; spacing: 8
-                                    Text { anchors.verticalCenter: parent.verticalCenter; text: monCard.modelData.name; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsBody; font.weight: Font.DemiBold }
-                                    Text { anchors.verticalCenter: parent.verticalCenter; visible: root.isLaptop(monCard.modelData); text: "built-in"; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 10 }
-                                    Text { anchors.verticalCenter: parent.verticalCenter; visible: monCard.modelData.primary; text: Theme.icStar + " primary"; color: Theme.accent; font.family: Theme.fontText; font.pixelSize: 10; font.weight: Font.DemiBold }
+                                width: parent.width; height: Math.max(Theme.controlLg, monHead.implicitHeight)
+                                Column {
+                                    id: monHead
+                                    anchors.left: parent.left; anchors.right: monToggle.left; anchors.rightMargin: Theme.spaceMd
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    Row {
+                                        spacing: Theme.spaceS
+                                        TStrong { anchors.verticalCenter: parent.verticalCenter; text: monCard.modelData.name }
+                                        Badge { anchors.verticalCenter: parent.verticalCenter; visible: root.isLaptop(monCard.modelData); label: "Built-in"; tone: "neutral"; solid: false }
+                                        Badge { anchors.verticalCenter: parent.verticalCenter; visible: monCard.modelData.primary; label: "Primary"; tone: "accent"; solid: false }
+                                    }
+                                    TCaption { width: parent.width; text: monCard.modelData.desc; elide: Text.ElideRight }
                                 }
-                                Row {
-                                    anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; spacing: 10
-                                    Text { anchors.verticalCenter: parent.verticalCenter; text: monCard.modelData.desc; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 10; elide: Text.ElideRight; width: Math.min(implicitWidth, 190) }
-                                    Toggle {
-                                        anchors.verticalCenter: parent.verticalCenter
-                                        on: !monCard.modelData.disabled
-                                        onToggled: {
-                                            if (!monCard.modelData.disabled && monCard.enabledCount <= 1) { root.errorMsg = "At least one display must stay enabled."; return }
-                                            root.riskyChange(monCard.modelData.name, { disabled: !monCard.modelData.disabled })
-                                        }
+                                Toggle {
+                                    id: monToggle
+                                    anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
+                                    on: !monCard.modelData.disabled
+                                    onToggled: {
+                                        if (!monCard.modelData.disabled && monCard.enabledCount <= 1) { root.errorMsg = "One display has to stay on."; return }
+                                        root.riskyChange(monCard.modelData.name, { disabled: !monCard.modelData.disabled })
                                     }
                                 }
                             }
                             Column {
-                                width: parent.width; spacing: 2; visible: !monCard.modelData.disabled
+                                width: parent.width; spacing: Theme.spaceXs; visible: !monCard.modelData.disabled
+                                Divider {}
                                 DropRow {
                                     label: "Resolution"; ddId: "res-" + monCard.modelData.name; options: monCard.resOpts; value: monCard.curRes
                                     onPicked: function (v) { var hzs = monCard.mm.byRes[v] || []; if (hzs.length) root.riskyChange(monCard.modelData.name, { mode: hzs[0].mode }) }
                                 }
                                 DropRow {
-                                    label: "Refresh rate"; ddId: "hz-" + monCard.modelData.name; options: monCard.hzOpts; value: monCard.modelData.mode; buttonWidth: 110
+                                    label: "Refresh rate"; ddId: "hz-" + monCard.modelData.name; options: monCard.hzOpts; value: monCard.modelData.mode
                                     onPicked: function (v) { root.riskyChange(monCard.modelData.name, { mode: v }) }
                                 }
-                                Item {
-                                    width: parent.width; height: 30
-                                    Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Scale"; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
-                                    Row {
-                                        anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; spacing: 5
-                                        Repeater {
-                                            model: [1, 1.25, 1.5, 1.75, 2]
-                                            delegate: Rectangle {
-                                                required property var modelData
-                                                readonly property bool sel: Math.abs(monCard.modelData.scale - modelData) < 0.001
-                                                width: 37; height: 24; radius: Theme.r(6)
-                                                color: sel ? Theme.accentFill : (spMa.containsMouse ? Theme.bg1Hover : Theme.bg1)
-                                                border.color: sel ? Theme.accent : Theme.stroke1; border.width: Theme.borderThin
-                                                Text { anchors.centerIn: parent; text: modelData === 1 || modelData === 2 ? modelData + "×" : String(modelData); color: sel ? Theme.accentOn : Theme.fg1; font.family: Theme.fontText; font.pixelSize: 10; font.weight: Font.DemiBold }
-                                                MouseArea { id: spMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: if (!sel) root.riskyChange(monCard.modelData.name, { scale: modelData }) }
-                                            }
-                                        }
-                                        Rectangle {
-                                            width: 52; height: 24; radius: Theme.r(6); color: Theme.bg1
-                                            border.color: scIn.activeFocus ? Theme.accent : Theme.stroke1; border.width: Theme.borderThin
-                                            TextInput {
-                                                id: scIn
-                                                anchors.fill: parent; horizontalAlignment: TextInput.AlignHCenter; verticalAlignment: TextInput.AlignVCenter
-                                                color: Theme.fg1; font.family: Theme.fontMono; font.pixelSize: 11
-                                                text: Number(monCard.modelData.scale).toFixed(2)
-                                                onAccepted: { var v = parseFloat(text); if (!isNaN(v) && v >= 0.5 && v <= 3) root.riskyChange(monCard.modelData.name, { scale: Math.round(v * 100) / 100 }) }
-                                            }
+                                SetRow {
+                                    title: "Scale"
+                                    desc: "Logical size " + root.specW(monCard.modelData) + " × " + root.specH(monCard.modelData)
+                                    Seg {
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        options: [1, 1.25, 1.5, 1.75, 2].map(function (x) { return { label: Math.round(x * 100) + "%", value: x } })
+                                        value: [1, 1.25, 1.5, 1.75, 2].filter(function (x) { return Math.abs(monCard.modelData.scale - x) < 0.001 })[0]
+                                        onPicked: function (v) { root.riskyChange(monCard.modelData.name, { scale: v }) }
+                                    }
+                                    FieldBox {
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        width: Theme.controlXl + Theme.spaceMd; focused: scIn.activeFocus
+                                        TextInput {
+                                            id: scIn
+                                            anchors.fill: parent; anchors.leftMargin: Theme.spaceXs; anchors.rightMargin: Theme.spaceXs
+                                            horizontalAlignment: TextInput.AlignHCenter; verticalAlignment: TextInput.AlignVCenter
+                                            color: Theme.textPrimary; font.family: Theme.type.mono.family; font.pixelSize: Theme.type.mono.size
+                                            text: Number(monCard.modelData.scale).toFixed(2)
+                                            onAccepted: { var v = parseFloat(text); if (!isNaN(v) && v >= 0.5 && v <= 3) root.riskyChange(monCard.modelData.name, { scale: Math.round(v * 100) / 100 }) }
                                         }
                                     }
                                 }
-                                Item {
-                                    id: effRow
-                                    width: parent.width; height: 16
+                                Note {
                                     readonly property var wh: HyprMon.modeRes(monCard.modelData.mode).split("x")
                                     readonly property bool frac: (wh[0] / monCard.modelData.scale) % 1 !== 0 || (wh[1] / monCard.modelData.scale) % 1 !== 0
-                                    Text { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; text: "Logical size: " + root.specW(monCard.modelData) + " × " + root.specH(monCard.modelData) + (effRow.frac ? "  ·  fractional — Hyprland rounds to whole pixels" : ""); color: effRow.frac ? Theme.warning : Theme.fg3; font.family: Theme.fontText; font.pixelSize: 10 }
+                                    visible: frac
+                                    color: Theme.warning
+                                    text: "This scale doesn't divide the resolution evenly, so Hyprland rounds it to whole pixels."
                                 }
                                 DropRow {
-                                    label: "Rotation"; ddId: "rot-" + monCard.modelData.name; buttonWidth: 110
+                                    label: "Rotation"; ddId: "rot-" + monCard.modelData.name
                                     options: [{ label: "Normal", value: 0 }, { label: "90°", value: 1 }, { label: "180°", value: 2 }, { label: "270°", value: 3 }]
                                     value: monCard.modelData.transform
                                     onPicked: function (v) { root.riskyChange(monCard.modelData.name, { transform: Number(v) }) }
                                 }
                                 DropRow {
                                     visible: root.dispSpecs.length > 1
-                                    label: "Mirror"; ddId: "mir-" + monCard.modelData.name; buttonWidth: 110
+                                    label: "Mirror"; ddId: "mir-" + monCard.modelData.name
                                     options: monCard.mirrorOpts; value: monCard.modelData.mirror
                                     onPicked: function (v) { root.riskyChange(monCard.modelData.name, { mirror: v }) }
                                 }
-                                ToggleRow { title: "Variable refresh rate (VRR)"; on: monCard.modelData.vrr; onToggled: root.directChange(monCard.modelData.name, { vrr: !monCard.modelData.vrr }) }
-                                ToggleRow { title: "10-bit colour"; on: monCard.modelData.bitdepth === 10; onToggled: root.directChange(monCard.modelData.name, { bitdepth: monCard.modelData.bitdepth === 10 ? 8 : 10 }) }
-                                KV { k: "Position"; v: monCard.modelData.x + ", " + monCard.modelData.y + "  ·  drag in Arrangement to move" }
+                                ToggleRow { title: "Variable refresh rate"; sub: "Smoother games and video"; on: monCard.modelData.vrr; onToggled: root.directChange(monCard.modelData.name, { vrr: !monCard.modelData.vrr }) }
+                                ToggleRow { title: "10-bit color"; on: monCard.modelData.bitdepth === 10; onToggled: root.directChange(monCard.modelData.name, { bitdepth: monCard.modelData.bitdepth === 10 ? 8 : 10 }) }
+                                KV { k: "Position"; v: monCard.modelData.x + ", " + monCard.modelData.y }
                                 KV { visible: !monCard.modelData.primary; k: "Primary display"; action: true; actionLabel: "Make primary"; onAct: root.setPrimary(monCard.modelData.name) }
                             }
-                            Text { visible: monCard.modelData.disabled; width: parent.width; text: "Display is disabled — flip the toggle to re-enable it."; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11 }
+                            Note { visible: monCard.modelData.disabled; text: "This display is off. Switch it on to use it again." }
                         }
                     }
-                    Text { width: parent.width; text: "Changes apply live (with a 10-second revert safety net) and persist per display-set profile: docking or undocking restores the matching profile automatically, including at boot."; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
-                    Text { width: parent.width; text: "Screen goes black when (un)plugging the charger? The saved profile is re-asserted automatically a moment later. If the built-in panel still blanks, that's the xe graphics driver's panel self-refresh (kernel-side, not fixable from the shell) — use “Reset displays” to recover, or boot with xe.enable_psr=0."; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
-                    Item { width: 1; height: 8 }
+                    Note { text: "Changes apply at once. A change that can black out a display goes back on its own after 10 seconds unless you keep it. Each set of displays keeps its own profile, restored when you dock or undock and at startup." }
+                    Note { text: "Screen goes black when you plug in the charger? The saved profile comes back a moment later. If the built-in panel stays black, that is the xe driver's panel self-refresh: use Reset displays, or start with xe.enable_psr=0." }
                 }
             }
 
-            // ════════ PANE 2 — Networking ════════
+            // ════════ PANE 2 — Network ════════
             Component {
                 id: cNetwork
                 Column {
-                    spacing: 14
+                    spacing: Theme.spaceS
                     // Wired / Ethernet
-                    SectionTitle { text: "WIRED" }
+                    SectionTitle { text: "Wired" }
                     Card {
-                        Text { width: parent.width; visible: root.wiredList.length === 0; text: "No wired connection."; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
+                        spacing: 0
+                        TBody { width: parent.width; visible: root.wiredList.length === 0; text: "No wired connection"; color: Theme.textSecondary }
                         Repeater {
                             model: root.wiredList
-                            delegate: Item {
+                            delegate: ListRow {
                                 required property var modelData
-                                width: parent.width; height: 30
-                                Text { anchors.left: parent.left; anchors.leftMargin: 4; anchors.verticalCenter: parent.verticalCenter; text: Theme.icEthernet; font.family: Theme.fontIcons; font.pixelSize: 13; color: modelData.state === "activated" ? Theme.accent : Theme.fg3 }
-                                Text { anchors.left: parent.left; anchors.leftMargin: 28; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; text: modelData.name + "  ·  " + modelData.dev + (modelData.state === "activated" ? "  ·  connected" : ""); color: modelData.state === "activated" ? Theme.accent : Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: modelData.state === "activated" ? Font.DemiBold : Font.Normal; elide: Text.ElideRight }
+                                glyph: Theme.icEthernet
+                                label: modelData.name
+                                desc: modelData.dev
+                                active: modelData.state === "activated"
+                                selected: modelData.state === "activated"
+                                kind: modelData.state === "activated" ? "Connected" : ""
                             }
                         }
                     }
                     // Wi-Fi
                     Item {
-                        width: parent.width; height: 30
-                        SectionTitle { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "WI-FI" }
+                        width: parent.width; height: Math.max(wifiTitle.implicitHeight, Theme.controlLg)
+                        SectionTitle { id: wifiTitle; first: false; topPadding: 0; bottomPadding: 0; anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Wi-Fi" }
                         Toggle { visible: root.hasWifi; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; on: root.wifiOn; onToggled: { Quickshell.execDetached(["nmcli", "radio", "wifi", root.wifiOn ? "off" : "on"]); wifiRescan.restart() } }
-                        Text { visible: !root.hasWifi; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; text: "Not available"; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
+                        TCaption { visible: !root.hasWifi; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; text: "Not available" }
                     }
-                    Card {
-                        visible: !root.hasWifi
-                        Text { width: parent.width; text: Theme.icWifiOff + "  No Wi-Fi adapter detected — this machine has no wireless device (common in VMs). Use the wired connection above, or plug in a USB Wi-Fi dongle."; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; wrapMode: Text.Wrap }
+                    Alert {
+                        visible: !root.hasWifi; tone: "neutral"
+                        title: "No Wi-Fi adapter"
+                        text: "This machine has no wireless device, which is common in virtual machines. Use a wired connection or plug in a USB Wi-Fi adapter."
                     }
                     Card {
                         visible: root.hasWifi && root.wifiOn
+                        spacing: 0
+                        TBody { width: parent.width; visible: root.wifiList.length === 0; text: "Looking for networks…"; color: Theme.textSecondary }
                         Repeater {
                             model: root.wifiList.slice(0, 8)
                             delegate: Column {
+                                id: wRow
                                 required property var modelData
                                 width: parent.width
-                                Item {
-                                    width: parent.width; height: 30
-                                    Rectangle { anchors.fill: parent; radius: Theme.r(7); color: wMa.containsMouse ? Theme.subtleHover : Theme.subtle }
-                                    Text { anchors.left: parent.left; anchors.leftMargin: 4; anchors.verticalCenter: parent.verticalCenter; text: modelData.signal >= 66 ? Theme.icWifi : (modelData.signal >= 33 ? Theme.icWifiMed : Theme.icWifiLow); font.family: Theme.fontIcons; font.pixelSize: 13; color: modelData.active ? Theme.accent : Theme.fg3 }
-                                    Text { anchors.left: parent.left; anchors.leftMargin: 28; anchors.right: parent.right; anchors.rightMargin: 22; anchors.verticalCenter: parent.verticalCenter; text: modelData.ssid; color: modelData.active ? Theme.accent : Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: modelData.active ? Font.DemiBold : Font.Normal; elide: Text.ElideRight }
-                                    Text { anchors.right: parent.right; anchors.rightMargin: 4; anchors.verticalCenter: parent.verticalCenter; visible: modelData.sec !== ""; text: Theme.icLock; font.family: Theme.fontIcons; font.pixelSize: 10; color: Theme.fg3 }
-                                    MouseArea { id: wMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.connectWifi(modelData.ssid, modelData.sec) }
+                                ListRow {
+                                    glyph: wRow.modelData.signal >= 66 ? Theme.icWifi : (wRow.modelData.signal >= 33 ? Theme.icWifiMed : Theme.icWifiLow)
+                                    label: wRow.modelData.ssid
+                                    active: wRow.modelData.active; selected: wRow.modelData.active; check: wRow.modelData.active
+                                    onClicked: root.connectWifi(wRow.modelData.ssid, wRow.modelData.sec)
+                                    Text { visible: wRow.modelData.sec !== ""; anchors.verticalCenter: parent.verticalCenter; text: Theme.icLock; font.family: Theme.fontIcons; font.pixelSize: Theme.iconSm; color: Theme.textMuted }
                                 }
                                 Item {
-                                    width: parent.width; height: visible ? 34 : 0; visible: root.pwTarget === modelData.ssid
-                                    Rectangle { anchors.fill: parent; anchors.topMargin: 2; anchors.bottomMargin: 4; radius: Theme.r(7); color: Theme.bg1; border.color: Theme.accent; border.width: Theme.borderThin
-                                        TextInput { id: pwIn; anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 52; verticalAlignment: TextInput.AlignVCenter; echoMode: TextInput.Password; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
-                                            onTextChanged: root.pwText = text; Component.onCompleted: forceActiveFocus(); onAccepted: root.connectWifi(modelData.ssid, modelData.sec)
-                                            Text { anchors.verticalCenter: parent.verticalCenter; visible: pwIn.text.length === 0; text: "Password"; color: Theme.fg3; font: pwIn.font } }
-                                        Text { anchors.right: parent.right; anchors.rightMargin: 12; anchors.verticalCenter: parent.verticalCenter; text: "Join"; color: Theme.accent; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold; MouseArea { anchors.fill: parent; anchors.margins: -6; cursorShape: Qt.PointingHandCursor; onClicked: root.connectWifi(modelData.ssid, modelData.sec) } } }
+                                    width: parent.width; visible: root.pwTarget === wRow.modelData.ssid
+                                    height: visible ? Theme.controlMd + 2 * Theme.spaceXs : 0
+                                    FieldBox {
+                                        anchors.left: parent.left; anchors.right: joinBtn.left; anchors.rightMargin: Theme.spaceS
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        focused: pwIn.activeFocus
+                                        TextInput {
+                                            id: pwIn
+                                            anchors.fill: parent; anchors.leftMargin: Theme.spaceS; anchors.rightMargin: Theme.spaceS
+                                            verticalAlignment: TextInput.AlignVCenter; echoMode: TextInput.Password; clip: true
+                                            color: Theme.textPrimary; font.family: Theme.type.body.family; font.pixelSize: Theme.type.body.size
+                                            onTextChanged: root.pwText = text; Component.onCompleted: forceActiveFocus(); onAccepted: root.connectWifi(wRow.modelData.ssid, wRow.modelData.sec)
+                                            TBody { anchors.verticalCenter: parent.verticalCenter; visible: pwIn.text.length === 0; text: "Password"; color: Theme.textMuted }
+                                        }
+                                    }
+                                    Pill { id: joinBtn; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; primary: true; label: "Join"; onGo: root.connectWifi(wRow.modelData.ssid, wRow.modelData.sec) }
                                 }
                             }
                         }
                     }
                     // VPN
                     Item {
-                        width: parent.width; height: 20
-                        SectionTitle { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "VPN" }
-                        Text { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; text: "+ Add VPN"; color: Theme.accent; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold; MouseArea { anchors.fill: parent; anchors.margins: -6; cursorShape: Qt.PointingHandCursor; onClicked: Quickshell.execDetached(["nm-connection-editor"]) } }
+                        width: parent.width; height: Math.max(vpnTitle.implicitHeight, Theme.controlMd)
+                        SectionTitle { id: vpnTitle; first: false; topPadding: 0; bottomPadding: 0; anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "VPN" }
+                        LinkBtn { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; text: "Add VPN…"; onGo: Quickshell.execDetached(["nm-connection-editor"]) }
                     }
                     Card {
-                        Text { width: parent.width; visible: root.vpnList.length === 0; text: "No VPN connections configured."; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
+                        spacing: 0
+                        Column {
+                            width: parent.width; visible: root.vpnList.length === 0
+                            TBody { text: "No VPN connections yet" }
+                            TCaption { width: parent.width; text: "Add one with Add VPN…"; wrapMode: Text.WordWrap }
+                        }
                         Repeater {
                             model: root.vpnList
-                            delegate: Item {
+                            delegate: ListRow {
                                 required property var modelData
-                                width: parent.width; height: 30
-                                Rectangle { anchors.fill: parent; radius: Theme.r(7); color: vMa.containsMouse ? Theme.subtleHover : Theme.subtle }
-                                Text { anchors.left: parent.left; anchors.leftMargin: 4; anchors.verticalCenter: parent.verticalCenter; text: Theme.icVpn; font.family: Theme.fontIcons; font.pixelSize: 12; color: modelData.active ? Theme.accent : Theme.fg3 }
-                                Text { anchors.left: parent.left; anchors.leftMargin: 26; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; text: modelData.name + (modelData.active ? "  ·  connected" : ""); color: modelData.active ? Theme.accent : Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: modelData.active ? Font.DemiBold : Font.Normal; elide: Text.ElideRight }
-                                MouseArea { id: vMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: { Quickshell.execDetached(["nmcli", "connection", modelData.active ? "down" : "up", modelData.name]); vpnRescan.restart() } }
+                                glyph: Theme.icVpn
+                                label: modelData.name
+                                active: modelData.active; selected: modelData.active
+                                kind: modelData.active ? "Connected" : (hovered ? "Connect" : "")
+                                onClicked: { Quickshell.execDetached(["nmcli", "connection", modelData.active ? "down" : "up", modelData.name]); vpnRescan.restart() }
                             }
                         }
                     }
                     // SSH
                     Item {
-                        width: parent.width; height: 20
-                        SectionTitle { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "SSH HOSTS" }
-                        Text { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; text: "Edit config"; color: Theme.accent; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold; MouseArea { anchors.fill: parent; anchors.margins: -6; cursorShape: Qt.PointingHandCursor; onClicked: Quickshell.execDetached(["kitty", "-e", "sh", "-c", "${EDITOR:-micro} ~/.ssh/config"]) } }
+                        width: parent.width; height: Math.max(sshTitle.implicitHeight, Theme.controlMd)
+                        SectionTitle { id: sshTitle; first: false; topPadding: 0; bottomPadding: 0; anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "SSH hosts" }
+                        LinkBtn { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; text: "Edit config"; onGo: Quickshell.execDetached(["kitty", "-e", "sh", "-c", "${EDITOR:-micro} ~/.ssh/config"]) }
                     }
                     Card {
-                        Text { width: parent.width; visible: root.sshHosts.length === 0; text: "No hosts in ~/.ssh/config. Add one with “Edit config”."; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; wrapMode: Text.Wrap }
+                        spacing: 0
+                        Column {
+                            width: parent.width; visible: root.sshHosts.length === 0
+                            TBody { text: "No hosts in ~/.ssh/config" }
+                            TCaption { width: parent.width; text: "Add one with Edit config."; wrapMode: Text.WordWrap }
+                        }
                         Repeater {
                             model: root.sshHosts
-                            delegate: Item {
+                            delegate: ListRow {
                                 required property var modelData
-                                width: parent.width; height: 30
-                                Rectangle { anchors.fill: parent; radius: Theme.r(7); color: sMa.containsMouse ? Theme.subtleHover : Theme.subtle }
-                                Text { anchors.left: parent.left; anchors.leftMargin: 4; anchors.verticalCenter: parent.verticalCenter; text: Theme.icLock; font.family: Theme.fontIcons; font.pixelSize: 12; color: Theme.fg3 }
-                                Text { anchors.left: parent.left; anchors.leftMargin: 26; anchors.verticalCenter: parent.verticalCenter; text: modelData; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
-                                Text { anchors.right: parent.right; anchors.rightMargin: 6; anchors.verticalCenter: parent.verticalCenter; visible: sMa.containsMouse; text: "connect →"; color: Theme.accent; font.family: Theme.fontText; font.pixelSize: 11 }
-                                MouseArea { id: sMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: Quickshell.execDetached(["kitty", "-e", "ssh", modelData]) }
+                                glyph: Theme.icSsh
+                                label: modelData
+                                kind: hovered ? "Connect" : ""
+                                onClicked: Quickshell.execDetached(["kitty", "-e", "ssh", modelData])
                             }
                         }
                     }
                     // Status
-                    SectionTitle { text: "STATUS" }
+                    SectionTitle { text: "Status" }
                     Card {
+                        TBody { width: parent.width; visible: root.netActive.length === 0 && root.ipList.length === 0; text: "No active connections"; color: Theme.textSecondary }
                         Repeater {
                             model: root.netActive
                             delegate: KV { required property var modelData; k: modelData.name + " (" + modelData.type + ")"; v: modelData.dev + " · " + modelData.state; dot: modelData.state === "activated" ? "ok" : "info" }
                         }
-                        Repeater { model: root.ipList; delegate: KV { required property var modelData; k: "IP"; v: modelData } }
+                        Repeater { model: root.ipList; delegate: KV { required property var modelData; k: "IP address"; v: modelData } }
                     }
-                    Item { width: 1; height: 8 }
                 }
             }
 
-            // ════════ PANE 3 — Default Apps ════════
+            // ════════ PANE 3 — Default apps ════════
             Component {
                 id: cDefaults
                 Column {
                     id: defCol
-                    spacing: 10
+                    spacing: Theme.spaceS
                     property string openCat: ""
                     Repeater {
                         model: root.appCats
@@ -1664,53 +2099,68 @@ Scope {
                             required property var modelData
                             readonly property string curId: root.defaults[modelData.key] || ""
                             readonly property var choices: root.appChoices[modelData.key] || []
-                            Item {
-                                width: parent.width; height: 30
-                                Row {
-                                    anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; spacing: 10
-                                    Text { anchors.verticalCenter: parent.verticalCenter; width: 18; text: root.g(appCard.modelData.ic); font.family: Theme.fontIcons; font.pixelSize: 15; color: Theme.fg3 }
-                                    Text { anchors.verticalCenter: parent.verticalCenter; text: appCard.modelData.key; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold }
-                                }
-                                Rectangle {
-                                    anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
-                                    width: 210; height: 26; radius: Theme.r(7); color: cMa.containsMouse ? Theme.bg1Hover : Theme.bg1; border.color: Theme.stroke1; border.width: Theme.borderThin
-                                    Text { anchors.left: parent.left; anchors.leftMargin: 9; anchors.right: chev.left; anchors.verticalCenter: parent.verticalCenter; text: root.appNameForId(appCard.curId); color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: 11; elide: Text.ElideRight }
-                                    Text { id: chev; anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter; text: Theme.icChevronDown; font.family: Theme.fontIcons; font.pixelSize: 9; color: Theme.fg3 }
-                                    MouseArea { id: cMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: defCol.openCat = (defCol.openCat === appCard.modelData.key ? "" : appCard.modelData.key) }
+                            readonly property bool open: defCol.openCat === modelData.key
+                            // the keys are also the map keys: show them in sentence case
+                            SetRow {
+                                glyph: root.g(appCard.modelData.ic)
+                                title: appCard.modelData.key.charAt(0) + appCard.modelData.key.slice(1).toLowerCase()
+                                // the Select trigger (Select card)
+                                FieldBox {
+                                    id: defBtn
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    width: Theme.panelSm / 2 + Theme.spaceLg; focused: appCard.open || activeFocus
+                                    activeFocusOnTab: true
+                                    Keys.onSpacePressed: defCol.openCat = appCard.open ? "" : appCard.modelData.key
+                                    Keys.onReturnPressed: defCol.openCat = appCard.open ? "" : appCard.modelData.key
+                                    TBody {
+                                        anchors.left: parent.left; anchors.leftMargin: Theme.spaceS
+                                        anchors.right: defChev.left; anchors.rightMargin: Theme.spaceXs
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        text: root.appNameForId(appCard.curId); elide: Text.ElideRight
+                                    }
+                                    Text {
+                                        id: defChev
+                                        anchors.right: parent.right; anchors.rightMargin: Theme.spaceS; anchors.verticalCenter: parent.verticalCenter
+                                        text: appCard.open ? Theme.icChevronUp : Theme.icChevronDown
+                                        font.family: Theme.fontIcons; font.pixelSize: Theme.iconMd; color: Theme.textSecondary
+                                    }
+                                    MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: defCol.openCat = (appCard.open ? "" : appCard.modelData.key) }
                                 }
                             }
                             Column {
-                                width: parent.width; visible: defCol.openCat === appCard.modelData.key; spacing: 1
-                                Text { width: parent.width; visible: appCard.choices.length === 0; text: "No installed app handles this type."; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11 }
+                                width: parent.width; visible: appCard.open; spacing: 0
+                                Divider {}
+                                TBody { width: parent.width; topPadding: Theme.spaceS; visible: appCard.choices.length === 0; text: "No installed app opens this type"; color: Theme.textSecondary }
                                 Repeater {
                                     model: appCard.choices
                                     delegate: Rectangle {
+                                        id: choice
                                         required property var modelData
                                         readonly property var entry: root.entryForId(modelData)
                                         readonly property bool isCur: String(appCard.curId).replace(/\.desktop$/, "") === String(modelData).replace(/\.desktop$/, "")
-                                        width: parent.width; height: 32; radius: Theme.r(6); color: eMa.containsMouse ? Theme.subtleHover : Theme.subtle
+                                        width: parent.width; height: Theme.controlLg; radius: Theme.radiusSecondary
+                                        color: eMa.pressed ? Theme.surfacePressed : choice.isCur ? Theme.accentSubtle : eMa.containsMouse ? Theme.surfaceHover : "transparent"
                                         Row {
-                                            anchors.left: parent.left; anchors.leftMargin: 8; anchors.verticalCenter: parent.verticalCenter; spacing: 9
-                                            Image { anchors.verticalCenter: parent.verticalCenter; width: 18; height: 18; sourceSize.width: 36; sourceSize.height: 36; mipmap: true; source: parent.parent.entry && parent.parent.entry.icon ? Quickshell.iconPath(parent.parent.entry.icon, "application-x-executable") : Quickshell.iconPath("application-x-executable") }
-                                            Text { anchors.verticalCenter: parent.verticalCenter; text: parent.parent.entry ? (parent.parent.entry.name || modelData) : modelData; color: parent.parent.isCur ? Theme.accent : Theme.fg1; font.family: Theme.fontText; font.pixelSize: 11; font.weight: parent.parent.isCur ? Font.DemiBold : Font.Normal }
+                                            anchors.left: parent.left; anchors.leftMargin: Theme.spaceS; anchors.verticalCenter: parent.verticalCenter; spacing: Theme.spaceS + Theme.spaceXs
+                                            Image { anchors.verticalCenter: parent.verticalCenter; width: Theme.iconLg; height: Theme.iconLg; sourceSize.width: 2 * Theme.iconLg; sourceSize.height: 2 * Theme.iconLg; mipmap: true; source: choice.entry && choice.entry.icon ? Quickshell.iconPath(choice.entry.icon, "application-x-executable") : Quickshell.iconPath("application-x-executable") }
+                                            TBody { anchors.verticalCenter: parent.verticalCenter; text: choice.entry ? (choice.entry.name || choice.modelData) : choice.modelData; font.weight: choice.isCur ? Theme.fontWeightMedium : Theme.type.body.weight }
                                         }
-                                        Text { anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter; visible: parent.isCur; text: Theme.icCheck; font.family: Theme.fontIcons; font.pixelSize: 11; color: Theme.accent }
-                                        MouseArea { id: eMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: { root.setDefaultApp(appCard.modelData.key, modelData); defCol.openCat = "" } }
+                                        Text { anchors.right: parent.right; anchors.rightMargin: Theme.spaceS; anchors.verticalCenter: parent.verticalCenter; visible: choice.isCur; text: Theme.icCheck; font.family: Theme.fontIcons; font.pixelSize: Theme.iconMd; color: Theme.accentText }
+                                        MouseArea { id: eMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: { root.setDefaultApp(appCard.modelData.key, choice.modelData); defCol.openCat = "" } }
                                     }
                                 }
                             }
                         }
                     }
-                    Item { width: 1; height: 8 }
                 }
             }
 
-            // ════════ PANE 4 — Keyboard & Mouse ════════
+            // ════════ PANE 4 — Keyboard and mouse ════════
             Component {
                 id: cKeyboard
                 Column {
                     id: kbPane
-                    spacing: 14
+                    spacing: Theme.spaceS
                     property string kbQuery: ""
                     property bool advOpen: false
                     function nameOf(code) { for (var i = 0; i < root.kbPresets.length; i++) if (root.kbPresets[i].c === code) return root.kbPresets[i].n; return code }
@@ -1740,24 +2190,27 @@ Scope {
                         if (root.devTarget !== "") root.applyDevice(root.devTarget, patch)
                         else root.applyInput(patch)
                     }
+                    // one layout row: controlLg + spaceXs, so a drag lands on a slot
+                    readonly property int rowH: Theme.controlLg + Theme.spaceXs
 
                     Card {
                         visible: !root.inpLoaded
-                        Text { width: parent.width; text: "Reading input configuration…"; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
+                        TBody { width: parent.width; text: "Reading your input settings…"; color: Theme.textSecondary }
                     }
 
-                    SectionTitle { visible: root.inpLoaded; text: "KEYBOARD LAYOUTS  ·  drag to reorder — first is the default" }
+                    SectionTitle { visible: root.inpLoaded; text: "Keyboard layouts" }
+                    Note { visible: root.inpLoaded; text: "Drag a layout to reorder. The first one is the default." }
                     Card {
                         visible: root.inpLoaded
                         Item {
-                            // when a variant popup is open its ~150px list must not be
-                            // occluded by the later search-box sibling — grow to fit
+                            // when a variant menu is open its list must not be
+                            // covered by the search field below — grow to fit
                             width: parent.width
                             height: {
-                                var h = root.kbActive.length * 38
+                                var h = root.kbActive.length * kbPane.rowH
                                 if (Globals.openDd.indexOf("kbvar-") === 0) {
                                     var idx = parseInt(Globals.openDd.slice(6)) || 0
-                                    h = Math.max(h, idx * 38 + 30 + 155)
+                                    h = Math.max(h, idx * kbPane.rowH + Theme.controlLg + Theme.panelSm / 2)
                                 }
                                 return h
                             }
@@ -1767,58 +2220,57 @@ Scope {
                                     id: kbRow
                                     required property var modelData
                                     required property int index
-                                    width: parent.width; height: 38
-                                    y: index * 38
+                                    width: parent.width; height: kbPane.rowH
+                                    y: index * kbPane.rowH
                                     z: rowDrag.drag.active || Globals.openDd === ("kbvar-" + index) ? 10 : 1
                                     Rectangle {
-                                        anchors.fill: parent; anchors.bottomMargin: 6; radius: Theme.r(7)
-                                        color: rowDrag.drag.active ? Theme.bg1Hover : Theme.bg1
-                                        border.color: Theme.stroke2; border.width: Theme.borderThin
-                                        Text { anchors.left: parent.left; anchors.leftMargin: 10; anchors.verticalCenter: parent.verticalCenter; text: Theme.icKeyboard; font.family: Theme.fontIcons; font.pixelSize: 13; color: Theme.fg3 }
-                                        Text {
-                                            anchors.left: parent.left; anchors.leftMargin: 32; anchors.right: kbRowRight.left; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter
-                                            text: kbPane.nameOf(kbRow.modelData.code) + "  (" + kbRow.modelData.code + ")" + (kbRow.index === 0 ? "  ·  default" : "")
-                                            color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: kbRow.index === 0 ? Font.DemiBold : Font.Normal; elide: Text.ElideRight
+                                        anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top
+                                        height: Theme.controlLg; radius: Theme.radiusSecondary
+                                        color: rowDrag.drag.active ? Theme.surfacePressed : rowDrag.containsMouse ? Theme.surfaceHover : "transparent"
+                                        border.color: rowDrag.drag.active ? Theme.borderStrong : Theme.borderSubtle; border.width: Theme.borderWidth1
+                                        Text { id: kbGlyph; anchors.left: parent.left; anchors.leftMargin: Theme.spaceS; anchors.verticalCenter: parent.verticalCenter; text: Theme.icKeyboard; font.family: Theme.fontIcons; font.pixelSize: Theme.iconMd; color: Theme.textSecondary }
+                                        TBody {
+                                            anchors.left: kbGlyph.right; anchors.leftMargin: Theme.spaceS + Theme.spaceXs
+                                            anchors.right: kbRowRight.left; anchors.rightMargin: Theme.spaceS; anchors.verticalCenter: parent.verticalCenter
+                                            text: kbPane.nameOf(kbRow.modelData.code) + " (" + kbRow.modelData.code + ")"
+                                            font.weight: kbRow.index === 0 ? Theme.fontWeightMedium : Theme.type.body.weight; elide: Text.ElideRight
                                         }
                                         Row {
                                             id: kbRowRight
-                                            anchors.right: parent.right; anchors.rightMargin: 10; anchors.verticalCenter: parent.verticalCenter; spacing: 10
-                                            Rectangle {
+                                            anchors.right: parent.right; anchors.rightMargin: Theme.spaceXs; anchors.verticalCenter: parent.verticalCenter; spacing: Theme.spaceS
+                                            Badge { anchors.verticalCenter: parent.verticalCenter; visible: kbRow.index === 0; label: "Default"; tone: "accent"; solid: false }
+                                            FieldBox {
                                                 visible: kbPane.variantOpts(kbRow.modelData.code).length > 1
                                                 anchors.verticalCenter: parent.verticalCenter
-                                                width: 118; height: 22; radius: Theme.r(6)
-                                                color: kvMa.containsMouse ? Theme.cardHover : Theme.card
-                                                border.color: Globals.openDd === ("kbvar-" + kbRow.index) ? Theme.accent : Theme.stroke1; border.width: Theme.borderThin
-                                                Text { anchors.left: parent.left; anchors.leftMargin: 7; anchors.right: parent.right; anchors.rightMargin: 18; anchors.verticalCenter: parent.verticalCenter; text: kbRow.modelData.variant === "" ? "Default" : kbRow.modelData.variant; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: 10; elide: Text.ElideRight }
-                                                Text { anchors.right: parent.right; anchors.rightMargin: 6; anchors.verticalCenter: parent.verticalCenter; text: Theme.icChevronDown; font.family: Theme.fontIcons; font.pixelSize: 8; color: Theme.fg3 }
-                                                MouseArea { id: kvMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: Globals.openDd = Globals.openDd === ("kbvar-" + kbRow.index) ? "" : ("kbvar-" + kbRow.index) }
+                                                width: Theme.panelSm / 3; height: Theme.controlSm
+                                                focused: Globals.openDd === ("kbvar-" + kbRow.index)
+                                                TCaption { anchors.left: parent.left; anchors.leftMargin: Theme.spaceS; anchors.right: kvChev.left; anchors.rightMargin: Theme.spaceXs; anchors.verticalCenter: parent.verticalCenter; text: kbRow.modelData.variant === "" ? "Default" : kbRow.modelData.variant; color: Theme.textPrimary; elide: Text.ElideRight }
+                                                Text { id: kvChev; anchors.right: parent.right; anchors.rightMargin: Theme.spaceXs; anchors.verticalCenter: parent.verticalCenter; text: Theme.icChevronDown; font.family: Theme.fontIcons; font.pixelSize: Theme.iconSm; color: Theme.textSecondary }
+                                                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: Globals.openDd = Globals.openDd === ("kbvar-" + kbRow.index) ? "" : ("kbvar-" + kbRow.index) }
                                             }
-                                            Text {
-                                                visible: root.kbActive.length > 1
-                                                anchors.verticalCenter: parent.verticalCenter
-                                                text: Theme.icClose; font.family: Theme.fontIcons; font.pixelSize: 12; color: kxMa.containsMouse ? Theme.danger : Theme.fg3
-                                                MouseArea { id: kxMa; anchors.fill: parent; anchors.margins: -6; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.kbRemove(kbRow.index) }
-                                            }
+                                            IconBtn { visible: root.kbActive.length > 1; anchors.verticalCenter: parent.verticalCenter; danger: true; onGo: root.kbRemove(kbRow.index) }
                                         }
                                     }
-                                    // variant popup — overlays the rows below (z-stacked)
+                                    // the variant menu (Menu card) — over the rows below it
                                     Rectangle {
                                         visible: Globals.openDd === ("kbvar-" + kbRow.index)
-                                        x: parent.width - 158; y: 30; width: 148; z: 30
-                                        height: Math.min(kvCol.implicitHeight + 10, 150)
-                                        radius: Theme.r(7); color: Theme.bg3; border.color: Theme.stroke2; border.width: Theme.borderThin
+                                        x: parent.width - width; y: Theme.controlLg; width: Theme.panelSm / 2; z: 30
+                                        height: Math.min(kvCol.implicitHeight + 2 * Theme.spaceXs, Theme.panelSm / 2)
+                                        radius: Theme.radiusRounded; color: Theme.surfaceOverlay
+                                        border.color: Theme.borderSubtle; border.width: Theme.borderWidth1
                                         Flickable {
-                                            anchors.fill: parent; anchors.margins: 5; contentHeight: kvCol.implicitHeight; clip: true; boundsBehavior: Flickable.StopAtBounds
+                                            anchors.fill: parent; anchors.margins: Theme.spaceXs; contentHeight: kvCol.implicitHeight; clip: true; boundsBehavior: Flickable.StopAtBounds
                                             Column {
                                                 id: kvCol; width: parent.width
                                                 Repeater {
                                                     model: kbPane.variantOpts(kbRow.modelData.code)
-                                                    delegate: Rectangle {
+                                                    delegate: ListRow {
                                                         required property var modelData
-                                                        readonly property bool sel: modelData.value === kbRow.modelData.variant
-                                                        width: parent.width; height: 24; radius: Theme.r(5); color: kvoMa.containsMouse ? Theme.subtleHover : Theme.subtle
-                                                        Text { anchors.left: parent.left; anchors.leftMargin: 7; anchors.verticalCenter: parent.verticalCenter; text: modelData.label; color: sel ? Theme.accent : Theme.fg1; font.family: Theme.fontText; font.pixelSize: 10; font.weight: sel ? Font.DemiBold : Font.Normal }
-                                                        MouseArea { id: kvoMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: { Globals.openDd = ""; root.kbSetVariant(kbRow.index, modelData.value) } }
+                                                        density: "dense"
+                                                        label: modelData.label
+                                                        active: modelData.value === kbRow.modelData.variant
+                                                        check: modelData.value === kbRow.modelData.variant
+                                                        onClicked: { Globals.openDd = ""; root.kbSetVariant(kbRow.index, modelData.value) }
                                                     }
                                                 }
                                             }
@@ -1826,51 +2278,54 @@ Scope {
                                     }
                                     MouseArea {
                                         id: rowDrag
-                                        anchors.left: parent.left; width: 30; height: parent.height - 6
+                                        anchors.left: parent.left; width: Theme.controlLg; height: Theme.controlLg
+                                        hoverEnabled: true
                                         drag.target: kbRow; drag.axis: Drag.YAxis
-                                        drag.minimumY: 0; drag.maximumY: Math.max(0, (root.kbActive.length - 1) * 38)
+                                        drag.minimumY: 0; drag.maximumY: Math.max(0, (root.kbActive.length - 1) * kbPane.rowH)
                                         cursorShape: Qt.SizeVerCursor
                                         onReleased: {
-                                            var to = Math.round(kbRow.y / 38)
+                                            var to = Math.round(kbRow.y / kbPane.rowH)
                                             if (to !== kbRow.index) root.kbMove(kbRow.index, to)
-                                            else kbRow.y = Qt.binding(function () { return kbRow.index * 38 })
+                                            else kbRow.y = Qt.binding(function () { return kbRow.index * kbPane.rowH })
                                         }
                                     }
                                 }
                             }
                         }
-                        // add a layout: searchable select
-                        Rectangle {
-                            width: parent.width; height: 34; radius: Theme.radiusInner
-                            color: Theme.bg3; border.color: kbSearch.activeFocus ? Theme.accent : Theme.stroke1; border.width: Theme.borderThin
-                            Text { anchors.left: parent.left; anchors.leftMargin: 11; anchors.verticalCenter: parent.verticalCenter; text: Theme.icSearch; font.family: Theme.fontIcons; font.pixelSize: 13; color: Theme.fg3 }
+                        // add a layout: a search field over the full xkb list
+                        FieldBox {
+                            width: parent.width; focused: kbSearch.activeFocus
+                            Text { id: kbSearchIc; anchors.left: parent.left; anchors.leftMargin: Theme.spaceS; anchors.verticalCenter: parent.verticalCenter; text: Theme.icSearch; font.family: Theme.fontIcons; font.pixelSize: Theme.iconMd; color: Theme.textMuted }
                             TextInput {
                                 id: kbSearch
-                                anchors.fill: parent; anchors.leftMargin: 34; anchors.rightMargin: 12; verticalAlignment: TextInput.AlignVCenter; clip: true
-                                color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
+                                anchors.left: kbSearchIc.right; anchors.leftMargin: Theme.spaceXs; anchors.right: parent.right; anchors.rightMargin: Theme.spaceS
+                                anchors.top: parent.top; anchors.bottom: parent.bottom
+                                verticalAlignment: TextInput.AlignVCenter; clip: true
+                                color: Theme.textPrimary; font.family: Theme.type.body.family; font.pixelSize: Theme.type.body.size
                                 onTextChanged: kbPane.kbQuery = text
                                 onAccepted: { var f = kbPane.filtered(); if (f.length) { root.kbAdd(f[0].c); text = "" } }
-                                Text { anchors.verticalCenter: parent.verticalCenter; visible: kbSearch.text.length === 0; text: "Add a layout — search by name or code…"; color: Theme.fg3; font: kbSearch.font }
+                                TBody { anchors.verticalCenter: parent.verticalCenter; visible: kbSearch.text.length === 0; text: "Search layouts to add"; color: Theme.textMuted }
                             }
                         }
                         Rectangle {
                             visible: kbSearch.activeFocus || kbPane.kbQuery !== ""
-                            width: parent.width; height: Math.min(addCol.implicitHeight + 10, 168)
-                            radius: Theme.r(7); color: Theme.bg3; border.color: Theme.stroke2; border.width: Theme.borderThin
+                            width: parent.width; height: Math.min(addCol.implicitHeight + 2 * Theme.spaceXs, Theme.panelSm / 2)
+                            radius: Theme.radiusRounded; color: Theme.surfaceRaised
+                            border.color: Theme.borderSubtle; border.width: Theme.borderWidth1
                             Flickable {
-                                anchors.fill: parent; anchors.margins: 5; contentHeight: addCol.implicitHeight; clip: true; boundsBehavior: Flickable.StopAtBounds
+                                anchors.fill: parent; anchors.margins: Theme.spaceXs; contentHeight: addCol.implicitHeight; clip: true; boundsBehavior: Flickable.StopAtBounds
                                 Column {
                                     id: addCol; width: parent.width
-                                    Text { visible: kbPane.filtered().length === 0; text: "No matching layout."; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11; leftPadding: 8; topPadding: 4 }
+                                    TBody { visible: kbPane.filtered().length === 0; text: "No layout matches “" + kbPane.kbQuery.trim() + "”"; color: Theme.textSecondary; leftPadding: Theme.spaceS; topPadding: Theme.spaceXs; bottomPadding: Theme.spaceXs }
                                     Repeater {
                                         model: kbPane.filtered()
-                                        delegate: Rectangle {
+                                        delegate: ListRow {
                                             required property var modelData
-                                            width: parent.width; height: 26; radius: Theme.r(6); color: kaMa.containsMouse ? Theme.subtleHover : Theme.subtle
-                                            Text { anchors.left: parent.left; anchors.leftMargin: 8; anchors.verticalCenter: parent.verticalCenter; text: modelData.n + "  (" + modelData.c + ")"; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: 11 }
-                                            Text { anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter; visible: kaMa.containsMouse; text: "+ add"; color: Theme.accent; font.family: Theme.fontText; font.pixelSize: 10; font.weight: Font.DemiBold }
-                                            // onPressed (not clicked): fire before the search field loses focus
-                                            MouseArea { id: kaMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onPressed: { root.kbAdd(modelData.c); kbSearch.text = "" } }
+                                            density: "dense"
+                                            label: modelData.n + " (" + modelData.c + ")"
+                                            kind: hovered ? "Add" : ""
+                                            // on press, not click: fire before the search field loses focus
+                                            MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onPressed: { root.kbAdd(modelData.c); kbSearch.text = "" } }
                                         }
                                     }
                                 }
@@ -1878,74 +2333,69 @@ Scope {
                         }
                     }
 
-                    SectionTitle { visible: root.inpLoaded; text: "LAYOUT SWITCHING" }
+                    SectionTitle { visible: root.inpLoaded; text: "Switching layouts" }
                     Card {
                         visible: root.inpLoaded
                         DropRow {
-                            label: "Extra switch shortcut"; ddId: "kb-grp"; buttonWidth: 210
+                            label: "Another shortcut"; ddId: "kb-grp"; buttonWidth: Theme.panelSm / 2 + Theme.spaceLg
                             options: root.grpOptions; value: root.kbOptToken("grp:")
                             onPicked: function (v) { root.setKbOptPrefix("grp:", v) }
                         }
                         ToggleRow {
-                            title: "Remember layout per window"
-                            sub: "GNOME-style: each window keeps its own layout (kb-per-window daemon)."
+                            title: "Remember the layout per window"
+                            sub: "Each window keeps its own layout."
                             on: root.perWindowKb
                             onToggled: root.setPerWindowKb(!root.perWindowKb)
                         }
                     }
 
-                    SectionTitle { visible: root.inpLoaded; text: "TYPING" }
+                    SectionTitle { visible: root.inpLoaded; text: "Typing" }
                     Card {
                         visible: root.inpLoaded
-                        Slider { label: "Key repeat rate (per second)"; value: root.inp.repeat_rate; from: 5; to: 80; onMoved: function (v) { root.applyInput({ repeat_rate: Math.round(v) }) } }
+                        Slider { label: "Repeat rate (per second)"; value: root.inp.repeat_rate; from: 5; to: 80; onMoved: function (v) { root.applyInput({ repeat_rate: Math.round(v) }) } }
                         Slider { label: "Repeat delay (ms)"; value: root.inp.repeat_delay; from: 150; to: 1000; step: 10; onMoved: function (v) { root.applyInput({ repeat_delay: Math.round(v) }) } }
+                        // Accordion: the rarely-changed keyboard options
                         Item {
-                            width: parent.width; height: 24
+                            width: parent.width; height: Theme.controlMd
+                            activeFocusOnTab: true
+                            Keys.onSpacePressed: kbPane.advOpen = !kbPane.advOpen
+                            Keys.onReturnPressed: kbPane.advOpen = !kbPane.advOpen
                             Row {
-                                anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; spacing: 6
-                                Text { anchors.verticalCenter: parent.verticalCenter; text: (kbPane.advOpen ? Theme.icChevronUp : Theme.icChevronDown); font.family: Theme.fontIcons; font.pixelSize: 10; color: Theme.fg3 }
-                                Text { anchors.verticalCenter: parent.verticalCenter; text: "Advanced"; color: Theme.fg2; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold }
+                                anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; spacing: Theme.spaceXs
+                                Text { anchors.verticalCenter: parent.verticalCenter; text: Theme.icChevronRight; rotation: kbPane.advOpen ? 90 : 0; font.family: Theme.fontIcons; font.pixelSize: Theme.iconMd; color: Theme.textSecondary
+                                    Behavior on rotation { NumberAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } } }
+                                TBody { anchors.verticalCenter: parent.verticalCenter; text: "Advanced"; font.weight: Theme.fontWeightMedium }
                             }
                             MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: kbPane.advOpen = !kbPane.advOpen }
                         }
                         Column {
-                            width: parent.width; spacing: 2; visible: kbPane.advOpen
-                            ToggleRow { title: "Num Lock on by default"; on: root.inp.numlock_by_default === true; onToggled: root.applyInput({ numlock_by_default: !(root.inp.numlock_by_default === true) }) }
+                            width: parent.width; spacing: Theme.spaceXs; visible: kbPane.advOpen
+                            ToggleRow { title: "Num Lock on at startup"; on: root.inp.numlock_by_default === true; onToggled: root.applyInput({ numlock_by_default: !(root.inp.numlock_by_default === true) }) }
                             ToggleRow { title: "Caps Lock acts as Ctrl"; on: root.hasKbOpt("ctrl:nocaps"); onToggled: root.toggleKbOpt("ctrl:nocaps") }
-                            ToggleRow { title: "Caps Lock acts as Escape"; on: root.hasKbOpt("caps:escape"); onToggled: root.toggleKbOpt("caps:escape") }
+                            ToggleRow { title: "Caps Lock acts as Esc"; on: root.hasKbOpt("caps:escape"); onToggled: root.toggleKbOpt("caps:escape") }
                             ToggleRow { title: "Right Alt is Compose"; on: root.hasKbOpt("compose:ralt"); onToggled: root.toggleKbOpt("compose:ralt") }
                         }
                     }
 
-                    SectionTitle { visible: root.inpLoaded; text: "MOUSE" }
+                    SectionTitle { visible: root.inpLoaded; text: "Mouse" }
                     Card {
                         visible: root.inpLoaded
                         DropRow {
                             visible: root.mice.filter(function (n) { return !root.isTouchpadName(n) }).length > 1
-                            label: "Device"; ddId: "mouse-dev"; buttonWidth: 250
+                            label: "Device"; ddId: "mouse-dev"; buttonWidth: Theme.panelSm / 2 + Theme.spaceXl
                             options: { var o = [{ label: "All pointing devices", value: "" }]; var ms = root.mice; for (var i = 0; i < ms.length; i++) if (!root.isTouchpadName(ms[i])) o.push({ label: ms[i], value: ms[i] }); return o }
                             value: root.devTarget
                             onPicked: function (v) { root.devTarget = v }
                         }
-                        Text { visible: root.devTarget !== ""; width: parent.width; text: "Overriding this device only — everything else keeps the global values."; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 10; wrapMode: Text.Wrap }
+                        Note { visible: root.devTarget !== ""; text: "These settings apply to this device only; the others keep the shared ones." }
                         Slider { label: "Pointer speed"; value: kbPane.effSens; from: -1; to: 1; step: 0.05; decimals: 2; onMoved: function (v) { kbPane.setMouse({ sensitivity: Math.round(v * 100) / 100 }) } }
-                        Item {
-                            width: parent.width; height: 30
-                            Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Acceleration profile"; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
-                            Row {
-                                anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; spacing: 5
-                                Repeater {
-                                    model: [{ n: "Adaptive", v: "adaptive" }, { n: "Flat", v: "flat" }]
-                                    delegate: Rectangle {
-                                        required property var modelData
-                                        readonly property bool sel: kbPane.effAccel === modelData.v || (kbPane.effAccel === "" && modelData.v === "adaptive")
-                                        width: 76; height: 24; radius: Theme.r(6)
-                                        color: sel ? Theme.accentFill : (apMa.containsMouse ? Theme.bg1Hover : Theme.bg1)
-                                        border.color: sel ? Theme.accent : Theme.stroke1; border.width: Theme.borderThin
-                                        Text { anchors.centerIn: parent; text: modelData.n; color: sel ? Theme.accentOn : Theme.fg1; font.family: Theme.fontText; font.pixelSize: 10; font.weight: Font.DemiBold }
-                                        MouseArea { id: apMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: kbPane.setMouse({ accel_profile: modelData.v }) }
-                                    }
-                                }
+                        SetRow {
+                            title: "Acceleration"
+                            Seg {
+                                anchors.verticalCenter: parent.verticalCenter
+                                options: [{ label: "Adaptive", value: "adaptive" }, { label: "Flat", value: "flat" }]
+                                value: kbPane.effAccel === "" ? "adaptive" : kbPane.effAccel
+                                onPicked: function (v) { kbPane.setMouse({ accel_profile: v }) }
                             }
                         }
                         ToggleRow { title: "Natural scrolling"; on: kbPane.effNat; onToggled: kbPane.setMouse({ natural_scroll: !kbPane.effNat }) }
@@ -1953,24 +2403,23 @@ Scope {
                         Slider { label: "Scroll speed"; value: Number(root.inp.scroll_factor); from: 0.1; to: 3; step: 0.1; decimals: 1; onMoved: function (v) { root.applyInput({ scroll_factor: Math.round(v * 10) / 10 }) } }
                     }
 
-                    SectionTitle { visible: root.inpLoaded; text: "TOUCHPAD" }
+                    SectionTitle { visible: root.inpLoaded; text: "Touchpad" }
                     Card {
                         visible: root.inpLoaded && !root.hasTouchpad
-                        Text { width: parent.width; text: "No touchpad detected."; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
+                        TBody { width: parent.width; text: "No touchpad found"; color: Theme.textSecondary }
                     }
                     Card {
                         visible: root.inpLoaded && root.hasTouchpad
                         ToggleRow { title: "Tap to click"; on: root.inp.tp_tap === true; onToggled: root.applyInput({ tp_tap: !(root.inp.tp_tap === true) }) }
                         ToggleRow { title: "Natural scrolling"; on: root.inp.tp_natural_scroll === true; onToggled: root.applyInput({ tp_natural_scroll: !(root.inp.tp_natural_scroll === true) }) }
-                        ToggleRow { title: "Disable while typing"; on: root.inp.tp_dwt === true; onToggled: root.applyInput({ tp_dwt: !(root.inp.tp_dwt === true) }) }
-                        ToggleRow { title: "Clickfinger behaviour"; sub: "Two-finger press = right-click, three-finger = middle-click (instead of corner zones)."; on: root.inp.tp_clickfinger === true; onToggled: root.applyInput({ tp_clickfinger: !(root.inp.tp_clickfinger === true) }) }
+                        ToggleRow { title: "Off while typing"; on: root.inp.tp_dwt === true; onToggled: root.applyInput({ tp_dwt: !(root.inp.tp_dwt === true) }) }
+                        ToggleRow { title: "Click with fingers"; sub: "Press with two fingers to right-click and three to middle-click, instead of using the corners."; on: root.inp.tp_clickfinger === true; onToggled: root.applyInput({ tp_clickfinger: !(root.inp.tp_clickfinger === true) }) }
                         ToggleRow { title: "Tap and drag"; on: root.inp.tp_tap_drag === true; onToggled: root.applyInput({ tp_tap_drag: !(root.inp.tp_tap_drag === true) }) }
-                        ToggleRow { title: "Drag lock"; sub: "Keep dragging briefly after lifting the finger."; on: root.inp.tp_drag_lock === true; onToggled: root.applyInput({ tp_drag_lock: !(root.inp.tp_drag_lock === true) }) }
-                        ToggleRow { title: "Middle-click emulation"; sub: "Left+right button together = middle click."; on: root.inp.tp_mbe === true; onToggled: root.applyInput({ tp_mbe: !(root.inp.tp_mbe === true) }) }
+                        ToggleRow { title: "Drag lock"; sub: "Keep dragging for a moment after you lift your finger."; on: root.inp.tp_drag_lock === true; onToggled: root.applyInput({ tp_drag_lock: !(root.inp.tp_drag_lock === true) }) }
+                        ToggleRow { title: "Middle-click emulation"; sub: "Press left and right together to middle-click."; on: root.inp.tp_mbe === true; onToggled: root.applyInput({ tp_mbe: !(root.inp.tp_mbe === true) }) }
                         Slider { label: "Scroll speed"; value: Number(root.inp.tp_scroll_factor); from: 0.1; to: 3; step: 0.1; decimals: 1; onMoved: function (v) { root.applyInput({ tp_scroll_factor: Math.round(v * 10) / 10 }) } }
                     }
-                    Text { width: parent.width; text: "Everything here applies live and persists to generated/input.lua. Two-finger vs edge scrolling follows the hardware default (libinput); Hyprland doesn't expose it."; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
-                    Item { width: 1; height: 8 }
+                    Note { text: "Everything here applies at once and is kept in generated/input.lua. Two-finger or edge scrolling follows the hardware's default, which Hyprland doesn't expose." }
                 }
             }
 
@@ -1978,180 +2427,241 @@ Scope {
             Component {
                 id: cShortcuts
                 Column {
-                    spacing: 6
+                    spacing: Theme.spaceS
+                    TBody { visible: root.shortcutsMd === ""; width: parent.width; text: "No shortcut list found at ~/.config/hypr/SHORTCUTS.md"; color: Theme.textSecondary; wrapMode: Text.WordWrap }
                     Repeater {
                         model: root.shortcutsModel()
                         delegate: Item {
+                            id: scRow
                             required property var modelData
                             width: parent.width
-                            height: modelData.h ? 30 : 24
-                            SectionTitle { visible: modelData.h; anchors.left: parent.left; anchors.bottom: parent.bottom; text: modelData.a; font.pixelSize: Theme.fsBody; color: Theme.fg1 }
-                            Text { visible: !modelData.h; anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; width: 180; text: modelData.a; color: Theme.accent; font.family: Theme.fontMono; font.pixelSize: 11 }
-                            Text { visible: !modelData.h; anchors.left: parent.left; anchors.leftMargin: 190; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; text: modelData.b; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; elide: Text.ElideRight }
+                            height: scRow.modelData.h ? scHead.implicitHeight : Math.max(Theme.controlMd, scDesc.implicitHeight)
+                            SectionTitle { id: scHead; visible: scRow.modelData.h; first: false; anchors.left: parent.left; anchors.bottom: parent.bottom; text: scRow.modelData.a; bottomPadding: 0 }
+                            TMono { id: scKeys; visible: !scRow.modelData.h; anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; width: Theme.panelSm / 2; text: scRow.modelData.a; color: Theme.textPrimary; elide: Text.ElideRight }
+                            TBody { id: scDesc; visible: !scRow.modelData.h; anchors.left: scKeys.right; anchors.leftMargin: Theme.spaceS; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; text: scRow.modelData.b; color: Theme.textSecondary; wrapMode: Text.WordWrap }
                         }
                     }
-                    Item { width: 1; height: 8 }
                 }
             }
 
-            // ════════ PANE 6 — Layout (gaps & border) ════════
+            // ════════ PANE 6 — Layout (gaps, border, corners) ════════
             Component {
                 id: cLayout
                 Column {
-                    spacing: 14
-                    SectionTitle { text: "WINDOW GAPS, BORDER & CORNERS  ·  applied live, persisted to generated/user.lua" }
+                    spacing: Theme.spaceS
+                    SectionTitle { text: "Windows" }
                     Card {
-                        Slider { label: "Inner gap"; value: root.gapsIn; from: 0; to: 30
+                        Slider { label: "Gap between windows"; value: root.gapsIn; from: 0; to: 30
                             onMoved: function (v) { root.gapsIn = Math.round(v); root.applyGaps() } }
-                        Slider { label: "Outer gap"; value: root.gapsOut; from: 0; to: 60
+                        Slider { label: "Gap at the screen edges"; value: root.gapsOut; from: 0; to: 60
                             onMoved: function (v) { root.gapsOut = Math.round(v); root.applyGaps() } }
                         Slider { label: "Border width"; value: root.borderSize; from: 0; to: 6
                             onMoved: function (v) { root.borderSize = Math.round(v); root.applyGaps() } }
                         Slider { label: "Corner radius"; value: root.rounding; from: 0; to: 24
                             onMoved: function (v) { root.rounding = Math.round(v); root.applyGaps() } }
                     }
-                    Pill { label: "Reset to defaults"; onGo: { root.gapsIn = 6; root.gapsOut = 14; root.borderSize = 1; root.rounding = 12; root.applyGaps() } }
-                    Text { width: parent.width; text: "Sliders preview while dragging and apply on release — live via hyprctl, persisted to generated/user.lua so they survive reloads and relogin."; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
-                    Item { width: 1; height: 8 }
+                    Pill { label: "Reset to defaults"; onGo: { root.gapsIn = Theme.spaceXs; root.gapsOut = Theme.windowGap; root.borderSize = Theme.borderWidth2; root.rounding = Theme.radiusRounded; root.applyGaps() } }
+                    Note { text: "Sliders preview while you drag and apply when you let go. Changes are kept in generated/user.lua, so they last after a reload and the next sign-in." }
                 }
             }
 
-            // ════════ PANE 7 — Theme & Accent ════════
+            // ════════ PANE 7 — Appearance ════════
+            // Look presets (corner, density, stroke), the bar and Glass, the
+            // accent, window chrome and motion. The presets, the bar size and
+            // bar opacity live only in ewe.conf: they are written with hooks
+            // on, so the generator rebuilds the tokens and the desktop follows.
             Component {
                 id: cTheme
                 Column {
-                    spacing: 14
-                    SectionTitle { text: "SHAPE & DENSITY" }
+                    id: lookPane
+                    spacing: Theme.spaceS
+                    readonly property int barOpacity: Number(root.tokIn("bar_opacity", 100))
+                    property int opacityDrag: -1          // the slider's value while dragging
+                    readonly property int opacityShown: lookPane.opacityDrag >= 0 ? lookPane.opacityDrag : lookPane.barOpacity
+
+                    SectionTitle { text: "Scheme and accent" }
                     Card {
-                        // There is one ewe look now — it is not picked from a
-                        // list, it is BUILT from your accent. What is left to
-                        // choose is its shape and how tightly it packs, and
-                        // both are keys in ewe.conf [desktop.theme], so they
-                        // sync with everything else rather than living in a
-                        // second file that `ewe-conf pull` would overwrite.
-                        Repeater {
-                            model: [
-                                { k: "corner",  t: "Corners", d: "round",
-                                  o: [["none","Square"],["small","Slight"],["medium","Rounded"],["large","Soft"],["round","Round"]] },
-                                { k: "density", t: "Density", d: "comfortable",
-                                  o: [["compact","Compact"],["comfortable","Comfortable"],["roomy","Roomy"]] },
-                                { k: "stroke",  t: "Outlines", d: "none",
-                                  o: [["none","None"],["thin","Hairline"],["thick","Bold"]] }
-                            ]
-                            delegate: Column {
-                                id: grp
-                                required property var modelData
-                                width: parent.width; spacing: 6
-                                Text { text: grp.modelData.t; color: Theme.fg2; font.family: Theme.fontText
-                                       font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold }
-                                Row {
-                                    id: grpRow
-                                    width: parent.width; spacing: 6
-                                    Repeater {
-                                        model: grp.modelData.o
-                                        delegate: Rectangle {
-                                            id: opt
-                                            required property var modelData
-                                            readonly property bool sel:
-                                                (Globals.tokInput[grp.modelData.k] || grp.modelData.d) === opt.modelData[0]
-                                            width: (grpRow.width - (grp.modelData.o.length - 1) * grpRow.spacing)
-                                                   / grp.modelData.o.length
-                                            height: 36; radius: Theme.radiusPill
-                                            color: opt.sel ? Theme.accentFill : Theme.bg4
-                                            border.width: 0
-                                            Text { anchors.centerIn: parent; text: opt.modelData[1]
-                                                   color: opt.sel ? Theme.accentOn : Theme.fg1
-                                                   font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
-                                                   font.weight: Font.DemiBold }
-                                            MouseArea {
-                                                anchors.fill: parent; cursorShape: Qt.PointingHandCursor
-                                                // hooks ON: `ewe-conf set` rebuilds theme-tokens.json
-                                                // and pokes the shell, so the change lands live.
-                                                onClicked: root.shapeWrite(
-                                                    [Globals.eweConf, "set",
-                                                     "desktop.theme." + grp.modelData.k, opt.modelData[0]])
-                                            }
-                                        }
-                                    }
-                                }
-                            }
+                        DropRow {
+                            label: "Scheme"; ddId: "look-scheme"
+                            options: root.schemeOptions
+                            value: root.tokIn("scheme_slug", "ewe-dark")
+                            onPicked: function (v) { root.applyScheme(v) }
                         }
-                        Text {
-                            width: parent.width; wrapMode: Text.Wrap
-                            text: "Every colour in ewe is derived from your accent — there is no palette to pick. These three set the SHAPE of it. They live in ewe.conf, so they follow you to your other machines."
-                            color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11
-                        }
-                    }
-                    // dark-only by decision (2026-09-01): light mode was deleted, so no Light/Dark toggle.
-                    SectionTitle { text: "ACCENT COLOUR" }
-                    Card {
+                        Divider {}
+                        TBody { text: "Accent color"; font.weight: Theme.fontWeightMedium }
+                        // Accent picker: controlMd swatches spaceS apart, a
+                        // borderSubtle ring so dark colours stay visible; the
+                        // selected one wears a check in its own ink and a
+                        // double ring (borderWidth2 of the surface, then
+                        // borderWidth2 of textPrimary).
                         Flow {
-                            width: parent.width; spacing: 10
+                            width: parent.width; spacing: Theme.spaceS + Theme.spaceXs
                             Repeater {
                                 model: root.accents
-                                delegate: Rectangle {
+                                delegate: Item {
+                                    id: sw
                                     required property var modelData
-                                    width: 46; height: 46; radius: 23; color: modelData.hex
-                                    readonly property bool sel: root.hex6(Globals.accentColor).toLowerCase() === root.hex6(modelData.hex).toLowerCase()
-                                    border.color: sel ? Theme.fg1 : Qt.rgba(1, 1, 1, 0.15); border.width: sel ? 3 : 1
-                                    // onAccent, the ink the generator measured for the ACTIVE accent:
-                                    // the tick only shows on the selected swatch, which is that accent
-                                    // (a white check vanishes on the yellow and light ones).
-                                    Text { anchors.centerIn: parent; visible: parent.sel; text: Theme.icCheck; font.family: Theme.fontIcons; font.pixelSize: 18; color: Theme.onAccent }
-                                    MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.setAccent(modelData.hex) }
+                                    readonly property bool sel: root.hex6(Theme.accent).toLowerCase() === root.hex6(sw.modelData.hex).toLowerCase()
+                                    width: Theme.controlMd + 4 * Theme.borderWidth2; height: width
+                                    Rectangle {
+                                        anchors.fill: parent; radius: Theme.radiusFull
+                                        color: "transparent"
+                                        visible: sw.sel || swMa.containsMouse || sw.activeFocus
+                                        border.width: sw.activeFocus && !sw.sel && !swMa.containsMouse ? Theme.focusWidth : Theme.borderWidth2
+                                        border.color: sw.activeFocus && !sw.sel && !swMa.containsMouse ? Theme.focusRing : sw.sel ? Theme.textPrimary : Theme.borderStrong
+                                    }
+                                    Rectangle {
+                                        anchors.centerIn: parent
+                                        width: Theme.controlMd; height: Theme.controlMd; radius: Theme.radiusFull
+                                        color: sw.modelData.hex
+                                        border.color: Theme.borderSubtle; border.width: Theme.borderWidth1
+                                        Text { anchors.centerIn: parent; visible: sw.sel; text: Theme.icCheck; font.family: Theme.fontIcons; font.pixelSize: Theme.iconSm; color: sw.modelData.ink }
+                                    }
+                                    activeFocusOnTab: true
+                                    Keys.onSpacePressed: root.setAccent(sw.modelData.hex)
+                                    Keys.onReturnPressed: root.setAccent(sw.modelData.hex)
+                                    MouseArea { id: swMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.setAccent(sw.modelData.hex) }
                                 }
                             }
                         }
-                        Item {
-                            width: parent.width; height: 30
-                            Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Custom hex"; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
-                            Rectangle { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; width: 130; height: 26; radius: Theme.r(7); color: Theme.bg1; border.color: hexIn.activeFocus ? Theme.accent : Theme.stroke1; border.width: Theme.borderThin
-                                TextInput { id: hexIn; anchors.fill: parent; anchors.leftMargin: 9; anchors.rightMargin: 9; verticalAlignment: TextInput.AlignVCenter; color: Theme.fg1; font.family: Theme.fontMono; font.pixelSize: 12; text: String(Globals.accentColor)
-                                    onAccepted: { var t = text.trim(); if (/^#?[0-9a-fA-F]{6}$/.test(t)) root.setAccent(t[0] === "#" ? t : "#" + t) } } }
+                        SetRow {
+                            title: "Custom color"
+                            desc: "Any color works; accent text is adjusted to stay readable."
+                            FieldBox {
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: Theme.panelSm / 3; focused: hexIn.activeFocus
+                                Rectangle { id: hexChip; anchors.left: parent.left; anchors.leftMargin: Theme.spaceS; anchors.verticalCenter: parent.verticalCenter; width: Theme.iconMd; height: Theme.iconMd; radius: Theme.radiusSlight; color: Theme.accent; border.color: Theme.borderSubtle; border.width: Theme.borderWidth1 }
+                                TextInput {
+                                    id: hexIn
+                                    anchors.left: hexChip.right; anchors.leftMargin: Theme.spaceS; anchors.right: parent.right; anchors.rightMargin: Theme.spaceS
+                                    anchors.top: parent.top; anchors.bottom: parent.bottom
+                                    verticalAlignment: TextInput.AlignVCenter; clip: true
+                                    color: Theme.textPrimary; font.family: Theme.type.mono.family; font.pixelSize: Theme.type.mono.size
+                                    text: String(Theme.accent)
+                                    onAccepted: { var t = text.trim(); if (/^#?[0-9a-fA-F]{6}$/.test(t)) root.setAccent(t[0] === "#" ? t : "#" + t) }
+                                }
+                            }
+                        }
+                        Note { visible: Globals.schemeActive && root.tokIn("scheme_slug", "ewe-dark").indexOf("ewe-") !== 0; text: "This scheme brings its own accent; picking one here replaces it." }
+                    }
+
+                    SectionTitle { text: "Look" }
+                    Card {
+                        SetRow {
+                            glyph: root.g(0xE648); title: "Corners"; desc: "How round windows, panels and controls are."
+                            Seg {
+                                anchors.verticalCenter: parent.verticalCenter
+                                options: [{ label: "None", value: "none" }, { label: "Small", value: "small" }, { label: "Medium", value: "medium" }, { label: "Large", value: "large" }]
+                                // the pre-v3 value `round` reads as large (the generator maps it)
+                                value: root.tokIn("corner", "medium") === "round" ? "large" : root.tokIn("corner", "medium")
+                                onPicked: function (v) { root.confSet("desktop.theme.corner", v) }
+                            }
+                        }
+                        SetRow {
+                            glyph: root.g(0xE58B); title: "Density"; desc: "How tall controls and rows are."
+                            Seg {
+                                anchors.verticalCenter: parent.verticalCenter
+                                options: [{ label: "Compact", value: "compact" }, { label: "Comfortable", value: "comfortable" }, { label: "Roomy", value: "roomy" }]
+                                value: root.tokIn("density", "comfortable")
+                                onPicked: function (v) { root.confSet("desktop.theme.density", v) }
+                            }
+                        }
+                        SetRow {
+                            glyph: root.g(0xE167); title: "Outlines"; desc: "The line around cards, panels and buttons."
+                            Seg {
+                                anchors.verticalCenter: parent.verticalCenter
+                                options: [{ label: "None", value: "none" }, { label: "Thin", value: "thin" }, { label: "Thick", value: "thick" }]
+                                value: root.tokIn("stroke", "thin")
+                                onPicked: function (v) { root.confSet("desktop.theme.stroke", v) }
+                            }
                         }
                     }
-                    SectionTitle { text: "WINDOW BORDERS" }
+
+                    SectionTitle { text: "Bar and dock" }
+                    Card {
+                        SetRow {
+                            glyph: root.g(0xE435); title: "Bar size"
+                            desc: Number(root.tokIn("text_scale", 100)) >= 130 ? "Text size 130% uses the large bar." : "Normal is 48 pixels tall, large 64."
+                            dim: Number(root.tokIn("text_scale", 100)) >= 130
+                            Seg {
+                                anchors.verticalCenter: parent.verticalCenter
+                                dim: Number(root.tokIn("text_scale", 100)) >= 130
+                                options: [{ label: "Normal", value: "normal" }, { label: "Large", value: "large" }]
+                                value: root.tokIn("bar_size", "normal")
+                                onPicked: function (v) { root.confSet("desktop.bar.size", v) }
+                            }
+                        }
+                        Divider {}
+                        // Glass: bar opacity drives the bar, the dock and the
+                        // lock card; the preset is 80, and below it Settings
+                        // warns (Glass card). Nothing is blocked.
+                        SetRow {
+                            glyph: root.g(0xE59C); title: "Bar opacity"
+                            desc: "The bar, the dock and the lock screen card. Below 100% the wallpaper shows through."
+                            Pill {
+                                anchors.verticalCenter: parent.verticalCenter
+                                size: "sm"; label: "Glass"
+                                disabled: lookPane.opacityShown === Math.round(Theme.opacityGlass * 100)
+                                onGo: root.confSet("desktop.theme.bar_opacity", Math.round(Theme.opacityGlass * 100))
+                            }
+                        }
+                        Slider {
+                            from: 0; to: 100; step: 1; showValue: true
+                            value: lookPane.barOpacity
+                            valueText: lookPane.opacityShown + "%"
+                            onDraggingChanged: lookPane.opacityDrag = dragging ? Math.round(dragVal) : -1
+                            onDragValChanged: if (dragging) lookPane.opacityDrag = Math.round(dragVal)
+                            onMoved: function (v) { lookPane.opacityDrag = -1; root.confSet("desktop.theme.bar_opacity", Math.round(v)) }
+                        }
+                        Alert {
+                            visible: lookPane.opacityShown < Math.round(Theme.opacityGlass * 100)
+                            tone: "warning"
+                            text: "Text can be hard to read on bright wallpapers." + (Globals.noBlur ? " Blur isn't available on this machine, so 90% or more keeps it readable." : "")
+                        }
+                        Alert {
+                            visible: Globals.noBlur && lookPane.opacityShown >= Math.round(Theme.opacityGlass * 100) && lookPane.opacityShown < 90
+                            tone: "info"
+                            text: "Blur isn't available on this machine, so the wallpaper shows through sharp. 90% or more keeps text easy to read."
+                        }
+                        Note { visible: root.tokIn("reduce_transparency", false) === true || root.tokIn("increase_contrast", false) === true; text: "Reduce transparency or Increase contrast is on (Accessibility), so the bar and dock stay solid." }
+                    }
+
+                    SectionTitle { text: "Windows" }
                     Card {
                         ToggleRow {
-                            title: "Tint window borders with accent"
-                            sub: "Replaces the default border colour with your accent."
+                            title: "Accent-colored borders"
+                            sub: "The focused window's border follows your accent color."
                             on: Globals.tintBorders
                             onToggled: { Globals.tintBorders = !Globals.tintBorders; root.applyBorder(); root.setAccent(String(Globals.accentColor)) }
                         }
-                    }
-                    SectionTitle { text: "WINDOW TRANSPARENCY" }
-                    Card {
                         ToggleRow {
-                            title: "Transparent unfocused windows"
-                            sub: "Slight see-through on windows without focus. Off = every window fully opaque."
+                            title: "Transparent windows in the background"
+                            sub: "Windows without focus let a little of what is behind them through."
                             on: Globals.windowTransparency
                             onToggled: root.setTransparency(!Globals.windowTransparency)
                         }
+                        ToggleRow {
+                            title: "Blur behind apps"
+                            sub: "Every window at 85% with the blurred desktop behind it. Full-screen windows stay solid."
+                            on: root.tokIn("app_blur", false) === true
+                            onToggled: root.confSet("desktop.theme.app_blur", root.tokIn("app_blur", false) === true ? "false" : "true")
+                        }
                     }
-                    SectionTitle { text: "ANIMATIONS" }
+
+                    SectionTitle { text: "Motion" }
                     Card {
-                        Row {
-                            width: parent.width; spacing: 8
-                            Repeater {
-                                // m divides the base durations (shell base = 300 ms):
-                                // Off 0 · Fast 150 ms · Normal 300 ms · Slow 500 ms —
-                                // steps far enough apart to actually feel different
-                                model: [{ n: "Off", m: 0 }, { n: "Fast", m: 2 }, { n: "Normal", m: 1 }, { n: "Slow", m: 0.6 }]
-                                delegate: Rectangle {
-                                    required property var modelData
-                                    readonly property bool sel: Math.abs(Globals.animationSpeed - modelData.m) < 0.001
-                                    width: (parent.width - 24) / 4; height: 32; radius: Theme.radiusInner
-                                    color: sel ? Theme.accentFill : Theme.bg1
-                                    border.color: sel ? Theme.accent : Theme.stroke1; border.width: Theme.borderThin
-                                    Text { anchors.centerIn: parent; text: modelData.n; color: parent.sel ? Theme.accentOn : Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold }
-                                    MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.setAnim(modelData.m) }
-                                }
+                        SetRow {
+                            glyph: Theme.icSpeed; title: "Animation speed"; desc: "Windows and the shell move at this speed."
+                            Seg {
+                                anchors.verticalCenter: parent.verticalCenter
+                                // m divides every duration: Off 0 · Slow 0.6 · Normal 1 · Fast 2
+                                options: [{ label: "Off", value: 0 }, { label: "Slow", value: 0.6 }, { label: "Normal", value: 1 }, { label: "Fast", value: 2 }]
+                                value: [0, 0.6, 1, 2].filter(function (m) { return Math.abs(Globals.animationSpeed - m) < 0.001 })[0]
+                                onPicked: function (v) { root.setAnim(v) }
                             }
                         }
                     }
-                    Text { width: parent.width; text: "Animation speed drives window + shell motion (shell: Fast 150 ms · Normal 300 ms · Slow 500 ms; window animations scale along); applies live and persists to user-theme.json + generated/user.lua."; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
-                    Text { width: parent.width; text: "Accent recolours the whole shell instantly and persists in user-theme.json."; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
-                    Item { width: 1; height: 8 }
+                    Note { text: "Everything here applies at once and lives in ewe.conf, so it follows you to your other machines. Reduce motion is in Accessibility." }
                 }
             }
 
@@ -2159,106 +2669,108 @@ Scope {
             Component {
                 id: cWallpaper
                 Column {
-                    spacing: 14
-                    Card {
-                        visible: root.wpBackendLabel === "none"
-                        Text { width: parent.width; text: "No wallpaper backend found. Install swww (packaged as “awww”) for images and animated GIFs, mpvpaper for video wallpapers — or swaybg for static images only."; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; wrapMode: Text.Wrap }
+                    spacing: Theme.spaceS
+                    Alert {
+                        visible: root.wpBackendLabel === "none"; tone: "warning"
+                        title: "No wallpaper backend"
+                        text: "Install swww (packaged as awww) for pictures and animated GIFs, mpvpaper for videos, or swaybg for still pictures only."
                     }
-                    SectionTitle { visible: root.wpBackendLabel !== "none"; text: "WALLPAPER  ·  backend: " + root.wpBackendLabel }
+                    SectionTitle { visible: root.wpBackendLabel !== "none"; text: "Wallpaper" }
                     Card {
                         visible: root.wpBackendLabel !== "none"
-                        Item {
-                            width: parent.width; height: 30
-                            Text { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; text: "Apply to"; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
-                            Row {
-                                anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; spacing: 5
-                                Repeater {
-                                    model: { var o = [{ label: "All displays", value: "*" }], ss = root.dispSpecs; for (var i = 0; i < ss.length; i++) if (!ss[i].disabled) o.push({ label: ss[i].name, value: ss[i].name }); return o }
-                                    delegate: Rectangle {
-                                        required property var modelData
-                                        readonly property bool sel: root.wpTarget === modelData.value
-                                        width: wptLbl.implicitWidth + 18; height: 24; radius: Theme.r(6)
-                                        color: sel ? Theme.accentFill : (wptMa.containsMouse ? Theme.bg1Hover : Theme.bg1)
-                                        border.color: sel ? Theme.accent : Theme.stroke1; border.width: Theme.borderThin
-                                        Text { id: wptLbl; anchors.centerIn: parent; text: modelData.label; color: sel ? Theme.accentOn : Theme.fg1; font.family: Theme.fontText; font.pixelSize: 10; font.weight: Font.DemiBold }
-                                        MouseArea { id: wptMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.wpTarget = modelData.value }
-                                    }
-                                }
+                        SetRow {
+                            title: "Show on"
+                            Seg {
+                                anchors.verticalCenter: parent.verticalCenter
+                                options: { var o = [{ label: "All displays", value: "*" }], ss = root.dispSpecs; for (var i = 0; i < ss.length; i++) if (!ss[i].disabled) o.push({ label: ss[i].name, value: ss[i].name }); return o }
+                                value: root.wpTarget
+                                onPicked: function (v) { root.wpTarget = v }
                             }
                         }
                         DropRow {
-                            label: "Fit"; ddId: "wp-mode"; buttonWidth: 110
-                            options: [{ label: "Fill", value: "fill" }, { label: "Fit", value: "fit" }, { label: "Stretch", value: "stretch" }, { label: "Tile", value: "tile" }, { label: "Centre", value: "center" }]
+                            label: "Fit"; ddId: "wp-mode"
+                            options: [{ label: "Fill", value: "fill" }, { label: "Fit", value: "fit" }, { label: "Stretch", value: "stretch" }, { label: "Tile", value: "tile" }, { label: "Center", value: "center" }]
                             value: root.wpMode
                             onPicked: function (v) { root.wpMode = v; if (Object.keys(root.wpMap).length) { root.wpWrite(); root.flashApplied() } }
                         }
                         ToggleRow {
                             visible: root.wpAnyVideo
-                            title: "Mute video wallpaper"; sub: "mpvpaper plays the file's audio track otherwise."
+                            title: "Mute video wallpaper"; sub: "Otherwise mpvpaper plays the video's sound."
                             on: root.wpMute
                             onToggled: { root.wpMute = !root.wpMute; root.wpWrite(); root.flashApplied() }
                         }
-                        Text { width: parent.width; visible: Object.keys(root.wpMap).length === 0; text: "No wallpaper set yet — pick one below."; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11 }
+                        Divider {}
+                        TBody { width: parent.width; visible: Object.keys(root.wpMap).length === 0; text: "No wallpaper yet. Pick one below."; color: Theme.textSecondary }
                         Repeater {
                             model: Object.keys(root.wpMap).sort()
                             delegate: KV { required property var modelData; k: modelData === "*" ? "All displays" : modelData; v: String(root.wpMap[modelData]).replace(/^.*\//, "") }
                         }
+                        TCaption { width: parent.width; text: "Backend: " + root.wpBackendLabel }
                     }
-                    SectionTitle { visible: root.wpBackendLabel !== "none"; text: "CHOOSE  ·  " + root.wpDir }
+                    SectionTitle { visible: root.wpBackendLabel !== "none"; text: "Choose" }
+                    Note { visible: root.wpBackendLabel !== "none"; text: root.wpDir }
                     Card {
                         visible: root.wpBackendLabel !== "none"
                         FileDropTarget {
                             id: wpPicker
                             width: parent.width
                             acceptVideo: true
-                            label: "Drop an image, GIF or video here — or click to browse"
-                            dialogTitle: "Choose wallpaper"
+                            label: "Drop a picture, GIF or video here, or click to browse"
+                            dialogTitle: "Choose a wallpaper"
                             onPicked: function (p) { root.wpAssign(p); root.wpList(p.replace(/\/[^/]*$/, "")) }
                             Connections { target: root; function onWallpaperBrowseRequested() { wpPicker.browse() } }
                         }
                         Row {
-                            spacing: 8
+                            spacing: Theme.spaceS
                             Pill { label: "Browse files…"; onGo: wpPicker.browse() }
                             Pill { label: "Wallpapers folder"; onGo: root.wpList(root.home + "/Pictures/Wallpapers") }
                             Pill { label: "Pictures"; onGo: root.wpList(root.home + "/Pictures") }
                         }
-                        Text { width: parent.width; visible: root.wpFiles.length === 0; text: "No images in this folder — use “Browse files…” or drop images into " + root.wpDir + "."; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
+                        Note { visible: root.wpFiles.length === 0; text: "No pictures in this folder. Use Browse files…, or put pictures in " + root.wpDir + "." }
+                        // thumbnails: four to a row, 16:10, radiusPrimary; the
+                        // current one wears a borderWidth2 accentText edge
                         Flow {
-                            width: parent.width; spacing: 8
+                            id: wpFlow
+                            width: parent.width; spacing: Theme.spaceS
+                            readonly property real tileW: (width - 3 * spacing) / 4
                             Repeater {
                                 model: root.wpFiles
                                 delegate: Rectangle {
+                                    id: wpTile
                                     required property var modelData
                                     readonly property bool cur: root.wpMap[root.wpTarget] === modelData
                                     readonly property bool isVid: root.wpIsVideo(modelData)
                                     readonly property bool isGif: root.wpIsGif(modelData)
-                                    width: 122; height: 76; radius: Theme.r(7); clip: true
-                                    color: Theme.bg3
-                                    border.color: cur ? Theme.accent : (wtMa.containsMouse ? Theme.fg3 : Theme.stroke1); border.width: cur ? 2 : 1
-                                    Image { visible: !parent.isVid; anchors.fill: parent; anchors.margins: 1; source: parent.isVid ? "" : "file://" + modelData; fillMode: Image.PreserveAspectCrop; asynchronous: true; sourceSize.width: 244; sourceSize.height: 152 }
+                                    width: wpFlow.tileW; height: width * 5 / 8; radius: Theme.radiusPrimary; clip: true
+                                    color: Theme.surfaceSunken
+                                    border.color: wpTile.cur ? Theme.accentText : wtMa.containsMouse ? Theme.textMuted : Theme.borderSubtle
+                                    border.width: wpTile.cur ? Theme.borderWidth2 : Theme.borderWidth1
+                                    Image { visible: !wpTile.isVid; anchors.fill: parent; anchors.margins: parent.border.width; source: wpTile.isVid ? "" : "file://" + wpTile.modelData; fillMode: Image.PreserveAspectCrop; asynchronous: true; sourceSize.width: 2 * wpTile.width; sourceSize.height: 2 * wpTile.height }
                                     // videos get a film tile — no thumbnail without a decode pass
                                     Column {
-                                        visible: parent.isVid
-                                        anchors.centerIn: parent; spacing: 3; width: parent.width - 14
-                                        Text { anchors.horizontalCenter: parent.horizontalCenter; text: root.g(0xE0D0); font.family: Theme.fontIcons; font.pixelSize: 20; color: Theme.fg3 }
-                                        Text { width: parent.width; horizontalAlignment: Text.AlignHCenter; text: String(modelData).replace(/^.*\//, ""); color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 9; elide: Text.ElideMiddle }
+                                        visible: wpTile.isVid
+                                        anchors.centerIn: parent; spacing: Theme.spaceXxs; width: parent.width - 2 * Theme.spaceS
+                                        Text { anchors.horizontalCenter: parent.horizontalCenter; text: root.g(0xE0D0); font.family: Theme.fontIcons; font.pixelSize: Theme.iconLg; color: Theme.textMuted }
+                                        TCaption { width: parent.width; horizontalAlignment: Text.AlignHCenter; text: String(wpTile.modelData).replace(/^.*\//, ""); elide: Text.ElideMiddle }
+                                    }
+                                    Badge {
+                                        visible: wpTile.isVid || wpTile.isGif
+                                        anchors.left: parent.left; anchors.bottom: parent.bottom; anchors.margins: Theme.spaceXs
+                                        label: wpTile.isVid ? "Video" : "GIF"; tone: "neutral"; solid: false
                                     }
                                     Rectangle {
-                                        visible: parent.isVid || parent.isGif
-                                        anchors.left: parent.left; anchors.bottom: parent.bottom; anchors.margins: 4
-                                        width: badgeT.implicitWidth + 10; height: 16; radius: Theme.r(5)
-                                        color: Qt.rgba(0, 0, 0, 0.62)
-                                        Text { id: badgeT; anchors.centerIn: parent; text: parent.parent.isVid ? "▶ video" : "GIF"; color: "white"; font.family: Theme.fontText; font.pixelSize: 9; font.weight: Font.DemiBold }
+                                        visible: wpTile.cur
+                                        anchors.right: parent.right; anchors.top: parent.top; anchors.margins: Theme.spaceXs
+                                        width: Theme.iconLg; height: Theme.iconLg; radius: Theme.radiusFull; color: Theme.accent
+                                        Text { anchors.centerIn: parent; text: Theme.icCheck; font.family: Theme.fontIcons; font.pixelSize: Theme.iconXs; color: Theme.onAccent }
                                     }
-                                    Text { anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 4; visible: cur; text: Theme.icCheck; font.family: Theme.fontIcons; font.pixelSize: 12; color: Theme.accent; style: Text.Outline; styleColor: "black" }
-                                    MouseArea { id: wtMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.wpAssign(modelData) }
+                                    MouseArea { id: wtMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.wpAssign(wpTile.modelData) }
                                 }
                             }
                         }
                     }
-                    Text { width: parent.width; text: "Applied live and restored at every login by wallpaper.sh; when a monitor is plugged in, its wallpaper is re-applied automatically. Static images → " + (root.wpImgBackend || "no backend") + ", GIFs animate via swww, video plays via mpvpaper (always looped)."; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
-                    Text { visible: root.wpAnyAnimated; width: parent.width; text: "Animated wallpapers keep the GPU decoding continuously — expect measurable battery drain on the laptop."; color: Theme.warning; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
-                    Item { width: 1; height: 8 }
+                    Alert { visible: root.wpAnyAnimated; tone: "warning"; text: "Animated wallpapers keep the graphics card busy and use more battery." }
+                    Note { text: "Applied at once and restored at every sign-in by wallpaper.sh; a display you plug in gets its wallpaper back. Pictures use " + (root.wpImgBackend || "no backend") + ", GIFs animate with swww and videos loop with mpvpaper." }
                 }
             }
 
@@ -2266,279 +2778,218 @@ Scope {
             Component {
                 id: cSaver
                 Column {
-                    spacing: 14
-                    SectionTitle { text: "SCREENSAVER" }
-                    Card {
-                        visible: !root.hypridleOk
-                        Text { width: parent.width; text: "hypridle is not installed — the screensaver (and idle auto-lock) needs it:  sudo pacman -S hypridle"; color: Theme.warning; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; wrapMode: Text.Wrap }
+                    spacing: Theme.spaceS
+                    Alert {
+                        visible: !root.hypridleOk; tone: "warning"
+                        title: "The screensaver needs hypridle"
+                        text: "Install it with sudo pacman -S hypridle. Locking when idle needs it too."
                     }
+                    SectionTitle { text: "Screensaver" }
                     Card {
                         ToggleRow {
-                            title: "Enable screensaver"
-                            sub: "Covers every display after the idle timeout; any key, click or mouse move dismisses it."
+                            title: "Screensaver"
+                            sub: "Covers every display when you have been away; any key, click or mouse move closes it."
                             on: Globals.saverEnabled
                             onToggled: { Globals.saverEnabled = !Globals.saverEnabled; root.saverChanged() }
                         }
                         DropRow {
-                            label: "Idle timeout"; ddId: "sv-timeout"; dim: !Globals.saverEnabled
+                            label: "Start after"; ddId: "sv-timeout"; dim: !Globals.saverEnabled
                             options: [1, 3, 5, 10, 15, 30].map(function (m) { return { label: m + " min", value: m } })
                             value: Globals.saverMin
                             onPicked: function (v) { Globals.saverMin = v; root.saverChanged() }
                         }
                         Slider {
-                            label: "Custom timeout (minutes)"; from: 1; to: 60; step: 1; decimals: 0
+                            label: "Start after (minutes)"; from: 1; to: 60; step: 1; decimals: 0
                             value: Globals.saverMin
                             visible: Globals.saverEnabled
                             onMoved: function (v) { Globals.saverMin = Math.round(v); root.saverChanged() }
                         }
                         DropRow {
                             label: "Style"; ddId: "sv-style"; dim: !Globals.saverEnabled || Globals.saverLock
-                            options: [{ label: "Clock", value: "clock" }, { label: "Blank (black)", value: "blank" }]
+                            options: [{ label: "Clock", value: "clock" }, { label: "Blank", value: "blank" }]
                             value: Globals.saverStyle
                             onPicked: function (v) { Globals.saverStyle = v; root.saverChanged() }
                         }
                     }
-                    SectionTitle { text: "LOCKING" }
+                    SectionTitle { text: "Locking" }
                     Card {
                         ToggleRow {
                             title: "Require password"
-                            sub: "Idle goes straight to the session lock screen instead of the dismissable saver."
+                            sub: "When idle, go straight to the lock screen instead of the screensaver."
                             dim: !Globals.saverEnabled
                             on: Globals.saverLock
                             onToggled: { Globals.saverLock = !Globals.saverLock; root.saverChanged() }
                         }
                         DropRow {
-                            label: "Lock after the saver starts"; ddId: "sv-lockafter"; dim: !Globals.saverEnabled || Globals.saverLock
+                            label: "Lock after the screensaver starts"; ddId: "sv-lockafter"; dim: !Globals.saverEnabled || Globals.saverLock
                             options: [{ label: "Never", value: 0 }, { label: "1 min", value: 1 }, { label: "5 min", value: 5 }, { label: "10 min", value: 10 }, { label: "15 min", value: 15 }, { label: "30 min", value: 30 }]
                             value: Globals.saverLockAfterMin
                             onPicked: function (v) { Globals.saverLockAfterMin = v; root.saverChanged() }
                         }
-                        Text { width: parent.width; text: "With the saver disabled the stock behaviour stays: auto-lock after 5 minutes idle. Idle-suspend on battery (15 min) is always kept."; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
+                        Note { text: "With the screensaver off, the screen still locks after 5 minutes idle. On battery, the machine still suspends after 15 minutes." }
                     }
                     Row {
-                        spacing: 10
+                        spacing: Theme.spaceS + Theme.spaceXs
                         Pill { label: "Preview"; primary: true; onGo: Globals.saverActive = true }
-                        Text { anchors.verticalCenter: parent.verticalCenter; text: "Shows the saver now — press any key to dismiss."; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11 }
+                        TCaption { anchors.verticalCenter: parent.verticalCenter; text: "Shows the screensaver now. Press any key to close it." }
                     }
-                    Text { width: parent.width; text: "Playing media, a fullscreen window, or the bar's Insomnia toggle keep the screensaver (and auto-lock/suspend) away. Timing is enforced by hypridle via generated/hypridle.conf — settings apply immediately, no restart needed."; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
-                    Item { width: 1; height: 8 }
+                    Note { text: "Playing media, a full-screen window or Keep awake in Quick settings hold off the screensaver, the lock and suspend. hypridle keeps the time through generated/hypridle.conf; changes apply at once." }
                 }
             }
 
-            // ════════ PANE — Dock ════════
             // ════════ PANE — Power / lid ════════
             Component {
                 id: cPower
                 Column {
-                    spacing: 14
-                    SectionTitle { text: "WHEN THE LID CLOSES" }
+                    spacing: Theme.spaceS
+                    SectionTitle { text: "When the lid closes" }
                     Card {
-                        Item {
-                            width: parent.width; height: 34
-                            Column { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; spacing: 1
-                                Text { text: "Suspend even when docked"; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
-                                Text { text: "On: closing the lid always suspends. Off (default): with an external monitor, keep working with the panel dark."
-                                       color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 10 }
-                            }
-                            Toggle {
-                                anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
-                                on: Globals.lidDockedSuspend
-                                onToggled: { Globals.lidDockedSuspend = !Globals.lidDockedSuspend; root.writePrefs() }
-                            }
+                        ToggleRow {
+                            title: "Suspend even when docked"
+                            sub: "On: closing the lid always suspends. Off: with an external display, keep working with the panel dark."
+                            on: Globals.lidDockedSuspend
+                            onToggled: { Globals.lidDockedSuspend = !Globals.lidDockedSuspend; root.writePrefs() }
                         }
-                        Rectangle { width: parent.width; height: 1; color: Theme.stroke3 }
+                        Divider {}
                         KV { k: "Right now"; v: Lid.docked ? (Lid.externals + " external display" + (Lid.externals === 1 ? "" : "s") + " connected")
-                                                           : "no external display — the lid always suspends" }
+                                                           : "No external display, so the lid always suspends" }
                     }
-                    Text { width: parent.width
-                           text: "With the laptop alone, closing the lid always suspends. The session is locked on the way down through a logind delay inhibitor, so the lock is up before the machine sleeps rather than racing it."
-                           color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
+                    Note { text: "On its own, the laptop always suspends when you close the lid. The screen locks before it sleeps, so nothing shows when it wakes." }
 
-                    SectionTitle { text: "BATTERY" }
+                    SectionTitle { text: "Battery" }
                     Card {
-                        KV { k: "Charge"; v: Power.capacity >= 0 ? Power.capacity + "%  ·  " + Power.remainingText() : "—" }
+                        KV { k: "Charge"; v: Power.capacity >= 0 ? Power.capacity + "% · " + Power.remainingText() : "—" }
                         KV { k: "Health"; v: Power.healthText() }
-                        Rectangle { visible: Power.hasChargeLimit; width: parent.width; height: 1; color: Theme.stroke3 }
+                        Divider { visible: Power.hasChargeLimit }
                         DropRow {
                             visible: Power.hasChargeLimit && Power.chargeLimitWritable
-                            label: "Charge ceiling"; ddId: "chg-limit"; buttonWidth: 120
-                            options: [{ label: "60%  (longest life)", value: 60 },
-                                      { label: "80%  (balanced)", value: 80 },
-                                      { label: "100%  (full capacity)", value: 100 }]
+                            label: "Charge limit"; ddId: "chg-limit"
+                            options: [{ label: "60% (longest life)", value: 60 },
+                                      { label: "80% (balanced)", value: 80 },
+                                      { label: "100% (full capacity)", value: 100 }]
                             value: Power.chargeLimit
                             onPicked: function (v) { Power.setChargeLimit(v) }
                         }
                         // present but root-only: say why rather than offering a
                         // control that would silently write into the void
-                        Text {
-                            visible: Power.hasChargeLimit && !Power.chargeLimitWritable
-                            width: parent.width; wrapMode: Text.Wrap
-                            text: "Charge ceiling is " + Power.chargeLimit + "%, but this attribute is root-only here. Re-run install.sh to add the udev rule, or manage it with asusctl."
-                            color: Theme.warning; font.family: Theme.fontText; font.pixelSize: 11
+                        Alert {
+                            visible: Power.hasChargeLimit && !Power.chargeLimitWritable; tone: "warning"
+                            text: "The charge limit is " + Power.chargeLimit + "%, but only root can change it here. Run install.sh again to add the udev rule, or use asusctl."
                         }
-                        Text {
-                            visible: !Power.hasChargeLimit
-                            width: parent.width; wrapMode: Text.Wrap
-                            text: "This machine's battery exposes no charge-ceiling control."
-                            color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11
-                        }
+                        Note { visible: !Power.hasChargeLimit; text: "This battery has no charge limit to set." }
                     }
 
-                    SectionTitle { visible: Logind.hasKbdBacklight; text: "KEYBOARD BACKLIGHT" }
+                    SectionTitle { visible: Logind.hasKbdBacklight; text: "Keyboard backlight" }
                     Card {
                         visible: Logind.hasKbdBacklight
                         DropRow {
-                            label: "Level"; ddId: "kbd-bl"; buttonWidth: 120
+                            label: "Level"; ddId: "kbd-bl"
                             options: [{ label: "Off", value: 0 }, { label: "Low", value: 1 },
                                       { label: "Medium", value: 2 }, { label: "High", value: 3 }]
                             value: Logind.hasKbdBacklight ? Logind.kbdBacklight.value : 0
                             onPicked: function (v) { Logind.setKbdStep(v) }
                         }
-                        KV { k: "Hotkeys"; v: "the keyboard-backlight keys step this too" }
+                        Note { text: "The keyboard's backlight keys change it too." }
                     }
 
-                    SectionTitle { text: "PERFORMANCE" }
+                    SectionTitle { text: "Performance" }
                     Card {
-                        KV { k: "Profile daemon"; v: Power.ppdRunning ? "power-profiles-daemon" : "none — using " + (Power.platformProfile !== "" ? "the firmware profile" : "kernel defaults") }
+                        KV { k: "Profiles from"; v: Power.ppdRunning ? "power-profiles-daemon" : (Power.platformProfile !== "" ? "The firmware profile" : "Kernel defaults") }
                         KV { visible: !Power.ppdRunning && Power.platformProfile !== ""
-                             k: "Firmware profile"; v: Power.platformProfile + (Power.platformChoices.length ? "  (" + Power.platformChoices.join(" · ") + ")" : "") }
-                        Text {
-                            visible: Power.degraded
-                            width: parent.width; wrapMode: Text.Wrap
-                            text: "Performance is being held back: " + Power.degradedReason + "."
-                            color: Theme.warning; font.family: Theme.fontText; font.pixelSize: 11
-                        }
-                        Text {
-                            visible: !Power.degraded && Power.ppdRunning
-                            width: parent.width
-                            text: "Not thermally limited. Switch profiles from Quick Settings."
-                            color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11
-                        }
+                             k: "Firmware profile"; v: Power.platformProfile + (Power.platformChoices.length ? " (" + Power.platformChoices.join(" · ") + ")" : "") }
+                        Alert { visible: Power.degraded; tone: "warning"; text: "Performance is held back: " + Power.degradedReason + "." }
+                        Note { visible: !Power.degraded && Power.ppdRunning; text: "Not held back by heat. Switch profiles in Quick settings." }
                     }
 
-                    SectionTitle { text: "ON BATTERY" }
+                    SectionTitle { text: "On battery" }
                     Card {
-                        Item {
-                            width: parent.width; height: 34
-                            Column { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; spacing: 1
-                                Text { text: "Low-power mode"; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
-                                Text { text: "Slow background polling down while unplugged."
-                                       color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 10 }
-                            }
-                            Toggle {
-                                anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
-                                on: Globals.lowPowerEnabled
-                                onToggled: { Globals.lowPowerEnabled = !Globals.lowPowerEnabled; root.writePrefs() }
-                            }
+                        ToggleRow {
+                            title: "Low-power mode"
+                            sub: "Checks less often in the background while unplugged."
+                            on: Globals.lowPowerEnabled
+                            onToggled: { Globals.lowPowerEnabled = !Globals.lowPowerEnabled; root.writePrefs() }
                         }
-                        Rectangle { width: parent.width; height: 1; color: Theme.stroke3 }
-                        KV { k: "Power source"; v: Globals.onBattery ? "battery" + (Globals.lowPower ? " · low-power active" : "") : "mains" }
+                        Divider {}
+                        KV { k: "Power source"; v: Globals.onBattery ? "Battery" + (Globals.lowPower ? " · low-power mode on" : "") : "Plugged in" }
                     }
 
-                    SectionTitle { text: "SESSION" }
+                    SectionTitle { text: "Session" }
                     Card {
-                        KV { k: "logind bridge"; v: Logind.bridgeUp ? "connected" : (Logind.bridgeError !== "" ? Logind.bridgeError : "starting…") }
-                        KV { k: "Sleep inhibitor"; v: Logind.inhibited ? "held (" + Logind.delayMs + " ms to lock)" : "not held" }
-                        KV { k: "Panel backlight"; v: Logind.hasBacklight ? Logind.backlight.name : "none detected" }
-                        KV { k: "Keyboard backlight"; v: Logind.hasKbdBacklight ? Logind.kbdBacklight.name : "none detected" }
+                        KV { k: "logind bridge"; v: Logind.bridgeUp ? "Connected" : (Logind.bridgeError !== "" ? Logind.bridgeError : "Starting…") }
+                        KV { k: "Sleep inhibitor"; v: Logind.inhibited ? "Held (" + Logind.delayMs + " ms to lock)" : "Not held" }
+                        KV { k: "Screen backlight"; v: Logind.hasBacklight ? Logind.backlight.name : "None found" }
+                        KV { k: "Keyboard backlight"; v: Logind.hasKbdBacklight ? Logind.kbdBacklight.name : "None found" }
                     }
 
-                    SectionTitle { text: "KEEPING THIS MACHINE AWAKE" }
+                    SectionTitle { text: "Keeping this machine awake" }
                     Card {
                         // We deliberately do not own org.freedesktop.ScreenSaver —
                         // hypridle implements it, and two owners would fight. This
                         // reports whether app inhibits are being heard at all.
-                        KV { k: "App inhibits"; v: Logind.screensaverOwner !== ""
-                                ? "honoured by " + Logind.screensaverOwner
-                                : "nothing owns org.freedesktop.ScreenSaver" }
-                        KV { k: "Insomnia"; v: Globals.caffeine ? "on — idle is blocked" : "off" }
-                        Rectangle { width: parent.width; height: 1; color: Theme.stroke3 }
+                        KV { k: "Apps that keep it awake"; v: Logind.screensaverOwner !== ""
+                                ? "Honored by " + Logind.screensaverOwner
+                                : "Nothing owns org.freedesktop.ScreenSaver" }
+                        KV { k: "Keep awake"; v: Globals.caffeine ? "On, idle is blocked" : "Off" }
+                        Divider {}
                         Repeater {
                             model: Logind.blockingInhibitors()
                             delegate: KV {
                                 required property var modelData
                                 k: String(modelData.who)
-                                v: String(modelData.why) + "  ·  " + String(modelData.what)
+                                v: String(modelData.why) + " · " + String(modelData.what)
                             }
                         }
-                        Text {
-                            visible: Logind.blockingInhibitors().length === 0
-                            width: parent.width; wrapMode: Text.Wrap
-                            text: "Nothing is blocking idle or sleep right now."
-                            color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11
-                        }
+                        Note { visible: Logind.blockingInhibitors().length === 0; text: "Nothing is keeping this machine awake right now." }
                     }
-                    Item { width: 1; height: 8 }
                 }
             }
 
+            // ════════ PANE — Dock ════════
             Component {
                 id: cDock
                 Column {
-                    spacing: 14
-                    SectionTitle { text: "BOTTOM DOCK" }
+                    spacing: Theme.spaceS
+                    SectionTitle { text: "Dock" }
                     Card {
-                        Item {
-                            width: parent.width; height: 30
-                            Column { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; spacing: 1
-                                Text { text: "Show dock"; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
-                                Text { text: "Launcher · overview · workspace switcher at the bottom."; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 10 }
-                            }
-                            Toggle { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; on: Globals.dockEnabled; onToggled: { Globals.dockEnabled = !Globals.dockEnabled; root.writePrefs() } }
+                        ToggleRow {
+                            title: "Show the dock"
+                            sub: "The launcher, Overview and your workspaces at the bottom of the screen."
+                            on: Globals.dockEnabled
+                            onToggled: { Globals.dockEnabled = !Globals.dockEnabled; root.writePrefs() }
                         }
-                        Rectangle { width: parent.width; height: 1; color: Theme.stroke3 }
-                        Item {
-                            width: parent.width; height: 30
-                            opacity: Globals.dockEnabled ? 1 : 0.4
-                            Column { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; spacing: 1
-                                Text { text: "Intelligent hide"; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
-                                Text { text: "Auto-hide; reveal by moving the cursor to the bottom edge."; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 10 }
-                            }
-                            Toggle { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; on: Globals.dockAutohide; onToggled: { if (Globals.dockEnabled) { Globals.dockAutohide = !Globals.dockAutohide; root.writePrefs() } } }
+                        ToggleRow {
+                            title: "Hide automatically"
+                            sub: "Moves away when a window needs the space; point at the bottom edge to bring it back."
+                            dim: !Globals.dockEnabled
+                            on: Globals.dockAutohide
+                            onToggled: { if (Globals.dockEnabled) { Globals.dockAutohide = !Globals.dockAutohide; root.writePrefs() } }
                         }
-                        Rectangle { width: parent.width; height: 1; color: Theme.stroke3 }
-                        Item {
-                            width: parent.width; height: 30
-                            opacity: Globals.dockEnabled ? 1 : 0.4
-                            Column { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; spacing: 1
-                                Text { text: "Icon size"; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
-                                Text { text: "How big the dock buttons and workspace boxes are."; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 10 }
-                            }
-                            Row {
-                                anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; spacing: 6
-                                Repeater {
-                                    model: [{ n: "Small", v: "small" }, { n: "Normal", v: "normal" }, { n: "Large", v: "large" }]
-                                    delegate: Rectangle {
-                                        required property var modelData
-                                        readonly property bool sel: Globals.dockIconSize === modelData.v
-                                        width: 60; height: 26; radius: Theme.radiusPill
-                                        color: sel ? Theme.accentFill : Theme.bg1
-                                        border.color: sel ? Theme.accent : Theme.stroke1; border.width: Theme.borderThin
-                                        Text { anchors.centerIn: parent; text: modelData.n; color: parent.sel ? Theme.accentOn : Theme.fg1; font.family: Theme.fontText; font.pixelSize: 11; font.weight: Font.DemiBold }
-                                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: { if (Globals.dockEnabled) { Globals.dockIconSize = modelData.v; root.writePrefs() } } }
-                                    }
-                                }
+                        SetRow {
+                            title: "Icon size"; desc: "Small is 40 pixels, medium 48, large 64."
+                            dim: !Globals.dockEnabled
+                            Seg {
+                                anchors.verticalCenter: parent.verticalCenter
+                                dim: !Globals.dockEnabled
+                                options: [{ label: "Small", value: "small" }, { label: "Medium", value: "normal" }, { label: "Large", value: "large" }]
+                                value: Globals.dockIconSize
+                                onPicked: function (v) { Globals.dockIconSize = v; root.writePrefs() }
                             }
                         }
                     }
-                    Text { width: parent.width; text: "The dock replaces the workspace row that used to be in the top bar."; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
-                    Item { width: 1; height: 8 }
                 }
             }
 
-            // ════════ PANE — Startup applications ════════
+            // ════════ PANE — Startup apps ════════
             Component {
                 id: cStartup
                 Column {
-                    spacing: 14
-                    SectionTitle { text: "LAUNCH AT LOGIN" }
-
+                    spacing: Theme.spaceS
+                    SectionTitle { text: "Start at sign-in" }
                     Card {
-                        Text {
-                            visible: root.startupApps.length === 0
-                            width: parent.width; wrapMode: Text.Wrap
-                            text: "Nothing starts automatically yet. Search below to add an application."
-                            color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
+                        Column {
+                            width: parent.width; visible: root.startupApps.length === 0
+                            TBody { text: "Nothing starts at sign-in yet" }
+                            TCaption { width: parent.width; text: "Search below to add an app."; wrapMode: Text.WordWrap }
                         }
                         Repeater {
                             model: root.startupApps
@@ -2546,54 +2997,48 @@ Scope {
                                 id: saRow
                                 required property var modelData
                                 required property int index
-                                width: parent.width; height: 36
-                                opacity: saRow.modelData.enabled === false ? 0.45 : 1
+                                readonly property bool off: saRow.modelData.enabled === false
+                                width: parent.width; height: Math.max(Theme.controlLg, saTexts.implicitHeight) + Theme.spaceXs
                                 Image {
                                     id: saIcon
                                     anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter
-                                    width: 20; height: 20
+                                    width: Theme.iconLg; height: Theme.iconLg
                                     visible: source !== ""
                                     source: saRow.modelData.icon ? Quickshell.iconPath(saRow.modelData.icon, true) : ""
-                                    sourceSize.width: 40; sourceSize.height: 40; mipmap: true
+                                    sourceSize.width: 2 * Theme.iconLg; sourceSize.height: 2 * Theme.iconLg; mipmap: true
                                 }
                                 Column {
-                                    anchors.left: parent.left; anchors.leftMargin: 30
-                                    anchors.right: saCtl.left; anchors.rightMargin: 8
+                                    id: saTexts
+                                    anchors.left: parent.left; anchors.leftMargin: Theme.iconLg + Theme.spaceS + Theme.spaceXs
+                                    anchors.right: saCtl.left; anchors.rightMargin: Theme.spaceS
                                     anchors.verticalCenter: parent.verticalCenter
-                                    spacing: 1
-                                    Text { width: parent.width; text: saRow.modelData.name || saRow.modelData.exec; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold; elide: Text.ElideRight }
-                                    Text { width: parent.width; text: saRow.modelData.exec; color: Theme.fg3; font.family: Theme.fontMono; font.pixelSize: 10; elide: Text.ElideRight }
+                                    TBody { width: parent.width; text: saRow.modelData.name || saRow.modelData.exec; color: saRow.off ? Theme.textDisabled : Theme.textPrimary; font.weight: Theme.fontWeightMedium; elide: Text.ElideRight }
+                                    TMono { width: parent.width; text: saRow.modelData.exec; color: saRow.off ? Theme.textDisabled : Theme.textMuted; font.pixelSize: Theme.fontSizeXs; elide: Text.ElideRight }
                                 }
                                 Row {
                                     id: saCtl
-                                    anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; spacing: 8
-                                    Toggle { anchors.verticalCenter: parent.verticalCenter; on: saRow.modelData.enabled !== false; onToggled: root.startupToggle(saRow.index) }
-                                    Rectangle {
-                                        anchors.verticalCenter: parent.verticalCenter
-                                        width: 22; height: 22; radius: Theme.r(6)
-                                        color: saDelMa.containsMouse ? Theme.danger : "transparent"
-                                        Text { anchors.centerIn: parent; text: Theme.icClose; font.family: Theme.fontIcons; font.pixelSize: 11; color: saDelMa.containsMouse ? Theme.fgInverted : Theme.fg3 }
-                                        MouseArea { id: saDelMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.startupRemove(saRow.index) }
-                                    }
+                                    anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; spacing: Theme.spaceS
+                                    Toggle { anchors.verticalCenter: parent.verticalCenter; on: !saRow.off; onToggled: root.startupToggle(saRow.index) }
+                                    IconBtn { anchors.verticalCenter: parent.verticalCenter; danger: true; onGo: root.startupRemove(saRow.index) }
                                 }
                             }
                         }
                     }
 
-                    SectionTitle { text: "ADD APPLICATION" }
+                    SectionTitle { text: "Add an app" }
                     Card {
                         // search over installed desktop entries
-                        Rectangle {
-                            width: parent.width; height: 32; radius: Theme.r(8)
-                            color: Theme.bg3; border.color: saSearch.activeFocus ? Theme.accent : Theme.stroke1; border.width: Theme.borderThin
-                            Text { anchors.left: parent.left; anchors.leftMargin: 10; anchors.verticalCenter: parent.verticalCenter; text: Theme.icSearch; font.family: Theme.fontIcons; font.pixelSize: 13; color: Theme.fg3 }
+                        FieldBox {
+                            width: parent.width; focused: saSearch.activeFocus
+                            Text { id: saSearchIc; anchors.left: parent.left; anchors.leftMargin: Theme.spaceS; anchors.verticalCenter: parent.verticalCenter; text: Theme.icSearch; font.family: Theme.fontIcons; font.pixelSize: Theme.iconMd; color: Theme.textMuted }
                             TextInput {
                                 id: saSearch
-                                anchors.fill: parent; anchors.leftMargin: 30; anchors.rightMargin: 10
-                                verticalAlignment: TextInput.AlignVCenter
-                                color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
+                                anchors.left: saSearchIc.right; anchors.leftMargin: Theme.spaceXs; anchors.right: parent.right; anchors.rightMargin: Theme.spaceS
+                                anchors.top: parent.top; anchors.bottom: parent.bottom
+                                verticalAlignment: TextInput.AlignVCenter; clip: true
+                                color: Theme.textPrimary; font.family: Theme.type.body.family; font.pixelSize: Theme.type.body.size
                                 onTextChanged: root.startupQuery = text
-                                Text { anchors.verticalCenter: parent.verticalCenter; visible: saSearch.text.length === 0; text: "Search apps — or type any command…"; color: Theme.fg3; font: saSearch.font }
+                                TBody { anchors.verticalCenter: parent.verticalCenter; visible: saSearch.text.length === 0; text: "Search apps or type a command"; color: Theme.textMuted }
                             }
                         }
                         Column {
@@ -2611,26 +3056,24 @@ Scope {
                                     }
                                     return out
                                 }
-                                delegate: Item {
+                                delegate: Rectangle {
                                     id: saRes
                                     required property var modelData
-                                    width: parent.width; height: 30
-                                    Rectangle { anchors.fill: parent; radius: Theme.r(6); color: saResMa.containsMouse ? Theme.subtleHover : Theme.subtle }
+                                    width: parent.width; height: Theme.controlLg; radius: Theme.radiusSecondary
+                                    color: saResMa.pressed ? Theme.surfacePressed : saResMa.containsMouse ? Theme.surfaceHover : "transparent"
                                     Image {
-                                        anchors.left: parent.left; anchors.leftMargin: 4; anchors.verticalCenter: parent.verticalCenter
-                                        width: 18; height: 18
+                                        id: saResIc
+                                        anchors.left: parent.left; anchors.leftMargin: Theme.spaceS; anchors.verticalCenter: parent.verticalCenter
+                                        width: Theme.iconLg; height: Theme.iconLg
                                         source: saRes.modelData.icon ? Quickshell.iconPath(saRes.modelData.icon, true) : ""
-                                        sourceSize.width: 36; sourceSize.height: 36; mipmap: true
+                                        sourceSize.width: 2 * Theme.iconLg; sourceSize.height: 2 * Theme.iconLg; mipmap: true
                                     }
-                                    Text {
-                                        anchors.left: parent.left; anchors.leftMargin: 30; anchors.right: parent.right; anchors.rightMargin: 60
+                                    TBody {
+                                        anchors.left: saResIc.right; anchors.leftMargin: Theme.spaceS + Theme.spaceXs; anchors.right: saAdd.left; anchors.rightMargin: Theme.spaceS
                                         anchors.verticalCenter: parent.verticalCenter
-                                        text: saRes.modelData.name; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; elide: Text.ElideRight
+                                        text: saRes.modelData.name; elide: Text.ElideRight
                                     }
-                                    Text {
-                                        anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter
-                                        text: "Add"; color: Theme.accent; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold
-                                    }
+                                    TBody { id: saAdd; anchors.right: parent.right; anchors.rightMargin: Theme.spaceS; anchors.verticalCenter: parent.verticalCenter; text: "Add"; color: Theme.accentText; font.weight: Theme.fontWeightMedium }
                                     MouseArea {
                                         id: saResMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
                                         onClicked: { root.startupAdd(saRes.modelData.name, root.cleanExec(saRes.modelData.execString), saRes.modelData.icon); saSearch.text = "" }
@@ -2638,20 +3081,16 @@ Scope {
                                 }
                             }
                             // raw command fallback — whatever was typed runs via sh -c
-                            Item {
-                                width: parent.width; height: 30
-                                Rectangle { anchors.fill: parent; radius: Theme.r(6); color: saCmdMa.containsMouse ? Theme.subtleHover : Theme.subtle }
-                                Text { anchors.left: parent.left; anchors.leftMargin: 8; anchors.verticalCenter: parent.verticalCenter; text: Theme.icSsh; font.family: Theme.fontIcons; font.pixelSize: 12; color: Theme.fg3 }
-                                Text {
-                                    anchors.left: parent.left; anchors.leftMargin: 30; anchors.right: parent.right; anchors.rightMargin: 90
+                            Rectangle {
+                                width: parent.width; height: Theme.controlLg; radius: Theme.radiusSecondary
+                                color: saCmdMa.pressed ? Theme.surfacePressed : saCmdMa.containsMouse ? Theme.surfaceHover : "transparent"
+                                Text { id: saCmdIc; anchors.left: parent.left; anchors.leftMargin: Theme.spaceS; anchors.verticalCenter: parent.verticalCenter; width: Theme.iconLg; horizontalAlignment: Text.AlignHCenter; text: Theme.icSsh; font.family: Theme.fontIcons; font.pixelSize: Theme.iconMd; color: Theme.textSecondary }
+                                TMono {
+                                    anchors.left: saCmdIc.right; anchors.leftMargin: Theme.spaceS + Theme.spaceXs; anchors.right: saCmdAdd.left; anchors.rightMargin: Theme.spaceS
                                     anchors.verticalCenter: parent.verticalCenter
-                                    text: "Run command: " + root.startupQuery.trim()
-                                    color: Theme.fg2; font.family: Theme.fontMono; font.pixelSize: 11; elide: Text.ElideRight
+                                    text: "Run “" + root.startupQuery.trim() + "”"; elide: Text.ElideRight
                                 }
-                                Text {
-                                    anchors.right: parent.right; anchors.rightMargin: 8; anchors.verticalCenter: parent.verticalCenter
-                                    text: "Add command"; color: Theme.accent; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; font.weight: Font.DemiBold
-                                }
+                                TBody { id: saCmdAdd; anchors.right: parent.right; anchors.rightMargin: Theme.spaceS; anchors.verticalCenter: parent.verticalCenter; text: "Add command"; color: Theme.accentText; font.weight: Theme.fontWeightMedium }
                                 MouseArea {
                                     id: saCmdMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
                                     onClicked: { root.startupAdd(root.startupQuery.trim(), root.startupQuery.trim(), ""); saSearch.text = "" }
@@ -2659,233 +3098,243 @@ Scope {
                             }
                         }
                     }
-                    Text {
-                        width: parent.width; wrapMode: Text.Wrap
-                        text: "Entries launch once at login (autostart). Changes apply at the next login — the toggle disables an entry without removing it. This list is included in Settings sync."
-                        color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11
-                    }
-                    Item { width: 1; height: 8 }
+                    Note { text: "These start once when you sign in, so changes take effect at the next sign-in. Switching one off keeps it in the list. The list is part of settings sync." }
                 }
+            }
+
+            // an account's picture: the image in a circle, or its initial on
+            // accentSubtle while there is none (Avatar card, initials)
+            component AccountPic: Rectangle {
+                id: ap
+                property string src: ""
+                property string initial: "?"
+                width: Theme.controlXl; height: Theme.controlXl; radius: width / 2
+                color: Theme.accentSubtle
+                Text {
+                    anchors.centerIn: parent; visible: apImg.status !== Image.Ready
+                    text: ap.initial; color: Theme.accentText
+                    font.family: Theme.type.bodyStrong.family; font.pixelSize: Theme.fontSizeLg; font.weight: Theme.fontWeightSemibold
+                }
+                Image {
+                    id: apImg
+                    anchors.fill: parent
+                    source: ap.src
+                    fillMode: Image.PreserveAspectCrop
+                    visible: status === Image.Ready
+                    layer.enabled: true
+                    layer.effect: MultiEffect { maskEnabled: true; maskSource: apMask; maskThresholdMin: 0.5; maskSpreadAtMin: 1.0 }
+                }
+                Item { id: apMask; anchors.fill: parent; layer.enabled: true; visible: false; Rectangle { anchors.fill: parent; radius: Theme.radiusFull; antialiasing: true } }
             }
 
             // ════════ PANE — User ════════
             Component {
                 id: cUser
                 Column {
-                    spacing: 14
-                    SectionTitle { text: "ACCOUNT" }
+                    spacing: Theme.spaceS
+                    SectionTitle { text: "Account" }
                     Card {
                         Row {
-                            width: parent.width; spacing: 16
-                            Avatar { size: 72; initial: (root.userRealName || Quickshell.env("USER") || "").charAt(0).toUpperCase() }
+                            width: parent.width; spacing: Theme.spaceMd
+                            Avatar { size: 2 * Theme.control2xl; initial: (root.userRealName || Quickshell.env("USER") || "").charAt(0).toUpperCase() }
                             Column {
-                                anchors.verticalCenter: parent.verticalCenter; spacing: 3
-                                // display name — click to edit, saved to AccountsService
-                                Rectangle {
-                                    width: Math.max(220, nameIn.implicitWidth + 26); height: 32; radius: Theme.r(6)
-                                    color: nameIn.activeFocus ? Theme.bg3 : "transparent"
-                                    border.color: nameIn.activeFocus ? Theme.accent : (nameHov.hovered ? Theme.stroke1 : "transparent"); border.width: Theme.borderThin
-                                    HoverHandler { id: nameHov }
+                                anchors.verticalCenter: parent.verticalCenter; spacing: Theme.spaceXs
+                                // your name: click to change it (AccountsService)
+                                FieldBox {
+                                    width: Math.max(Theme.panelSm / 2 + Theme.spaceLg, nameIn.implicitWidth + Theme.spaceLg)
+                                    height: Theme.controlLg
+                                    color: nameIn.activeFocus ? Theme.surfaceSunken : "transparent"
+                                    border.color: nameIn.activeFocus ? Theme.focusRing : hovered ? Theme.borderStrong : "transparent"
                                     TextInput {
                                         id: nameIn
-                                        anchors.fill: parent; anchors.leftMargin: 8; anchors.rightMargin: 24; verticalAlignment: TextInput.AlignVCenter
+                                        anchors.fill: parent; anchors.leftMargin: Theme.spaceS; anchors.rightMargin: Theme.spaceLg - Theme.spaceS; verticalAlignment: TextInput.AlignVCenter
                                         text: root.userRealName !== "" ? root.userRealName : (Quickshell.env("USER") || "user")
-                                        color: Theme.fg1; font.family: Theme.fontDisplay; font.pixelSize: Theme.fsLarge; font.weight: Font.Bold
+                                        color: Theme.textPrimary
+                                        font.family: Theme.type.h4.family; font.pixelSize: Theme.type.h4.size; font.weight: Theme.type.h4.weight
                                         selectByMouse: true; clip: true
                                         onAccepted: focus = false
                                         onActiveFocusChanged: if (!activeFocus && text.trim() !== "" && text.trim() !== root.userRealName) root.setRealName(text.trim())
                                     }
-                                    Text { anchors.right: parent.right; anchors.rightMargin: 7; anchors.verticalCenter: parent.verticalCenter; visible: nameHov.hovered && !nameIn.activeFocus; text: Theme.icPencil; font.family: Theme.fontMono; font.pixelSize: 11; color: Theme.fg3 }
+                                    Text { anchors.right: parent.right; anchors.rightMargin: Theme.spaceS; anchors.verticalCenter: parent.verticalCenter; visible: parent.hovered && !nameIn.activeFocus; text: Theme.icPencil; font.family: Theme.fontIcons; font.pixelSize: Theme.iconSm; color: Theme.textSecondary }
                                 }
-                                Text { leftPadding: 9; text: "@" + (Quickshell.env("USER") || "user"); color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
-                                Item { width: 1; height: 3 }
+                                TBody { leftPadding: Theme.spaceS; text: "@" + (Quickshell.env("USER") || "user"); color: Theme.textSecondary }
                                 Row {
-                                    spacing: 8
-                                    Pill { label: "Change avatar…"; onGo: avPicker.browse() }
-                                    // shape picker — applies live everywhere via Globals.avatarShape
-                                    Repeater {
-                                        model: [{ l: "Circle", v: "circle" }, { l: "Rounded", v: "rounded" }, { l: "Square", v: "square" }]
-                                        delegate: Pill {
-                                            required property var modelData
-                                            label: modelData.l; primary: Globals.avatarShape === modelData.v
-                                            onGo: { Globals.avatarShape = modelData.v; root.writePrefs() }
-                                        }
+                                    leftPadding: Theme.spaceS; topPadding: Theme.spaceXs
+                                    spacing: Theme.spaceS
+                                    Pill { label: "Change picture…"; onGo: avPicker.browse() }
+                                    // shape: applies live everywhere via Globals.avatarShape
+                                    Seg {
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        options: [{ label: "Circle", value: "circle" }, { label: "Rounded", value: "rounded" }, { label: "Square", value: "square" }]
+                                        value: Globals.avatarShape
+                                        onPicked: function (v) { Globals.avatarShape = v; root.writePrefs() }
                                     }
                                 }
                             }
                         }
                         FileDropTarget {
                             id: avPicker
-                            width: parent.width; implicitHeight: 44
-                            label: "Drop an image here to change your avatar"
-                            dialogTitle: "Choose avatar image"
+                            width: parent.width; implicitHeight: 2 * Theme.control2xl
+                            label: "Drop a picture here to use it"
+                            dialogTitle: "Choose a picture"
                             onPicked: function (p) { root.avatarCropSrc = p }
                         }
                     }
-                    Text { width: parent.width; text: "Avatar is saved to ~/.face (used by login/greeters); the system account icon and display name update via AccountsService."; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
+                    Note { text: "Your picture is saved to ~/.face for the sign-in screen; the system account picture and your name change through AccountsService." }
 
-                    SectionTitle { text: "SESSION" }
+                    SectionTitle { text: "Session" }
                     Card {
                         KV { k: "Host"; v: root.sysFacts.host || "—" }
                         KV { k: "Compositor"; v: root.sysFacts.hypr || "Hyprland" }
                         KV { k: "Session type"; v: "Wayland" }
                         KV { k: "Kernel"; v: root.sysFacts.kernel || "—" }
-                        KV { k: "Uptime"; v: root.sysFacts.up || "—" }
+                        KV { k: "Up for"; v: root.sysFacts.up || "—" }
                     }
 
-                    SectionTitle { text: "YOUR ACCOUNT  ·  NEXTCLOUD" }
+                    SectionTitle { text: "Nextcloud account" }
                     // signed out → the server field + sign in (RFC-005: the ewe
                     // account is the user's own Nextcloud; nothing is baked in)
                     Card {
                         visible: Cloud.probed && !Cloud.signedIn
-                        Text { width: parent.width; text: "Sign in to your Nextcloud — a server you run, or a hosted account (Murena, Disroot, Infomaniak…) — and ewe lights up around it: your machine kept in sync as one file, your apps restorable through Komble, your calendar in the Control Center, your files in ~/Nextcloud. ewe never sees your password: the server hands it an app password you can revoke any time."; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; wrapMode: Text.Wrap }
+                        TBody { width: parent.width; color: Theme.textSecondary; wrapMode: Text.WordWrap
+                            text: "Sign in to your Nextcloud, a server you run or a hosted account (Murena, Disroot, Infomaniak…), and ewe works with it: this machine kept as one file, your apps restorable in Komble, your calendar in Quick settings and your files in ~/Nextcloud. ewe never sees your password: the server gives it an app password you can revoke at any time." }
                         Item {
-                            width: parent.width; height: 34
-                            Rectangle {
-                                anchors.left: parent.left; anchors.right: ncSignIn.left; anchors.rightMargin: 10; height: 34; radius: Theme.r(8)
-                                color: Theme.bg3; border.color: ncSrv.activeFocus ? Theme.accent : Theme.stroke1; border.width: Theme.borderThin
+                            width: parent.width; height: Theme.controlMd
+                            FieldBox {
+                                anchors.left: parent.left; anchors.right: ncBtns.left; anchors.rightMargin: Theme.spaceS
+                                focused: ncSrv.activeFocus
                                 TextInput {
                                     id: ncSrv
-                                    anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10
+                                    anchors.fill: parent; anchors.leftMargin: Theme.spaceS; anchors.rightMargin: Theme.spaceS
                                     verticalAlignment: TextInput.AlignVCenter
                                     text: Cloud.lastServer
-                                    color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall
+                                    color: Theme.textPrimary; font.family: Theme.type.body.family; font.pixelSize: Theme.type.body.size
                                     clip: true; selectByMouse: true
                                     onAccepted: if (text.trim() !== "") Cloud.signIn(text)
-                                    Text { visible: ncSrv.text === "" && !ncSrv.activeFocus; anchors.verticalCenter: parent.verticalCenter; text: "https://cloud.example.org"; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
+                                    TBody { visible: ncSrv.text === "" && !ncSrv.activeFocus; anchors.verticalCenter: parent.verticalCenter; text: "https://cloud.example.org"; color: Theme.textMuted }
                                 }
                             }
-                            Pill { id: ncSignIn; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; visible: Cloud.busy !== "signin"; label: "Sign in"; primary: true; onGo: Cloud.signIn(ncSrv.text) }
-                            Pill { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; visible: Cloud.busy === "signin"; label: "Cancel"; onGo: Cloud.cancelSignIn() }
+                            Row {
+                                id: ncBtns
+                                anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
+                                Pill { visible: Cloud.busy !== "signin"; label: "Sign in"; primary: true; onGo: Cloud.signIn(ncSrv.text) }
+                                Pill { visible: Cloud.busy === "signin"; label: "Cancel"; onGo: Cloud.cancelSignIn() }
+                            }
                         }
-                        Text { visible: Cloud.busy === "signin"; width: parent.width; text: "Waiting for the browser — sign in on your server's page and grant access to ewe…"; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; wrapMode: Text.Wrap }
                         Row {
-                            visible: Cloud.loginUrl !== ""; spacing: 10
+                            visible: Cloud.busy === "signin"; spacing: Theme.spaceS
+                            Spinner { anchors.verticalCenter: parent.verticalCenter }
+                            TBody { anchors.verticalCenter: parent.verticalCenter; text: "Waiting for the browser. Sign in on your server's page and allow ewe…" }
+                        }
+                        Row {
+                            visible: Cloud.loginUrl !== ""; spacing: Theme.spaceS
                             Pill { label: "Open the sign-in page"; onGo: Cloud.openLoginUrl() }
                             Pill { label: "Copy the link"; onGo: Cloud.copyLoginUrl() }
                         }
-                        Text { visible: Cloud.reason === "revoked"; width: parent.width; text: "This machine's access was revoked on the server — sign in again."; color: Theme.warning; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; wrapMode: Text.Wrap }
-                        Text { visible: Cloud.keyringPromptExpected; width: parent.width; text: Cloud.keyringState === "locked" ? "Your keyring is locked: an “Unlock keyring” prompt will appear during sign-in — answer it with your login password." : "A “Choose password for new keyring” prompt will appear during sign-in — use your login password so it unlocks by itself at every login."; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
-                        Text { visible: Google.legacyGoogleSync; width: parent.width; text: "Settings sync now uses a Nextcloud account — sign in to keep your backups going. Your Google Drive backup stays where it is, untouched."; color: Theme.warning; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
+                        Alert { visible: Cloud.reason === "revoked"; tone: "warning"; text: "This machine's access was revoked on the server. Sign in again." }
+                        Note { visible: Cloud.keyringPromptExpected; text: Cloud.keyringState === "locked" ? "Your keyring is locked, so an “Unlock keyring” prompt appears during sign-in. Answer it with your sign-in password." : "A “Choose password for new keyring” prompt appears during sign-in. Use your sign-in password, so it unlocks by itself every time you sign in." }
+                        Alert { visible: Google.legacyGoogleSync; tone: "warning"; text: "Settings sync now uses a Nextcloud account. Sign in to keep your backups going; your Google Drive backup stays where it is." }
                     }
                     // signed in → identity + what the account provides + sign out
                     Card {
                         visible: Cloud.signedIn
                         Item {
-                            width: parent.width; height: 46
-                            Rectangle {
-                                anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter
-                                width: 40; height: 40; radius: 20; color: Theme.card
-                                Text { anchors.centerIn: parent; visible: ncAv.status !== Image.Ready; text: (Cloud.displayName || "?").charAt(0).toUpperCase(); color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: 16; font.weight: Font.DemiBold }
-                                Image {
-                                    id: ncAv
-                                    anchors.fill: parent
-                                    source: Cloud.avatarPath !== "" ? "file://" + Cloud.avatarPath : ""
-                                    fillMode: Image.PreserveAspectCrop
-                                    visible: status === Image.Ready
-                                    layer.enabled: true
-                                    layer.effect: MultiEffect { maskEnabled: true; maskSource: ncAvMask; maskThresholdMin: 0.5; maskSpreadAtMin: 1.0 }
-                                }
-                                Item { id: ncAvMask; anchors.fill: parent; layer.enabled: true; visible: false; Rectangle { anchors.fill: parent; radius: Theme.r(20); antialiasing: true } }
-                            }
+                            width: parent.width; height: Theme.controlXl
+                            AccountPic { id: ncPic; anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; src: Cloud.avatarPath !== "" ? "file://" + Cloud.avatarPath : ""; initial: (Cloud.displayName || "?").charAt(0).toUpperCase() }
                             Column {
-                                anchors.left: parent.left; anchors.leftMargin: 52; anchors.right: ncOut.left; anchors.rightMargin: 10; anchors.verticalCenter: parent.verticalCenter; spacing: 1
-                                Text { width: parent.width; text: Cloud.displayName || "Nextcloud account"; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsBody; font.weight: Font.DemiBold; elide: Text.ElideRight }
-                                Text { width: parent.width; text: (Cloud.email !== "" ? Cloud.email + " · " : "") + Cloud.serverHost; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; elide: Text.ElideRight }
+                                anchors.left: ncPic.right; anchors.leftMargin: Theme.spaceS + Theme.spaceXs; anchors.right: ncOut.left; anchors.rightMargin: Theme.spaceS
+                                anchors.verticalCenter: parent.verticalCenter
+                                TStrong { width: parent.width; text: Cloud.displayName || "Nextcloud account"; elide: Text.ElideRight }
+                                TCaption { width: parent.width; text: (Cloud.email !== "" ? Cloud.email + " · " : "") + Cloud.serverHost; elide: Text.ElideRight }
                             }
                             Pill { id: ncOut; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; label: "Sign out"; onGo: Cloud.signOut() }
                         }
-                        KV { k: "Server"; v: Cloud.serverHost + (Cloud.offline ? " · not reachable right now" : ""); dot: Cloud.offline ? "info" : "ok" }
+                        Divider {}
+                        KV { k: "Server"; v: Cloud.serverHost + (Cloud.offline ? " · can't be reached right now" : ""); dot: Cloud.offline ? "info" : "ok" }
                         KV { k: "Storage"; v: Cloud.quota && Cloud.quota.total > 0 ? (root.fmtBytes(Cloud.quota.used) + " of " + root.fmtBytes(Cloud.quota.total) + " · " + Math.round(Cloud.quota.relative || 0) + "%") : (Cloud.quota ? root.fmtBytes(Cloud.quota.used) + " used" : "—") }
-                        KV { k: "Files"; v: Cloud.filesMounted ? "mounted at " + Cloud.filesPath : "not mounted"; dot: Cloud.filesMounted ? "ok" : "info"; action: !Cloud.filesMounted; actionLabel: "Mount"; onAct: Cloud.mountFiles() }
-                        KV { k: "Calendar"; v: Cloud.calState === "offline" ? "offline — showing the last fetch" : (Cloud.events.length + " upcoming in the Control Center"); dot: Cloud.calState === "offline" ? "info" : "ok" }
-                        KV { k: "Mail"; v: Mail.source === "imap" ? Mail.imapUser : (Mail.source === "gmail" ? "Gmail (Google extra)" : "none — add an IMAP account in the Settings app"); dot: Mail.available ? "ok" : "info" }
+                        KV { k: "Files"; v: Cloud.filesMounted ? "In " + Cloud.filesPath : "Not connected"; dot: Cloud.filesMounted ? "ok" : "info"; action: !Cloud.filesMounted; actionLabel: "Connect files"; onAct: Cloud.mountFiles() }
+                        KV { k: "Calendar"; v: Cloud.calState === "offline" ? "Offline, showing events from the last sync" : (Cloud.events.length + " upcoming in Quick settings"); dot: Cloud.calState === "offline" ? "info" : "ok" }
+                        KV { k: "Mail"; v: Mail.source === "imap" ? Mail.imapUser : (Mail.source === "gmail" ? "Gmail (Google)" : "None. Add an IMAP account in the Settings app"); dot: Mail.available ? "ok" : "info" }
                         // the account app (RFC-006) — the in-shell cards stay as the fallback
-                        KV { visible: Globals.syncAppInstalled; k: "Account app"; v: "your machines, folder sync, conflicts"; dot: "ok"; action: true; actionLabel: "Manage in ewe-sync"; onAct: Globals.openSync() }
+                        KV { visible: Globals.syncAppInstalled; k: "Your machines, folders and conflicts"; dot: "ok"; action: true; actionLabel: "Open ewe-sync"; onAct: Globals.openSync() }
                     }
-                    Text {
-                        visible: Cloud.error !== ""
-                        width: parent.width; text: Cloud.error; color: Theme.danger; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap
-                    }
+                    Alert { visible: Cloud.error !== ""; tone: "danger"; text: Cloud.error }
                     // the keyring rejects the login password → replace it (PAM
                     // recreates `login` with the login password at the next login)
                     Card {
                         visible: !Cloud.signedIn && (Cloud.keyringTrouble || Cloud.keyringResetDone)
-                        KV { visible: !Cloud.keyringResetDone; k: "Keyring"; v: Cloud.keyringState === "locked" ? "locked — PAM could not unlock it" : "refused the app password"; dot: "bad"; action: true; actionLabel: "Reset the keyring"; onAct: Cloud.resetKeyring() }
-                        KV { visible: Cloud.keyringResetDone; k: "Keyring"; v: "reset — log out and back in, then sign in"; dot: "info"; action: true; actionLabel: "Log out now"; onAct: Cloud.logOut() }
+                        KV { visible: !Cloud.keyringResetDone; k: "Keyring"; v: Cloud.keyringState === "locked" ? "Locked; it couldn't be unlocked at sign-in" : "It refused the app password"; dot: "bad"; action: true; actionLabel: "Reset keyring"; onAct: Cloud.resetKeyring() }
+                        KV { visible: Cloud.keyringResetDone; k: "Keyring"; v: "Reset. Sign out and in again, then sign in here"; dot: "info"; action: true; actionLabel: "Sign out now"; onAct: Cloud.logOut() }
                     }
 
-                    SectionTitle { visible: Cloud.signedIn; text: "SETTINGS SYNC" }
+                    SectionTitle { visible: Cloud.signedIn; text: "Settings sync" }
                     Card {
                         visible: Cloud.signedIn
                         // two facts, kept apart: who SAVED the backup, and when THIS
                         // machine last talked to it
-                        KV { k: "Backup in your account"; v: Cloud.cloudInfo ? ("saved by “" + Cloud.cloudInfo.device + "” · " + root.fmtSyncTime(Cloud.cloudInfo.updatedAt)) : "none yet" }
-                        KV { k: "This machine last synced"; v: (Cloud.localSyncedAt !== "" ? root.fmtSyncTime(Cloud.localSyncedAt) : (Cloud.lastSync !== "" ? root.fmtSyncTime(Cloud.lastSync) : "never — nothing is uploaded until you back it up")) + (Cloud.inSync && Cloud.lastSync !== "" ? " · up to date" : "") }
+                        KV { k: "Backup in your account"; v: Cloud.cloudInfo ? ("Saved by “" + Cloud.cloudInfo.device + "” · " + root.fmtSyncTime(Cloud.cloudInfo.updatedAt)) : "None yet" }
+                        KV { k: "This machine last synced"; v: (Cloud.localSyncedAt !== "" ? root.fmtSyncTime(Cloud.localSyncedAt) : (Cloud.lastSync !== "" ? root.fmtSyncTime(Cloud.lastSync) : "Never. Nothing is uploaded until you back it up")) + (Cloud.inSync && Cloud.lastSync !== "" ? " · up to date" : "") }
                         ToggleRow {
-                            title: "Auto-sync"
-                            sub: Cloud.lastSync === "" ? "Starts after the first backup from this machine; every change to the one file — Settings, Komble, the terminal — pushes ~20 s later." : "Every change to the one file — Settings, Komble, the terminal — pushes ~20 s later."
+                            title: "Sync automatically"
+                            sub: Cloud.lastSync === "" ? "Starts after this machine's first backup. After that, every change (in Settings, Komble or the terminal) is uploaded about 20 s later." : "Every change, in Settings, Komble or the terminal, is uploaded about 20 s later."
                             on: Cloud.autoSync
                             onToggled: Cloud.setAutoSync(!Cloud.autoSync)
                         }
                         Row {
-                            spacing: 10
+                            spacing: Theme.spaceS
                             // a never-synced machine never auto-pushes: its first upload is this button
                             Pill { label: Cloud.syncState === "syncing" ? "Syncing…" : (Cloud.lastSync === "" ? "Back up this machine" : "Sync now"); primary: true; onGo: Cloud.syncNow() }
-                            Pill { label: "Restore from the account…"; onGo: Cloud.requestRestore() }
+                            Pill { label: "Restore from your account…"; onGo: Cloud.requestRestore() }
                             // only offered when the server refused a push
-                            Pill { visible: Cloud.syncConflict; label: "Push anyway"; onGo: Cloud.pushForce() }
+                            Pill { visible: Cloud.syncConflict; label: "Upload anyway"; onGo: Cloud.pushForce() }
                         }
-                        Text { width: parent.width; text: "The machine file (ewe.conf) lives in the ewe/ folder of your account: theme + accent, dock, animations, power, display profiles, window rules, wallpapers, pinned/startup apps, places, VPN and SSH definitions, and Komble's installed-apps list (reinstalling from it is always opt-in). Credentials never sync — that is the rule the file is built on."; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
-                        Text { visible: Cloud.syncError !== ""; width: parent.width; text: Cloud.syncError; color: Theme.danger; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
-                        Text { visible: Cloud.restoreSummary !== ""; width: parent.width; text: Cloud.restoreSummary; color: Theme.success; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
+                        Note { text: "The machine file (ewe.conf) lives in the ewe folder of your account: scheme and accent, dock, animations, power, display profiles, window rules, wallpapers, pinned and startup apps, places, VPN and SSH hosts, and Komble's list of installed apps (reinstalling from it is always your choice). Passwords and keys never sync." }
+                        Alert { visible: Cloud.syncError !== ""; tone: "danger"; text: Cloud.syncError }
+                        Alert { visible: Cloud.restoreSummary !== ""; tone: "success"; text: Cloud.restoreSummary }
                     }
-                    // restore confirmation — explicit, summarises what will change
-                    Rectangle {
+                    // restore confirmation — explicit, says what will change
+                    Card {
                         visible: Cloud.pendingRestore !== null
-                        width: parent.width
-                        implicitHeight: restCol.implicitHeight + 24
-                        radius: Theme.radiusInner; color: Theme.card
-                        border.color: Theme.accent; border.width: Theme.borderThin
-                        Column {
-                            id: restCol
-                            anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 12; spacing: 8
-                            Text { text: "Restore settings from the backup in your account?"; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsBody; font.weight: Font.DemiBold }
-                            KV { k: "Saved on"; v: Cloud.pendingRestore ? ("“" + (Cloud.pendingRestore.device || "?") + "” · " + root.fmtSyncTime(Cloud.pendingRestore.updatedAt || "")) : "" }
-                            KV { k: "Restores"; v: "the machine file (ewe.conf) — theme, dock, displays, rules, apps list; your current file is kept as a timestamped backup" }
-                            KV { k: "Applications"; v: "reinstall offers appear in Komble → For you (never auto-installed)" }
-                            Text { width: parent.width; text: "Overwrites this machine's theme, dock, wallpaper, window-rule, display-profile and app-list settings, then reloads the shell config live."; color: Theme.warning; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap }
-                            Row {
-                                spacing: 10
-                                Pill { label: "Restore"; primary: true; onGo: Cloud.applyRestore() }
-                                Pill { label: "Cancel"; onGo: Cloud.cancelRestore() }
-                            }
+                        border.color: Theme.accentText
+                        Text { width: parent.width; text: "Restore settings from your account?"; color: Theme.textPrimary; wrapMode: Text.WordWrap
+                               font.family: Theme.type.h4.family; font.pixelSize: Theme.type.h4.size; font.weight: Theme.type.h4.weight }
+                        KV { k: "Saved on"; v: Cloud.pendingRestore ? ("“" + (Cloud.pendingRestore.device || "?") + "” · " + root.fmtSyncTime(Cloud.pendingRestore.updatedAt || "")) : "" }
+                        KV { k: "Restores"; v: "The machine file (ewe.conf); your current one is kept as a dated backup" }
+                        KV { k: "Apps"; v: "Offered in Komble → For you, never installed on their own" }
+                        Alert { tone: "warning"; text: "This machine's scheme, dock, wallpaper, window rules, display profiles and app list are replaced, then the shell reloads them." }
+                        Row {
+                            anchors.right: parent.right; spacing: Theme.spaceS
+                            Pill { label: "Cancel"; ghost: true; onGo: Cloud.cancelRestore() }
+                            Pill { label: "Restore settings"; primary: true; onGo: Cloud.applyRestore() }
                         }
                     }
 
-                    SectionTitle { text: "GOOGLE  ·  OPTIONAL" }
+                    SectionTitle { text: "Google (optional)" }
                     // ewe ships no Google client (RFC-005): the extra exists only
                     // for people who bring their own OAuth client file
                     Card {
                         visible: !Google.personalClient
-                        Text { width: parent.width; text: "For Gmail in the Control Center and Google Drive as a folder. ewe ships no Google client: create your own OAuth client of type “Desktop app” (docs/GOOGLE-CLIENT.md), save it as the file below, and this card turns into Connect."; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; wrapMode: Text.Wrap }
-                        Text { width: parent.width; text: Google.clientPath; color: Theme.fg2; font.family: Theme.fontMono; font.pixelSize: 11; elide: Text.ElideMiddle }
+                        TBody { width: parent.width; color: Theme.textSecondary; wrapMode: Text.WordWrap
+                            text: "For Gmail in Quick settings and Google Drive as a folder. ewe ships no Google client: create your own OAuth client of type “Desktop app” (docs/GOOGLE-CLIENT.md) and save it as the file below; then this turns into Connect." }
+                        TMono { width: parent.width; text: Google.clientPath; elide: Text.ElideMiddle }
                     }
-                    Card {
-                        visible: Google.personalClient && Google.probed && !Google.configured
-                        Text { width: parent.width; text: "The client file is there but the broker could not read a client_id from it — check docs/GOOGLE-CLIENT.md for the expected JSON."; color: Theme.warning; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; wrapMode: Text.Wrap }
+                    Alert {
+                        visible: Google.personalClient && Google.probed && !Google.configured; tone: "warning"
+                        text: "The client file is there, but it has no client_id that could be read. docs/GOOGLE-CLIENT.md shows the JSON it expects."
                     }
                     Card {
                         visible: Google.probed && Google.configured && !Google.signedIn
-                        Text { width: parent.width; text: "Your client file is in place. Connect to get Gmail in the Control Center and ~/Google Drive in Files. Settings sync never goes through Google."; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; wrapMode: Text.Wrap }
+                        TBody { width: parent.width; color: Theme.textSecondary; wrapMode: Text.WordWrap
+                            text: "Your client file is in place. Connect for Gmail in Quick settings and ~/Google Drive in Files. Settings sync never goes through Google." }
                         Row {
-                            spacing: 10
+                            spacing: Theme.spaceS
                             Pill { visible: Google.busy !== "signin"; label: "Connect Google"; primary: true; onGo: Google.signIn() }
-                            Text { visible: Google.busy === "signin"; anchors.verticalCenter: parent.verticalCenter; text: "Waiting for the browser sign-in…"; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall }
+                            Spinner { visible: Google.busy === "signin"; anchors.verticalCenter: parent.verticalCenter }
+                            TBody { visible: Google.busy === "signin"; anchors.verticalCenter: parent.verticalCenter; text: "Waiting for the browser…" }
                             Pill { visible: Google.busy === "signin"; label: "Cancel"; onGo: Google.cancelSignIn() }
                         }
                         Row {
-                            visible: Google.consentUrl !== ""; spacing: 10
+                            visible: Google.consentUrl !== ""; spacing: Theme.spaceS
                             Pill { label: "Open the sign-in page"; onGo: Google.openConsentUrl() }
                             Pill { label: "Copy the link"; onGo: Google.copyConsentUrl() }
                         }
@@ -2893,106 +3342,156 @@ Scope {
                     Card {
                         visible: Google.signedIn
                         Item {
-                            width: parent.width; height: 46
-                            Rectangle {
-                                id: gAvBox
-                                anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter
-                                width: 40; height: 40; radius: 20; color: Theme.card
-                                Text { anchors.centerIn: parent; visible: gAv.status !== Image.Ready; text: ((Google.profile && Google.profile.name) || "?").charAt(0).toUpperCase(); color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: 16; font.weight: Font.DemiBold }
-                                Image {
-                                    id: gAv
-                                    anchors.fill: parent
-                                    source: (Google.profile && Google.profile.picture) ? Google.profile.picture : ""
-                                    fillMode: Image.PreserveAspectCrop
-                                    visible: status === Image.Ready
-                                    layer.enabled: true
-                                    layer.effect: MultiEffect { maskEnabled: true; maskSource: gAvMask; maskThresholdMin: 0.5; maskSpreadAtMin: 1.0 }
-                                }
-                                Item { id: gAvMask; anchors.fill: parent; layer.enabled: true; visible: false; Rectangle { anchors.fill: parent; radius: Theme.r(20); antialiasing: true } }
-                            }
+                            width: parent.width; height: Theme.controlXl
+                            AccountPic { id: gPic; anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; src: (Google.profile && Google.profile.picture) ? Google.profile.picture : ""; initial: ((Google.profile && Google.profile.name) || "?").charAt(0).toUpperCase() }
                             Column {
-                                anchors.left: parent.left; anchors.leftMargin: 52; anchors.right: gOut.left; anchors.rightMargin: 10; anchors.verticalCenter: parent.verticalCenter; spacing: 1
-                                Text { width: parent.width; text: (Google.profile && Google.profile.name) || "Google account"; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsBody; font.weight: Font.DemiBold; elide: Text.ElideRight }
-                                Text { width: parent.width; text: (Google.profile && Google.profile.email) || ""; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; elide: Text.ElideRight }
+                                anchors.left: gPic.right; anchors.leftMargin: Theme.spaceS + Theme.spaceXs; anchors.right: gOut.left; anchors.rightMargin: Theme.spaceS
+                                anchors.verticalCenter: parent.verticalCenter
+                                TStrong { width: parent.width; text: (Google.profile && Google.profile.name) || "Google account"; elide: Text.ElideRight }
+                                TCaption { width: parent.width; text: (Google.profile && Google.profile.email) || ""; elide: Text.ElideRight }
                             }
                             Pill { id: gOut; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; label: "Disconnect"; onGo: Google.signOut() }
                         }
-                        KV { k: "Gmail"; v: Mail.source === "gmail" ? "in the Control Center" : "an IMAP account is set up — it takes precedence"; dot: Mail.source === "gmail" ? "ok" : "info" }
+                        Divider {}
+                        KV { k: "Gmail"; v: Mail.source === "gmail" ? "In Quick settings" : "Your IMAP account is used instead"; dot: Mail.source === "gmail" ? "ok" : "info" }
                         KV { k: "Google Drive"; v: "~/Google Drive in Files"; dot: "ok" }
-                        KV { visible: Google.profile && Google.profile.picture; k: "Google profile photo"; action: true; actionLabel: "Use as avatar"; onAct: root.useGooglePhoto() }
+                        KV { visible: Google.profile && Google.profile.picture; k: "Google profile photo"; action: true; actionLabel: "Use as picture"; onAct: root.useGooglePhoto() }
                     }
-                    Text {
-                        visible: Google.error !== ""
-                        width: parent.width; text: Google.error; color: Theme.danger; font.family: Theme.fontText; font.pixelSize: 11; wrapMode: Text.Wrap
-                    }
+                    Alert { visible: Google.error !== ""; tone: "danger"; text: Google.error }
                     Card {
                         visible: Google.configured && !Google.signedIn && (Google.keyringTrouble || Google.keyringResetDone)
-                        KV { visible: !Google.keyringResetDone; k: "Keyring"; v: Google.keyringState === "locked" ? "locked — PAM could not unlock it" : "refused the token"; dot: "bad"; action: true; actionLabel: "Reset the keyring"; onAct: Google.resetKeyring() }
-                        KV { visible: Google.keyringResetDone; k: "Keyring"; v: "reset — log out and back in, then sign in"; dot: "info"; action: true; actionLabel: "Log out now"; onAct: Google.logOut() }
+                        KV { visible: !Google.keyringResetDone; k: "Keyring"; v: Google.keyringState === "locked" ? "Locked; it couldn't be unlocked at sign-in" : "It refused the token"; dot: "bad"; action: true; actionLabel: "Reset keyring"; onAct: Google.resetKeyring() }
+                        KV { visible: Google.keyringResetDone; k: "Keyring"; v: "Reset. Sign out and in again, then connect here"; dot: "info"; action: true; actionLabel: "Sign out now"; onAct: Google.logOut() }
                     }
 
-                    SectionTitle { visible: Accounts.contacts.length > 0; text: "CONTACTS  ·  " + Accounts.contacts.length }
+                    SectionTitle { visible: Accounts.contacts.length > 0; text: "Contacts (" + Accounts.contacts.length + ")" }
                     Card {
                         visible: Accounts.contacts.length > 0
+                        spacing: 0
                         Repeater {
                             model: Accounts.contacts.slice(0, 25)
                             delegate: Item {
+                                id: ctRow
                                 required property var modelData
-                                width: parent.width; height: 36
-                                Rectangle {
-                                    anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter
-                                    width: 26; height: 26; radius: 13; color: Theme.card
-                                    Text { anchors.centerIn: parent; text: (modelData.name || "?").charAt(0).toUpperCase(); color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: 12; font.weight: Font.DemiBold }
-                                }
+                                width: parent.width; height: Theme.control2xl - Theme.spaceS
+                                AccountPic { id: ctPic; width: Theme.controlMd; height: Theme.controlMd; anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; initial: (ctRow.modelData.name || "?").charAt(0).toUpperCase() }
                                 Column {
-                                    anchors.left: parent.left; anchors.leftMargin: 36; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; spacing: 1
-                                    Text { width: parent.width; text: modelData.name; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; elide: Text.ElideRight }
-                                    Text { width: parent.width; text: (modelData.emails[0] || "") + (modelData.phones && modelData.phones.length ? "  ·  " + modelData.phones[0] : ""); color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 10; elide: Text.ElideRight }
+                                    anchors.left: ctPic.right; anchors.leftMargin: Theme.spaceS + Theme.spaceXs; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
+                                    TBody { width: parent.width; text: ctRow.modelData.name; elide: Text.ElideRight }
+                                    TCaption { width: parent.width; text: (ctRow.modelData.emails[0] || "") + (ctRow.modelData.phones && ctRow.modelData.phones.length ? " · " + ctRow.modelData.phones[0] : ""); elide: Text.ElideRight }
                                 }
                             }
                         }
-                        Text { visible: Accounts.contacts.length > 25; text: "…and " + (Accounts.contacts.length - 25) + " more"; color: Theme.fg3; font.family: Theme.fontText; font.pixelSize: 11 }
+                        Note { visible: Accounts.contacts.length > 25; topPadding: Theme.spaceXs; text: "And " + (Accounts.contacts.length - 25) + " more" }
                     }
-                    Item { width: 1; height: 8 }
                 }
             }
 
-            // ════════ overlays: error banner · applied flash · confirm-or-revert ════════
+            // ════════ PANE — Accessibility (new, Accessibility modes) ════════
+            // The four modes, stored in ewe.conf [desktop.accessibility] and
+            // applied by the generator as remaps: nothing on this page (or
+            // anywhere else) asks which mode is on to decide how to draw.
+            Component {
+                id: cAccessibility
+                Column {
+                    spacing: Theme.spaceS
+                    Card {
+                        SetRow {
+                            glyph: root.g(0xE121); title: "Reduce motion"
+                            desc: "Fades instead of slides; nothing moves more than it has to."
+                            Toggle {
+                                anchors.verticalCenter: parent.verticalCenter
+                                on: root.tokIn("reduce_motion", false) === true
+                                onToggled: root.confSet("desktop.accessibility.reduce_motion", on ? "false" : "true")
+                            }
+                        }
+                        SetRow {
+                            glyph: root.g(0xE59C); title: "Reduce transparency"
+                            desc: "Solid bar, dock and lock screen card; no blur."
+                            Toggle {
+                                anchors.verticalCenter: parent.verticalCenter
+                                on: root.tokIn("reduce_transparency", false) === true
+                                onToggled: root.confSet("desktop.accessibility.reduce_transparency", on ? "false" : "true")
+                            }
+                        }
+                        SetRow {
+                            glyph: root.g(0xE09D); title: "Increase contrast"
+                            desc: "Stronger outlines and text, and a thicker focus ring."
+                            Toggle {
+                                anchors.verticalCenter: parent.verticalCenter
+                                on: root.tokIn("increase_contrast", false) === true
+                                onToggled: root.confSet("desktop.accessibility.increase_contrast", on ? "false" : "true")
+                            }
+                        }
+                        SetRow {
+                            glyph: root.g(0xE198); title: "Text size"
+                            desc: "Text grows, and controls grow with it. At 130% the bar uses its large size."
+                            Seg {
+                                anchors.verticalCenter: parent.verticalCenter
+                                options: [{ label: "100%", value: 100 }, { label: "115%", value: 115 }, { label: "130%", value: 130 }]
+                                value: Number(root.tokIn("text_scale", 100))
+                                onPicked: function (v) { root.confSet("desktop.accessibility.text_scale", v) }
+                            }
+                        }
+                    }
+                    Note { text: "These work with every scheme and look, and apply to the whole desktop at once. Display scaling (125%, 150%) is separate, in Displays." }
+                }
+            }
+
+            // ════════ overlays: error alert · saved confirmation · dialogs ════════
+            // an error: a danger Inline alert along the bottom of the pane,
+            // closed with its × (Inline alert card)
             Rectangle {
                 visible: root.errorMsg !== ""
-                anchors.horizontalCenter: parent.horizontalCenter; anchors.bottom: parent.bottom; anchors.bottomMargin: 14
-                width: Math.min(errText.implicitWidth + 66, card.width - 40); height: 36; radius: Theme.r(10); z: 60
-                color: Theme.card; border.color: Theme.danger; border.width: Theme.borderThin
-                Text { anchors.left: parent.left; anchors.leftMargin: 12; anchors.verticalCenter: parent.verticalCenter; text: Theme.icWarning; font.family: Theme.fontIcons; font.pixelSize: 13; color: Theme.danger }
-                Text { id: errText; anchors.left: parent.left; anchors.leftMargin: 34; anchors.right: parent.right; anchors.rightMargin: 32; anchors.verticalCenter: parent.verticalCenter; text: root.errorMsg; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: 11; elide: Text.ElideRight }
-                Text { anchors.right: parent.right; anchors.rightMargin: 11; anchors.verticalCenter: parent.verticalCenter; text: Theme.icClose; font.family: Theme.fontIcons; font.pixelSize: 12; color: Theme.fg3
-                    MouseArea { anchors.fill: parent; anchors.margins: -8; cursorShape: Qt.PointingHandCursor; onClicked: root.clearError() } }
+                anchors.horizontalCenter: pagePane.horizontalCenter; anchors.bottom: parent.bottom
+                anchors.bottomMargin: Theme.spaceMd + Theme.spaceS
+                width: Math.min(errText.implicitWidth + Theme.iconMd + Theme.controlSm + 2 * Theme.spaceMd + Theme.spaceS, pagePane.width - 2 * Theme.spaceMd)
+                height: Math.max(Theme.controlLg, errText.implicitHeight + 2 * Theme.spaceS); z: 60
+                radius: Theme.radiusPrimary
+                color: Theme.dangerSubtle
+                border.color: Theme.danger; border.width: Theme.borderWidth1
+                Text { id: errIc; anchors.left: parent.left; anchors.leftMargin: Theme.spaceS + Theme.spaceXs; anchors.verticalCenter: parent.verticalCenter; text: Theme.icWarning; font.family: Theme.fontIcons; font.pixelSize: Theme.iconMd; color: Theme.danger }
+                TBody { id: errText; anchors.left: errIc.right; anchors.leftMargin: Theme.spaceS; anchors.right: errX.left; anchors.rightMargin: Theme.spaceS; anchors.verticalCenter: parent.verticalCenter; text: root.errorMsg; wrapMode: Text.WordWrap; maximumLineCount: 3; elide: Text.ElideRight }
+                IconBtn { id: errX; anchors.right: parent.right; anchors.rightMargin: Theme.spaceXs; anchors.verticalCenter: parent.verticalCenter; onGo: root.clearError() }
             }
+            // a change applied and kept: a short confirmation at the pane's
+            // bottom right (Toast card: past tense, names the thing)
             Rectangle {
                 visible: root.appliedMsg !== "" && root.errorMsg === ""
-                anchors.right: parent.right; anchors.bottom: parent.bottom; anchors.margins: 14
-                width: apText.implicitWidth + 40; height: 30; radius: Theme.r(9); z: 60
-                color: Theme.card; border.color: Theme.stroke2; border.width: Theme.borderThin
-                Text { anchors.left: parent.left; anchors.leftMargin: 11; anchors.verticalCenter: parent.verticalCenter; text: Theme.icCheck; font.family: Theme.fontIcons; font.pixelSize: 12; color: Theme.success }
-                Text { id: apText; anchors.right: parent.right; anchors.rightMargin: 11; anchors.verticalCenter: parent.verticalCenter; text: root.appliedMsg; color: Theme.fg1; font.family: Theme.fontText; font.pixelSize: 11; font.weight: Font.DemiBold }
+                anchors.right: pagePane.right; anchors.bottom: parent.bottom
+                anchors.rightMargin: Theme.spaceMd; anchors.bottomMargin: Theme.spaceMd + Theme.spaceS
+                width: apRow.implicitWidth + 2 * (Theme.spaceS + Theme.spaceXs); height: Theme.controlLg; z: 60
+                radius: Theme.radiusPrimary
+                color: Theme.surfaceOverlay
+                border.color: Theme.borderSubtle; border.width: Theme.borderWidth1
+                Row {
+                    id: apRow
+                    anchors.centerIn: parent; spacing: Theme.spaceS
+                    Text { anchors.verticalCenter: parent.verticalCenter; text: Theme.icCheck; font.family: Theme.fontIcons; font.pixelSize: Theme.iconMd; color: Theme.success }
+                    TBody { anchors.verticalCenter: parent.verticalCenter; text: root.appliedMsg; font.weight: Theme.fontWeightMedium }
+                }
             }
+            // avatar crop (Dialog card): pan by dragging, zoom with the slider,
+            // inside a square; Save grabs it at 512×512 and writes ~/.face
             Rectangle {
-                // avatar crop: pan (drag) + zoom (slider) inside a square viewport;
-                // Save grabs the viewport at 512×512 and writes it to ~/.face.
-                anchors.fill: parent; color: Qt.rgba(0, 0, 0, 0.45); z: 65
+                anchors.fill: parent; color: Theme.scrim; z: 65
                 visible: root.avatarCropSrc !== ""
                 MouseArea { anchors.fill: parent }   // swallow clicks
                 Rectangle {
-                    anchors.centerIn: parent; width: 340; height: cropCol.implicitHeight + 40
-                    radius: Theme.radius; color: Theme.bg1; border.color: Theme.stroke2; border.width: Theme.borderThin
+                    anchors.centerIn: parent; width: Theme.panelMd; height: cropCol.implicitHeight + 2 * Theme.spaceMd
+                    radius: Theme.radiusRounded; color: Theme.surfaceRaised
+                    border.color: Theme.borderSubtle; border.width: Theme.borderWidth1
                     Column {
                         id: cropCol
-                        anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 20; spacing: 12
-                        Text { text: "Crop avatar"; color: Theme.fg1; font.family: Theme.fontDisplay; font.pixelSize: Theme.fsLarge; font.weight: Font.Bold }
+                        anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: Theme.spaceMd; spacing: Theme.spaceMd
+                        Text { text: "Crop your picture"; color: Theme.textPrimary
+                               font.family: Theme.type.h3.family; font.pixelSize: Theme.type.h3.size; font.weight: Theme.type.h3.weight }
                         Item {
                             id: cropView
                             anchors.horizontalCenter: parent.horizontalCenter
-                            width: 256; height: 256
+                            // the crop square: four times the largest icon
+                            readonly property real side: 4 * Theme.icon4xl
+                            width: side; height: side
                             property real zoom: 1
                             onVisibleChanged: if (visible) zoom = 1
                             Item {
@@ -3001,60 +3500,66 @@ Scope {
                                 Image {
                                     id: cropImg
                                     source: root.avatarCropSrc === "" ? "" : "file://" + root.avatarCropSrc
-                                    readonly property real baseScale: status === Image.Ready && implicitWidth > 0 && implicitHeight > 0 ? Math.max(256 / implicitWidth, 256 / implicitHeight) : 1
+                                    readonly property real baseScale: status === Image.Ready && implicitWidth > 0 && implicitHeight > 0 ? Math.max(cropView.side / implicitWidth, cropView.side / implicitHeight) : 1
                                     width: implicitWidth * baseScale * cropView.zoom
                                     height: implicitHeight * baseScale * cropView.zoom
-                                    onStatusChanged: if (status === Image.Ready) { x = (256 - width) / 2; y = (256 - height) / 2 }
+                                    onStatusChanged: if (status === Image.Ready) { x = (cropView.side - width) / 2; y = (cropView.side - height) / 2 }
                                 }
                             }
                             // overlay chrome lives OUTSIDE cropCanvas so the grab stays clean
-                            Rectangle { anchors.fill: parent; color: "transparent"; border.color: Theme.stroke2; border.width: Theme.borderThin }
-                            Rectangle { anchors.fill: parent; radius: Theme.r(128); color: "transparent"; border.color: Qt.rgba(1, 1, 1, 0.4); border.width: Theme.borderThin }
+                            Rectangle { anchors.fill: parent; color: "transparent"; border.color: Theme.borderSubtle; border.width: Theme.borderWidth1 }
+                            Rectangle { anchors.fill: parent; radius: width / 2; color: "transparent"; border.color: Theme.textPrimary; border.width: Theme.borderWidth1 }
                             MouseArea {
                                 anchors.fill: parent
                                 drag.target: cropImg
-                                drag.minimumX: 256 - cropImg.width; drag.maximumX: 0
-                                drag.minimumY: 256 - cropImg.height; drag.maximumY: 0
+                                drag.minimumX: cropView.side - cropImg.width; drag.maximumX: 0
+                                drag.minimumY: cropView.side - cropImg.height; drag.maximumY: 0
                                 cursorShape: Qt.SizeAllCursor
                             }
                         }
                         Slider {
                             label: "Zoom"; value: cropView.zoom; from: 1; to: 3; step: 0.05; decimals: 2; live: true
                             onMoved: function (v) {
-                                var cx = cropImg.width > 0 ? (128 - cropImg.x) / cropImg.width : 0.5
-                                var cy = cropImg.height > 0 ? (128 - cropImg.y) / cropImg.height : 0.5
+                                var s = cropView.side, h = s / 2
+                                var cx = cropImg.width > 0 ? (h - cropImg.x) / cropImg.width : 0.5
+                                var cy = cropImg.height > 0 ? (h - cropImg.y) / cropImg.height : 0.5
                                 cropView.zoom = v
-                                cropImg.x = Math.min(0, Math.max(256 - cropImg.width, 128 - cx * cropImg.width))
-                                cropImg.y = Math.min(0, Math.max(256 - cropImg.height, 128 - cy * cropImg.height))
+                                cropImg.x = Math.min(0, Math.max(s - cropImg.width, h - cx * cropImg.width))
+                                cropImg.y = Math.min(0, Math.max(s - cropImg.height, h - cy * cropImg.height))
                             }
                         }
                         Row {
-                            anchors.right: parent.right; spacing: 8
-                            Pill { label: "Cancel"; onGo: root.avatarCropSrc = "" }
-                            Pill { label: "Save avatar"; primary: true; onGo: root.saveAvatar() }
+                            anchors.right: parent.right; spacing: Theme.spaceS
+                            Pill { label: "Cancel"; ghost: true; onGo: root.avatarCropSrc = "" }
+                            Pill { label: "Save picture"; primary: true; onGo: root.saveAvatar() }
                         }
                     }
                 }
             }
             Rectangle {
-                // confirm-or-revert: a change that can black out a display was just
-                // applied; unless the user confirms within 10 s, the previous
-                // known-good configuration is restored automatically.
-                anchors.fill: parent; color: Qt.rgba(0, 0, 0, 0.45); z: 70
+                // confirm-or-revert (Dialog card): a change that can black out a
+                // display was just applied; unless it is kept within 10 s, the
+                // previous known-good configuration comes back by itself.
+                anchors.fill: parent; color: Theme.scrim; z: 70
                 visible: root.revertSpecs !== null
                 MouseArea { anchors.fill: parent }   // swallow clicks
                 Rectangle {
-                    anchors.centerIn: parent; width: 380; height: revCol.implicitHeight + 40
-                    radius: Theme.radius; color: Theme.bg1; border.color: Theme.stroke2; border.width: Theme.borderThin
+                    anchors.centerIn: parent; width: Theme.panelMd; height: revCol.implicitHeight + 2 * Theme.spaceMd
+                    radius: Theme.radiusRounded; color: Theme.surfaceRaised
+                    border.color: Theme.borderSubtle; border.width: Theme.borderWidth1
                     Column {
                         id: revCol
-                        anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 20; spacing: 10
-                        Text { text: "Keep these display settings?"; color: Theme.fg1; font.family: Theme.fontDisplay; font.pixelSize: Theme.fsLarge; font.weight: Font.Bold }
-                        Text { width: parent.width; text: "Reverting to the previous configuration in " + root.revertLeft + " s if you can't see this."; color: Theme.fg2; font.family: Theme.fontText; font.pixelSize: Theme.fsSmall; wrapMode: Text.Wrap }
+                        anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: Theme.spaceMd; spacing: Theme.spaceMd
+                        Column {
+                            width: parent.width; spacing: Theme.spaceXs
+                            Text { width: parent.width; text: "Keep these display settings?"; color: Theme.textPrimary; wrapMode: Text.WordWrap
+                                   font.family: Theme.type.h3.family; font.pixelSize: Theme.type.h3.size; font.weight: Theme.type.h3.weight }
+                            TBody { width: parent.width; text: "The previous settings come back in " + root.revertLeft + " s if you can't see this."; color: Theme.textSecondary; wrapMode: Text.WordWrap }
+                        }
                         Row {
-                            anchors.right: parent.right; spacing: 8
-                            Pill { label: "Revert now"; onGo: root.doRevert() }
-                            Pill { label: "Keep (" + root.revertLeft + ")"; primary: true; onGo: root.keepChange() }
+                            anchors.right: parent.right; spacing: Theme.spaceS
+                            Pill { label: "Revert now"; ghost: true; onGo: root.doRevert() }
+                            Pill { label: "Keep settings"; primary: true; onGo: root.keepChange() }
                         }
                     }
                 }
