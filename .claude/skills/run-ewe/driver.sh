@@ -30,6 +30,8 @@
 #   HS_SCHEME=ewe-light          # [desktop.theme] scheme (default ewe-dark)
 #   HS_CONF=<file>               # use this ewe.conf instead (HS_SCHEME ignored)
 #   HS_WELCOME=1                 # let the first-run Welcome screen appear
+#   HS_PLUGINS=1                 # seed the bundled plugins (plugins/) into the sandbox
+#   HS_NO_APPS=1                 # hide Komble/ewe-settings/ewe-sync: the in-shell fallbacks open
 #   HS_SANDBOX=0                 # old behaviour: the live HOME and config
 #
 # PARALLEL RUNS: HS_WORK=<dir> gives a run its own state, sandbox and logs
@@ -87,6 +89,16 @@ sandbox_prepare() {
   ( sandbox_env
     "$REPO/bin/ewe-theme" build --json "$XDG_CONFIG_HOME/quickshell/theme-tokens.json" --css /dev/null >"$WORK/theme.log" 2>&1
   ) || die "ewe-theme build failed — see $WORK/theme.log"
+  # HS_PLUGINS=1: seed this checkout's bundled plugins (plugins/) into the
+  # sandbox, as ewe-setup does on a real machine, so their widgets and
+  # panels load. ewe-plugin writes only the sandbox ewe.conf (--no-hooks),
+  # and --no-restart keeps it off the HOST's ewe.service (systemctl --user
+  # is not sandboxed: without it, seeding restarts the live shell).
+  if [ "${HS_PLUGINS:-0}" = "1" ]; then
+    ( sandbox_env
+      "$REPO/bin/ewe-plugin" seed "$REPO/plugins" --no-restart >"$WORK/plugins.log" 2>&1
+    ) || die "ewe-plugin seed failed — see $WORK/plugins.log"
+  fi
   echo "sandbox: $SBHOME ($(python3 -c "import json,sys;j=json.load(open(sys.argv[1]));print(j['input']['scheme'])" "$SBHOME/.config/quickshell/theme-tokens.json"))"
 }
 
@@ -170,7 +182,26 @@ except Exception: pass" 2>/dev/null)"
   # be in a README screenshot. A private bus renders every pane signed-out/empty.
   local qs_wrap=()
   [ "${HS_PRIVATE_BUS:-0}" = "1" ] && command -v dbus-run-session >/dev/null && qs_wrap=(dbus-run-session --)
+  # HS_NO_APPS=1: the shell sees a PATH without Komble, ewe-settings and
+  # ewe-sync, so their entry points open the in-shell fallbacks (the
+  # AppStore and Settings panels) instead of launching the installed apps.
+  local qs_path="$PATH"
+  if [ "${HS_NO_APPS:-0}" = "1" ]; then
+    local pdir="$WORK/path-noapps" d f
+    rm -rf "$pdir"; mkdir -p "$pdir"
+    local IFS_OLD="$IFS"; IFS=:
+    for d in $PATH; do
+      [ -d "$d" ] || continue
+      for f in "$d"/*; do
+        case "${f##*/}" in komble|ewe-settings|hypr-settings|ewe-sync) continue ;; esac
+        [ -x "$f" ] && [ ! -e "$pdir/${f##*/}" ] && ln -s "$f" "$pdir/${f##*/}"
+      done
+    done
+    IFS="$IFS_OLD"
+    qs_path="$pdir"
+  fi
   ( sandbox_env
+    export PATH="$qs_path"
     exec env WAYLAND_DISPLAY="$nestwd" HYPRLAND_INSTANCE_SIGNATURE="$nestsig" QT_QPA_PLATFORM=wayland \
       "${qs_wrap[@]}" qs -p "$QSDIR" ) > "$WORK/qs.log" 2>&1 &
   local qpid=$!
