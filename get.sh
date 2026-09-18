@@ -32,9 +32,12 @@ fi
 
 tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
 
-# Latest release artefact, if one exists (pre-release included via /latest is
-# fine once stable; before that the API may 404 — then use the main snapshot).
-url=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" 2>/dev/null \
+# Latest release artefact, if one exists. `releases?per_page=1` answers the
+# NEWEST release, pre-releases included — while the line is beta every
+# release is a pre-release, and `/releases/latest` only answers stable
+# releases (it would hand new users the ancient 0.11.2). If the API answers
+# nothing, use the main snapshot.
+url=$(curl -fsSL "https://api.github.com/repos/$REPO/releases?per_page=1" 2>/dev/null \
       | grep -o '"browser_download_url": *"[^"]*\.tar\.zst"' | head -1 | cut -d'"' -f4 || true)
 
 mkdir -p "$DEST"
