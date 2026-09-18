@@ -1713,7 +1713,7 @@ def gen_json(t):
         "brand": t["brand"], "grey": t["grey"],
         "scheme": t["scheme"],          # colorscheme.sh reads the palette for kitty's ANSI
         # the Accent picker's swatches, each with the ink its check mark takes
-        "accent_presets": [{"name": n, "hex": h, "ink": on_color(h)} for n, h in ACCENT_PRESETS],
+        "accent_presets": accent_presets(),
         "themes": legacy(t),
     }
     return json.dumps(doc, indent=2) + "\n"
@@ -1848,6 +1848,12 @@ def _write(path, text):
     os.replace(tmp, path)
 
 
+def accent_presets():
+    """The Accent picker's swatches, each with the ink its check mark takes:
+    in theme-tokens.json for the shell and in `show` for the apps."""
+    return [{"name": n, "hex": h, "ink": on_color(h)} for n, h in ACCENT_PRESETS]
+
+
 # ═══ commands ═════════════════════════════════════════════════════════════
 def cmd_show(a):
     cfg, src = read_conf(a.conf)
@@ -1860,7 +1866,8 @@ def cmd_show(a):
          "alpha": t["alpha"], "shape": t["shape"], "size": t["size"], "type": t["type"],
          "motion": t["motion"], "opacity": t["opacity"], "surface": t["surface"], "bar": t["bar"],
          "presets": t["presets"], "accessibility": t["accessibility"], "brand": t["brand"],
-         "scheme": t["scheme"], "adjusted": t["adjusted"], "css_vars": css_vars(t)})
+         "scheme": t["scheme"], "adjusted": t["adjusted"], "accent_presets": accent_presets(),
+         "css_vars": css_vars(t)})
 
 
 def design_tokens(cfg, slug=None):

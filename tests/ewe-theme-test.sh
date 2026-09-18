@@ -137,6 +137,10 @@ import json; d=json.load(open(\"$SB/one-dark.json\")); p=d[\"accent_presets\"]
 assert [x[\"name\"] for x in p]==[\"Ewellow\",\"Amber\",\"Coral\",\"Rose\",\"Iris\",\"Sky\",\"Teal\",\"Moss\",\"Stone\"], p
 assert p[0][\"hex\"]==\"#eeb407\" and all(x[\"ink\"] in (\"#020202\",\"#fefdfc\") for x in p)
 '"
+check "accent presets: show carries the same list for the apps' pickers" "$T show | python3 -c '
+import json,sys; d=json.load(sys.stdin); t=json.load(open(\"$SB/one-dark.json\"))
+assert d[\"accent_presets\"]==t[\"accent_presets\"], d.get(\"accent_presets\")
+'"
 lst="$($T scheme list)"
 check "list: both built-ins first, marked builtin, ewe-dark current" "echo '$lst' | python3 -c 'import json,sys; d=json.load(sys.stdin); s=d[\"schemes\"]; assert [x[\"slug\"] for x in s[:2]]==[\"ewe-dark\",\"ewe-light\"]; assert all(x[\"builtin\"] for x in s[:2]); assert s[0][\"current\"] and not s[1][\"current\"]; assert d[\"current\"]==\"ewe-dark\"'"
 r="$($T scheme --no-hooks set accent '#ff0000' || true)"
