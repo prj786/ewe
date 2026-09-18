@@ -15,7 +15,7 @@ version 3). What you can CHANGE lives in `ewe.conf`:
     bar_opacity  = 100            # 0-100; the Glass preset is 80
     app_blur     = false          # every window at opacity-app, blurred behind
     window_transparency = false   # unfocused windows at opacity-inactive
-    [desktop.bar]            icon_size = "normal" # small | normal | large (44 / 48 / 56)
+    [desktop.bar]            icon_size = "normal" # small | normal | large (36 / 40 / 48)
     [desktop.accessibility]  reduce_motion, reduce_transparency,
                              increase_contrast = false; text_scale = 100|115|130
     [desktop.animations]     speed = 1            # divides the motion durations
@@ -419,7 +419,7 @@ SIZES = {"control-sm": 24, "control-xl": 40, "control-2xl": 48,
 # The top bar (owner's model, 2026-09-18): its size follows its ICONS.
 # [desktop.bar] icon_size small | normal | large picks the glyph and the
 # module it sits in; the bar has no height of its own — it is its content
-# plus space-s above and below, so 44 / 48 / 56 (the shell grows it further
+# plus space-xs above and below, so 36 / 40 / 48 (the shell grows it further
 # when its content is taller, e.g. a larger text size or Georgian). The
 # modules do not follow density: the bar has its own size setting (Look
 # presets). Text size 130% moves icon_size one step up. The v3
@@ -429,7 +429,7 @@ BAR = {"small": ("control-md", "icon-md"), "normal": ("control-lg", "icon-lg"),
        "large": ("control-xl", "icon-xl")}
 BAR_MODULE = {"control-md": DENSITY["comfortable"][0], "control-lg": DENSITY["comfortable"][1],
               "control-xl": SIZES["control-xl"]}
-BAR_PAD = "space-s"
+BAR_PAD = "space-xs"
 TEXT_SCALES = (100, 115, 130)
 # shadow: (x, y, blur) and the alpha per variant. The colour is derived
 # (shadow_color): `black` in the dark, the scheme's darkest ink in the light.
@@ -1041,9 +1041,9 @@ def tokens(cfg):
               "icon-2xl", "icon-3xl", "icon-4xl", "panel-sm", "panel-md", "panel-lg", "window-gap",
               "blur-glass"):
         size[k] = SIZES[k]
-    # the bar's heights are derived: module + space-s above and below.
-    # bar-height is the normal bar (48), bar-height-lg the large one (56 —
-    # tokens.json's 64 is the retired v3 large bar)
+    # the bar's heights are derived: module + space-xs above and below.
+    # bar-height is the normal bar (40), bar-height-lg the large one (48),
+    # matching design/system/tokens.json (the owner's bar model).
     pad = size[BAR_PAD]
     size["bar-height"] = BAR_MODULE[BAR["normal"][0]] + 2 * pad
     size["bar-height-lg"] = BAR_MODULE[BAR["large"][0]] + 2 * pad

@@ -250,8 +250,8 @@ This guide is for whoever updates the Ewe repositories to match this design syst
 | `control-lg` | `--control-lg` | `controlLg` | 32px |
 | `control-xl` | `--control-xl` | `controlXl` | 40px |
 | `control-2xl` | `--control-2xl` | `control2xl` | 48px |
-| `bar-height` | `--bar-height` | `barHeight` | 48px |
-| `bar-height-lg` | `--bar-height-lg` | `barHeightLg` | 64px |
+| `bar-height` | `--bar-height` | `barHeight` | 40px |
+| `bar-height-lg` | `--bar-height-lg` | `barHeightLg` | 48px |
 | `icon-xs` | `--icon-xs` | `iconXs` | 12px |
 | `icon-sm` | `--icon-sm` | `iconSm` | 14px |
 | `icon-md` | `--icon-md` | `iconMd` | 16px |
@@ -327,7 +327,7 @@ This guide is for whoever updates the Ewe repositories to match this design syst
 | `pad` | spaceS + spaceXs (12) |
 | `gap` | spaceS |
 | `controlHeight, rowHeight` | controlMd (28) |
-| `barHeight` | barHeight (48) or barHeightLg (64) |
+| `barHeight` | barHeight (40) or barHeightLg (48) |
 | `barItemHeight` | controlLg (32) or controlXl (40) |
 | `barIconPx, trayIconPx` | iconLg (20) or iconXl (24) |
 | `barItemSpacing, trayItemSpacing` | spaceXs between modules, spaceS inside the Quick settings button |
@@ -386,7 +386,7 @@ This guide is for whoever updates the Ewe repositories to match this design syst
 | `[desktop.theme] stroke` | `thin` | `none` · `thin` · `thick`. Was `none`. |
 | `[desktop.theme] bar_opacity` | `100` | 0–100. The Glass preset is 80 (was 72). Settings warns below 80. |
 | `[desktop.theme] app_blur`, `window_transparency` | `false` | Unchanged; windows use `opacity-app` and `opacity-inactive`. |
-| `[desktop.bar] icon_size` | `normal` | `small` · `normal` · `large`. The bar is its icons plus `space-s` above and below (44 / 48 / 56). The v3 `size` key is no longer written; `size = large` still reads as `large`. |
+| `[desktop.bar] icon_size` | `normal` | `small` · `normal` · `large`. The bar is its icons plus `space-xs` above and below (36 / 40 / 48). The v3 `size` key is no longer written; `size = large` still reads as `large`. |
 | `[desktop.dock] icon_size` | `medium` | `small` (40) · `medium` (48) · `large` (64). |
 | `[desktop.accessibility] reduce_motion` | `false` | New. |
 | `[desktop.accessibility] reduce_transparency` | `false` | New. |

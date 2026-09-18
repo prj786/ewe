@@ -308,6 +308,14 @@ written. Called live by Settings → Theme, at shell startup, and by phase 60.
   on-demand-launched apps is unreliable.
 - **Hyprland config is Lua** (`hyprland.lua` requires `colors.lua`), needs Hyprland
   **≥ 0.55**. User overrides land in `hypr/generated/user.lua` (sourced last).
+- **The bar's height is its icons plus `space-xs` above and below** (36 / 40 / 48
+  by `[desktop.bar] icon_size` small / normal / large — the old 44 / 48 / 56
+  used `space-s`). The right cluster has one rhythm: every gap between tray
+  icons, widgets, modules and dividers is `space-xs` (4px). The clock (date and
+  time) lives **inside the Quick settings button** — the two share the click
+  (toggle Quick settings) and the wheel (volume); there is no separate clock
+  module. The Bar card (`design/system/components/Bar/README.md`) is the spec.
+  Do not "fix" any of this back.
 
 ### Versioning
 

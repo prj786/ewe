@@ -18,7 +18,7 @@ import QtQuick
 //   bar_opacity  = 100            # 0-100 — Glass on the bar, dock, lock card
 //   app_blur     = false          # blur behind every window (Hyprland side)
 //   [desktop.bar]            icon_size = "normal"   # small | normal | large:
-//                            the bar is its icons plus padding (44 / 48 / 56)
+//                            the bar is its icons plus padding (36 / 40 / 48)
 //   [desktop.accessibility]  reduce_motion, reduce_transparency,
 //                            increase_contrast, text_scale = 100|115|130
 //
@@ -322,7 +322,7 @@ QtObject {
     readonly property int controlLg:               _z("control-lg", 32)
     readonly property int controlXl:               _z("control-xl", 40)
     readonly property int control2xl:              _z("control-2xl", 48)
-    readonly property int barHeightLg:             _z("bar-height-lg", 56)
+    readonly property int barHeightLg:             _z("bar-height-lg", 48)
     readonly property int iconXs:                  _z("icon-xs", 12)
     readonly property int iconSm:                  _z("icon-sm", 14)
     readonly property int iconMd:                  _z("icon-md", 16)
@@ -406,12 +406,12 @@ QtObject {
     // iconMd glyphs in controlMd modules, normal = iconLg in controlLg,
     // large = iconXl in controlXl; Text size 130% moves it one step up. The
     // bar has no height of its own: it is its content plus barPadding
-    // (spaceS) above and below — 44 / 48 / 56 — and taller content (a larger
+    // (spaceXs) above and below — 36 / 40 / 48 — and taller content (a larger
     // text size, Georgian) makes it taller still: the bar reports its
     // content through Globals.barContentHeight.
     readonly property int barModule:   _bz("module", controlLg)
     readonly property int barIcon:     _bz("icon", iconLg)
-    readonly property int barPadding:  _bz("padding", spaceS)
+    readonly property int barPadding:  _bz("padding", spaceXs)
     readonly property int barHeight:   Math.max(barModule, Globals.barContentHeight) + 2 * barPadding
     readonly property string barIconSize: _bz("icon_size", _bz("size", "normal"))
     readonly property bool barLarge:   barIconSize === "large"

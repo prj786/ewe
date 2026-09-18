@@ -153,7 +153,7 @@ The shell and the three apps currently read about 150 Fluent 2 role names from t
 | `--control` | 32px | `control-md` (28px) | Was 32px. |
 | `--row` | 36px | `control-md` (28px) | List rows; was 36px. |
 | `--icon` | 18px | `icon-md` (16px) | The bar uses `icon-lg` (20px); was 18px. |
-| `--bar-height` | 30px | `bar-height` (48px) | Was 30px; `bar-height-lg` is 64px. |
+| `--bar-height` | 30px | `bar-height` (40px) | Was 30px; `bar-height-lg` is 48px. |
 | `--radius` | 26px | `rounded` (10px) | Was 20px / 26px. |
 | `--radius-inner` | 20px | `primary` (8px) | Was 12px / 20px. |
 | `--border` | 0px | `border-width-1` | Ewe draws a 1px outline by default (was 0). |
