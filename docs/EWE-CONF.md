@@ -106,29 +106,37 @@ debounced push when it is on.
 
 Version of this document's shape. Bumped only when a key changes meaning.
 
-### `[desktop.theme]` — the whole look, from one accent
+### `[desktop.theme]` — the whole look, from one scheme and one accent
 
-ewe's look is built on **Fluent 2**, and it is *derived*, not declared. There
-is no theme file to edit: `ewe-theme` reads this section and computes the
-entire token set — a 16-stop brand ramp, a 50-stop neutral ramp, and every
-alias token the shell and the apps consume. The six keys below are the whole
-user-facing surface; everything else lives in the repo, in `bin/ewe-theme`,
-because it is a derivation rather than a preference.
+ewe's look is the **Ewe design system** (version 3, `design/system/`), and it
+is *derived*, not declared. There is no theme file to edit: `ewe-theme` reads
+this section and computes the entire token set — the accent ramp, every
+colour role (`surface-*`, `text-*`, `border-*`, `accent-*`, status, `glass-*`),
+type, spacing, radii, sizes, shadows and motion — under the design system's
+own names. The keys below are the whole user-facing surface; everything else
+lives in the repo, in `bin/ewe-theme`, because it is a derivation rather than
+a preference.
 
 | key | type | default | meaning |
 |---|---|---|---|
-| `accent` | hex string | `"#0a84ff"` | **the seed.** Your accent lands exactly on brand stop 80; the other fifteen stops, and the hue of the greys, come from it |
-| `corner` | `none` \| `small` \| `medium` \| `large` \| `round` | `"round"` | which radius each role gets. The first four stand on Fluent's ramp; `round` (the 2026-09 revamp) is pitched by role — control 12, card 20, panel 26, capsule buttons. `none` squares the entire desktop |
-| `density` | `compact` \| `comfortable` \| `roomy` | `"comfortable"` | spacing rungs and control heights — Fluent's own 24 / 32 / 40 ladder |
-| `stroke` | `none` \| `thin` \| `thick` | `"none"` | the width of a component's own outline (`--outline-width`). `none` draws no edge around buttons, inputs, cards or tiles — the layer step separates them; hairlines inside a surface and the window ring stay 1px (`--stroke-width`) whatever this says |
-| `bar_opacity` | int 0-100 | `100` | the top bar and dock's opacity. Emitted as `--bar-alpha`; every other panel stays opaque |
-| `app_blur` | bool | `false` | blur behind every window at a fixed level (off on VMs and NVIDIA by policy) |
-| `neutral_tint` | int 0-40 | `8` | how far the greys follow the accent's hue. `0` is Fluent's pure neutrals; the pull is weighted to the dark end, where the large surfaces are, and gone by the time it reaches text |
-| `color_scheme` | `"dark"` | `"dark"` | always `"dark"` — ewe is dark-only by decision (2026-09-01); the key stays because Komble reads it to follow the DE |
+| `scheme` | slug | `"ewe-dark"` | `ewe-dark`, `ewe-light`, or the slug of a scheme in `[[desktop.theme.schemes]]`. The pre-v3 value `"accent"` reads as `ewe-dark` |
+| `accent` | hex string | `"#eeb407"` | any colour; the accent roles and the ramp follow it (a scheme with its own `accent` wins) |
+| `corner` | `none` \| `small` \| `medium` \| `large` | `"medium"` | the radius ramp (Look presets). `round` (pre-v3) reads as `large`; `none` squares the desktop |
+| `density` | `compact` \| `comfortable` \| `roomy` | `"comfortable"` | control heights: `control-md` 24 / 28 / 32 |
+| `stroke` | `none` \| `thin` \| `thick` | `"thin"` | components' own outlines (`border-width-1` 0 / 1 / 2). Fields, checkboxes and switches keep theirs (`field-border-width`) |
+| `bar_opacity` | int 0-100 | `100` | Glass on the bar, the dock and the lock card; the preset is 80 and Settings warns below it. Every other panel stays solid |
+| `app_blur` | bool | `false` | every window at `opacity-app`, blurred behind (off on VMs and NVIDIA by policy) |
+| `window_transparency` | bool | `false` | unfocused windows at `opacity-inactive` |
+| `neutral_tint` | int 0-40 | `8` | kept for older synced files; the v3 derivation does not read it |
+| `color_scheme` | `"dark"` | `"dark"` | kept because Komble reads it from user-theme.json; the scheme's `variant` decides light or dark |
 | `tint_borders` | bool | `true` | accent-tinted window borders |
-| `window_transparency` | bool | `false` | translucent unfocused windows |
 | `avatar_shape` | `"circle"` \| `"rounded"` | `"circle"` | greeter/bar avatar mask |
-| `theme_name` | string | `"flock"` | **vestigial.** ewe has one look since the Fluent move; either legacy name resolves to it. Kept so a synced `ewe.conf` from an older machine still round-trips |
+| `theme_name` | string | `"flock"` | **vestigial.** ewe has one look; kept so a synced `ewe.conf` from an older machine still round-trips |
+
+`[desktop.accessibility]` holds the four modes the generator applies as
+remaps: `reduce_motion`, `reduce_transparency`, `increase_contrast` (bools)
+and `text_scale` (`100` · `115` · `130` — type grows, and so do the
+controls, rows and badges it sits in).
 
 Applying this section rebuilds `~/.config/quickshell/theme-tokens.json` — an
 artifact, so it happens even under `--no-hooks`, because the shell cannot
@@ -138,17 +146,18 @@ derive the tokens itself. To see a change before committing to it:
 ewe-theme preview && xdg-open design/specimen.html
 ```
 
-The values the engine derives are held to the designer's reference sheet,
-`design/spec/ewe-design-system.html`, by `design/check-spec.sh` — run it after
-any change to `bin/ewe-theme`.
+The values the engine derives are held to the design system's
+`design/system/tokens.json` by `design/check-spec.sh`, and to the contrast
+rules by `design/check-contrast.sh` — run both after any change to
+`bin/ewe-theme`.
 
 Applying this section re-runs `colorscheme.sh`, which writes every toolkit's
 config (GTK, Qt, cursor, icon hue) in one pass.
 
 #### Colour schemes — `scheme` and `[[desktop.theme.schemes]]`
 
-`scheme = "accent"` (the default) derives every colour from `accent`.
-Any other value is the slug of a palette in `[[desktop.theme.schemes]]`:
+`ewe-dark` (the default) and `ewe-light` are built in. Any other value is
+the slug of a palette in `[[desktop.theme.schemes]]`:
 a Base24 palette (`base00`…`base0F` required, `base10`…`base17` optional),
 a `name`, `variant = "dark" | "light"`, an optional explicit `accent`, and
 `semantic = true` (status colours from the palette's red / yellow / green;
@@ -159,7 +168,7 @@ sync. Nobody edits this table by hand — `ewe-theme scheme` does:
 ewe-theme scheme list                          # what you have, which is on
 ewe-theme scheme import ~/dl/kanagawa.yaml --apply   # base16/base24 YAML,
         # Omarchy colors.toml, Catppuccin palette.json (--flavour), Gogh yml; file or URL
-ewe-theme scheme apply gruvbox-dark-medium     # or `apply accent` to go back
+ewe-theme scheme apply gruvbox-dark-medium     # or `apply ewe-dark` to go back
 ewe-theme scheme set accent '#fe8019'          # this scheme, a different accent
 ewe-theme scheme set base00 '#1d2021'          # edit one palette entry
 ewe-theme scheme export > mine.yaml            # share it (Base24)
@@ -170,7 +179,7 @@ ewe-theme scheme remove kanagawa
 
 ewe is dark by default and a scheme that says `variant = "light"` is
 honoured: the surfaces run the other way, GTK switches to `adw-gtk3` and
-`prefer-light`, the icon theme to its light variant. The 150 token roles
+`prefer-light`, the icon theme to its light variant. The token roles
 never change — the shell, both apps, Hyprland's borders, GTK, Qt, kitty (its
 sixteen colours come from the palette), Zathura and mpv all follow.
 
