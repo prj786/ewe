@@ -161,7 +161,7 @@ Scope {
         for (var k = 0; k < keys.length && out.length < 4; k++) {
             var dd = new Date(keys[k])
             out.push({
-                label: keys[k] === t0 ? "Today" : (keys[k] === t0 + 86400000 ? "Tomorrow" : Qt.formatDateTime(dd, "dddd d MMMM")),
+                label: keys[k] === t0 ? "Today" : (keys[k] === t0 + 86400000 ? "Tomorrow" : Qt.formatDateTime(dd, "dddd, d MMMM")),
                 events: groups[keys[k]].slice(0, 4)
             })
         }

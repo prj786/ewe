@@ -309,7 +309,7 @@ Scope {
                         }
                         MouseArea {
                             id: seekMa
-                            anchors.fill: parent; anchors.margins: -4
+                            anchors.fill: parent; anchors.margins: -Theme.spaceXs
                             hoverEnabled: true
                             enabled: box.pl !== null && box.pl.canSeek
                             cursorShape: Qt.PointingHandCursor
