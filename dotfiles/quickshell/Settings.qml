@@ -1625,7 +1625,8 @@ Scope {
             // textPrimary at medium weight and its icon accentText.
             Item {
                 id: rail
-                width: 7 * Theme.controlMd
+                // 196px; wider in step with Text size, so labels keep fitting
+                width: Theme.grow(7 * Theme.controlMd)
                 anchors.top: parent.top; anchors.bottom: parent.bottom; anchors.left: parent.left
                 Column {
                     id: railCol
