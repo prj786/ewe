@@ -222,8 +222,15 @@ are palette + accent only (no `overrides`); accent roles are ramp steps
 the floor and `neutral-0` (#fefdfc) the ceiling of every emitted colour
 (`in_range`) — never add a literal hex outside the FOUNDATIONS tables. The pre-v3 value `scheme = "accent"` reads
 as ewe-dark wearing `desktop.theme.accent`; `corner = round` reads as
-`large`. Every Fluent name is still emitted as an alias (Migration guide)
-until Phase 6. `ewe-theme scheme list|show|apply|import|duplicate|remove|
+`large`. **Ewe names only (Phase 6, 2026-09-18):** the Fluent aliases
+(`bg-1`, `fg-2`, `brand-bg` …) and the old `themes` block are gone from
+theme-tokens.json and tokens.css; every reader (Theme.qml, colorscheme.sh,
+colors.lua, the greeter, plugins) uses the design system's names.
+**Text size** scales the type AND the control heights (`control-*`, whole
+px) — rows, fields, buttons and, via `line-height-xs`, badges grow with
+their text; icons, spacing, panels stay; the bar steps up an icon size at
+130 and the dock keeps its cells (the JSON's `dock` block). In QML never
+wrap a `control*` in `Theme.grow()` — it has grown already. `ewe-theme scheme list|show|apply|import|duplicate|remove|
 export|set|from-wallpaper` is the CLI (imports: base16/24 YAML via a mini
 parser, Omarchy TOML, Catppuccin JSON, Gogh; wallpaper via ImageMagick
 histogram, Pillow fallback); `set overrides.<role> <hex|none>` edits an
@@ -241,8 +248,8 @@ and **Geist Mono** (OFL, not in the Arch repos): the variable woff2 files
 ship in `dotfiles/quickshell/fonts/geist/` and `dotfiles/fontconfig/fonts.conf`
 adds that folder with a relative `<dir>` (no installer change) and prefers
 **Noto Sans Georgian** (noto-fonts) next in every stack — Geist has no
-Georgian glyphs, and Georgian is NEVER uppercased (`Theme.labelCaps` is
-MixedCase for good). GTK, kitty (with the Nerd PUA mapped to Symbols Nerd
+Georgian glyphs, and Georgian is NEVER uppercased (small headers are the
+`overline` style, which spaces letters and never changes case). GTK, kitty (with the Nerd PUA mapped to Symbols Nerd
 Font Mono), Zed, mpv, the groupbar and Helium follow; the greeter (another user, reads no dotfiles) gets them system-wide: phase 30 copies
 the geist/ files + OFL to `/usr/share/fonts/ewe/` and
 `system/fontconfig/60-ewe-geist.conf` (Noto Sans Georgian next) to
@@ -251,22 +258,30 @@ property per v3 token (QML names from `40-implementation.md`), plus
 `Theme.type.<style>` (both `body-strong` and `bodyStrong`), the motion
 table (`durFast/Base/Slow/Dim`, OutCubic + InOutCubic, no OutBack), the
 Glass trio (`glass`, `barAlpha`, `glassBlur` — `EWE_NO_BLUR=1` keeps the
-translucency, drops the blur) and the accessibility modes. Every Fluent
-name still exists pointing at its Ewe role (Migration guide) until Phase 6.
+translucency, drops the blur) and the accessibility modes. **No Fluent
+name is left** (`bg1`, `fg2`, `radiusControl`, `fsBody`, `barIconPx` … were
+deleted in Phase 6, along with `Sheen.qml`); the "Theme.qml today → Ewe"
+table in `40-implementation.md` maps any old name. No raw colour, size or
+duration in QML: literals live only in `bin/ewe-theme` and as Theme.qml's
+fallbacks.
 **Gotcha:** `onAccent: <expr>` beside a property called `accent` parses as a
 signal handler — the token is declared bare and filled by a `Binding`.
 Iterating: `.claude/skills/run-ewe/driver.sh` now sandboxes HOME/XDG and
 generates the tokens itself (`HS_SCHEME=ewe-light`, `HS_CONF=<ewe.conf>`),
-so the live config and ewe-conf's sync hooks are never touched.
+so the live config and ewe-conf's sync hooks are never touched;
+`HS_PLUGINS=1` seeds the bundled plugins into the sandbox and
+`HS_NO_APPS=1` hides Komble/ewe-settings so the in-shell fallbacks open.
+`ewe-plugin` verbs restart the host's `ewe.service` unless given
+`--no-restart` — systemctl is not sandboxed.
 
 **Bar & dock opacity:** `desktop.theme.bar_opacity = 0..100` in ewe.conf
 (Settings → Appearance slider). The bar and dock are painted at
-`Theme.barAlpha` (`barTop`, `dockFill`); between 10 and 99 `ewe-conf` writes
+`Theme.barAlpha` (`barGround`, `dockGround`); between 10 and 99 `ewe-conf` writes
 the compositor blur + a `quickshell:(bar|dock)` layer rule into
 `generated/user.lua`; `EWE_NO_BLUR=1` (VMs, NVIDIA — `start-hyprland.sh`)
 skips the blur. `desktop.theme.app_blur` draws every WINDOW at 85 % with blur
 behind it (`decoration.active/inactive_opacity`, fullscreen opaque) — fixed, not
-the slider. Every other panel (`Theme.panel`) stays opaque. Prefs the
+the slider. Every other panel (`Theme.surfaceRaised`) stays opaque. Prefs the
 Settings app writes MUST be in `ewe-conf`'s `THEME_MAP`, or `absorb` drops
 them on the next write (that was the 0.12.7 "Top bar settings do nothing").
 
