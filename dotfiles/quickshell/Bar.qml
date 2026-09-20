@@ -208,7 +208,11 @@ Scope {
                 try {
                     var d = JSON.parse(this.text), kbs = d.keyboards || []
                     for (var i = 0; i < kbs.length; i++) {
-                        if (kbs[i].main) { bar.kbDevice = kbs[i].name; bar.kbLayout = bar.shortLayout(kbs[i].active_keymap); break }
+                        if (!kbs[i].main) continue
+                        bar.kbDevice = kbs[i].name
+                        var km = kbs[i].active_keymap || ""
+                        if (km !== "" && km.toLowerCase() !== "error") bar.kbLayout = bar.shortLayout(km)
+                        break
                     }
                 } catch (e) {}
             }
@@ -219,8 +223,15 @@ Scope {
         target: Hyprland
         function onRawEvent(event) {
             if (event.name === "activelayout") {
-                var p = event.data.split(",")
-                bar.kbLayout = bar.shortLayout(p[p.length - 1])
+                // data = "keyboard,Layout name" — the name may hold commas
+                // ("English (US, intl.)"), the keyboard never does
+                var cut = event.data.indexOf(",")
+                var name = cut >= 0 ? event.data.slice(cut + 1) : event.data
+                // a virtual keyboard (wtype: password fill, emoji) has no
+                // keymap name and reports "error" — that showed as "ER".
+                // It says nothing about the real layout: ask the main keyboard.
+                if (name === "" || name.toLowerCase() === "error") kbProc.running = true
+                else bar.kbLayout = bar.shortLayout(name)
             }
         }
     }
@@ -354,13 +365,16 @@ Scope {
                 // Entrance: slide down from behind the top edge once the shell
                 // is up (also plays for a bar spawned on hotplug). Reduce
                 // motion turns the slide into a plain fade at durFast.
+                // The tokens land a beat after the bar is built, so Reduce
+                // motion can turn on while the slide is already running:
+                // never STOP it (that parks the bar off-screen) — finish it.
                 NumberAnimation on y {
-                    running: !Theme.reduceMotion
+                    readonly property bool rm: Theme.reduceMotion
+                    onRmChanged: if (rm) complete()
                     from: -win.implicitHeight; to: 0
-                    duration: Theme.durSlow; easing.type: Theme.easeSlow
+                    duration: Theme.reduceMotion ? 0 : Theme.durSlow; easing.type: Theme.easeSlow
                 }
-                OpacityAnimator on opacity {
-                    running: Theme.reduceMotion
+                NumberAnimation on opacity {
                     from: 0; to: 1
                     duration: Theme.durFast; easing.type: Theme.easeFast
                 }
@@ -473,7 +487,16 @@ Scope {
                             delegate: Item {
                                 id: trayDelegate
                                 required property var modelData
-                                width: Theme.barIcon; height: Theme.barModule
+                                // a module-sized cell, like the plugins' widgets
+                                // beside it: barModule cells spaceXs apart is the
+                                // one rhythm of the whole cluster
+                                width: Theme.barModule; height: Theme.barModule
+                                Rectangle {
+                                    anchors.fill: parent
+                                    radius: Theme.radiusPrimary
+                                    color: trayMa.containsMouse ? Theme.barHoverFill : "transparent"
+                                    Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
+                                }
                                 TrayIcon {
                                     anchors.centerIn: parent
                                     px: Theme.barIcon
@@ -487,7 +510,9 @@ Scope {
                                     Globals.trayMenuOpen = true
                                 }
                                 MouseArea {
+                                    id: trayMa
                                     anchors.fill: parent
+                                    hoverEnabled: true
                                     cursorShape: Qt.PointingHandCursor
                                     acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
                                     onClicked: function (m) {
@@ -570,6 +595,7 @@ Scope {
                             glyph: Globals.updatesTotal > 0 ? Theme.icDownload : Theme.icCheck
                             color: Globals.updatesTotal > 0 ? Theme.barAccentText : Theme.barTextMuted
                             count: Globals.updatesTotal
+                            centered: true
                         }
                     }
 

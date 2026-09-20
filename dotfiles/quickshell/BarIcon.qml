@@ -27,16 +27,23 @@ Item {
     property color ringColor: Theme.barGround
 
     readonly property bool showBadge: root.count > 0
+    // An icon that is ALONE in its module (Komble's updates) reserves the
+    // badge's overhang on BOTH sides, so the glyph stays in the middle of the
+    // module's hover fill and the count sits inside it. In a row of icons
+    // (the status group) only the right side is reserved, as before.
+    property bool centered: false
+    readonly property real overhang: root.showBadge ? Math.max(0, badge.width - (root.dotOnly ? Theme.spaceXxs : Theme.spaceS)) : 0
 
     // The badge hangs off the glyph's corner, so the item has to RESERVE that
     // overhang — otherwise the Row packs neighbours against it and a wide
     // "9+" runs into whatever sits to the right.
-    implicitWidth: g.implicitWidth + (root.showBadge ? Math.max(0, badge.width - Theme.spaceS) : 0)
+    implicitWidth: g.implicitWidth + (root.centered ? 2 : 1) * root.overhang
     implicitHeight: g.implicitHeight
 
     Text {
         id: g
         anchors.left: parent.left
+        anchors.leftMargin: root.centered ? root.overhang : 0
         anchors.verticalCenter: parent.verticalCenter
         text: root.glyph
         font.family: Theme.fontIcons

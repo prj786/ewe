@@ -476,6 +476,21 @@ check "corner small / density roomy / stroke thick" "[ \"$(echo "$show" | shape 
 check "presets never touch colours" "[ \"$(echo "$show" | role surface-raised)\" = '#151411' ]"
 check "the v3 bar size = large still reads as icon_size large: 48 / 40 / 24, density ignored" "echo '$show' | jq_ 'd[\"bar\"]' | grep -q \"'height': 48, 'module': 40, 'icon': 24\""
 check "Glass at 80: glass roles carry the alpha, blur on, bar_alpha 0.8" "echo '$show' | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d[\"surface\"][\"bar_alpha\"]==0.8 and d[\"surface\"][\"blur\"] and d[\"surface\"][\"glass\"]; assert d[\"alpha\"][\"glass-base\"]==0.8 and d[\"alpha\"][\"glass-border\"]==0.1 and d[\"alpha\"][\"glass-pressed\"]==0.14; assert d[\"color\"][\"glass-border\"]==\"#fefdfc\"; assert d[\"css_vars\"][\"--glass-base\"]==\"rgba(11, 10, 8, 0.8)\"'"
+# the 0.12.8 `surface = "glass"` leftover must not turn an explicit 100 back
+# into the preset (2026-09-20: solid was unreachable on an upgraded box)
+cat > "$CONF" <<'C'
+schema = 1
+[desktop.theme]
+surface = "glass"
+bar_opacity = 100
+C
+check "surface=glass + bar_opacity=100 stays solid" "$T show | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d[\"surface\"][\"bar_alpha\"]==1.0 and not d[\"surface\"][\"glass\"]'"
+cat > "$CONF" <<'C'
+schema = 1
+[desktop.theme]
+surface = "glass"
+C
+check "surface=glass with no bar_opacity still reads as the Glass preset" "$T show | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d[\"surface\"][\"bar_alpha\"]==0.8 and d[\"surface\"][\"glass\"]'"
 cat > "$CONF" <<'C'
 schema = 1
 [desktop.theme]

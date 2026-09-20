@@ -713,8 +713,10 @@ def read_conf(path=None):
         cfg["bar_opacity"] = DEFAULTS["bar_opacity"]
     cfg["app_blur"] = _truthy(cfg.get("app_blur"), False)
     cfg["window_transparency"] = _truthy(cfg.get("window_transparency"), False)
-    # 0.12.8's one-release `surface = "glass"` reads as the Glass preset
-    if str(t.get("surface", "solid")) == "glass" and cfg["bar_opacity"] == 100:
+    # 0.12.8's one-release `surface = "glass"` reads as the Glass preset —
+    # only while bar_opacity was never written: an explicit 100 is the user
+    # asking for a solid bar, and must not snap back to the preset
+    if str(t.get("surface", "solid")) == "glass" and "bar_opacity" not in t:
         cfg["bar_opacity"] = GLASS_PRESET
     return cfg, src
 

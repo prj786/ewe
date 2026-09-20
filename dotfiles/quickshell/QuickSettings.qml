@@ -17,9 +17,9 @@ import Quickshell.Bluetooth
 //            surfaceRaised with a borderWidth1 borderSubtle outline, the
 //            radiusRounded corner and the shadowFloat elevation, spaceXs
 //            below the bar at the right edge, spaceS + spaceXs of padding and
-//            between sections. Its height follows the open page, up to 80%
-//            of the screen. Solid, never Glass.
-//   motion   in: fade plus a slideOffset drop at durBase; out at durFast;
+//            between sections. One height for every page: half the screen
+//            (at most 80%); a longer page scrolls. Solid, never Glass.
+//   motion   in: fade plus a slide from the right edge at durBase; out at durFast;
 //            OutCubic, and nothing moves under Reduce motion
 //   rail     the collapsed Side navigation: the sheep mark, then one
 //            controlLg × controlMd item per page (home, Wi-Fi, Bluetooth,
@@ -835,15 +835,13 @@ Scope {
             // below it, windowGap in from the right edge
             y: Theme.spaceXs
             x: parent.width - width - Theme.windowGap
-            // Wrap the content instead of spanning the desktop: the panel is as
-            // tall as the open page needs (the rail sets the floor), capped at
-            // the card's 80% of the screen, and a page switch animates it.
+            // ONE height for every page — half the screen (the rail sets the
+            // floor, the card's 80% the ceiling) — so switching pages never
+            // moves the panel's bottom edge; a longer page scrolls inside.
             readonly property real railNeed: railTop.implicitHeight + railBottom.implicitHeight + 3 * pad
-            readonly property real wantH: pad + hdrItem.height + pad + inner.implicitHeight + pad + foot.height + pad
             readonly property real maxH: Math.min((win.screen ? win.screen.height : parent.height) * 0.8,
                                                   parent.height - Theme.spaceXs - Theme.windowGap)
-            height: Math.min(maxH, Math.max(wantH, railNeed))
-            Behavior on height { NumberAnimation { duration: Theme.durBase; easing.type: Theme.ease } }
+            height: Math.min(maxH, Math.max((win.screen ? win.screen.height : parent.height) * 0.5, railNeed))
             radius: Theme.radiusRounded
             color: Theme.surfaceRaised
             border.color: Theme.borderSubtle
@@ -851,15 +849,16 @@ Scope {
             clip: true
             layer.enabled: true
             layer.effect: Elevation {}
-            // fade plus a slideOffset drop from the bar — in at durBase, out
-            // at durFast, no overshoot
+            // fade plus a slide in from the right edge, where the panel lives
+            // — in at durBase, out at durFast, no overshoot; Reduce motion
+            // keeps the fade only
             opacity: Globals.quickSettingsOpen ? 1 : 0
             Behavior on opacity {
                 NumberAnimation { duration: Globals.quickSettingsOpen ? Theme.durBase : Theme.durFast; easing.type: Theme.ease }
             }
             transform: Translate {
-                y: (Globals.quickSettingsOpen || Theme.reduceMotion) ? 0 : -Theme.slideOffset
-                Behavior on y { NumberAnimation { duration: Theme.durBase; easing.type: Theme.ease } }
+                x: (Globals.quickSettingsOpen || Theme.reduceMotion) ? 0 : panel.width + Theme.windowGap
+                Behavior on x { NumberAnimation { duration: Globals.quickSettingsOpen ? Theme.durBase : Theme.durFast; easing.type: Theme.ease } }
             }
             MouseArea { anchors.fill: parent }
 
