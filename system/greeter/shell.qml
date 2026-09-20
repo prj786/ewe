@@ -141,8 +141,9 @@ FloatingWindow {
         function onLaunched() { /* session started — qs exits */ }
     }
     Timer { id: retry; interval: 500; onTriggered: win.beginAuth() }
-    // start auth once both the user and the greetd socket are ready
-    Connections { target: Greetd; function onAvailableChanged() { if (Greetd.available) win.beginAuth() } }
+    // Greetd.available is constant (GREETD_SOCK is read once at startup —
+    // there is no availableChanged signal, a Connections on it only warned),
+    // so auth starts when the user lookup below finishes.
 
     // ── who to log in: first normal user (uid ≥ 1000) ──
     Process {
@@ -173,8 +174,12 @@ FloatingWindow {
                     arr.push({ name: p[0] || p[1], exec: p[1] })
                 }
                 win.sessions = arr
+                // default to the ewe session: the entry phase 30 renders (Exec =
+                // start-hyprland.sh) whatever its Name is ("Hyprland (DE)" once,
+                // "Ewe" now). The bare "Hyprland" entry beside it would start
+                // without the wrapper: no session env, Hyprland's log on the VT.
                 for (var j = 0; j < arr.length; j++)
-                    if (/hyprland \(de\)/i.test(arr[j].name)) { win.sessionIdx = j; break }
+                    if (/start-hyprland\.sh/.test(arr[j].exec) || /^ewe$/i.test(arr[j].name)) { win.sessionIdx = j; break }
             }
         }
     }

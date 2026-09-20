@@ -192,6 +192,8 @@ phase_services() {
         #   WLR_RENDERER_ALLOW_SOFTWARE (VM) — cage software-GL fallback.
         #   XDG_CONFIG_DIRS/XDG_CACHE_HOME — so `qs -c` finds the config + has a
         #     writable cache as the greeter user.
+        #   stdio → $XDG_CACHE_HOME/greeter.log — greetd hands the greeter the VT
+        #     as stdio and cage's wlroots INFO log is bold blue on it (see below).
         # Runs the QML greeter, falling back to ReGreet if qs exits nonzero (a QML
         # error must never lock you out of login).
         if [ "${DRY_RUN:-0}" = "1" ]; then info "would write /usr/local/bin/ewe-greeter (cage → qs greeter)"
@@ -206,6 +208,19 @@ phase_services() {
               # "in a window". Disable Qt CSD so the greeter is borderless/fullscreen.
               printf 'export QT_QPA_PLATFORM=wayland\n'
               printf 'export QT_WAYLAND_DISABLE_WINDOWDECORATION=1\n'
+              # greetd points the greeter's stdio at its VT (tty1), and cage runs
+              # wlroots at INFO: every backend/EGL line lands on tty1 in bold
+              # blue — visible while the greeter "loads" (before cage is DRM
+              # master) and again the instant cage exits on login, until Hyprland
+              # takes the screen (the blue text of 2026-09-20). Wipe the VT while
+              # stdout still is it, then keep the chatter in a file. A failed
+              # open falls back to /dev/null: under `sh` a failed `exec >` ends
+              # the script, and that would lock the login out.
+              printf '# stdio is the VT: clear it, then log to a file (wlroots INFO is bold blue on tty1 otherwise)\n'
+              printf 'printf '"'"'\\033[H\\033[2J\\033[3J'"'"'\n'
+              printf 'mkdir -p "$XDG_CACHE_HOME" 2>/dev/null\n'
+              printf '_log="$XDG_CACHE_HOME/greeter.log"\n'
+              printf 'if : >"$_log" 2>/dev/null; then exec >"$_log" 2>&1; else exec >/dev/null 2>&1; fi\n'
               printf 'exec cage -s -- sh -c "qs -c ewe-greeter || regreet"\n'
             } | sudo_run tee /usr/local/bin/ewe-greeter >/dev/null \
               && sudo_run chmod 755 /usr/local/bin/ewe-greeter \

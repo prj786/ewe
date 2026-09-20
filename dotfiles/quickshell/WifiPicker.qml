@@ -130,7 +130,8 @@ Column {
                 for (var i = 0; i < lines.length; i++) {
                     if (!lines[i]) continue
                     var p = lines[i].split(":")
-                    var ssid = p.slice(3).join(":")
+                    // nmcli -t escapes ':' and '\' inside values ("My\:Net"); undo it
+                    var ssid = p.slice(3).join(":").replace(/\\:/g, ":").replace(/\\\\/g, "\\")
                     if (!ssid || seen[ssid]) continue
                     seen[ssid] = true
                     arr.push({ ssid: ssid, signal: parseInt(p[1]) || 0, sec: p[2] || "", active: p[0] === "*" })

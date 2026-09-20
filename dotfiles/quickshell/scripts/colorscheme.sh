@@ -21,9 +21,12 @@ set -u
 # caller — Globals.applyColorScheme, Settings → Theme, ewe-conf apply, phase 60,
 # ewe-setup — keeps working unchanged. The mode is always dark.
 
-# accent → 6 lowercase hex (fallback system blue) + decimal R,G,B
+# accent → 6 lowercase hex + decimal R,G,B. No accent given: ewellow, the
+# design system v3 default (bin/ewe-theme DEFAULTS) — the old blue fallback
+# themed every GTK app, kitty and Zathura blue on a first boot until the
+# shell re-applied its own accent (2026-09-20).
 ACC="$(printf '%s' "${2:-}" | tr -dc 'a-fA-F0-9' | tr 'A-F' 'a-f')"
-if [ "${#ACC}" -ge 6 ]; then ACC="${ACC: -6}"; else ACC="0a84ff"; fi
+if [ "${#ACC}" -ge 6 ]; then ACC="${ACC: -6}"; else ACC="eeb407"; fi
 AR=$((16#${ACC:0:2})); AG=$((16#${ACC:2:2})); AB=$((16#${ACC:4:2}))
 
 # map any accent to the nearest Reversal colour variant (by HSV hue/saturation)

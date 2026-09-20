@@ -40,7 +40,7 @@ Scope {
         // Control Center on the sink list (picking a TV needs eyes anyway)
         function toggle(): void {
             if (Globals.casting) root.command("stop", "")
-            else { root.ensureDaemon(); Globals.quickSettingsOpen = true }
+            else { root.ensureDaemon(); Globals.openQuickSettingsTab("cast") }
         }
         function start(sink: string): void { root.command("start", sink) }
         function stop(): void  { root.command("stop", ""); Globals.castLegacy = false }

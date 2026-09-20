@@ -40,18 +40,39 @@ Scope {
     // answers pkexec and Komble / Welcome fail with "polkit refused". So the
     // agent lives in a Loader and is re-created until polkitd accepts it, and
     // again whenever the registration is lost later (polkitd restart).
-    property var agent: agentLoader.item
+    //
+    // Never DESTROY a failed agent (2026-09-20): Quickshell 0.3.1 aborts the
+    // whole shell ("pure virtual method called") when a PolkitAgent whose
+    // registration was refused is deleted — a Loader flip did exactly that,
+    // so any session where another agent already owns polkit (a nested dev
+    // shell, a polkit-gnome autostart) crash-looped instead of warning. A
+    // refused agent is parked and a fresh one created beside it; the retries
+    // are capped so a permanent owner cannot leak forever, and the cap resets
+    // whenever a registration has succeeded, so a registration lost later
+    // (polkitd restart) is still recovered.
+    property var agent: null
     readonly property var flow: agent ? agent.flow : null
-    Loader { id: agentLoader; active: true; sourceComponent: PolkitAgent {} }
+    property var parked: []
+    Component { id: agentComp; PolkitAgent {} }
+    function makeAgent() {
+        if (root.agent) { var p = root.parked; p.push(root.agent); root.parked = p }
+        root.agent = agentComp.createObject(root)
+    }
+    Component.onCompleted: makeAgent()
     Timer {
         interval: 5000; repeat: true; running: true
         property int tries: 0
+        readonly property int maxTries: 12   // a minute of retries per outage
         onTriggered: {
-            if (agentLoader.item && agentLoader.item.isRegistered) { tries = 0; return }
+            if (root.agent && root.agent.isRegistered) { tries = 0; return }
             tries += 1
-            if (tries === 3 || tries % 60 === 0) Log.warn("auth", "polkit agent not registered yet — re-creating (try " + tries + ")")
-            agentLoader.active = false
-            agentLoader.active = true
+            if (tries > maxTries) return
+            if (tries === maxTries) {
+                Log.warn("auth", "polkit agent not registered after " + tries + " tries — another agent owns polkit; giving up until it goes away")
+                return
+            }
+            if (tries === 3) Log.warn("auth", "polkit agent not registered yet — re-creating (try " + tries + ")")
+            makeAgent()
         }
     }
 

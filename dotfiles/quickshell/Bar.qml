@@ -76,7 +76,10 @@ Scope {
             var ev = bar.calSrc[i]
             if (!ev || ev.allDay) continue
             var st = new Date(ev.start).getTime()
-            var en = new Date(ev.end || ev.start).getTime()
+            // no end at all: treat it as running for an hour (the old `end ||
+            // start` fallback plus the one-minute floor for zero-length events
+            // read an end-less event as over a minute after it began)
+            var en = ev.end ? new Date(ev.end).getTime() : st + 3600000
             if (isNaN(st)) continue
             if (st - now <= 3600000 && now < Math.max(en, st + 60000)) { soon = true; break }
         }
@@ -193,11 +196,25 @@ Scope {
     // ── keyboard layout indicator (US ↔ GE) ───────────────────────────────
     property string kbLayout: "US"
     property string kbDevice: ""
+    // xkb's long names ("English (US)", "Georgian", "Russian") → a two-letter
+    // label. By language, never by substring: `indexOf("us")` labelled
+    // Russian, Belarusian and Austrian as US (2026-09-20).
+    readonly property var layoutCodes: ({
+        english: "US", georgian: "GE", russian: "RU", german: "DE", french: "FR", spanish: "ES",
+        italian: "IT", ukrainian: "UA", turkish: "TR", polish: "PL", portuguese: "PT", arabic: "AR",
+        hebrew: "IL", greek: "GR", dutch: "NL", swedish: "SE", norwegian: "NO", danish: "DK",
+        finnish: "FI", czech: "CZ", hungarian: "HU", romanian: "RO", armenian: "AM", azerbaijani: "AZ",
+        japanese: "JP", korean: "KR", chinese: "CN", persian: "IR", hindi: "IN", thai: "TH",
+        vietnamese: "VN", serbian: "RS", croatian: "HR", slovak: "SK", slovenian: "SI", bulgarian: "BG",
+        lithuanian: "LT", latvian: "LV", estonian: "EE", belarusian: "BY", kazakh: "KZ", uzbek: "UZ"
+    })
     function shortLayout(name) {
-        var n = (name || "").toLowerCase()
-        if (n.indexOf("georg") >= 0) return "GE"
-        if (n.indexOf("english") >= 0 || n.indexOf("us") >= 0) return "US"
-        return (name || "??").slice(0, 2).toUpperCase()
+        var n = (name || "").toLowerCase().trim()
+        var m = n.match(/^([a-z]+)(?:[^(]*\(([^)]*)\))?/)     // "english (uk, extd.)" → english, "uk, extd."
+        var base = m ? m[1] : "", variant = (m && m[2]) ? m[2] : ""
+        if (base === "english" && /^(uk|us)\b/.test(variant)) return variant.slice(0, 2).toUpperCase()
+        if (bar.layoutCodes[base]) return bar.layoutCodes[base]
+        return (n.slice(0, 2) || "??").toUpperCase()
     }
     Process {
         id: kbProc

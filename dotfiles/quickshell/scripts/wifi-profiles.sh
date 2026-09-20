@@ -19,6 +19,7 @@ nmcli -t -f NAME,TYPE connection show 2>/dev/null | while IFS= read -r line; do
     name="${line%:802-11-wireless}"
     name="${name//\\:/:}"
     ssid="$(nmcli -g 802-11-wireless.ssid connection show "$name" 2>/dev/null)"
+    ssid="${ssid//\\:/:}"; ssid="${ssid//\\\\/\\}"   # the same escapes as the name
     [ -n "$ssid" ] || continue
     kmgmt="$(nmcli -g 802-11-wireless-security.key-mgmt connection show "$name" 2>/dev/null)"
     flags="$(nmcli -g 802-11-wireless-security.psk-flags connection show "$name" 2>/dev/null)"

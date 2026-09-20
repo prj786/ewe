@@ -18,10 +18,12 @@ import Quickshell.Io
 // ewe.service). A plugin that fails to compile is logged and skipped; one
 // that compiles and then crashes takes the shell down with it, and
 // ewe.service relaunches it a second later — a login loop with no desktop.
-// The crash guard lives in ewe-plugin: `list --json --boot` counts starts,
-// and the third inside a minute answers safeMode, on which this host loads
-// nothing and says so with a notification. A start that survives a minute
-// reports `boot-ok` (the budget resets).
+// The crash guard lives in ewe-plugin: `list --json --boot` counts the starts
+// that follow a CRASH (a new Quickshell crash report or a systemd automatic
+// restart — a deliberate restart is neither), and the third inside a minute
+// answers safeMode, on which this host loads nothing and says so with a
+// notification. A start that survives a minute reports `boot-ok` (the
+// budget resets).
 //
 // Kinds: service | panel | overlay | menu are instantiated identically — the
 // plugin owns its windows and IpcHandlers. bar-widget is not instantiated
@@ -143,10 +145,10 @@ QtObject {
         if (j.safeMode) {
             host.safeMode = true
             host.suspects = j.suspects || []
-            Log.warn("plugins", "SAFE MODE: the shell restarted repeatedly — no plugins loaded; enabled:", host.suspects.join(", "))
+            Log.warn("plugins", "SAFE MODE: the shell crashed repeatedly — no plugins loaded; enabled:", host.suspects.join(", "))
             Quickshell.execDetached(["notify-send", "-a", "ewe", "-u", "normal",
                 "Plugins disabled for this session",
-                "The shell restarted three times within a minute. Enabled plugins: "
+                "The shell crashed three times within a minute. Enabled plugins: "
                 + host.suspects.join(", ") + ". Disable the culprit with ewe-plugin disable <id>."])
             host.loaded()
             return
