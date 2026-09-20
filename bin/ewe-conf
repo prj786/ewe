@@ -897,8 +897,8 @@ def gen_user_lua(doc):
         op = max(0, min(100, int(gv("desktop.theme.bar_opacity", 100))))
     except (TypeError, ValueError):
         op = 100
-    if op == 100 and gv("desktop.theme.surface", "solid") == "glass":
-        op = 80                              # 0.12.8's one-release knob = the Glass preset
+    if gv("desktop.theme.bar_opacity", None) is None and gv("desktop.theme.surface", "solid") == "glass":
+        op = 80                              # 0.12.8's one-release knob = the Glass preset (never over an explicit 100)
     bar_blur = BAR_BLUR_MIN <= op < 100 and not (reduce_t or inc_c)
     if bar_blur or app_blur:
         s += BLUR_ON_LUA

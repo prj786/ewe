@@ -31,7 +31,7 @@ Scope {
     property bool held: false
     property Timer _closeHold: Timer { interval: Math.max(1, Theme.durBase + 60); onTriggered: root.held = false }
     onOpenedChanged: {
-        if (opened) { _closeHold.stop(); held = true; query = ""; input.text = ""; selected = 0; fileResults = [] }
+        if (opened) { _closeHold.stop(); held = true; query = ""; input.text = ""; selected = 0; fileResults = []; if (!indexProc.running) indexProc.running = true }
         else _closeHold.restart()
     }
     onResultsChanged: if (selected >= results.length) selected = Math.max(0, results.length - 1)
@@ -49,8 +49,24 @@ Scope {
     }
 
     // ── file/folder search (plocate, basename match, home-scoped, noise-filtered) ──
+    // The launcher keeps ITS OWN index of $HOME (~/.cache/ewe/files.db): the
+    // system one leaves /home out wherever it is a btrfs subvolume — updatedb
+    // takes a subvolume mount for a bind mount and PRUNE_BIND_MOUNTS drops it
+    // (2026-09-20: no file was ever found on a stock install). Indexing a
+    // home takes well under a second, needs no root, and is redone in the
+    // background on open once the index is 10 minutes old. Until the first
+    // one exists the system index answers.
+    readonly property string fileDb: "${XDG_CACHE_HOME:-$HOME/.cache}/ewe/files.db"
+    readonly property string indexScript: "db=\"" + fileDb + "\"; mkdir -p \"${db%/*}\"; "
+        + "if [ ! -s \"$db\" ] || [ -n \"$(find \"$db\" -mmin +10 2>/dev/null)\" ]; then "
+        + "updatedb -l 0 --prune-bind-mounts no -U \"$HOME\" -o \"$db.new\" --prunenames \".git .cache node_modules .cargo .rustup .npm .gradle\" 2>/dev/null "
+        + "&& mv -f \"$db.new\" \"$db\"; fi"
+    Process { id: indexProc; command: ["sh", "-c", root.indexScript] }
     // $1 = query; emits "<d|f>\t<abs-path>" per line so the icon can be a folder/file.
-    readonly property string fileScript: "plocate -i -b -l 2000 -- \"$1\" 2>/dev/null | grep \"^$HOME/\" | grep -vE \"/(\\.cache|\\.git|\\.cargo|\\.rustup|\\.npm|\\.gradle|\\.mozilla|node_modules)/|/\\.var/app/[^/]+/cache/|/\\.local/share/Trash/\" | head -25 | while IFS= read -r p; do if [ -d \"$p\" ]; then printf \"d\\t%s\\n\" \"$p\"; else printf \"f\\t%s\\n\" \"$p\"; fi; done"
+    readonly property string fileScript: "db=\"" + fileDb + "\"; "
+        + "if [ -s \"$db\" ]; then plocate -d \"$db\" -i -b -l 2000 -- \"$1\"; else plocate -i -b -l 2000 -- \"$1\"; fi 2>/dev/null"
+        + " | grep \"^$HOME/\" | grep -vE \"/(\\.cache|\\.git|\\.cargo|\\.rustup|\\.npm|\\.gradle|\\.mozilla|node_modules)/|/\\.var/app/[^/]+/cache/|/\\.local/share/Trash/\""
+        + " | head -25 | while IFS= read -r p; do if [ -d \"$p\" ]; then printf \"d\\t%s\\n\" \"$p\"; else printf \"f\\t%s\\n\" \"$p\"; fi; done"
 
     Timer { id: fileDebounce; interval: 140; onTriggered: root.runFileSearch() }
 
@@ -316,8 +332,11 @@ Scope {
                         width: parent.width
                         // at most 8 rows, and never past the bottom of the
                         // screen — the footer's hints must stay visible
-                        height: Math.min(Math.min(root.results.length, 8) * Theme.control2xl,
-                                         Math.max(Theme.control2xl,
+                        // (the rows PLUS the list's own top/bottom margins:
+                        // without them the content is 2 × spaceXs taller than
+                        // the list and the last row's fill touches the footer)
+                        height: Math.min(Math.min(root.results.length, 8) * Theme.control2xl + topMargin + bottomMargin,
+                                         Math.max(Theme.control2xl + topMargin + bottomMargin,
                                                   win.height - panelWrap.y - searchRow.height
                                                   - foot.height - Theme.spaceLg))
                         topMargin: root.results.length > 0 ? Theme.spaceXs : 0

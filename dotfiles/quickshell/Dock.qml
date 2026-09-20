@@ -187,10 +187,13 @@ Scope {
             // on a Translate so it never fights the revealed/peek y binding.
             // Reduce motion drops the slide; the pill just fades in.
             transform: Translate {
+                // Reduce motion can turn on (the tokens land late) while
+                // this is running: finish it, never stop it off-screen.
                 NumberAnimation on y {
-                    running: !Theme.reduceMotion
+                    readonly property bool rm: Theme.reduceMotion
+                    onRmChanged: if (rm) complete()
                     from: win.implicitHeight; to: 0
-                    duration: Theme.durSlow; easing.type: Theme.easeSlow
+                    duration: Theme.reduceMotion ? 0 : Theme.durSlow; easing.type: Theme.easeSlow
                 }
             }
             // Reduce motion: no slides. The pill fades in at start, and
