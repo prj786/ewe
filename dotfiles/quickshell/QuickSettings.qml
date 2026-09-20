@@ -202,6 +202,7 @@ Scope {
     //    the section visibles below keep working unchanged ──
     property string tab: "home"
     readonly property string expanded: tab === "home" ? "" : tab
+    Connections { target: Globals; function onQuickSettingsTabRequested(name) { root.setTab(name) } }
     function setTab(t) {
         if (t !== "bt" && Bluetooth.defaultAdapter) Bluetooth.defaultAdapter.discovering = false
         root.tab = t
@@ -557,7 +558,8 @@ Scope {
                 for (var i = 0; i < lines.length; i++) {
                     if (!lines[i]) continue
                     var p = lines[i].split(":")
-                    var ssid = p.slice(3).join(":")
+                    // nmcli -t escapes ':' and '\' inside values ("My\:Net"); undo it
+                    var ssid = p.slice(3).join(":").replace(/\\:/g, ":").replace(/\\\\/g, "\\")
                     if (!ssid || seen[ssid]) continue
                     seen[ssid] = true
                     arr.push({ ssid: ssid, signal: parseInt(p[1]) || 0, sec: p[2] || "", active: p[0] === "*" })
@@ -577,8 +579,11 @@ Scope {
     property string wiredDev: ""
     property string wiredStateStr: ""
     readonly property bool wiredPresent: wiredDev !== ""
+    // nmcli's device states carry a parenthetical — "connecting (getting IP
+    // configuration)", "connected (externally)" — so match the word, not the string
+    readonly property bool wiredConnecting: wiredStateStr.indexOf("connecting") === 0
     property bool wiredBusy: false
-    Process { id: wiredState; command: ["sh", "-c", "nmcli -t -f DEVICE,TYPE,STATE device 2>/dev/null | awk -F: '$2==\"ethernet\"{print $1\":\"$3; exit}'"]; stdout: StdioCollector { onStreamFinished: { var p = this.text.trim().split(":"); root.wiredDev = p[0] || ""; root.wiredStateStr = p[1] || ""; root.wiredUp = root.wiredStateStr === "connected"; if (!wiredSetProc.running) root.wiredBusy = false } } }
+    Process { id: wiredState; command: ["sh", "-c", "nmcli -t -f DEVICE,TYPE,STATE device 2>/dev/null | awk -F: '$2==\"ethernet\"{print $1\":\"$3; exit}'"]; stdout: StdioCollector { onStreamFinished: { var p = this.text.trim().split(":"); root.wiredDev = p[0] || ""; root.wiredStateStr = p[1] || ""; root.wiredUp = root.wiredStateStr.indexOf("connected") === 0; if (!wiredSetProc.running) root.wiredBusy = false } } }
     // the wired switch: `device disconnect` drops the link and stops
     // autoconnect until `device connect` (or a re-plug) — the way to be on
     // Wi-Fi with the cable still in
@@ -1653,10 +1658,10 @@ Scope {
                             visible: root.wiredPresent
                             ic: Theme.icEthernet; label: "Wired"
                             desc: root.wiredStateStr === "unavailable" ? "No cable"
-                                : root.wiredStateStr === "connecting" || root.wiredBusy ? "Connecting…"
+                                : root.wiredConnecting || root.wiredBusy ? "Connecting…"
                                 : root.wiredUp ? "Connected" : "Off"
-                            busy: root.wiredBusy || root.wiredStateStr === "connecting"
-                            on: root.wiredUp || root.wiredStateStr === "connecting"
+                            busy: root.wiredBusy || root.wiredConnecting
+                            on: root.wiredUp || root.wiredConnecting
                             disabled: root.wiredStateStr === "unavailable"
                             onToggled: root.setWired(!on)
                         }

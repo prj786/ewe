@@ -44,6 +44,10 @@ QtObject {
 
     property bool barVisible: true          // the top bar (Super+Shift+B toggles)
     property bool quickSettingsOpen: false  // the Quick Settings panel
+    // "open Quick settings ON this tab" for components outside the panel
+    // (Cast's IPC toggle lands on the sink list); QuickSettings.qml listens
+    signal quickSettingsTabRequested(string name)
+    function openQuickSettingsTab(name) { g.quickSettingsOpen = true; g.quickSettingsTabRequested(name) }
     property bool dnd: false               // Do Not Disturb (suppresses toasts)
     property var server: null              // set by Notifications.qml (the live NotificationServer)
     property bool vpnActive: false         // any VPN connection up (bar shows a VPN glyph)

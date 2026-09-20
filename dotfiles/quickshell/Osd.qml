@@ -23,7 +23,7 @@ import Quickshell.Services.Pipewire
 //                  `qs ipc call osd brightness`; there is no Wayland
 //                  brightness service to observe.
 //
-// It sits control2xl above the bottom edge, centred, and goes after 1.5 s of
+// It sits just above the dock (control2xl above the edge without one), centred, and goes after 1.5 s of
 // quiet; repeated presses update it in place. Suppressed while Quick settings
 // is open, which already shows both sliders.
 Scope {
@@ -93,7 +93,10 @@ Scope {
         // it mapped through the fade-out.
         visible: root.shown || pill.opacity > 0.01
         color: "transparent"
-        exclusionMode: ExclusionMode.Ignore
+        // reserve nothing, but RESPECT the dock's zone (ExclusionMode.Ignore
+        // put this layer at the screen edge and the pill on top of the dock's
+        // icons — 2026-09-20); the same placement as Toast.qml
+        exclusiveZone: 0
         mask: Region {}                                   // click-through
         WlrLayershell.namespace: "quickshell:osd"
         WlrLayershell.layer: WlrLayer.Overlay
@@ -104,7 +107,10 @@ Scope {
             id: pill
             anchors.horizontalCenter: parent.horizontalCenter
             anchors.bottom: parent.bottom
-            anchors.bottomMargin: Theme.control2xl
+            // the dock's own layer reserves its height, so this margin is
+            // measured from the dock's edge — the toast's rhythm
+            anchors.bottomMargin: (Globals.dockEnabled && !Globals.dockAutohide)
+                                  ? Theme.spaceS + Theme.spaceXs : Theme.control2xl
             width: Theme.panelSm - Theme.spaceLg - Theme.spaceMd - Theme.spaceS
             height: Theme.control2xl
             radius: Theme.radiusFull

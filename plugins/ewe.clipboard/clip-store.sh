@@ -16,9 +16,12 @@ set -u
 #    before wl-copy — one copy passes, then the marker is gone
 skip="${XDG_RUNTIME_DIR:-/tmp}/ewe-clip-skip"
 if [ -f "$skip" ]; then
+    # only honour a fresh marker (a stale one from a failed copy must not eat
+    # a later real copy) — judge its age BEFORE removing it: `find` on a file
+    # already deleted prints nothing, which read as "fresh" and ate the copy
+    stale="$(find "$skip" -mmin +0.1 2>/dev/null)"
     rm -f "$skip"
-    # only honour a fresh marker (a stale one from a failed copy must not eat a later real copy)
-    if [ -z "$(find "$skip" -mmin +0.1 2>/dev/null)" ]; then cat >/dev/null; exit 0; fi
+    if [ -z "$stale" ]; then cat >/dev/null; exit 0; fi
 fi
 if wl-paste -l 2>/dev/null | grep -qi 'x-kde-passwordManagerHint'; then
     cat >/dev/null; exit 0

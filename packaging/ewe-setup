@@ -85,8 +85,8 @@ fi
 # the broken-image checkerboard. colorscheme.sh writes gtk settings.ini,
 # qt6ct, gsettings (best-effort without a bus) and the Mocu cursor link.
 if [ "$FIRST" = 1 ] && [ -r "$DEST/dotfiles/quickshell/scripts/colorscheme.sh" ]; then
-    say "applying the default appearance (dark, blue accent)"
-    sh "$DEST/dotfiles/quickshell/scripts/colorscheme.sh" dark 0a84ff >/dev/null 2>&1 \
+    say "applying the default appearance (dark, the ewe accent)"
+    sh "$DEST/dotfiles/quickshell/scripts/colorscheme.sh" dark >/dev/null 2>&1 \
         || warn "colorscheme.sh reported errors — theming may be incomplete until Settings → Theme is used."
 fi
 

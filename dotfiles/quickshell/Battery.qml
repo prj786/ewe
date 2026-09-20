@@ -15,16 +15,17 @@ Scope {
     readonly property bool isBattery: dev && dev.isLaptopBattery
     readonly property bool discharging: dev && dev.state === UPowerDeviceState.Discharging
     readonly property real rawPct: dev ? dev.percentage : 100
-    readonly property int pct: Math.round(rawPct)
-
-    // UPower reports percentage on 0–100, and Bar/Quick Settings both scale a
-    // 0–1 reading up for display. We must NOT copy that here: 0.8 is genuinely
-    // ambiguous (0.8% or 80%?), and guessing wrong in this file suspends the
-    // machine. A wrong number on the bar is survivable; a wrong suspend is not —
-    // so an ambiguous sample is refused outright. Nothing is lost in practice:
-    // on a real drain the 5% latch has already fired long before 1%.
-    readonly property bool plausible: rawPct > 1
-    property bool _warnedScale: false
+    // Quickshell's UPowerDevice.percentage is a FRACTION, 0.0–1.0 (0.3.1 on
+    // the 2026-09-20 machine: a full battery reads 1). The bar and Quick
+    // settings scale it the same way. A reading above 1 can only be a
+    // 0–100 scale and passes through, so a future Quickshell that changes
+    // the contract still lands right; the one ambiguous sample, ≤1 on a
+    // 0–100 scale, is a battery at ≤1%, where sleeping is the right call
+    // anyway. The old "refuse anything ≤1 as ambiguous" guard refused EVERY
+    // reading on this scale: no 20/10 % warnings, no hibernate at 5 %.
+    readonly property real pct100: rawPct <= 1 ? rawPct * 100 : rawPct
+    readonly property int pct: Math.round(pct100)
+    readonly property bool plausible: !isNaN(rawPct) && rawPct >= 0
 
     // highest threshold already fired this discharge cycle; re-armed when charging
     property int armed: 101
@@ -37,14 +38,7 @@ Scope {
 
     function evaluate() {
         if (!isBattery) return
-        if (!plausible) {
-            if (!_warnedScale) {
-                _warnedScale = true
-                Log.warn("battery", "UPower reported percentage", rawPct,
-                         "— ambiguous scale, holding off low-battery actions")
-            }
-            return
-        }
+        if (!plausible) return                              // no reading at all
         if (!discharging) { armed = 101; return }          // charging/full → re-arm
         if (pct <= 5 && armed > 5) {
             armed = 5

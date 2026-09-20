@@ -519,9 +519,14 @@ QtObject {
         command: ["sh", "-c", '"$0" pull && "$0" apply --no-hooks', cl.eweConf]
         stdout: StdioCollector {
             onStreamFinished: {
-                var j = null
-                try { j = JSON.parse(this.text.split("\n")[0]) } catch (e) {}
+                // two JSON lines: pull's (machine, backup), then apply's — the
+                // verdict is the LAST one (an apply that refused the pulled file
+                // read as success while only pull's line was checked, 2026-09-20)
+                var ls = this.text.trim().split("\n"), j = null, a = null
+                try { j = JSON.parse(ls[0]) } catch (e) {}
+                try { a = JSON.parse(ls[ls.length - 1]) } catch (e) {}
                 if (!j || !j.ok) { cl._syncFail("restore: " + (j && j.error ? j.error : "pull failed")); return }
+                if (!a || !a.ok) { cl._syncFail("restore: " + (a && a.error ? a.error : "apply failed")); return }
                 Globals.reloadUserState()
                 HyprMon.reloadProfiles()
                 if (!HyprMon.virtualSession) {

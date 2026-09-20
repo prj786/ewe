@@ -163,7 +163,11 @@ Scope {
         Quickshell.execDetached(["hyprctl", "eval", root.transparencyLua()])
     }
     Process { id: luaWriter }
-    Process { id: jsonWriter }
+    // absorb runs with --no-hooks (this shell IS the reload target) but it
+    // still rebuilds theme-tokens.json — re-read it, or every role derived
+    // from a freshly picked accent (hover, subtle, focus ring…) stayed on the
+    // old ramp until a restart (2026-09-20)
+    Process { id: jsonWriter; onExited: Globals.reloadThemeTokens() }
     // Shape & density writer. Hooks stay ON here (unlike the panes that write
     // their own artifacts): `ewe-conf set desktop.theme.*` has to re-run
     // `ewe-theme build` and poke the shell, or the change sits in the file
@@ -2478,7 +2482,13 @@ Scope {
                     spacing: Theme.spaceS
                     readonly property int barOpacity: Number(root.tokIn("bar_opacity", 100))
                     property int opacityDrag: -1          // the slider's value while dragging
-                    readonly property int opacityShown: lookPane.opacityDrag >= 0 ? lookPane.opacityDrag : lookPane.barOpacity
+                    // the value just written, shown until `settings reload` brings the
+                    // token back (a second or more) — without it the knob snapped back
+                    // to the old value on release and jumped later (2026-09-20)
+                    property int opacityCommitted: -1
+                    onBarOpacityChanged: opacityCommitted = -1
+                    readonly property int opacityShown: lookPane.opacityDrag >= 0 ? lookPane.opacityDrag
+                                                       : lookPane.opacityCommitted >= 0 ? lookPane.opacityCommitted : lookPane.barOpacity
 
                     SectionTitle { text: "Scheme and accent" }
                     Card {
@@ -2584,7 +2594,7 @@ Scope {
                             glyph: root.g(0xE435); title: "Bar icons"
                             desc: Number(root.tokIn("text_scale", 100)) >= 130
                                   ? "The bar is as tall as its icons. Text size 130% makes them one size larger."
-                                  : "The bar is as tall as its icons: 44, 48 or 56 pixels."
+                                  : "The bar is as tall as its icons: 36, 40 or 48 pixels."
                             Seg {
                                 anchors.verticalCenter: parent.verticalCenter
                                 options: [{ label: "Small", value: "small" }, { label: "Normal", value: "normal" }, { label: "Large", value: "large" }]
@@ -2603,16 +2613,16 @@ Scope {
                                 anchors.verticalCenter: parent.verticalCenter
                                 size: "sm"; label: "Glass"
                                 disabled: lookPane.opacityShown === Math.round(Theme.opacityGlass * 100)
-                                onGo: root.confSet("desktop.theme.bar_opacity", Math.round(Theme.opacityGlass * 100))
+                                onGo: { lookPane.opacityCommitted = Math.round(Theme.opacityGlass * 100); root.confSet("desktop.theme.bar_opacity", lookPane.opacityCommitted) }
                             }
                         }
                         Slider {
                             from: 0; to: 100; step: 1; showValue: true
-                            value: lookPane.barOpacity
+                            value: lookPane.opacityCommitted >= 0 ? lookPane.opacityCommitted : lookPane.barOpacity
                             valueText: lookPane.opacityShown + "%"
                             onDraggingChanged: lookPane.opacityDrag = dragging ? Math.round(dragVal) : -1
                             onDragValChanged: if (dragging) lookPane.opacityDrag = Math.round(dragVal)
-                            onMoved: function (v) { lookPane.opacityDrag = -1; root.confSet("desktop.theme.bar_opacity", Math.round(v)) }
+                            onMoved: function (v) { lookPane.opacityDrag = -1; lookPane.opacityCommitted = Math.round(v); root.confSet("desktop.theme.bar_opacity", Math.round(v)) }
                         }
                         Alert {
                             visible: lookPane.opacityShown < Math.round(Theme.opacityGlass * 100)

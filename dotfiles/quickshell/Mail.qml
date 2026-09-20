@@ -113,8 +113,12 @@ QtObject {
                         ml.imapState = ""; ml.imapError = ""
                         ml.imapUnread = j.unread || 0
                         ml.imapList = j.list || []
+                        // judge "first fetch ever" BEFORE the stamp moves — stamped
+                        // first, it never was the first fetch and every already-unread
+                        // message toasted on a fresh account (2026-09-20)
+                        var first = Object.keys(ml._notified).length === 0 && ml.imapLastFetch === 0
                         ml.imapLastFetch = Date.now()
-                        ml._notifyNew(ml.imapList)
+                        ml._notifyNew(ml.imapList, first)
                         ml._saveState()
                     } else if (j.error === "auth-failed" || j.error === "no-password") {
                         ml.imapState = "auth"; ml.imapError = "The mail server rejected the login — sign in to the mail account again in Settings → Account."
@@ -162,10 +166,9 @@ QtObject {
         for (var k in ml._notified) if (ml._notified[k] < cut) delete ml._notified[k]
         ml._saveT.restart()
     }
-    function _notifyNew(rows) {
+    function _notifyNew(rows, first) {
         if (!ml._stateLoaded) return
         // first fetch ever: everything currently unseen is "seen" — no storm
-        var first = Object.keys(ml._notified).length === 0 && ml.imapLastFetch === 0
         var fresh = []
         for (var i = 0; i < rows.length; i++) {
             var id = String(rows[i].id || "")

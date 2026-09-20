@@ -79,6 +79,12 @@ sandbox_prepare() {
   # HS_WELCOME=1 leaves the stamp off so it does appear.
   [ "${HS_WELCOME:-0}" = "1" ] || { mkdir -p "$SBHOME/.local/state/ewe"; : > "$SBHOME/.local/state/ewe/welcomed"; }
   ln -s "$REPO/dotfiles/fontconfig" "$SBHOME/.config/fontconfig"
+  # the live icon theme, read-only (qt6ct.conf names it; QT_QPA_PLATFORMTHEME=
+  # qt6ct comes from the session): with no theme every themed icon misses,
+  # and a miss makes Quickshell 0.3.1's icon loader abort on its image thread
+  # ("pure virtual method called", QIcon::pixmap → QPlatformPixmap::fromFile)
+  # about one start in three (2026-09-20). Never written by the shell.
+  [ -d "$HOME/.config/qt6ct" ] && ln -s "$HOME/.config/qt6ct" "$SBHOME/.config/qt6ct"
   # fontconfig's relative <dir> resolves beside the linked fontconfig dir
   ln -s "$REPO/dotfiles/quickshell/fonts" "$SBHOME/.config/quickshell/fonts"
   if [ -n "${HS_CONF:-}" ]; then

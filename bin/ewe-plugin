@@ -578,10 +578,11 @@ def _boots_read():
             j = json.load(f)
         if isinstance(j, dict):
             return {"boots": [t for t in j.get("boots", []) if isinstance(t, (int, float))],
+                    "last": j.get("last") if isinstance(j.get("last"), dict) else {},
                     "safe": j.get("safe") if isinstance(j.get("safe"), dict) else None}
     except (FileNotFoundError, json.JSONDecodeError):
         pass
-    return {"boots": [], "safe": None}
+    return {"boots": [], "last": {}, "safe": None}
 
 
 def _boots_write(st):
@@ -592,16 +593,53 @@ def _boots_write(st):
     os.replace(tmp, BOOTS)
 
 
+def _crash_evidence():
+    """What says the PREVIOUS shell instance died rather than exited: the
+    newest Quickshell crash report (its handler writes one per crash under
+    $XDG_CACHE_HOME/quickshell/crashes, also when it relaunches itself) and
+    systemd's automatic-restart counter (Restart=on-failure; a SIGKILL/OOM
+    the handler never sees). Both stay put across a deliberate restart —
+    `systemctl --user restart` resets NRestarts to 0 and writes no report."""
+    cache = os.environ.get("XDG_CACHE_HOME") or os.path.join(os.path.expanduser("~"), ".cache")
+    newest = 0
+    try:
+        for d in os.scandir(os.path.join(cache, "quickshell", "crashes")):
+            try:
+                newest = max(newest, int(d.stat().st_mtime))
+            except OSError:
+                pass
+    except OSError:
+        pass
+    nrestarts = 0
+    if shutil.which("systemctl"):
+        try:
+            r = subprocess.run(["systemctl", "--user", "show", SHELL_UNIT, "-p", "NRestarts", "--value"],
+                               capture_output=True, text=True, timeout=5)
+            nrestarts = int((r.stdout or "0").strip() or 0)
+        except (OSError, ValueError, subprocess.TimeoutExpired):
+            pass
+    return {"crash": newest, "nrestarts": nrestarts}
+
+
 def record_boot(plugins):
-    """One shell start. Returns the safe-mode record when this start is the
-    CRASH_LIMIT-th inside CRASH_WINDOW seconds and there is a plugin to blame;
-    the budget resets at the same time, so a fixed plugin gets a clean run."""
+    """One shell start. Counts it as a CRASH only when there is evidence the
+    previous instance died (see _crash_evidence) — the user re-running the
+    unit, a Settings "restart shell", ewe-setup after an upgrade, a dev
+    `qs -p` are starts, not crashes, and used to trip safe mode after three
+    inside a minute (2026-09-20). Returns the safe-mode record when this is
+    the CRASH_LIMIT-th crash inside CRASH_WINDOW seconds and there is a
+    plugin to blame; the budget resets then, so a fixed plugin gets a clean
+    run."""
     st = _boots_read()
     now = int(time.time())
-    st["boots"] = [t for t in st["boots"] if now - t < CRASH_WINDOW] + [now]
+    ev = _crash_evidence()
+    last = st.get("last") or {}
+    crashed = ev["crash"] > last.get("crash", 0) or ev["nrestarts"] > last.get("nrestarts", 0)
+    st["last"] = ev
+    st["boots"] = [t for t in st["boots"] if now - t < CRASH_WINDOW] + ([now] if crashed else [])
     suspects = [p["id"] for p in plugins if p["enabled"] and p["installed"] and p["valid"]]
     if len(st["boots"]) >= CRASH_LIMIT and suspects:
-        st = {"boots": [], "safe": {"at": now, "suspects": suspects}}
+        st = {"boots": [], "last": ev, "safe": {"at": now, "suspects": suspects}}
         _boots_write(st)
         return st["safe"]
     _boots_write(st)
@@ -730,7 +768,7 @@ def cmd_list(args):
         return
     safe = _boots_read()["safe"]
     if safe:
-        say("! safe mode: the shell restarted %d times within a minute (%s) and loaded no plugins that session."
+        say("! safe mode: the shell crashed %d times within a minute (%s) and loaded no plugins that session."
             % (CRASH_LIMIT, time.strftime("%Y-%m-%d %H:%M", time.localtime(safe.get("at", 0)))))
         say("  enabled at the time: %s — `ewe-plugin disable <id>` the culprit; a start that stays up a minute clears this."
             % ", ".join(safe.get("suspects", [])))

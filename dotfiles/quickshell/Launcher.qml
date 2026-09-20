@@ -63,7 +63,10 @@ Scope {
         + "&& mv -f \"$db.new\" \"$db\"; fi"
     Process { id: indexProc; command: ["sh", "-c", root.indexScript] }
     // $1 = query; emits "<d|f>\t<abs-path>" per line so the icon can be a folder/file.
-    readonly property string fileScript: "db=\"" + fileDb + "\"; "
+    // the first line echoes the query the run was started with: the one
+    // collector serves every run, so a result must prove it is for the query
+    // on screen (a killed run still flushes its partial output — 2026-09-20)
+    readonly property string fileScript: "db=\"" + fileDb + "\"; printf \"q\\t%s\\n\" \"$1\"; "
         + "if [ -s \"$db\" ]; then plocate -d \"$db\" -i -b -l 2000 -- \"$1\"; else plocate -i -b -l 2000 -- \"$1\"; fi 2>/dev/null"
         + " | grep \"^$HOME/\" | grep -vE \"/(\\.cache|\\.git|\\.cargo|\\.rustup|\\.npm|\\.gradle|\\.mozilla|node_modules)/|/\\.var/app/[^/]+/cache/|/\\.local/share/Trash/\""
         + " | head -25 | while IFS= read -r p; do if [ -d \"$p\" ]; then printf \"d\\t%s\\n\" \"$p\"; else printf \"f\\t%s\\n\" \"$p\"; fi; done"
@@ -74,9 +77,13 @@ Scope {
         id: fileProc
         stdout: StdioCollector {
             onStreamFinished: {
-                var q = root.fileQuery.toLowerCase()
                 var lines = this.text.split("\n"), arr = []
-                for (var i = 0; i < lines.length; i++) {
+                var ran = (lines[0] || "").indexOf("q\t") === 0 ? lines[0].slice(2) : null
+                var want = root.query.trim()
+                // not the query on screen (typed past, or cleared to nothing): drop it
+                if (ran === null || ran !== want || want.length < 2) return
+                var q = ran.toLowerCase()
+                for (var i = 1; i < lines.length; i++) {
                     var ln = lines[i]; if (!ln) continue
                     var t = ln.indexOf("\t"); if (t < 0) continue
                     var isDir = ln.charAt(0) === "d"

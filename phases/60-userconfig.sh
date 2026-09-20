@@ -232,7 +232,7 @@ phase_userconfig() {
 
     local cs="$HOME/.config/quickshell/scripts/colorscheme.sh"
     if [ -r "$cs" ]; then
-        run sh "$cs" dark 0a84ff && ok "default appearance set to dark (GTK + Qt fallback)"
+        run sh "$cs" dark && ok "default appearance set to dark (GTK + Qt fallback)"
     else
         info "colorscheme.sh not found yet (dotfiles not linked?) — skipping appearance default."
     fi
