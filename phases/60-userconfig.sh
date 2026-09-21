@@ -247,9 +247,10 @@ phase_userconfig() {
 
     # ── Node toolchain via mise (no system nodejs) ──
     # mise owns Node here. Provision Node LTS + pnpm + the front-end language
-    # servers/formatter declared in dotfiles/mise/config.toml, and wire mise into
-    # the shells. The shims dir is also added to PATH by start-hyprland.sh so
-    # GUI-launched apps (Zed, kitty tools) find them without an interactive shell.
+    # servers/formatter declared in dotfiles/mise/config.toml. The shims dir is
+    # also added to PATH by start-hyprland.sh so GUI-launched apps (Zed, kitty
+    # tools) find them without an interactive shell. The mise ACTIVATION in the
+    # rc files is done by shell-setup.sh below, which owns all rc wiring.
     if [ "${DEV:-0}" != "1" ]; then
         info "dev toolchain: skipped (opt-in) — re-run with --dev to provision the Node/LSP stack via mise."
     elif command -v mise >/dev/null 2>&1; then
@@ -260,40 +261,21 @@ phase_userconfig() {
             info "provisioning Node toolchain via mise (this builds/downloads node + npm tools)…"
             run mise install || warn "mise install reported errors — run 'mise install' again after login."
         fi
-        # activate mise in interactive shells (shims also live on PATH via the session wrapper)
-        for rcf in "$HOME/.bashrc" "$HOME/.zshrc"; do
-            [ -e "$rcf" ] || continue
-            local sh_name; sh_name="$(basename "$rcf" | sed 's/^\.//; s/rc$//')"   # bashrc→bash, zshrc→zsh
-            grep -q 'mise activate' "$rcf" 2>/dev/null || \
-                run sh -c "printf '\n# ewe: mise (node toolchain)\neval \"\$(mise activate %s)\"\n' '$sh_name' >> '$rcf'"
-        done
     else
         warn "mise not installed — Node toolchain not provisioned (install mise, then 'mise install')."
     fi
 
-    # ── prompt: oh-my-posh, themed to match the shell ────────────────────────
-    # One look (flock), one theme file. Written once and guarded by a grep so
-    # re-running the installer never duplicates it. (graphite.omp.json remains
-    # on disk only so snippets written by older installs keep resolving.)
-    if command -v oh-my-posh >/dev/null 2>&1; then
-        local rcf sh_name
-        for rcf in "$HOME/.bashrc" "$HOME/.zshrc"; do
-            [ -e "$rcf" ] || continue
-            grep -q 'oh-my-posh init' "$rcf" 2>/dev/null && continue
-            sh_name="$(basename "$rcf" | sed 's/^\.//; s/rc$//')"
-            info "adding the oh-my-posh prompt to $(basename "$rcf")"
-            if [ "${DRY_RUN:-0}" != "1" ]; then
-                cat >> "$rcf" <<RC
-
-# ewe: oh-my-posh prompt (flock theme)
-if command -v oh-my-posh >/dev/null 2>&1; then
-    eval "\$(oh-my-posh init $sh_name --config "\$HOME/.config/oh-my-posh/flock.omp.json")"
-fi
-RC
-            fi
-        done
+    # ── shell wiring: zsh (the terminal shell), the prompt, and mise activation ──
+    # ONE place, used by BOTH install paths (this phase AND packaging/ewe-setup):
+    # dotfiles/shell/shell-setup.sh idempotently adds ONE marked block to
+    # ~/.zshrc / ~/.bashrc that sources the shared config (~/.config/ewe-shell/),
+    # and migrates the old inline blocks this phase used to write directly (the
+    # oh-my-posh prompt + mise activation) so the prompt is never set up twice.
+    # The user's own rc lines are untouched; their overrides go after the marker.
+    if [ -x "$DOTREPO/dotfiles/shell/shell-setup.sh" ]; then
+        run "$DOTREPO/dotfiles/shell/shell-setup.sh"
     else
-        warn "oh-my-posh not installed — prompt left as-is (install it, then re-run)."
+        warn "shell-setup.sh not found — shell config not wired into the rc files."
     fi
 
     # RFC-001 [system]: record what this run made the machine into. Only ever

@@ -222,7 +222,7 @@ Scope {
             component DockBtn: Rectangle {
                 id: db
                 property string glyph: ""
-                property string image: ""          // an SVG instead of a glyph (the ewe sheep), tinted like one
+                property string image: ""          // an SVG instead of a glyph (the ewe mark: the line-art logo, bold cut), tinted like one
                 property bool activeState: false
                 // a toolbar button named by what it opens (Dock card, Accessibility)
                 property string a11yName: ""
@@ -248,7 +248,9 @@ Scope {
                     id: dbImg
                     visible: false
                     source: db.image
-                    width: win.glyphPx; height: width
+                    // the mark carries inner detail (a ringed line drawing), so it is drawn a
+                    // step larger than the plain glyphs beside it, inside the same cell
+                    width: Math.round(win.glyphPx * 1.35); height: width
                     sourceSize: Qt.size(width * 2, height * 2)
                     fillMode: Image.PreserveAspectFit
                 }
@@ -269,7 +271,7 @@ Scope {
                 anchors.centerIn: parent
                 spacing: Theme.spaceS
 
-                DockBtn { id: launchBtn; a11yName: "Apps"; image: Qt.resolvedUrl("assets/sheep.svg"); activeState: Globals.launcherOpen; anchors.verticalCenter: parent.verticalCenter; onGo: { Globals.launcherAnchorX = launchBtn.mapToItem(null, launchBtn.width / 2, 0).x; Globals.storeOpen = false; Globals.placesOpen = false; Globals.mediaOpen = false; Globals.launcherOpen = !Globals.launcherOpen } }
+                DockBtn { id: launchBtn; a11yName: "Apps"; image: Qt.resolvedUrl("assets/ewe-mark.svg"); activeState: Globals.launcherOpen; anchors.verticalCenter: parent.verticalCenter; onGo: { Globals.launcherAnchorX = launchBtn.mapToItem(null, launchBtn.width / 2, 0).x; Globals.storeOpen = false; Globals.placesOpen = false; Globals.mediaOpen = false; Globals.launcherOpen = !Globals.launcherOpen } }
                 DockBtn { a11yName: "Overview"; glyph: Theme.icStack; anchors.verticalCenter: parent.verticalCenter; onGo: Quickshell.execDetached(["qs", "ipc", "call", "overview", "toggle"]) }
                 // store button → Komble (the software manager) when installed;
                 // the in-shell quick-installer panel is only the fallback.

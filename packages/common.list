@@ -79,9 +79,29 @@ fwupd                   # firmware/BIOS updates from Linux (LVFS) — stale vend
                         # root cause behind ACPI poweroff/suspend bugs on thin laptops
 
 # ── terminal (single, fast, GPU-accelerated) ─────────────────────────────────
-# kitty is the one terminal (foot/ghostty dropped). No multiplexer: the prompt
-# is oh-my-posh (packages/aur.list) and Hyprland already does windows/workspaces.
+# kitty is the one terminal (foot/ghostty dropped). No multiplexer: Hyprland
+# already does windows/workspaces. kitty launches zsh (dotfiles/kitty/
+# ewe-shell.sh); the LOGIN shell stays bash.
 kitty
+
+# ── terminal shell: zsh + plugins (all official repos) ──────────────────────
+# The interactive shell is zsh with its plugins, the fuzzy finder, modern ls/
+# cat, and the system-info fetch — all from the OFFICIAL repos so they arrive on
+# BOTH install paths (install.sh AND the pacman `ewe` package, whose depends are
+# generated from this list). The prompt stays oh-my-posh (packages/aur.list),
+# wired into ~/.zshrc / ~/.bashrc by dotfiles/shell/shell-setup.sh. fzf/bat also
+# appear in dev.list (--dev); the duplicate is harmless (pacman --needed skips).
+zsh
+zsh-autosuggestions      # fish-style inline suggestions as you type
+zsh-syntax-highlighting  # colour commands as you type (sourced LAST, per its docs)
+zsh-completions          # extra completion functions (installed into site-functions)
+zsh-history-substring-search  # up/down search the history by prefix
+fzf                      # Ctrl-R history / Ctrl-T files / Alt-C cd
+bash-completion          # programmable completion for bash
+eza                      # modern ls (aliased only when present)
+bat                      # syntax-highlighting cat/pager (not aliased — cat stays cat)
+zoxide                   # smarter cd that remembers where you go
+fastfetch                # the neofetch replacement (neofetch is gone from the repos)
 
 # ── file manager + utility apps = traditional GTK (NOT libadwaita) ────────────
 #    Nemo/Engrampa/Zathura use a normal menubar/toolbar + server-side decorations,
