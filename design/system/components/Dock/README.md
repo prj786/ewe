@@ -3,7 +3,7 @@
 The dock floats at the bottom of the main screen with the shell's launchers and one group per workspace showing its windows.
 
 ## Placement
-- Only on the main screen, centered, `window-gap` (8px) above the bottom edge. It sits above windows, and above everything while the Overview is open.
+- Only on the main screen, centered, `window-gap` (8px) above the bottom edge. It sits above windows. It slides out of view while the Overview is open; its reserved strip stays, so windows never move.
 - It reserves space only when auto-hide is off.
 
 ## Anatomy
@@ -40,7 +40,7 @@ The dock floats at the bottom of the main screen with the shell's launchers and 
 - Launchers toggle their panel; opening one closes the others.
 - Clicking a group switches to that workspace; clicking a tile focuses that window.
 - Pen: click the box to show or hide the stash; click a tile to focus it; middle-click brings that window to the current workspace.
-- Auto-hide: the dock slides down, leaving a 6px peek, when the current workspace has a tiled or fullscreen window. It comes back when the pointer reaches the bottom edge (a strip as wide as the dock), while any of its panels or the Overview is open, and for a moment after the pointer leaves.
+- Auto-hide: the dock slides down, leaving a 6px peek, when the current workspace has a tiled or fullscreen window. It comes back when the pointer reaches the bottom edge (a strip as wide as the dock), while any of its panels is open, and for a moment after the pointer leaves.
 
 ## Accessibility
 - A toolbar. Launchers are named (“Apps”, “Overview”); groups say their number and window count (“Workspace 3, 3 windows”); tiles say the app and window title.

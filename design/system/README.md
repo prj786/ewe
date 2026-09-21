@@ -86,7 +86,7 @@ Motion confirms, it never decorates. Nothing bounces or overshoots.
 | Name | Duration | Easing | Used for |
 | --- | --- | --- | --- |
 | fast | 150ms | ease-out (OutCubic) | hover, pressed, focus and other color changes; menus and toasts closing |
-| base | 200ms | ease-out (OutCubic) | panels, popups, the launcher and toasts opening: a fade plus a 4px slide from their edge; the dock hiding |
+| base | 200ms | ease-out (OutCubic) | panels and toasts opening: a fade plus a 4px slide from their edge — dock panels and the launcher fade only, with no slide; the dock hiding |
 | slow | 250ms | ease-in-out (InOutCubic) | workspace switches (a full-width slide), the Overview zoom, Welcome |
 | dim | 1500ms | linear | the screen dimming before it locks |
 
@@ -101,7 +101,7 @@ The shell draws its surfaces on layer-shell layers, so stacking is always the sa
 | --- | --- |
 | background | Wallpaper |
 | bottom | Desktop widgets |
-| top | Bar, dock (the dock moves to overlay while the Overview is open) |
+| top | Bar and dock (both slide out of view while the Overview is open; their reserved strips stay) |
 | overlay | Popups, menus, launcher, quick settings, notification center, notifications, OSD |
 | overlay (exclusive) | Lock screen, power menu |
 

@@ -19,6 +19,7 @@ The launcher opens apps, settings pages, files and commands from the keyboard. S
 - Results update as people type; the first result is selected. Up and Down move, Enter opens, Tab changes the filter, Esc clears and then closes.
 - Commands run in a terminal with Ctrl+Enter. Settings results open the exact page.
 - Frequently used apps rank higher.
+- It fades in and out (`durBase`). Dock panels and the launcher never slide.
 
 ## Accessibility
 - A dialog with a combobox and a listbox of results; the number of results is announced.

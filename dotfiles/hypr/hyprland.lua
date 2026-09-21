@@ -682,9 +682,8 @@ hl.window_rule({
 -- animation of their own (bar, notifications, auth, screensaver, caffeine)
 -- keep the compositor fade — the bar's one-shot QML slide-in at startup rides
 -- inside its surface, so the map fade composes with it rather than fighting
--- it. The dock is listed because it hops
--- between the Top and Overlay layers while the Overview is open — a remap the
--- fade would otherwise turn into a flicker on every Super tap.
+-- it. The dock is listed because it animates its own Overview slide in QML and
+-- remaps on enable/disable; the compositor fade would fight both.
 hl.layer_rule({
     name    = "quickshell-self-animated",
     match   = { namespace = "^quickshell:(overview|control|launcher|applauncher|store|clipboard|places|traymenu|osd|preview|dock)$" },

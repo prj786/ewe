@@ -170,10 +170,8 @@ Scope {
             // tall — what it has always been — and never past the screen
             height: Math.min(Theme.panelMd + Theme.controlXl + Theme.spaceMd + Theme.spaceXs,
                              parent.height - dockGap - 2 * edgeGap)
-            // a fade plus a short rise from its own edge; Reduce motion zeroes
-            // the offset through Theme.slideOffset, leaving the fade
+            // a dock panel opens and closes with a plain fade — no slide
             y: Math.max(edgeGap, parent.height - height - dockGap)
-               + (Globals.placesOpen ? 0 : Theme.slideOffset)
             radius: Theme.radiusRounded
             color: Theme.surfaceRaised
             // an accent outline while something is being dropped on the panel
@@ -181,7 +179,6 @@ Scope {
             border.width: Theme.borderWidth1
             opacity: Globals.placesOpen ? 1 : 0
             Behavior on opacity { NumberAnimation { duration: Theme.durBase; easing.type: Theme.ease } }
-            Behavior on y { NumberAnimation { duration: Theme.durBase; easing.type: Theme.ease } }
             Behavior on border.color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
             layer.enabled: true
             layer.effect: Elevation {}

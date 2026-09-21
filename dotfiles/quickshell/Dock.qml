@@ -87,9 +87,10 @@ Scope {
                 if (ss[i].name === HyprMon.primaryName) return win.modelData.name === HyprMon.primaryName
             return ss.length > 0 && win.modelData === ss[0]
         }
-        // Always shown while the Overview is open — even if the dock is disabled or
-        // set to autohide (the Overview is a launch surface, so the dock belongs there).
-        visible: win.isPrimary && (Globals.dockEnabled || Globals.overviewOpen)
+        // Only on the primary, and only while the dock is enabled — the dock
+        // is no longer a surface of the Overview (the Overview owns the whole
+        // screen and the dock slides out of view instead).
+        visible: win.isPrimary && Globals.dockEnabled
         color: "transparent"
         // Always-visible dock reserves its strip so windows tile/maximize ABOVE it
         // instead of sliding underneath; intelligent-hide keeps zero reserve so
@@ -99,10 +100,10 @@ Scope {
         // recommitted to the compositor, leaving a ghost strip that windows
         // refused to use until the dock was toggled off and on.
         exclusiveZone: (Globals.dockEnabled && !Globals.dockAutohide) ? dockH + Theme.windowGap : 0
-        // Jump to the Overlay layer while the Overview is open so the dock floats ABOVE
-        // the Overview's dim scrim (which is itself on the Overlay layer); otherwise it
-        // would be dimmed underneath. Back to Top the rest of the time.
-        WlrLayershell.layer: Globals.overviewOpen ? WlrLayer.Overlay : WlrLayer.Top
+        // Always Top. The dock used to hop to Overlay so it drew above the
+        // Overview; the Overview now owns the whole screen and the dock slides
+        // out of view instead.
+        WlrLayershell.layer: WlrLayer.Top
         WlrLayershell.namespace: "quickshell:dock"
         anchors { bottom: true; left: true; right: true }
 
@@ -186,23 +187,31 @@ Scope {
             // up (mirrors the bar's slide-down; also plays on hotplug). Runs
             // on a Translate so it never fights the revealed/peek y binding.
             // Reduce motion drops the slide; the pill just fades in.
-            transform: Translate {
-                // Reduce motion can turn on (the tokens land late) while
-                // this is running: finish it, never stop it off-screen.
-                NumberAnimation on y {
-                    readonly property bool rm: Theme.reduceMotion
-                    onRmChanged: if (rm) complete()
-                    from: win.implicitHeight; to: 0
-                    duration: Theme.reduceMotion ? 0 : Theme.durSlow; easing.type: Theme.easeSlow
+            transform: [
+                Translate {   // entrance — unchanged
+                    // Reduce motion can turn on (the tokens land late) while
+                    // this is running: finish it, never stop it off-screen.
+                    NumberAnimation on y {
+                        readonly property bool rm: Theme.reduceMotion
+                        onRmChanged: if (rm) complete()
+                        from: win.implicitHeight; to: 0
+                        duration: Theme.reduceMotion ? 0 : Theme.durSlow; easing.type: Theme.easeSlow
+                    }
+                },
+                Translate {   // the Overview owns the screen: slide fully out of
+                              // view (not to the autohide peek — nothing to grab
+                              // at), back after the cards have gone. Reduce
+                              // motion keeps y and fades instead (see opacity).
+                    y: (Globals.overviewCover && !Theme.reduceMotion) ? win.implicitHeight : 0
+                    Behavior on y { NumberAnimation { duration: Theme.durBase; easing.type: Theme.ease } }
                 }
-            }
+            ]
             // Reduce motion: no slides. The pill fades in at start, and
             // auto-hide jumps to the peek and back while the pill fades out
             // and in at durFast, so it still says where it went.
             property bool entered: false
             Component.onCompleted: dock.entered = true
-            opacity: !dock.entered ? 0
-                   : (Theme.reduceMotion && !win.revealed) ? 0 : 1
+            opacity: !dock.entered ? 0 : (Theme.reduceMotion && (!win.revealed || Globals.overviewCover)) ? 0 : 1
             Behavior on opacity { enabled: Theme.reduceMotion; NumberAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
             height: win.dockH
             width: row.implicitWidth + 2 * Theme.spaceS

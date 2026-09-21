@@ -20,6 +20,7 @@ Places is a small file browser above the dock's folder button: pinned places fir
 
 ## Behavior
 - Click a folder to open it, a file to open it in its app. Arrow keys move between rows; Enter opens; Backspace goes back.
+- It fades in and out (`durBase`). Dock panels and the launcher never slide.
 
 ## Accessibility
 - A dialog named “Places”; the list is a tree grid; rows say name, type and size.

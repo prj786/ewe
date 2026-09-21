@@ -133,15 +133,10 @@ Scope {
             height: col.implicitHeight + 2 * (Theme.spaceS + Theme.spaceXs)
             radius: Theme.radiusRounded; color: Theme.surfaceRaised
             border.color: Theme.borderSubtle; border.width: Theme.borderWidth1
-            // fade plus a slideOffset lift from the dock edge, in at durBase
-            // and out at durFast — no overshoot anywhere
+            // a dock panel opens and closes with a plain fade — no slide
             opacity: Globals.mediaOpen ? 1 : 0
             Behavior on opacity {
                 NumberAnimation { duration: Globals.mediaOpen ? Theme.durBase : Theme.durFast; easing.type: Theme.ease }
-            }
-            transform: Translate {
-                y: (Globals.mediaOpen || Theme.reduceMotion) ? 0 : Theme.slideOffset
-                Behavior on y { NumberAnimation { duration: Theme.durBase; easing.type: Theme.ease } }
             }
             layer.enabled: true
             layer.effect: Elevation {}

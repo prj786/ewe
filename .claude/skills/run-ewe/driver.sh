@@ -29,6 +29,7 @@
 # and generates theme-tokens.json with THIS checkout's bin/ewe-theme:
 #   HS_SCHEME=ewe-light          # [desktop.theme] scheme (default ewe-dark)
 #   HS_CONF=<file>               # use this ewe.conf instead (HS_SCHEME ignored)
+#   HS_WALLPAPER=<file>          # seed generated/wallpapers.conf (Overview/lock backdrop)
 #   HS_WELCOME=1                 # let the first-run Welcome screen appear
 #   HS_PLUGINS=1                 # seed the bundled plugins (plugins/) into the sandbox
 #   HS_NO_APPS=1                 # hide Komble/ewe-settings/ewe-sync: the in-shell fallbacks open
@@ -91,6 +92,13 @@ sandbox_prepare() {
     cp "$HS_CONF" "$SBHOME/.config/ewe/ewe.conf" || die "HS_CONF $HS_CONF unreadable"
   else
     printf '[desktop.theme]\nscheme = "%s"\n' "${HS_SCHEME:-ewe-dark}" > "$SBHOME/.config/ewe/ewe.conf"
+  fi
+  # HS_WALLPAPER=<file>: seed the per-output wallpaper map so the Overview and
+  # the lock screen have a real picture to paint (Wallpaper.qml reads this once
+  # at start, and the sandbox is rebuilt on every `up`).
+  if [ -n "${HS_WALLPAPER:-}" ]; then
+    mkdir -p "$SBHOME/.config/hypr/generated"
+    printf '*=%s\n' "$HS_WALLPAPER" > "$SBHOME/.config/hypr/generated/wallpapers.conf"
   fi
   ( sandbox_env
     "$REPO/bin/ewe-theme" build --json "$XDG_CONFIG_HOME/quickshell/theme-tokens.json" --css /dev/null >"$WORK/theme.log" 2>&1

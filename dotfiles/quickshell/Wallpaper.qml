@@ -1,5 +1,6 @@
 pragma Singleton
 import QtQuick
+import QtQml
 import Quickshell
 import Quickshell.Io
 
@@ -86,6 +87,30 @@ QtObject {
         }
     }
     function _readConf() { wp._conf.running = false; wp._conf.running = true }
+
+    // ── Warm the backdrop decode ──────────────────────────────────────────
+    // The Overview and the lock screen paint this file THEMSELVES, at the
+    // screen's size. A 3840x2400 JPEG takes a beat to decode, and the window
+    // that draws it only exists while it is open — so the wallpaper used to
+    // arrive AFTER the window cards. These Images have no visual parent and
+    // are never drawn: they hold a reference to the decoded pixmap in Qt's
+    // cache from shell start, so the surfaces that DO draw it get a cache hit
+    // and are ready on their first frame. The key is (url, sourceSize) —
+    // keep it byte-identical to Overview.qml's Image.
+    property Instantiator _warm: Instantiator {
+        model: Quickshell.screens
+        delegate: Image {
+            required property var modelData
+            readonly property string path: wp.pathFor(modelData.name)
+            source: path ? "file://" + path : ""
+            sourceSize: Qt.size(modelData.width, modelData.height)
+            asynchronous: true
+            cache: true
+            visible: false
+            onStatusChanged: if (status === Image.Ready)
+                Log.debug("wallpaper", "warmed", path, modelData.width + "x" + modelData.height)
+        }
+    }
 
     function start() { Log.debug("wallpaper", "policy armed"); wp._readConf() }
 }

@@ -66,6 +66,7 @@ QtObject {
     // derived: anything that makes the bar glyph and the tile light up
     readonly property bool casting: castLegacy || (castState !== "idle" && castState !== "error")
     property bool overviewOpen: false      // GNOME-style window overview (Super tapped alone)
+    property bool overviewCover: false     // the Overview owns the screen: backdrop up, bar and dock out of view (Overview.qml sequences it)
     property bool widgetsArrange: false    // desktop widgets in arrange mode (Super+Shift+W): drag to move, frames with sticky/hide
     property bool settingsOpen: false      // the Quickshell Settings window (Super+, or the CC gear)
     // the first-run Welcome overlay is up — Google.qml holds every auto-push

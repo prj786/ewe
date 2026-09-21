@@ -23,6 +23,7 @@ The launcher panel opens above the dock's sheep button with pinned apps and a qu
 - Enter opens the first result; arrow keys move between tiles; Esc closes.
 - Click opens the app or focuses it if it is running; middle-click opens a new window.
 - The full launcher (Super+D) is the Launcher card; this panel is the dock's quick version.
+- It fades in and out (`durBase`). Dock panels and the launcher never slide.
 
 ## Accessibility
 - A dialog named “Apps”; tiles are buttons named by app; the pin badge says “Pin Zen” or “Unpin Zen”.

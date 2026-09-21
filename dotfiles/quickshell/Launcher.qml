@@ -246,12 +246,10 @@ Scope {
             width: Theme.panelLg
             height: panel.height
             anchors.horizontalCenter: parent.horizontalCenter
-            y: parent.height * 0.20 + (root.opened ? 0 : Theme.slideOffset)
+            y: parent.height * 0.20
 
             opacity: root.opened ? 1 : 0
             Behavior on opacity { NumberAnimation { duration: Theme.durBase; easing.type: Theme.ease } }
-            Behavior on y { NumberAnimation { duration: Theme.durBase; easing.type: Theme.ease } }
-
 
             Rectangle {
                 id: panel
