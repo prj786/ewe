@@ -1341,7 +1341,7 @@ Scope {
                         Image {
                             id: sheepMark
                             anchors.fill: parent
-                            source: Qt.resolvedUrl("assets/sheep.svg")
+                            source: Qt.resolvedUrl("assets/ewe-mark.svg")
                             sourceSize.width: 2 * Theme.iconXl; sourceSize.height: 2 * Theme.iconXl
                             visible: false
                         }
