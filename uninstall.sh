@@ -29,6 +29,8 @@ restore "$HOME/.config/zed"
 restore "$HOME/.config/kitty"
 restore "$HOME/.config/oh-my-posh"
 restore "$HOME/.config/mise"
+restore "$HOME/.config/ewe-shell"
+restore "$HOME/.config/fastfetch"
 
 # the Zed mime-override we copied into the user apps dir
 if [ -e "$HOME/.local/share/applications/dev.zed.Zed.desktop" ]; then

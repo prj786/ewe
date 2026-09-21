@@ -126,6 +126,30 @@ live in **Settings → Theme**:
   `~/.icons/default`, GTK, gsettings and qt6ct so it never flips between
   toolkits.
 
+## Terminal
+
+The terminal is **kitty** running **zsh**. The login shell stays **bash** —
+nothing here runs `chsh`, and scripts that assume bash keep working. kitty
+launches zsh through a wrapper (`~/.config/kitty/ewe-shell.sh`) that falls back
+to your login shell if zsh is ever missing, so the terminal can never fail to
+open.
+
+- **What is set up** — zsh with autosuggestions, syntax highlighting, extra
+  completions and history-substring-search; fzf (Ctrl-R / Ctrl-T / Alt-C),
+  bash-completion, `eza` (a modern `ls`), `bat`, `zoxide` (a `cd` that remembers
+  where you go), and `fastfetch` (neofetch's replacement) as the system-info
+  fetch, wearing the ewe logo. The prompt is oh-my-posh with the `flock` theme.
+- **Where it lives** — one shared config, `~/.config/ewe-shell/` (`ewe.zsh`,
+  `ewe.bash`, `aliases.sh`), linked from the repo. `~/.zshrc` and `~/.bashrc`
+  each get ONE marked block that sources it:
+  `# >>> ewe shell >>>` … `# <<< ewe shell <<<`. Everything outside that block
+  stays exactly as you left it.
+- **Opt out of zsh** — put the word `bash` in `~/.config/ewe/shell` (or
+  `export EWE_SHELL=bash`) and kitty starts bash instead.
+- **Customise** — your rc files are yours. Add overrides AFTER the closing
+  marker, where they win over the shared config; the block itself is rewritten
+  by ewe, so don't edit inside it.
+
 ## Safety model
 
 - **Never clobbers configs.** An existing `~/.config/hypr` (etc.) is moved to

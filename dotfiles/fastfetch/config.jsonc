@@ -1,0 +1,35 @@
+{
+    // ewe's fastfetch — the system-info fetch, wearing the ewe logo.
+    // Used in kitty, where the kitty graphics protocol shows the PNG logo.
+    // Keys are plain text; no nerd-font-only glyphs. The ewe-logo.png and
+    // ewe-logo.txt files are dropped in next to this file at build time.
+    "$schema": "https://github.com/fastfetch-cli/fastfetch/raw/dev/doc/json_schema.json",
+    "logo": {
+        "type": "kitty",
+        "source": "~/.config/fastfetch/ewe-logo.png",
+        "width": 22,
+        "padding": {
+            "left": 1,
+            "top": 1,
+            "right": 2
+        }
+    },
+    "modules": [
+        "title",
+        "separator",
+        "os",
+        "kernel",
+        "uptime",
+        "packages",
+        "shell",
+        // "de" is replaced by a command that prints "ewe <version>".
+        { "type": "command", "key": "DE", "text": "v=$(cat \"$HOME/.local/share/ewe/VERSION\" 2>/dev/null || cat /usr/share/ewe/VERSION 2>/dev/null); [ -n \"$v\" ] && printf 'ewe %s' \"$v\" || printf 'ewe'" },
+        "wm",
+        "terminal",
+        "cpu",
+        "gpu",
+        "memory",
+        "disk",
+        "colors"
+    ]
+}
