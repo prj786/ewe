@@ -1,0 +1,34 @@
+{
+    // ewe's fastfetch with an ASCII logo — used anywhere the terminal has no
+    // graphics protocol (kitty's graphics protocol is kitty-only). The aliases.sh
+    // wrapper picks this config when $TERM is not xterm-kitty / $KITTY_WINDOW_ID
+    // is empty. ewe-logo.txt is an ASCII-art fallback dropped in next to this file.
+    "$schema": "https://github.com/fastfetch-cli/fastfetch/raw/dev/doc/json_schema.json",
+    "logo": {
+        "type": "file",
+        "source": "~/.config/fastfetch/ewe-logo.txt",
+        "padding": {
+            "left": 1,
+            "top": 1,
+            "right": 2
+        }
+    },
+    "modules": [
+        "title",
+        "separator",
+        "os",
+        "kernel",
+        "uptime",
+        "packages",
+        "shell",
+        // "de" is replaced by a command that prints "ewe <version>".
+        { "type": "command", "key": "DE", "text": "v=$(cat \"$HOME/.local/share/ewe/VERSION\" 2>/dev/null || cat /usr/share/ewe/VERSION 2>/dev/null); [ -n \"$v\" ] && printf 'ewe %s' \"$v\" || printf 'ewe'" },
+        "wm",
+        "terminal",
+        "cpu",
+        "gpu",
+        "memory",
+        "disk",
+        "colors"
+    ]
+}

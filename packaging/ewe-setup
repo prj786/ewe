@@ -44,7 +44,9 @@ cp -a "$PAYLOAD/." "$DEST/" || die "copy failed"
 # exec bits survive cp -a, but belt-and-braces after any transport
 chmod +x "$DEST/dotfiles/hypr/start-hyprland.sh" \
          "$DEST"/dotfiles/hypr/scripts/*.sh \
-         "$DEST"/dotfiles/quickshell/scripts/*.sh 2>/dev/null || true
+         "$DEST"/dotfiles/quickshell/scripts/*.sh \
+         "$DEST"/dotfiles/kitty/ewe-shell.sh \
+         "$DEST"/dotfiles/shell/shell-setup.sh 2>/dev/null || true
 
 # lib/deploy.sh expects the installer's logging + choke point; provide the
 # minimal real-run equivalents (no dry-run mode here).
@@ -57,6 +59,16 @@ run()  { "$@"; }
 # shellcheck source=/dev/null
 source "$DEST/lib/deploy.sh" || die "payload is missing lib/deploy.sh"
 deploy_dotfiles
+
+# Wire the terminal shell (zsh) + prompt + mise activation into ~/.zshrc and
+# ~/.bashrc. Idempotent, so it is safe on every sync; it migrates the old inline
+# blocks older installs wrote and never touches the user's own rc lines. The
+# install.sh path does the identical job via phase 60.
+if [ -x "$DEST/dotfiles/shell/shell-setup.sh" ]; then
+    "$DEST/dotfiles/shell/shell-setup.sh"
+else
+    warn "shell-setup.sh missing from the payload — terminal shell not wired."
+fi
 
 # RFC-001: make ewe-conf reachable for tarball installs too (the package
 # already owns /usr/bin/ewe-conf; ~/.local/bin shadows consistently) and make
