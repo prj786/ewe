@@ -317,6 +317,24 @@ written. Called live by Settings → Theme, at shell startup, and by phase 60.
   module. The Bar card (`design/system/components/Bar/README.md`) is the spec.
   Do not "fix" any of this back.
 
+- **The terminal shell is zsh, started by kitty; the login shell stays bash
+  (2026-09-21).** `dotfiles/shell/` (`ewe.zsh`, `ewe.bash`, `aliases.sh`,
+  `shell-setup.sh`) is linked to `~/.config/ewe-shell`; `shell-setup.sh` is the
+  ONLY writer of the rc files and runs from phase 60 AND `packaging/ewe-setup`
+  (the packaged path used to wire nothing — a bare prompt). kitty's `shell` is
+  `dotfiles/kitty/ewe-shell.sh`: falls back to `$SHELL` without zsh, honours
+  `~/.config/ewe/shell = bash`, and wires a missing `~/.zshrc` itself (zsh's
+  new-user questionnaire otherwise). Every package is in the official repos
+  (`packages/common.list`). `fastfetch` replaced the vanished neofetch
+  (`dotfiles/fastfetch/`, PNG logo in kitty, braille text elsewhere). Test:
+  `tests/ewe-shell-test.sh`; to run real zsh/fastfetch without installing
+  them, see the vault note "Terminal Shell — zsh in kitty, bash at login".
+- **One brand mark (2026-09-21):** the line-art logo everywhere; the cartoon
+  `sheep.svg` is gone. `dotfiles/quickshell/assets/ewe-mark.svg` is the bold
+  cut (white, tinted by a `MultiEffect`); the vectors live in
+  `design/system/assets/Logos/ewe-mark{,-bold}.svg`. The three apps' launcher
+  icons stay per-app.
+
 ### Versioning
 
 Canonical version is the repo-root **`VERSION`** file (semver + `-alpha`/`-beta`).
