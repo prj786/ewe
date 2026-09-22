@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # aliases.sh — shared aliases for ewe's bash and zsh.
 # POSIX-compatible on purpose: it is sourced by BOTH shells, so it sticks to
 # plain `[ ]` / `command -v` and never uses `[[ ]]`, arrays, or other bashisms.
