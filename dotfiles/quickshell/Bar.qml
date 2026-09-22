@@ -391,9 +391,24 @@ Scope {
                     from: -win.implicitHeight; to: 0
                     duration: Theme.reduceMotion ? 0 : Theme.durSlow; easing.type: Theme.easeSlow
                 }
-                NumberAnimation on opacity {
-                    from: 0; to: 1
-                    duration: Theme.durFast; easing.type: Theme.easeFast
+                // Entrance fade + the Reduce-motion Overview fade. A BINDING,
+                // not a `NumberAnimation on opacity`: a value source owns the
+                // property and would leave no way to fade for the Overview.
+                property bool entered: false
+                Component.onCompleted: barStrip.entered = true
+                opacity: !barStrip.entered ? 0
+                       : (Theme.reduceMotion && Globals.overviewCover) ? 0 : 1
+                Behavior on opacity { NumberAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
+                // The Overview takes the whole screen: the bar slides UP out of
+                // view while it is open and comes back after the cards have gone.
+                // exclusiveZone is NOT touched (windows must not relayout) —
+                // only the visuals move, on a Translate so this never fights the
+                // entrance animation above. Reduce motion keeps the target at 0
+                // and the fade above does the work, so a reduceMotion flip
+                // mid-slide glides the bar home instead of parking it off-screen.
+                transform: Translate {
+                    y: (Globals.overviewCover && !Theme.reduceMotion) ? -win.implicitHeight : 0
+                    Behavior on y { NumberAnimation { duration: Theme.durBase; easing.type: Theme.ease } }
                 }
                 // surfaceBase, or glassBase once bar opacity drops below 100
                 color: Theme.barGround

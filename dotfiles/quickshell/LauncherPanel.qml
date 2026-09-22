@@ -100,12 +100,9 @@ Scope {
             color: Theme.surfaceRaised
             border.color: Theme.borderSubtle; border.width: Theme.borderWidth1
             opacity: Globals.launcherOpen ? 1 : 0
-            // a panel opens with a fade plus a short rise from its own edge;
-            // Reduce motion zeroes the offset, leaving the fade (Theme)
+            // a dock panel opens and closes with a plain fade — no slide
             y: Math.max(edgeGap, parent.height - height - dockGap)
-               + (Globals.launcherOpen ? 0 : Theme.slideOffset)
             Behavior on opacity { NumberAnimation { duration: Theme.durBase; easing.type: Theme.ease } }
-            Behavior on y { NumberAnimation { duration: Theme.durBase; easing.type: Theme.ease } }
             layer.enabled: true
             layer.effect: Elevation {}
 

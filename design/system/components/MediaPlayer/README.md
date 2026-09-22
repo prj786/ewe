@@ -19,6 +19,7 @@ The media player controls whatever is playing, from any app that supports MPRIS.
 ## Behavior
 - With several players, arrows switch between them; the most recently active one shows first.
 - The seek slider is hidden for streams without a length.
+- It fades in and out (`durBase`). Dock panels and the launcher never slide.
 
 ## Accessibility
 - Controls are named (“Pause Ruins of Light”); the seek slider reports time, not percent.

@@ -8,9 +8,13 @@ import Quickshell.Widgets
 
 // Overview — GNOME/macOS-style activities view (per the user's SVG mockup).
 //
-// The wallpaper stays visible under a light scrim, and the top bar / dock stay
-// on screen (normal exclusion): the overview reads as a MODE of the desktop,
-// not a separate screen.
+// The Overview takes the WHOLE screen, wallpaper first: the top bar slides up
+// and the dock slides down out of view, then the window cards appear over the
+// wallpaper. Closing is the reverse. (Owner decision 2026-09-21, reversing the
+// earlier "overview reads as a MODE of the desktop" — see the vault note
+// "Overview Takes the Screen".) Exclusive zones are NOT released: bar and dock
+// keep their reserved strips, only their visuals translate, so windows
+// underneath never relayout.
 //
 //   · centre-top LAUNCHER: rounded search field; typing fuses a results panel
 //     under it — Apps ("Application"), open Windows ("Jump to", with their
@@ -311,12 +315,25 @@ Scope {
     // Connections handler started the timer, remapping it mid-fade, and the
     // timer expiring unmapped it again. Gone, back, gone: the blink.
     property bool held: false
-    Timer { id: closeTimer; interval: Math.max(1, Theme.durSlow + 60); onTriggered: root.held = false }
+    Timer { id: closeTimer; interval: Math.max(1, Theme.durFast + Theme.durSlow + 60); onTriggered: root.held = false }
+    // Two beats, sequenced HERE and not by pauses inside the Behaviors: a
+    // Behavior fires before a `duration: open ? a : b` binding in it has
+    // re-evaluated, so a state-dependent pause plays the OTHER direction's
+    // value. Open: the cover (backdrop up, bar and dock away) goes first, the
+    // stage (cards, search, pager) a durFast beat later. Close: the stage goes
+    // first, the cover a beat later.
+    property bool stageShown: false
+    Timer {
+        id: beat
+        interval: Math.max(1, Theme.durFast)
+        onTriggered: { if (Globals.overviewOpen) root.stageShown = true; else Globals.overviewCover = false }
+    }
     Connections {
         target: Globals
         function onOverviewOpenChanged() {
-            if (Globals.overviewOpen) { closeTimer.stop(); root.held = true; root.refreshGroups() }
-            else closeTimer.restart()
+            if (Globals.overviewOpen) { closeTimer.stop(); root.held = true; root.refreshGroups(); Globals.overviewCover = true }
+            else { closeTimer.restart(); root.stageShown = false }
+            beat.restart()
         }
     }
 
@@ -331,12 +348,10 @@ Scope {
         screen: modelData
         visible: Globals.overviewOpen || root.held
         color: "transparent"
-        // IGNORE exclusive zones so the scrim runs under the dock (the dock
-        // jumps to the Overlay layer while the overview is open and draws on
-        // top) — an always-visible dock's reserved strip used to cut the
-        // backdrop off above it. Only the bar keeps its space, via a margin.
+        // IGNORE exclusive zones: the Overview owns the whole output, bar and
+        // dock keep their reserved strips (windows must not relayout) and both
+        // simply translate out of view while this is open.
         exclusionMode: ExclusionMode.Ignore
-        margins.top: Globals.barVisible ? Theme.barHeight : 0
         WlrLayershell.layer: WlrLayer.Overlay
         WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
         WlrLayershell.namespace: "quickshell:overview"
@@ -375,8 +390,10 @@ Scope {
         Item {
             id: backdrop
             anchors.fill: parent
-            opacity: Globals.overviewOpen ? 1 : 0
-            Behavior on opacity { NumberAnimation { duration: Theme.reduceMotion ? Theme.durFast : Theme.durSlow; easing.type: Theme.easeSlow } }
+            // The wallpaper is the point of the Overview, so it lands FIRST:
+            // durFast in. On the way out it waits for the cards to go.
+            opacity: Globals.overviewCover ? 1 : 0
+            Behavior on opacity { NumberAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
 
             readonly property string wall: win.screen ? Wallpaper.pathFor(win.screen.name) : ""
 
@@ -388,15 +405,26 @@ Scope {
                 fillMode: Image.PreserveAspectCrop
                 asynchronous: true
                 cache: true
-                // decoded at screen size, not the file's — a 6000px photo
-                // would otherwise cost tens of MB of texture per monitor
-                sourceSize: Qt.size(win.width, win.height)
+                // Decoded at the SCREEN's size, never the WINDOW's: win.width /
+                // win.height are not the output's until the layer surface is
+                // configured, so binding to them re-keyed Qt's pixmap cache on
+                // every map and re-decoded the 3840x2400 wallpaper each time the
+                // Overview opened — which is why it used to arrive after the
+                // cards. Wallpaper.qml warms this exact key at shell start.
+                sourceSize: win.screen ? Qt.size(win.screen.width, win.screen.height) : Qt.size(0, 0)
                 visible: false
+                onStatusChanged: if (status === Image.Ready || status === Image.Error)
+                    Log.debug("overview", "backdrop", backdrop.wall,
+                              status === Image.Ready ? "ready" : "failed")
             }
             MultiEffect {
                 anchors.fill: parent
                 source: wallImg
-                visible: wallImg.status === Image.Ready
+                // fade in rather than pop, in case a cold decode ever beats the
+                // warm cache (the wallpaper changed while the Overview was shut)
+                opacity: wallImg.status === Image.Ready ? 1 : 0
+                visible: opacity > 0
+                Behavior on opacity { NumberAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
                 blurEnabled: true
                 // the card's own backdrop: blurGlass, brightness 0.82,
                 // saturate 0.85 (Overview card #1 / .ewe-ov__bg)
@@ -415,13 +443,15 @@ Scope {
         Item {
             id: stage
             anchors.fill: parent
-            // opens with a slight zoom and fade at durSlow, closes in the
-            // reverse; Reduce motion drops the zoom to a durFast fade
-            opacity: Globals.overviewOpen ? 1 : 0
-            scale: (Globals.overviewOpen || Theme.reduceMotion) ? 1 : 1.10
+            // The cards come SECOND: the backdrop owns the first beat, then the
+            // stage zooms in. Closing is the reverse — the cards go first.
+            // root.stageShown carries the beat (see the Timer above). Reduce
+            // motion drops the zoom to a durFast fade.
+            opacity: root.stageShown ? 1 : 0
+            scale: (root.stageShown || Theme.reduceMotion) ? 1 : 1.10
             transformOrigin: Item.Center
             Behavior on opacity { NumberAnimation { duration: Theme.reduceMotion ? Theme.durFast : Theme.durSlow; easing.type: Theme.easeSlow } }
-            Behavior on scale   { NumberAnimation { duration: Theme.durSlow; easing.type: Theme.easeSlow } }
+            Behavior on scale { NumberAnimation { duration: Theme.durSlow; easing.type: Theme.easeSlow } }
 
             readonly property real monAR: (win.screen && win.screen.height > 0) ? (win.screen.width / win.screen.height) : 1.6
 
@@ -727,8 +757,9 @@ Scope {
                 // show only their cards + the shared pager
                 visible: win.isFocused
                 anchors.horizontalCenter: parent.horizontalCenter
-                // spaceLg from the top of the stage (Overview card #2)
-                y: Theme.spaceLg
+                // spaceXl from the top of the screen — the bar is gone, so the
+                // field keeps the headroom it used to get from the bar strip
+                y: Theme.spaceXl
                 width: Math.min(parent.width - 2 * Theme.spaceLg, Theme.panelLg)
                 height: Theme.control2xl
                 radius: Theme.radiusRounded
@@ -892,11 +923,10 @@ Scope {
             Row {
                 id: pagerRow
                 anchors.horizontalCenter: parent.horizontalCenter
-                // clear of the dock, which draws above the overview in the same
-                // layer: its items + spaceS padding, windowGap above the edge,
-                // then spaceMd of breathing room — at every dock size
+                // the dock is gone while the Overview is open, so the pager sits
+                // spaceXl from the bottom edge — symmetric with the search field
                 anchors.bottom: parent.bottom
-                anchors.bottomMargin: Theme.dockClearance + Theme.spaceMd
+                anchors.bottomMargin: Theme.spaceXl
                 spacing: Theme.spaceS + Theme.spaceXs
                 opacity: root.searching ? 0.35 : 1
                 Behavior on opacity { NumberAnimation { duration: Theme.durBase; easing.type: Theme.ease } }

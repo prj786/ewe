@@ -18,9 +18,20 @@ jobs:
         uses: ludeeus/action-shellcheck@master
         with:
           severity: error          # only hard errors fail the build (not style nits)
+          # shellcheck has no zsh dialect: ewe.zsh's glob qualifiers are a parse
+          # error to it. zsh -n covers that file (the `zsh` job below).
+          ignore_names: ewe.zsh
         env:
           # install.sh sources lib/*.sh by relative path; don't fail on "can't follow".
           SHELLCHECK_OPTS: -e SC1090 -e SC1091
+
+  zsh:
+    name: zsh syntax (ewe.zsh)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends zsh
+      - run: zsh -n dotfiles/shell/ewe.zsh
 
   lua:
     name: lua syntax (hyprland config)

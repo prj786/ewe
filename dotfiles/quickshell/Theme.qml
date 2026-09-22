@@ -382,8 +382,10 @@ QtObject {
     readonly property int durBase: _dur("durBase", 200)
     readonly property int durSlow: _dur("durSlow", 250)
     readonly property int durDim:  _dur("durDim", 1500)
-    // A panel opens with a fade plus a slide of this many px from its edge;
-    // Reduce motion makes it 0, i.e. a plain fade.
+    // Toasts, the OSD, notifications, tray menus, Welcome and the Quick
+    // settings popovers open with a fade plus a slide of this many px from
+    // their edge; Reduce motion makes it 0. Dock panels (launcher, Places,
+    // store, media) and the launcher fade only — never a slide.
     readonly property int slideOffset: _m("slideOffset", 4)
 
     // Easing. OutCubic everywhere, InOutCubic for the slow ones, linear for
