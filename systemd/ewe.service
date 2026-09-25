@@ -29,7 +29,10 @@ RestartSec=1
 # qs exits 255 for "no display" AND for a config that fails to load. Neither
 # is cured by relaunching: the socket check above catches most of the first,
 # this catches the rest (a stale socket after a SIGKILLed compositor). Runtime
-# crashes are signals, not 255, and still restart.
+# crashes are signals, not 255, and still restart. The third 255 — Hyprland
+# severing a live shell with a protocol error ("invalid object N") while it
+# keeps running — IS cured by relaunching: qs-launch.sh turns that one into
+# exit 1 (ran ≥ 15 s, compositor still answers hyprctl), so it restarts.
 RestartPreventExitStatus=255
 Slice=session.slice
 # Apps launched from the shell (launcher, dock, xdg-open) inherit the shell's

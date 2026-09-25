@@ -547,6 +547,10 @@ Scope {
                             required property int index
                             readonly property bool seld: win.isFocused && index === root.sel && !root.searching
                             readonly property int groupN: root.groupsByAddr[root.addrOf(modelData)] || 0
+                            // ✕ drops this card's capture first and closes the
+                            // window a beat later — see the ScreencopyView below
+                            property bool closing: false
+                            Timer { id: closeLater; interval: Theme.durFast; onTriggered: root.killWin(dragArea.modelData) }
                             readonly property var rect: index < cardArea.cardLayout.rects.length
                                 ? cardArea.cardLayout.rects[index] : { x: 0, y: 0, w: 0, h: 0 }
                             x: rect.x; y: rect.y
@@ -620,11 +624,23 @@ Scope {
                                     PropertyChanges { target: cardContent; opacity: 0.92; z: 3000; scale: 0.5 }
                                 }
 
-                                // live window preview, icon fallback
+                                // live window preview, icon fallback.
+                                // Captures exist ONLY while the Overview is mapped:
+                                // Hyprland 0.56 (captureToplevel, unfixed upstream)
+                                // never creates the frame qs asked for when the
+                                // window closed that instant, and the frame's
+                                // destroy then gets the whole shell disconnected —
+                                //   wl_display#1: error 0: invalid object 105
+                                // (reproduced in the nested harness: close windows
+                                // with the Overview open → dead shell in round 1).
+                                // The Overview is hidden, never destroyed, so every
+                                // window used to hold a capture all session; now a close outside the
+                                // Overview can't race, and the ✕ stops its capture
+                                // before closing. qs-launch.sh restarts the rest.
                                 ScreencopyView {
                                     id: sc
                                     visible: hasContent && dragArea.modelData.wayland
-                                    captureSource: dragArea.modelData.wayland || null
+                                    captureSource: (win.visible && !dragArea.closing && dragArea.modelData.wayland) || null
                                     live: Globals.overviewOpen && !cardContent.Drag.active
                                     anchors.fill: parent
                                 }
@@ -721,7 +737,7 @@ Scope {
                                     text: Theme.icClose; font.family: Theme.fontIcons; font.pixelSize: Theme.iconSm
                                     color: closeMa.containsMouse ? Theme.onStatus : Theme.textPrimary
                                 }
-                                MouseArea { id: closeMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.killWin(dragArea.modelData) }
+                                MouseArea { id: closeMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: { dragArea.closing = true; closeLater.restart() } }
                             }
                         }
                     }

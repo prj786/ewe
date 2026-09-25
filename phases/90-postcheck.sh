@@ -39,6 +39,8 @@ phase_postcheck() {
     _check "audio: a default sink exists"         sh -c 'wpctl status 2>/dev/null | grep -qi sink'
     _check "audio: SOF + UCM firmware present"     sh -c 'pacman -Qq sof-firmware && pacman -Qq alsa-ucm-conf'
     _check "network: NetworkManager active"       systemctl is-active NetworkManager.service
+    # a VPN client (Tailscale) rewriting a plain resolv.conf = no DNS without the VPN
+    _check "dns: systemd-resolved owns resolv.conf" sh -c 'systemctl is-active -q systemd-resolved && [ "$(readlink /etc/resolv.conf)" = /run/systemd/resolve/stub-resolv.conf ]'
     # L2TP/IPsec = IKEv1; only libreswan still speaks it (strongSwan 6.1 does not)
     # and only with the policy line phase 30 writes — both, or "The VPN service
     # failed to start" on every L2TP profile

@@ -339,6 +339,37 @@ phase_services() {
             && ok "installed automatic-timezone hook (follows your network location)"
     fi
 
+    # ── DNS: systemd-resolved owns /etc/resolv.conf, NetworkManager feeds it ──
+    # Left to NM's default, resolv.conf is a plain file any VPN client may
+    # overwrite: Tailscale (MagicDNS) wrote `nameserver 100.100.100.100` there
+    # and, with the tailnet or work VPN down, nothing on the home network
+    # resolved — "only the VPN works" (dev box, 2026-09-25). resolved keeps DNS
+    # per link (Wi-Fi, ppp0, tailscale0), and Tailscale/NM/pppd all talk to it.
+    # The symlink is only switched when resolved is running (or we are in the
+    # installer's chroot, where it starts on first boot) — never pointed at a
+    # stub nobody serves.
+    if systemctl list-unit-files systemd-resolved.service 2>/dev/null | grep -q '^systemd-resolved' \
+       && { [ -d /etc/NetworkManager ] || pkg_present networkmanager; }; then
+        sudo_run install -d /etc/NetworkManager/conf.d
+        sudo_run install -m 644 "$DOTREPO/system/networkmanager/10-ewe-dns.conf" \
+            /etc/NetworkManager/conf.d/10-ewe-dns.conf
+        sudo_run systemctl enable --now systemd-resolved.service || warn "could not start systemd-resolved"
+        if [ "$(readlink /etc/resolv.conf 2>/dev/null)" = /run/systemd/resolve/stub-resolv.conf ]; then
+            ok "dns: /etc/resolv.conf already follows systemd-resolved"
+        elif systemctl is-active -q systemd-resolved.service || systemd-detect-virt -q --chroot 2>/dev/null \
+             || [ "${DRY_RUN:-0}" = "1" ]; then
+            if [ -e /etc/resolv.conf ] || [ -L /etc/resolv.conf ]; then
+                sudo_run cp -P /etc/resolv.conf "/etc/resolv.conf.bak.$RUN_STAMP"
+            fi
+            sudo_run ln -sfn /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf \
+                && ok "dns: systemd-resolved owns /etc/resolv.conf (VPNs can no longer take over lookups)"
+        else
+            warn "dns: systemd-resolved is not running — left /etc/resolv.conf alone"
+        fi
+        # SIGHUP re-reads conf.d, dns= included — no connection drop
+        sudo_run systemctl try-reload-or-restart NetworkManager.service 2>/dev/null || true
+    fi
+
     # ── L2TP/IPsec VPNs are IKEv1 (Windows RRAS, MikroTik, every ISP box — that
     # is what the protocol IS). libreswan 5 (phase 20) keeps IKEv1 but gates it
     # behind a runtime policy in /etc/ipsec.conf; its stock file ships the line
