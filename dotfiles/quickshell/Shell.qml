@@ -11,13 +11,14 @@ import Quickshell.Hyprland
 //
 //   read     overviewOpen · quickSettingsOpen · lowPower · onBattery · locked ·
 //            dnd · bottomInset · bottomReserved · dockPresent · dockPrefs ·
-//            pinnedApps
+//            pinnedApps · primaryScreenName · dockItems · activeCount
 //   call     toast() · openQuickSettings() · closeQuickSettings() ·
 //            openSettings() · openStore() · launch() · focusApp() ·
-//            registerAction() · runAction() · setBottomInset() · anchorFor() ·
-//            setActive() · isActive() · setPinned() · setDockItemShown() ·
-//            dockItemShown()
-//   signals  aboutToSleep() · resumed()   (Resume.qml emits them)
+//            toggleOverview() · registerAction() · runAction() ·
+//            setBottomInset() · anchorFor() · setActive() · isActive() ·
+//            setPinned() · setDockItemShown() · dockItemShown() · closePopups()
+//   signals  aboutToSleep() · resumed()   (Resume.qml emits them) ·
+//            popupsClosing(exceptId)      (closePopups emits it)
 QtObject {
     id: sh
 
@@ -30,6 +31,14 @@ QtObject {
     readonly property bool onBattery: Globals.onBattery
     readonly property bool locked: Globals.locked
     readonly property bool dnd: Globals.dnd
+    // The primary output's name — a shell concept (Wayland has none): the
+    // output HyprMon's display profile marks primary, else the first one.
+    // A dock pins itself to this screen.
+    readonly property string primaryScreenName: HyprMon.primaryName
+    // The dock-item registry: [{ id, name, icon, label, action, order }] for
+    // every enabled plugin that declares `dockItem`, in order — read-only,
+    // bindable; what a dock plugin renders (filtered by dockItemShown).
+    readonly property var dockItems: PluginHost.dockItems
 
     // The bottom inset: the pixels a dock takes from the bottom of the
     // screen (its strip plus windowGap), 0 without a dock. Panels that open
@@ -83,6 +92,9 @@ QtObject {
     // `qs ipc call quicksettings tab <key>`.
     function openQuickSettings(tab) { Globals.openQuickSettingsTab(tab || "home") }
     function closeQuickSettings() { Globals.quickSettingsOpen = false }
+    // The Overview, in-shell (a `qs ipc call overview toggle` spawn costs
+    // 50–70 ms per click; this is the flag the dock's button flips).
+    function toggleOverview() { Globals.overviewOpen = !Globals.overviewOpen }
     // The Settings app (ewe-settings) and Komble; `page` is forwarded as
     // `--<page>` to Komble ("addons", "updates") and `--page <name>` to
     // ewe-settings. An already-open window is focused instead of doubled.
@@ -140,6 +152,14 @@ QtObject {
         sh._active = m
     }
     function isActive(name) { return !!sh._active[String(name)] }
+    // One add-on popup at a time: closePopups(exceptId) asks every popup
+    // but the caller's to close — every AnchoredPopup honours it (spared
+    // when exceptId is its `owner`, its `action` or its `name`), and a
+    // plugin with its own PanelWindow (Places, the dock's pinned-apps panel)
+    // listens to popupsClosing and calls closePopups(<its id>) when it
+    // opens. What the built-in dock did between Places and the player.
+    signal popupsClosing(string exceptId)
+    function closePopups(exceptId) { sh.popupsClosing(exceptId === undefined || exceptId === null ? "" : String(exceptId)) }
     // A plugin's dock item is shown by default; the plugin hides its own at
     // runtime (the music player has no button while no player exists, or
     // when its setting says bar-only). The dock add-on filters on this;

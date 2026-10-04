@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "id": "ewe.phone",
+  "name": "Phone",
+  "version": "1.0.0",
+  "apiVersion": 3,
+  "description": "Your phone through KDE Connect: pairing, battery, its notifications and your SMS conversations on the Mobile page, a phone glyph in the bar while it is connected.",
+  "homepage": "https://github.com/prj786/ewe-plugin-phone",
+  "author": "prj786",
+  "icon": "icPhone",
+  "category": "Connections",
+  "kinds": ["service", "quick-page", "bar-status"],
+  "entryPoints": {
+    "service": "Service.qml",
+    "quick-page": "Page.qml",
+    "bar-status": "Status.qml"
+  },
+  "quickPage": { "key": "mobile", "label": "Mobile", "icon": "icPhone", "order": 70 },
+  "barStatus": { "order": 70 },
+  "requires": {
+    "packages": ["kdeconnect", "python-dbus", "python-gobject"],
+    "commands": ["kdeconnectd", "python3"]
+  }
+}

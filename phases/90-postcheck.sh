@@ -57,8 +57,8 @@ phase_postcheck() {
     # Chromecast path works regardless.
     _check "portal: ewe share picker installed"      test -x /usr/local/bin/ewe-share-picker
     _check "gtk: 'Find New Applications' opens Komble" sh -c 'test -x /usr/local/bin/gnome-software || test -x /usr/bin/gnome-software'
-    # screencopy freeze fix: three upstream commits after xdph 1.4.1 (#424/#425); we ship them as 1.4.1-1.1 (packages/patched)
-    _check "portal: screencopy freeze fix (xdph ≥ 1.4.1-1.1)" sh -c '[ "$(vercmp "$(pacman -Q xdg-desktop-portal-hyprland 2>/dev/null | awk "{print \$2}")" 1.4.1-1.1)" -ge 0 ]'
+    # screencopy freeze fix: three upstream commits after xdph 1.4.1 (#424/#425); we ship them as 1.4.1-2.1 (packages/patched; Arch's stock 1.4.1-2 of 2026-09 is the freeze build, so -1.1 would pass it)
+    _check "portal: screencopy freeze fix (xdph ≥ 1.4.1-2.1)" sh -c '[ "$(vercmp "$(pacman -Q xdg-desktop-portal-hyprland 2>/dev/null | awk "{print \$2}")" 1.4.1-2.1)" -ge 0 ]'
     if gst-inspect-1.0 vah264enc >/dev/null 2>&1; then _note "cast: hardware H.264 encoder (vah264enc) available"
     else _note "cast: no VA-API H.264 encoder — software x264 (sudo pacman -S gst-plugin-va)"; fi
     if iw reg get 2>/dev/null | grep -q 'country 00'; then _note "wifi: regulatory domain unset (world) — 5 GHz Wi-Fi Direct/hotspot disabled; set WIRELESS_REGDOM in /etc/conf.d/wireless-regdom"

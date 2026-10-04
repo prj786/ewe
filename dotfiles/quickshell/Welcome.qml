@@ -5,13 +5,17 @@ import Quickshell.Wayland
 
 // Welcome — what a stranger sees in their first minute (ROADMAP 0.7).
 // Shown ONCE on a fresh install (stamp: ~/.local/state/ewe/welcomed), never
-// on the live ISO (EWE_LIVE — the installer is the point there). Six steps:
+// on the live ISO (EWE_LIVE — the installer is the point there). Seven steps:
 //   1 welcome · 2 get online (0.9.16-2) · 3 updates (0.9.19: a fresh install
 //   must be current before anything can be installed — the sync database it
 //   was born with points at packages the mirrors have already dropped) ·
 //   4 sign in to your Nextcloud (RFC-005 — the ewe account) · 5 restore offer
-//   (only when the account holds a backup from another machine) · 6 the
-//   60-second tour. Google is not on this screen at all.
+//   (only when the account holds a backup from another machine) · 6 add-ons
+//   (0.25: a fresh install has NONE of the payload's add-ons — the dock,
+//   music, Places, phone, mail, cast… — this step lists `ewe-plugin list
+//   --json`'s `available`, nothing pre-checked, installs the picked ones with
+//   `install <id> --no-restart` and restarts the shell ONCE, at Finish, the
+//   tool's own way) · 7 the 60-second tour. Google is not on this screen at all.
 // Re-open any time:  qs ipc call welcome toggle   (reset: … welcome reset)
 //
 // 0.9.16-2, the first bare-metal install: this overlay sat on the Overlay
@@ -46,7 +50,9 @@ Scope {
     readonly property int stepUpdates: 2
     readonly property int stepSignIn: 3
     readonly property int stepRestore: 4
-    readonly property int stepTour: 5
+    readonly property int stepAddons: 5
+    readonly property int stepTour: 6
+    readonly property int stepCount: 7
     readonly property bool isLive: (Quickshell.env("EWE_LIVE") || "") !== ""
 
     // ── updates ──
@@ -100,6 +106,72 @@ Scope {
             if (!root.online || root.isLive) { root.step = root.stepSignIn; return }
             if (root.updState !== "done") root.checkUpdates()
         }
+        if (root.step === root.stepAddons && root.addonsState === "idle") root.loadAddons()
+    }
+
+    // ── add-ons (0.25, plan D1: opt-in) ──
+    // idle | loading | ready | installing | done | unavailable
+    property string addonsState: "idle"
+    property var addons: []              // `available` of `ewe-plugin list --json`: { id, name, description, icon, installed, … }
+    property var addonsPicked: ({})      // id -> true (nothing pre-checked)
+    property var addonsResult: ({})      // id -> "" (installed) | the error line
+    property var addonsQueue: []
+    property string addonsCurrent: ""
+    property string addonsLast: ""       // the last one installed here: Finish re-runs `install` on it WITHOUT --no-restart = the tool's own restart
+    readonly property int addonsPickedCount: { var n = 0; for (var k in root.addonsPicked) if (root.addonsPicked[k]) n++; return n }
+    readonly property int addonsOkCount: { var n = 0; for (var k in root.addonsResult) if (root.addonsResult[k] === "") n++; return n }
+    readonly property int addonsFailCount: { var n = 0; for (var k in root.addonsResult) if (root.addonsResult[k] !== "") n++; return n }
+    function loadAddons() {
+        root.addonsState = "loading"
+        addonsList.running = false; addonsList.running = true
+    }
+    function toggleAddon(id) {
+        if (root.addonsState !== "ready") return
+        var m = Object.assign({}, root.addonsPicked)
+        if (m[id]) delete m[id]; else m[id] = true
+        root.addonsPicked = m
+    }
+    function installAddons() {
+        if (root.addonsState !== "ready" || root.addonsPickedCount === 0) return
+        var q = []
+        for (var i = 0; i < root.addons.length; i++) if (root.addonsPicked[root.addons[i].id]) q.push(root.addons[i].id)
+        root.addonsQueue = q
+        root.addonsState = "installing"
+        root._installNextAddon()
+    }
+    function _installNextAddon() {
+        var q = root.addonsQueue.slice()
+        if (q.length === 0) { root.addonsCurrent = ""; root.addonsState = "done"; return }
+        root.addonsCurrent = q.shift(); root.addonsQueue = q
+        addonsInstall.command = [PluginHost.tool, "install", root.addonsCurrent, "--no-restart"]
+        addonsInstall.running = false; addonsInstall.running = true
+    }
+    property Process addonsList: Process {
+        command: [PluginHost.tool, "list", "--json"]
+        stdout: StdioCollector { id: addonsOut }
+        onExited: function (code) {
+            var list = []
+            try {
+                var j = JSON.parse(addonsOut.text)
+                if (j && Array.isArray(j.available)) list = j.available.filter(function (a) { return a && a.id && a.valid !== false })
+            } catch (e) {}
+            list.sort(function (a, b) { return String(a.name || a.id).localeCompare(String(b.name || b.id)) })
+            root.addons = list
+            root.addonsState = (code === 0 && list.length > 0) ? "ready" : "unavailable"
+        }
+    }
+    property Process addonsInstall: Process {
+        stdout: StdioCollector { id: instOut }
+        stderr: StdioCollector { id: instErr }
+        onExited: function (code) {
+            var why = ""
+            try { var j = JSON.parse(instOut.text); if (!j.ok) why = String(j.error || "could not be installed") }
+            catch (e) { why = code === 0 ? "" : String(instErr.text || "could not be installed").trim().split("\n").pop() }
+            if (code !== 0 && why === "") why = "could not be installed"
+            var r = Object.assign({}, root.addonsResult); r[root.addonsCurrent] = why; root.addonsResult = r
+            if (why === "") root.addonsLast = root.addonsCurrent
+            root._installNextAddon()
+        }
     }
 
     // a restore is worth offering when the account has a backup and THIS
@@ -112,12 +184,20 @@ Scope {
     onOpenChanged: Globals.welcomeOpen = root.open
 
     function finish() {
-        Quickshell.execDetached(["sh", "-c", 'mkdir -p "$(dirname "$1")" && : > "$1"', "sh", root.stamp])
+        if (root.addonsState === "installing") return   // never leave an install half-done
+        // the stamp first, then — when add-ons were installed here — the ONE
+        // shell restart, the tool's own way: `install <id>` without
+        // --no-restart on the last one (a refresh no-op plus restart_shell:
+        // the crash guard learns it was deliberate). Chained, so the restart
+        // can never outrun the stamp and bring this screen back.
+        Quickshell.execDetached(["sh", "-c", 'mkdir -p "$(dirname "$1")" && : > "$1"; [ -n "$3" ] && exec "$2" install "$3"; exit 0',
+                                 "sh", root.stamp, PluginHost.tool, root.addonsLast])
         root.open = false
     }
     function next() {
         if (root.step === root.stepUpdates && root.updBusy) return                                        // never skip past a running upgrade
-        if (root.step === root.stepSignIn && !root.restoreWorthIt) { root.step = root.stepTour; return }   // nothing to restore → tour
+        if (root.step === root.stepAddons && root.addonsState === "installing") return                     // nor past a running install
+        if (root.step === root.stepSignIn && !root.restoreWorthIt) { root.step = root.stepAddons; return } // nothing to restore → add-ons
         if (root.step >= root.stepTour) { root.finish(); return }
         root.step += 1
     }
@@ -136,6 +216,10 @@ Scope {
         function hide(): void { root.open = false }
         function reset(): void { Quickshell.execDetached(["rm", "-f", root.stamp]); root.step = 0; root.open = true }
         function step(n: int): void { root.open = true; root.step = n }   // driver screenshots
+        // the add-ons step from the driver (no pointer in the nested harness)
+        function pick(id: string): void { root.toggleAddon(id) }
+        function install(): void { root.installAddons() }
+        function finish(): void { root.finish() }
     }
 
     // the network step (WifiPicker, inside the card below) polls only while
@@ -183,7 +267,7 @@ Scope {
             id: keys
             anchors.fill: parent
             focus: true
-            Keys.onEscapePressed: if (!root.updBusy) root.finish()
+            Keys.onEscapePressed: if (!root.updBusy && root.addonsState !== "installing") root.finish()
             Keys.onReturnPressed: if ((root.step !== root.stepNetwork || root.online) && !root.updBusy) root.next()
             Keys.onEnterPressed: if ((root.step !== root.stepNetwork || root.online) && !root.updBusy) root.next()
         }
@@ -587,7 +671,159 @@ Scope {
                     }
                 }
 
-                // ── 6 · tour ──
+                // ── 6 · add-ons ──
+                // Every payload add-on from `ewe-plugin list --json` (the
+                // `available` list), nothing pre-checked (D1: opt-in). The
+                // picked ones are installed one after another with
+                // --no-restart, each row says how it went, and the shell
+                // restarts once, at Finish (see finish()).
+                Column {
+                    visible: root.step === root.stepAddons
+                    width: parent.width; spacing: Theme.spaceMd
+                    Glyph { anchors.horizontalCenter: parent.horizontalCenter; ic: Theme.icApps }
+                    Title { text: root.addonsState === "done" ? (root.addonsOkCount > 0 ? "Add-ons installed" : "Add-ons") : "Add-ons" }
+                    Body {
+                        text: root.addonsState === "loading" ? "Looking for add-ons…"
+                            : root.addonsState === "unavailable" ? "The add-on list is not available right now. Komble → Add-ons has it whenever you are ready."
+                            : root.addonsState === "done" ? (root.addonsOkCount > 0
+                                ? root.addonsOkCount + (root.addonsOkCount === 1 ? " add-on is" : " add-ons are") + " installed. They appear when you finish — the desktop restarts for a second."
+                                : "Nothing was installed. Komble → Add-ons has every add-on whenever you want one.")
+                            : "A few extras ship with ewe — the dock, music, Places, your phone, mail, Cast to TV and more. None is installed until you pick it. Choose what you want now; the rest is one click away in Komble → Add-ons."
+                    }
+                    Row {
+                        visible: root.addonsState === "loading"
+                        anchors.horizontalCenter: parent.horizontalCenter; spacing: Theme.spaceS
+                        Spinner { anchors.verticalCenter: parent.verticalCenter; size: Theme.iconMd }
+                        Text { anchors.verticalCenter: parent.verticalCenter; text: "Looking…"; color: Theme.textMuted; font.family: Theme.type.label.family; font.pixelSize: Theme.fontSizeS }
+                    }
+                    // the list: a sunken well, rows the Checkbox card way (box
+                    // iconMd, radiusSlight, borderStrong → accent when checked)
+                    Rectangle {
+                        visible: root.addonsState !== "idle" && root.addonsState !== "loading" && root.addons.length > 0
+                        width: parent.width
+                        height: Math.min(addonList.contentHeight, Theme.panelMd) + 2 * Theme.borderWidth1
+                        radius: Theme.radiusPrimary
+                        color: Theme.surfaceSunken
+                        border.color: Theme.borderSubtle; border.width: Theme.borderWidth1
+                        ListView {
+                            id: addonList
+                            anchors.fill: parent; anchors.margins: parent.border.width
+                            clip: true
+                            boundsBehavior: Flickable.StopAtBounds
+                            model: root.addons
+                            delegate: Item {
+                                id: aRow
+                                required property var modelData
+                                required property int index
+                                readonly property string aid: modelData.id
+                                readonly property bool installed: modelData.installed === true || (aid in root.addonsResult && root.addonsResult[aid] === "")
+                                readonly property bool failed: (aid in root.addonsResult) && root.addonsResult[aid] !== ""
+                                readonly property bool busy: root.addonsState === "installing" && root.addonsCurrent === aid
+                                readonly property bool picked: root.addonsPicked[aid] === true
+                                readonly property bool pickable: !installed && root.addonsState === "ready"
+                                readonly property bool isDock: aid === "ewe.dock"
+                                width: addonList.width
+                                height: aCol.implicitHeight + 2 * Theme.spaceS
+                                Rectangle { anchors.fill: parent; color: aMa.containsMouse && aRow.pickable ? Theme.surfaceHover : "transparent" }
+                                Rectangle { visible: aRow.index > 0; anchors.top: parent.top; anchors.left: parent.left; anchors.right: parent.right; anchors.leftMargin: Theme.spaceS + Theme.spaceXs; anchors.rightMargin: Theme.spaceS + Theme.spaceXs; height: Theme.borderWidth1; color: Theme.borderSubtle }
+                                MouseArea { id: aMa; anchors.fill: parent; hoverEnabled: true; enabled: aRow.pickable; cursorShape: aRow.pickable ? Qt.PointingHandCursor : Qt.ArrowCursor; onClicked: root.toggleAddon(aRow.aid) }
+                                Row {
+                                    anchors.left: parent.left; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
+                                    anchors.leftMargin: Theme.spaceS + Theme.spaceXs; anchors.rightMargin: Theme.spaceS + Theme.spaceXs
+                                    spacing: Theme.spaceS + Theme.spaceXs
+                                    Rectangle {
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        width: Theme.controlLg; height: Theme.controlLg
+                                        radius: Theme.radiusPrimary
+                                        color: Theme.surfaceRaised
+                                        border.color: Theme.borderSubtle; border.width: Theme.borderWidth1
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: (aRow.modelData.icon && Theme[aRow.modelData.icon]) ? Theme[aRow.modelData.icon] : Theme.icApps
+                                            font.family: Theme.fontIcons; font.pixelSize: Theme.iconLg
+                                            color: aRow.installed ? Theme.textSecondary : Theme.textPrimary
+                                        }
+                                    }
+                                    Column {
+                                        id: aCol
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        width: parent.width - Theme.controlLg - aRight.width - 2 * parent.spacing
+                                        spacing: Theme.spaceXxs
+                                        Text {
+                                            width: parent.width; elide: Text.ElideRight
+                                            text: aRow.modelData.name || aRow.aid
+                                            color: aRow.installed ? Theme.textSecondary : Theme.textPrimary
+                                            font.family: Theme.type.bodyStrong.family
+                                            font.pixelSize: Theme.type.bodyStrong.size
+                                            font.weight: Theme.fontWeightSemibold
+                                        }
+                                        Text {
+                                            width: parent.width; elide: Text.ElideRight; maximumLineCount: 1
+                                            text: aRow.failed ? root.addonsResult[aRow.aid] : (aRow.modelData.description || "")
+                                            color: aRow.failed ? Theme.danger : Theme.textSecondary
+                                            font.family: Theme.type.label.family; font.pixelSize: Theme.fontSizeS
+                                        }
+                                        Text {
+                                            visible: aRow.isDock && !aRow.installed && !aRow.failed
+                                            width: parent.width; elide: Text.ElideRight
+                                            text: "Recommended if you like a dock"
+                                            color: Theme.accentText
+                                            font.family: Theme.type.label.family; font.pixelSize: Theme.fontSizeS
+                                        }
+                                    }
+                                    Item {
+                                        id: aRight
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        width: Math.max(Theme.controlLg, aState.visible ? aState.implicitWidth : 0); height: Theme.controlLg
+                                        Spinner { visible: aRow.busy; anchors.centerIn: parent; size: Theme.iconMd }
+                                        Text {
+                                            id: aState
+                                            visible: !aRow.busy && (aRow.installed || aRow.failed)
+                                            anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
+                                            text: aRow.failed ? "Not installed" : "Installed"
+                                            color: aRow.failed ? Theme.danger : Theme.textMuted
+                                            font.family: Theme.type.label.family; font.pixelSize: Theme.fontSizeS
+                                        }
+                                        // the checkbox (design system: Checkbox)
+                                        Rectangle {
+                                            visible: !aRow.busy && !aRow.installed && !aRow.failed
+                                            anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
+                                            width: Theme.iconMd; height: Theme.iconMd
+                                            radius: Theme.radiusSlight
+                                            color: aRow.picked ? (aMa.containsMouse ? Theme.accentHover : Theme.accent) : Theme.surfaceSunken
+                                            border.width: Theme.borderWidth1
+                                            border.color: aRow.picked ? (aMa.containsMouse ? Theme.accentHover : Theme.accent)
+                                                        : aMa.containsMouse ? Theme.textSecondary : Theme.borderStrong
+                                            Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
+                                            Text {
+                                                visible: aRow.picked
+                                                anchors.centerIn: parent; text: Theme.icCheck
+                                                font.family: Theme.fontIcons; font.pixelSize: Theme.iconXs
+                                                color: Theme.onAccent
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        // a thin indicator while the list is longer than the well
+                        Rectangle {
+                            visible: addonList.contentHeight > addonList.height
+                            anchors.right: parent.right; anchors.rightMargin: Theme.spaceXxs
+                            y: parent.border.width + addonList.visibleArea.yPosition * (addonList.height)
+                            width: Theme.spaceXs; radius: Theme.radiusFull
+                            height: Math.max(Theme.spaceMd, addonList.visibleArea.heightRatio * addonList.height)
+                            color: Theme.borderStrong
+                        }
+                    }
+                    Row {
+                        visible: root.addonsState !== "loading"
+                        anchors.horizontalCenter: parent.horizontalCenter; spacing: Theme.spaceMd
+                        LinkBtn { label: "Browse in Komble"; onGo: Shell.openStore("addons") }
+                    }
+                }
+
+                // ── 7 · tour ──
                 Column {
                     visible: root.step === root.stepTour
                     width: parent.width; spacing: Theme.spaceMd
@@ -669,7 +905,7 @@ Scope {
                         anchors.verticalCenter: parent.verticalCenter
                         spacing: Theme.spaceXs
                         Repeater {
-                            model: 6
+                            model: root.stepCount
                             delegate: Rectangle {
                                 required property int index
                                 width: index === root.step ? Theme.spaceMd : Theme.spaceXs
@@ -694,6 +930,7 @@ Scope {
                         Btn { visible: root.step === root.stepSignIn && !root.online && Cloud.busy !== "signin" && !Cloud.signedIn; label: "Back"; onGo: root.step = root.stepNetwork }
                         Btn { visible: root.step === root.stepSignIn && Cloud.busy === "signin"; label: "Cancel"; onGo: Cloud.cancelSignIn() }
                         Btn { visible: root.step === root.stepRestore && !root._restoring; label: "Start fresh"; onGo: root.next() }
+                        Btn { visible: root.step === root.stepAddons && root.addonsState !== "installing" && root.addonsState !== "done"; label: "Skip for now"; onGo: root.next() }
                         // step-specific primary
                         Btn { visible: root.step === 0; primary: true; label: "Get started"; onGo: root.next() }
                         Btn { visible: root.step === root.stepNetwork; primary: true; enabled: root.online; label: root.online ? "Continue" : "Waiting for a connection…"; onGo: root.next() }
@@ -705,6 +942,9 @@ Scope {
                         Btn { visible: root.step === root.stepSignIn && Cloud.signedIn; primary: true; label: "Continue"; onGo: root.next() }
                         Btn { visible: root.step === root.stepRestore && !root._restoring; primary: true; label: "Restore my desktop"
                               onGo: { root._restoring = true; Cloud.pendingRestore = { updatedAt: Cloud.cloudInfo.updatedAt, device: Cloud.cloudInfo.device }; Cloud.applyRestore() } }
+                        Btn { visible: root.step === root.stepAddons && (root.addonsState === "ready" || root.addonsState === "loading" || root.addonsState === "idle"); primary: true; enabled: root.addonsState === "ready" && root.addonsPickedCount > 0; label: "Install selected"; onGo: root.installAddons() }
+                        Btn { visible: root.step === root.stepAddons && root.addonsState === "installing"; primary: true; enabled: false; label: "Installing…" }
+                        Btn { visible: root.step === root.stepAddons && (root.addonsState === "done" || root.addonsState === "unavailable"); primary: true; label: "Continue"; onGo: root.next() }
                         Btn { visible: root.step === root.stepTour; primary: true; label: "Finish"; onGo: root.finish() }
                     }
                 }

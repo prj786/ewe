@@ -2,9 +2,11 @@
   "schemaVersion": 1,
   "id": "ewe.clipboard",
   "name": "Clipboard & emoji",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "apiVersion": 2,
   "description": "Clipboard history and an emoji picker under a scissors icon in the bar; records copies, never passwords.",
+  "icon": "icClipboard",
+  "category": "Desktop",
   "homepage": "https://github.com/prj786/ewe-plugin-clipboard",
   "author": "prj786",
   "kinds": [

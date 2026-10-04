@@ -171,7 +171,11 @@ singletons tie everything together:
   `BarStatusGlyph`); the host loads apiVersion 2 and 3. The harness:
   `HS_PLUGINS=1` installs every payload add-on (`HS_PAYLOAD=<dir>` picks
   the payload), `HS_PLUGIN_DIRS=a:b` adds fixtures
-  (`tests/fixtures/plugins/acme.v3demo` exercises every kind). The driver
+  (`tests/fixtures/plugins/acme.v3demo` exercises every kind),
+  `HS_NO_SYSTEMCTL=1` puts a logging no-op `systemctl` on the nested
+  shell's PATH (Welcome's add-ons step ends in `ewe-plugin install <last>`
+  WITHOUT --no-restart = the tool's restart — the shim keeps it off the
+  host's ewe.service; `welcome pick|install|finish` drive it). The driver
   runs every `ewe-plugin` call with `HYPRLAND_INSTANCE_SIGNATURE` and
   `WAYLAND_DISPLAY` unset — the tool's `hyprctl reload` / `qs ipc` pokes
   would otherwise hit the LIVE session; do the same by hand.

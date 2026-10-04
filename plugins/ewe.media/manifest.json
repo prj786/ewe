@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "id": "ewe.media",
+  "name": "Music",
+  "version": "1.0.1",
+  "apiVersion": 3,
+  "description": "Now playing: artwork, controls and a seek bar for any MPRIS player, above the dock or under the bar.",
+  "homepage": "https://github.com/prj786/ewe-plugin-media",
+  "author": "prj786",
+  "icon": "icMusic",
+  "category": "Media",
+  "kinds": [
+    "panel",
+    "dock-item",
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "panel": "Panel.qml",
+    "bar-widget": "Widget.qml"
+  },
+  "dockItem": {
+    "icon": "icMusic",
+    "label": "Music",
+    "action": "ewe.media.toggle",
+    "order": 20
+  },
+  "barWidget": {
+    "defaultSection": "right"
+  },
+  "ipcAliases": [
+    "player"
+  ],
+  "requires": {
+    "packages": [],
+    "commands": [
+      "busctl"
+    ]
+  },
+  "settings": [
+    {
+      "key": "button",
+      "type": "choice",
+      "default": "auto",
+      "label": "Where the button lives",
+      "choices": [
+        "auto",
+        "bar",
+        "dock",
+        "both"
+      ]
+    },
+    {
+      "key": "always_show",
+      "type": "bool",
+      "default": false,
+      "label": "Show the bar button when nothing is playing"
+    }
+  ]
+}

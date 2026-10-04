@@ -309,7 +309,7 @@ debug output is kept in `~/.local/state/ewe/cast.log`; for the raw story run
 a screen share for good the first time the consumer returns a buffer late —
 on the TV that's a static image, or a connect that drops after ~10 s. The
 three upstream fixes (#422/#424/#425) landed after the release, so phase 20
-builds **`xdg-desktop-portal-hyprland 1.4.1-1.1`** from `packages/patched/`
+builds **`xdg-desktop-portal-hyprland 1.4.1-2.1`** from `packages/patched/`
 (Arch's PKGBUILD + the patches; it retires itself once the repos ship newer).
 For quality, `gst-plugin-va` gives hardware H.264 (the app prefers it), and
 phase 30 sets the Wi-Fi regulatory domain so Wi-Fi Direct may use 5 GHz —

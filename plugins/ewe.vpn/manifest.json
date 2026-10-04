@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "id": "ewe.vpn",
+  "name": "VPN",
+  "version": "1.0.0",
+  "apiVersion": 3,
+  "description": "Your NetworkManager VPN connections in Quick settings: a toggle tile, a list with a one-time sign-in form, and a shield in the bar while one is up.",
+  "homepage": "https://github.com/prj786/ewe-plugin-vpn",
+  "author": "prj786",
+  "icon": "icVpn",
+  "category": "Network",
+  "kinds": ["quick-tile", "quick-page", "bar-status"],
+  "entryPoints": {
+    "quick-tile": "Tile.qml",
+    "quick-page": "Page.qml",
+    "bar-status": "Status.qml"
+  },
+  "quickTile": { "span": 1, "order": 20 },
+  "quickPage": { "key": "vpn", "label": "VPN", "icon": "icVpn", "order": 20 },
+  "barStatus": { "order": 21 },
+  "requires": { "commands": ["nmcli"] }
+}

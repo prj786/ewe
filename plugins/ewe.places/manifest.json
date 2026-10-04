@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "id": "ewe.places",
+  "name": "Places",
+  "version": "1.0.1",
+  "apiVersion": 3,
+  "description": "A compact file browser above the dock or under the bar: your home, pinned folders, drag any file out into another app.",
+  "homepage": "https://github.com/prj786/ewe-plugin-places",
+  "author": "prj786",
+  "icon": "icFolder",
+  "category": "Files",
+  "kinds": [
+    "panel",
+    "dock-item",
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "panel": "Panel.qml",
+    "bar-widget": "Widget.qml"
+  },
+  "dockItem": {
+    "icon": "icFolder",
+    "label": "Places",
+    "action": "ewe.places.toggle",
+    "order": 10
+  },
+  "barWidget": {
+    "defaultSection": "right"
+  },
+  "ipcAliases": [
+    "places"
+  ],
+  "requires": {
+    "packages": [
+      "xdg-utils",
+      "findutils"
+    ],
+    "commands": [
+      "xdg-open",
+      "find"
+    ]
+  },
+  "settings": [
+    {
+      "key": "button",
+      "type": "choice",
+      "default": "auto",
+      "label": "Where the button lives",
+      "choices": [
+        "auto",
+        "bar",
+        "dock",
+        "both"
+      ]
+    }
+  ]
+}

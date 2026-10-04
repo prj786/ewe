@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "id": "ewe.mail",
+  "name": "Mail",
+  "version": "1.0.0",
+  "apiVersion": 3,
+  "description": "Unread mail from your IMAP account or Gmail: an Inbox page in Quick settings, an envelope with the count in the bar, and a notification for new mail.",
+  "homepage": "https://github.com/prj786/ewe-plugin-mail",
+  "author": "prj786",
+  "icon": "icMail",
+  "category": "Communication",
+  "kinds": ["service", "quick-page", "bar-status"],
+  "entryPoints": {
+    "service": "Service.qml",
+    "quick-page": "Page.qml",
+    "bar-status": "Status.qml"
+  },
+  "quickPage": { "key": "mail", "label": "Mail", "icon": "icMail", "order": 80 },
+  "barStatus": { "order": 60 },
+  "ipcAliases": ["mail"],
+  "requires": {
+    "packages": ["python"],
+    "commands": ["python3", "notify-send", "xdg-open"]
+  }
+}

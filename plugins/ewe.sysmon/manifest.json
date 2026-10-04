@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "id": "ewe.sysmon",
+  "name": "System monitor",
+  "version": "1.0.0",
+  "apiVersion": 3,
+  "description": "CPU and memory meters in Quick settings, and a compact readout in the top bar if you want one.",
+  "homepage": "https://github.com/prj786/ewe-plugin-sysmon",
+  "author": "prj786",
+  "icon": "icCpu",
+  "category": "System",
+  "kinds": [
+    "quick-tile",
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "quick-tile": "Tile.qml",
+    "bar-widget": "Widget.qml"
+  },
+  "quickTile": {
+    "span": 2,
+    "order": 20
+  },
+  "barWidget": {
+    "defaultSection": "right"
+  },
+  "requires": {
+    "packages": [],
+    "commands": [
+      "sh"
+    ]
+  },
+  "settings": [
+    {
+      "key": "show_in_bar",
+      "type": "bool",
+      "default": false,
+      "label": "Show in the top bar"
+    }
+  ]
+}

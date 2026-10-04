@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "id": "ewe.ssh",
+  "name": "SSH",
+  "version": "1.0.0",
+  "apiVersion": 3,
+  "description": "Your ~/.ssh/config hosts in Quick settings: a terminal in one click, a SOCKS tunnel with a saved browse script per host, and a glyph in the bar while a tunnel is up.",
+  "homepage": "https://github.com/prj786/ewe-plugin-ssh",
+  "author": "prj786",
+  "icon": "icSsh",
+  "category": "Network",
+  "kinds": ["quick-tile", "quick-page", "bar-status"],
+  "entryPoints": {
+    "quick-tile": "Tile.qml",
+    "quick-page": "Page.qml",
+    "bar-status": "Status.qml"
+  },
+  "quickTile": { "span": 1, "order": 21 },
+  "quickPage": { "key": "ssh", "label": "SSH", "icon": "icSsh", "order": 21 },
+  "barStatus": { "order": 20 },
+  "requires": { "commands": ["ssh"] }
+}
