@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "id": "ewe.dock",
+  "name": "Dock",
+  "version": "1.0.1",
+  "apiVersion": 3,
+  "description": "A centred bottom dock on the main screen: app launcher, Overview, Komble, the Pen, one box per workspace with its windows, and the dock items other add-ons provide.",
+  "homepage": "https://github.com/prj786/ewe-plugin-dock",
+  "author": "prj786",
+  "icon": "icApps",
+  "category": "Desktop",
+  "kinds": [
+    "panel"
+  ],
+  "entryPoints": {
+    "panel": "Dock.qml"
+  },
+  "requires": {
+    "packages": [],
+    "commands": []
+  },
+  "ipcAliases": [
+    "launcher"
+  ]
+}

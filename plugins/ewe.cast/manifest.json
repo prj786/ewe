@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "id": "ewe.cast",
+  "name": "Cast to TV",
+  "version": "1.0.0",
+  "apiVersion": 3,
+  "description": "Mirror the screen to a Miracast or Chromecast TV from Quick settings, through the ewe-castd engine.",
+  "homepage": "https://github.com/prj786/ewe-plugin-cast",
+  "author": "prj786",
+  "icon": "icCast",
+  "category": "Connections",
+  "kinds": ["service", "quick-tile", "quick-page", "bar-status"],
+  "entryPoints": {
+    "service": "Service.qml",
+    "quick-tile": "Tile.qml",
+    "quick-page": "Page.qml",
+    "bar-status": "Status.qml"
+  },
+  "quickTile": { "span": 1, "order": 30 },
+  "quickPage": { "key": "cast", "label": "Cast", "icon": "icCast", "order": 30 },
+  "barStatus": { "order": 30 },
+  "ipcAliases": ["cast"],
+  "keybinds": [
+    { "combo": "SUPER + SHIFT + C", "ipc": "ewe.cast toggle" }
+  ],
+  "requires": {
+    "packages": ["ewe-cast", "gnome-network-displays", "avahi", "iw", "wireless-regdb", "gst-plugin-va", "gst-plugins-bad"],
+    "commands": ["ewe-castd", "gnome-network-displays", "iw", "pactl", "notify-send"]
+  }
+}

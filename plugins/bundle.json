@@ -1,12 +1,47 @@
 {
   "_comment": "The add-ons the ewe payload carries (plan D1-D3; docs/PLUGINS.md 'Add-ons'). Written by scripts/vendor-plugins.sh, read by bin/ewe-plugin: `default` ids are seeded on every machine, `migrate` ids are installed once for upgraders who had the feature built in, everything else is installed with `ewe-plugin install <id>` (Komble -> Add-ons, the Welcome screen).",
   "plugins": {
+    "ewe.cast": {
+      "repo": "https://github.com/prj786/ewe-plugin-cast",
+      "default": false,
+      "migrate": true,
+      "commit": "8051ff26752c610a6e8d13d03422aaecec604aef",
+      "version": "1.0.0"
+    },
     "ewe.clipboard": {
       "repo": "https://github.com/prj786/ewe-plugin-clipboard",
       "commit": "861d2b352eaba2cb26e5c13ebd2a66fee49041c2",
       "version": "1.1.1",
       "default": false,
       "migrate": true
+    },
+    "ewe.dock": {
+      "repo": "https://github.com/prj786/ewe-plugin-dock",
+      "default": false,
+      "migrate": true,
+      "commit": "a77391d77d6da6d6f13ffc7da8437b72e5b9d41c",
+      "version": "1.0.1"
+    },
+    "ewe.insomnia": {
+      "repo": "https://github.com/prj786/ewe-plugin-insomnia",
+      "default": false,
+      "migrate": true,
+      "commit": "808d05ab86c128f559740dd63a132be4cefa5da6",
+      "version": "1.0.0"
+    },
+    "ewe.mail": {
+      "repo": "https://github.com/prj786/ewe-plugin-mail",
+      "default": false,
+      "migrate": true,
+      "commit": "5e033a5c77ed26019db7431ece3baeca41695cae",
+      "version": "1.0.0"
+    },
+    "ewe.media": {
+      "repo": "https://github.com/prj786/ewe-plugin-media",
+      "default": false,
+      "migrate": true,
+      "commit": "e1c5ab461037c3b3ac4207dedbc4ab47623f2e75",
+      "version": "1.0.1"
     },
     "ewe.passwords": {
       "repo": "https://github.com/prj786/ewe-plugin-passwords",
@@ -15,12 +50,47 @@
       "default": false,
       "migrate": true
     },
+    "ewe.phone": {
+      "repo": "https://github.com/prj786/ewe-plugin-phone",
+      "default": false,
+      "migrate": true,
+      "commit": "27c1882629fdaa44e0742082477e5cacc0556902",
+      "version": "1.0.0"
+    },
+    "ewe.places": {
+      "repo": "https://github.com/prj786/ewe-plugin-places",
+      "default": false,
+      "migrate": true,
+      "commit": "7857602be5e21a2be048e467cb45e6594df79696",
+      "version": "1.0.1"
+    },
     "ewe.screenshot": {
       "repo": "https://github.com/prj786/ewe-plugin-screenshot",
       "commit": "4d476ca8693a8505f5700d21ddf44bebd4680e59",
       "version": "1.1.0",
       "default": false,
       "migrate": true
+    },
+    "ewe.ssh": {
+      "repo": "https://github.com/prj786/ewe-plugin-ssh",
+      "default": false,
+      "migrate": true,
+      "commit": "a720950f2649aae62972572c06d78491d6e25a52",
+      "version": "1.0.0"
+    },
+    "ewe.sysmon": {
+      "repo": "https://github.com/prj786/ewe-plugin-sysmon",
+      "default": false,
+      "migrate": true,
+      "commit": "a7f76899816892e67fe8ecdfa0450824d80989fa",
+      "version": "1.0.0"
+    },
+    "ewe.vpn": {
+      "repo": "https://github.com/prj786/ewe-plugin-vpn",
+      "default": false,
+      "migrate": true,
+      "commit": "1166928854e7676be8d8af084c4a3b2e7d720b2d",
+      "version": "1.0.0"
     }
   }
 }
