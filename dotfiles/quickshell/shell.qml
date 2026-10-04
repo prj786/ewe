@@ -75,7 +75,6 @@ ShellRoot {
     Dock {}
     LauncherPanel {}
     Places {}
-    MediaPlayer {}
     TrayMenu {}
     Launcher {}
     QuickSettings {}
