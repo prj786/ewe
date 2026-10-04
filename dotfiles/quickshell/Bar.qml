@@ -253,101 +253,8 @@ Scope {
         }
     }
 
-    // ── a BAR MODULE (design system: Bar → Module states) ────────────────
-    // barModule tall (28 / 32 / 40 by icon size), radiusPrimary, spaceS of
-    // side padding, no fill until you point at it. Default glyphs are
-    // textSecondary; hover takes surfaceHover and textPrimary, an open popup
-    // surfacePressed — inside Glass those are the glass tints, which
-    // Theme.barHoverFill / barActive already resolve.
-    //
-    // Declare content as children (they land centred in a Row, spaceXs
-    // apart); `glyph` alone draws one icon and is the common case.
-    component BarModule: Item {
-        id: si
-        property string glyph: ""
-        property color fg: Theme.textSecondary
-        property int fontPx: Theme.barIcon
-        property bool active: false      // its popup is open
-        // .ewe-barmod: spaceS of side padding (spaceS + spaceXs on the large
-        // bar); a glyph-only module has none and is just barModule square
-        property int padH: si.glyph !== "" ? 0 : Theme.barLarge ? Theme.spaceS + Theme.spaceXs : Theme.spaceS
-        // the workspace chip's mark: a spaceMd × borderWidth2 accent rule
-        // spaceXs above the chip's bottom edge, always on
-        property bool underline: false
-        default property alias content: inner.data
-        readonly property alias hovered: ma.containsMouse
-        // each module is a button named with its state (Bar card, Accessibility)
-        property string a11yName: ""
-        Accessible.role: Accessible.Button
-        Accessible.name: si.a11yName
-        signal activated()
-        signal secondary()
-        signal tertiary()
-        signal scrolled(real dy)
-        implicitWidth: Math.max(Theme.barModule, inner.implicitWidth + 2 * si.padH)
-        // barModule, or taller when its content is (a larger text size,
-        // Georgian) — the bar grows with it
-        implicitHeight: Math.max(Theme.barModule, inner.implicitHeight + 2 * Theme.spaceXxs)
-        height: implicitHeight
-        Rectangle {
-            anchors.fill: parent
-            radius: Theme.radiusPrimary
-            color: si.active ? Theme.barPressedFill
-                 : ma.containsMouse ? Theme.barHoverFill : "transparent"
-            Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
-        }
-        Row {
-            id: inner
-            anchors.centerIn: parent
-            spacing: Theme.spaceXs
-            Text {
-                visible: si.glyph !== ""
-                anchors.verticalCenter: parent.verticalCenter
-                text: si.glyph
-                color: ma.containsMouse && si.fg === Theme.textSecondary ? Theme.textPrimary : si.fg
-                font.family: Theme.fontIcons
-                font.pixelSize: si.fontPx
-                Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
-            }
-        }
-        Rectangle {
-            visible: si.underline
-            anchors.bottom: parent.bottom
-            anchors.bottomMargin: Theme.spaceXs
-            anchors.horizontalCenter: parent.horizontalCenter
-            width: Theme.spaceMd; height: Theme.borderWidth2
-            radius: Theme.borderWidth2
-            color: Theme.accent
-        }
-        MouseArea {
-            id: ma
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
-            acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
-            onClicked: function (m) {
-                if (m.button === Qt.RightButton) si.secondary()
-                else if (m.button === Qt.LeftButton) si.activated()
-            }
-            // middle-click fires on press — onClicked is unreliable for the
-            // middle button (wheel-press / trackpad taps often aren't "clicks").
-            onPressed: function (m) {
-                if (m.button === Qt.MiddleButton) si.tertiary()
-            }
-            onWheel: function (w) { si.scrolled(w.angleDelta.y) }
-        }
-    }
-
-    // ── the bar's own divider: borderWidth1 × iconMd, spaceXs each side ──
-    component BarSep: Item {
-        implicitWidth: Theme.borderWidth1 + 2 * Theme.spaceXs
-        implicitHeight: Theme.barLarge ? Theme.iconLg : Theme.iconMd
-        Rectangle {
-            anchors.centerIn: parent
-            width: Theme.borderWidth1; height: parent.height
-            color: Theme.barOutline
-        }
-    }
+    // BarModule and BarSep — the bar's module and divider — are their own
+    // files since API 3 (public to plugins, docs/PLUGINS.md).
 
     // ── one bar per monitor ───────────────────────────────────────────────
     Variants {
@@ -480,7 +387,7 @@ Scope {
                     }
 
                     // third-party bar widgets whose manifest says defaultSection = left
-                    BarPluginSlots { section: "left"; anchors.verticalCenter: parent.verticalCenter }
+                    BarPluginSlots { section: "left"; screen: win.screen; barWindow: win; anchors.verticalCenter: parent.verticalCenter }
                 }
 
                 // ── CENTRE: no first-party module (workspace switching moved to the
@@ -488,6 +395,7 @@ Scope {
                 BarPluginSlots {
                     id: centerSlots
                     section: "center"
+                    screen: win.screen; barWindow: win
                     anchors.horizontalCenter: parent.horizontalCenter
                     anchors.verticalCenter: parent.verticalCenter
                     // yield on a narrow output instead of overlapping the clusters
@@ -572,7 +480,7 @@ Scope {
                             }
                         }
                         }
-                        BarPluginSlots { section: "right"; anchors.verticalCenter: parent.verticalCenter }
+                        BarPluginSlots { section: "right"; screen: win.screen; barWindow: win; anchors.verticalCenter: parent.verticalCenter }
                     }
 
                     // tiling ⇄ floating — the icon IS the state (grid = tiling,
@@ -918,6 +826,33 @@ Scope {
                                     color: ctlGroup.ink
                                 }
                             }
+                            // ── plugin bar-status glyphs (API 3) — after every
+                            //    built-in, before the clock, in manifest order.
+                            //    Hidden under the same Top bar key as the
+                            //    plugin's bar widget (plugin:<id>); a glyph the
+                            //    plugin hides takes no space. ──
+                            Repeater {
+                                model: PluginHost.barStatus
+                                delegate: Loader {
+                                    id: statusSlot
+                                    required property var modelData
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    active: Globals.barShows("plugin:" + modelData.id)
+                                    // `shown` (a plain property), never item.visible — that reads back
+                                    // the EFFECTIVE visibility and would lock the slot hidden
+                                    visible: active && status === Loader.Ready && item && (item.shown === undefined || item.shown)
+                                    source: "file://" + modelData.entry
+                                    function feed() { PluginHost.inject(item, modelData.id, { screen: win.screen, barWindow: win, ink: ctlGroup.ink }) }
+                                    Component.onCompleted: Log.debug("plugins", "bar-status slot for", modelData.id)
+                                    onStatusChanged: {
+                                        if (status === Loader.Error) Log.warn("plugins", modelData.id + "/bar-status failed to load (see the qml error above)")
+                                        else if (status === Loader.Ready) { statusSlot.feed(); Log.debug("plugins", "bar-status", modelData.id, "ready", item.width + "x" + item.height, "shown", item.shown) }
+                                    }
+                                    Connections { target: ctlGroup; function onInkChanged() { if (statusSlot.status === Loader.Ready && statusSlot.item && ("ink" in statusSlot.item)) statusSlot.item.ink = ctlGroup.ink } }
+                                    Connections { target: PluginHost; function onSettingsChanged() { if (statusSlot.status === Loader.Ready) PluginHost._giveSettings(statusSlot.item, statusSlot.modelData.id) } }
+                                }
+                            }
+
                             // the clock — date and time inside the pill, so the
                             // one button holds every status indicator plus the
                             // time (Bar card #10). Tabular figures keep the

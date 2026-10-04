@@ -15,12 +15,17 @@ singleton Mail 1.0 Mail.qml
 singleton KdeConnect 1.0 KdeConnect.qml
 singleton BtAgent 1.0 BtAgent.qml
 singleton PluginHost 1.0 PluginHost.qml
+singleton Shell 1.0 Shell.qml
 singleton AudioState 1.0 AudioState.qml
 singleton GlobalShortcuts 1.0 GlobalShortcuts.qml
 Elevation 1.0 Elevation.qml
 Spinner 1.0 Spinner.qml
 BarIcon 1.0 BarIcon.qml
 BarPluginSlots 1.0 BarPluginSlots.qml
+BarModule 1.0 BarModule.qml
+BarSep 1.0 BarSep.qml
+BarStatusGlyph 1.0 BarStatusGlyph.qml
+AnchoredPopup 1.0 AnchoredPopup.qml
 FileDropTarget 1.0 FileDropTarget.qml
 DropRow 1.0 DropRow.qml
 Toggle 1.0 Toggle.qml
@@ -31,6 +36,21 @@ ListWell 1.0 ListWell.qml
 ListRow 1.0 ListRow.qml
 SectionTitle 1.0 SectionTitle.qml
 Badge 1.0 Badge.qml
+TextBody 1.0 TextBody.qml
+TextStrong 1.0 TextStrong.qml
+TextCaption 1.0 TextCaption.qml
+TextMono 1.0 TextMono.qml
+Glyph 1.0 Glyph.qml
+QsNote 1.0 QsNote.qml
+QsButton 1.0 QsButton.qml
+QsIconButton 1.0 QsIconButton.qml
+QsField 1.0 QsField.qml
+QsFieldInput 1.0 QsFieldInput.qml
+QsSegmented 1.0 QsSegmented.qml
+QsSwitchRow 1.0 QsSwitchRow.qml
+QsPageHead 1.0 QsPageHead.qml
+QsEmpty 1.0 QsEmpty.qml
+QsMsgRow 1.0 QsMsgRow.qml
 Avatar 1.0 Avatar.qml
 Screensaver 1.0 Screensaver.qml
 Launcher 1.0 Launcher.qml

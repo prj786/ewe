@@ -107,9 +107,9 @@ Scope {
             id: pill
             anchors.horizontalCenter: parent.horizontalCenter
             anchors.bottom: parent.bottom
-            // the dock's own layer reserves its height, so this margin is
-            // measured from the dock's edge — the toast's rhythm
-            anchors.bottomMargin: (Globals.dockEnabled && !Globals.dockAutohide)
+            // the dock's own layer reserves its height (Shell.bottomReserved),
+            // so this margin is measured from the dock's edge — the toast's rhythm
+            anchors.bottomMargin: Shell.bottomReserved
                                   ? Theme.spaceS + Theme.spaceXs : Theme.control2xl
             width: Theme.panelSm - Theme.spaceLg - Theme.spaceMd - Theme.spaceS
             height: Theme.control2xl

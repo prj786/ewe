@@ -19,6 +19,11 @@ import Quickshell
 Row {
     id: slots
     required property string section
+    // the bar this row sits in and its screen — injected into every widget
+    // that declares `screen` / `barWindow` (API 3), so a popup can open on
+    // the right output without guessing from the focused monitor
+    property var screen: null
+    property var barWindow: null
     // the centre section sets this from the left/right rows' extents: on a
     // narrow output the right cluster can reach the middle, and the centre
     // yields rather than draw over it
@@ -40,7 +45,7 @@ Row {
             source: "file://" + modelData.entry
             onStatusChanged: {
                 if (status === Loader.Error) Log.warn("plugins", modelData.id + "/bar-widget failed to load (see the qml error above)")
-                else if (status === Loader.Ready) { Log.debug("plugins", "bar-widget", modelData.id, "in", slots.section); PluginHost._giveSettings(item, modelData.id) }
+                else if (status === Loader.Ready) { Log.debug("plugins", "bar-widget", modelData.id, "in", slots.section); PluginHost.inject(item, modelData.id, { screen: slots.screen, barWindow: slots.barWindow }) }
             }
             // `ewe-plugin set …` → plugins.reload → the widget sees its new values
             Connections { target: PluginHost; function onSettingsChanged() { if (status === Loader.Ready) PluginHost._giveSettings(item, modelData.id) } }

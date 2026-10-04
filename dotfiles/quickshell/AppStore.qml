@@ -280,7 +280,7 @@ Scope {
             // Launcher panel placement: above the dock's store button, kept
             // spaceS + spaceXs from the screen edges and above the dock
             readonly property int edgeGap: Theme.spaceS + Theme.spaceXs
-            readonly property int dockGap: Theme.dockClearance + edgeGap
+            readonly property int dockGap: Shell.bottomInset + edgeGap
             x: Math.max(edgeGap, Math.min(parent.width - width - edgeGap, Globals.storeAnchorX - width / 2))
             width: Theme.panelMd
             height: Math.min(Theme.panelMd + Theme.controlXl + Theme.spaceMd + Theme.spaceXs, parent.height - dockGap - 2 * edgeGap)

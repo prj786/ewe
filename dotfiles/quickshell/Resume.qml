@@ -46,6 +46,8 @@ QtObject {
         // step and clear busy, or the NEXT wake would be ignored as "already
         // running" and never refresh its tokens.
         function onAboutToSleep() {
+            // plugins (API 3) hear it from Shell, so none of them needs Logind
+            Shell.aboutToSleep()
             if (!rs.busy) return
             rs._netStep.stop()
             rs.busy = false
@@ -115,6 +117,11 @@ QtObject {
             Cloud.refreshAfterResume()
             Google.refreshAfterResume()
             Mail.refreshAfterResume()
+            // Shell.resumed (API 3): the plugins' turn — the phone and mail
+            // add-ons refresh here once those features leave the shell, so
+            // the two direct calls above (KdeConnect in step 4, Mail here)
+            // are simply deleted at extraction time.
+            Shell.resumed()
 
             rs.busy = false
             Log.info("resume", "=== wake sequence done ===")

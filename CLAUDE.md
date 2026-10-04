@@ -145,11 +145,25 @@ registered in `qmldir`. Two singletons tie everything together:
   components**. Their repos are `prj786/ewe-plugin-{clipboard,screenshot,
   passwords}`; `scripts/vendor-plugins.sh` copies them into `plugins/<id>/`
   (vendored copies — `git archive` ships them; a submodule would arrive
-  empty). `ewe-setup` runs `ewe-plugin seed <payload>/plugins`: each bundled
-  plugin is copied into `~/.config/ewe/plugins/<id>/` with source `bundled`
-  and enabled, refreshed when its version changes; `ewe-plugin remove` puts
+  empty) and records repo + commit + version in `plugins/bundle.json`.
+  **Add-ons (0.25, plugin API 3 — `docs/PLUGINS.md`):** nothing in the
+  payload is installed on a FRESH machine; `ewe-setup` and phase 60 run
+  `ewe-plugin seed` (bundle `default` ids only, none today, plus a refresh
+  of installed bundled copies) then `ewe-plugin migrate` (once per add-on,
+  upgraders only — marker `~/.local/state/ewe/addons-migrated`, local). A
+  user installs one with `ewe-plugin install <id>` (Komble → Add-ons, the
+  Welcome screen); `list --json` lists them under `available`. API 3 adds
+  the kinds `quick-tile`, `quick-page`, `bar-status`, `dock-item`, the
+  public `Shell` singleton (`Shell.qml`: toast, openQuickSettings, actions,
+  `bottomInset` — every panel that used to read `Theme.dockClearance` /
+  `Globals.dockEnabled` for layout reads it), `AnchoredPopup`, and the
+  promoted components (`Qs*`, `Text*`, `Glyph`, `BarModule`, `BarSep`,
+  `BarStatusGlyph`); the host loads apiVersion 2 and 3. The harness:
+  `HS_PLUGINS=1` installs every payload add-on, `HS_PLUGIN_DIRS=a:b` adds
+  fixtures (`tests/fixtures/plugins/acme.v3demo` exercises every kind).
+  `ewe-plugin remove` puts
   the id in `[plugins].removed` so a later seed leaves it alone
-  (`seed --restore <id>` undoes that). Manifest `keybinds` become
+  (`install <id>` or `seed --restore <id>` undoes that). Manifest `keybinds` become
   `generated/plugin-keybinds.lua` (written by every state-changing verb,
   sourced by hyprland.lua) — the Print keys and Super+P are no longer in
   hyprland.lua. Reserved `ewe.` ids validate only in the payload or with

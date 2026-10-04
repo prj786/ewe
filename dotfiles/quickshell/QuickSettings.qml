@@ -884,406 +884,10 @@ Scope {
                 function onQuickSettingsOpenChanged() { if (Globals.quickSettingsOpen) keyCatcher.forceActiveFocus() }
             }
 
-            // ══ shared pieces ═══════════════════════════════════════════════
-
-            // text in the system's type styles
-            component TBody: Text {
-                color: Theme.textPrimary
-                font.family: Theme.type.body.family
-                font.pixelSize: Theme.type.body.size
-                font.weight: Theme.type.body.weight
-                elide: Text.ElideRight
-            }
-            component TStrong: Text {
-                color: Theme.textPrimary
-                font.family: Theme.type.bodyStrong.family
-                font.pixelSize: Theme.type.bodyStrong.size
-                font.weight: Theme.type.bodyStrong.weight
-                elide: Text.ElideRight
-            }
-            component TCaption: Text {
-                color: Theme.textMuted
-                font.family: Theme.type.caption.family
-                font.pixelSize: Theme.type.caption.size
-                font.weight: Theme.type.caption.weight
-                elide: Text.ElideRight
-            }
-            component TMono: Text {
-                color: Theme.textSecondary
-                font.family: Theme.type.monoNumeric.family
-                font.pixelSize: Theme.type.monoNumeric.size
-                font.weight: Theme.type.monoNumeric.weight
-                font.features: ({ "tnum": 1 })
-            }
-            component Glyph: Text {
-                font.family: Theme.fontIcons
-                font.pixelSize: Theme.iconMd
-                color: Theme.textSecondary
-            }
-            // a hint, a note or an error under a list: caption, wrapping
-            component Note: Text {
-                property string tone: ""            // "" (muted) · danger · warning
-                width: parent ? parent.width : Theme.panelSm
-                wrapMode: Text.Wrap
-                color: tone === "danger" ? Theme.danger : tone === "warning" ? Theme.warning : Theme.textMuted
-                font.family: Theme.type.caption.family
-                font.pixelSize: Theme.type.caption.size
-            }
-
-            // Button (design system: Button) — sm in the panel's dense rows,
-            // md in dialogs; primary · secondary · ghost · danger
-            component QsBtn: Rectangle {
-                id: qb
-                property string label: ""
-                property string ic: ""
-                property string variant: "secondary"
-                property string size: "sm"
-                property bool disabled: false
-                property bool busy: false
-                signal go()
-                readonly property bool _sm: qb.size === "sm"
-                readonly property color _ink: qb.disabled ? Theme.textDisabled
-                                            : qb.variant === "primary" ? Theme.onAccent
-                                            : qb.variant === "danger" ? Theme.onStatus : Theme.textPrimary
-                width: qbRow.implicitWidth + 2 * (qb._sm ? Theme.spaceS : Theme.spaceS + Theme.spaceXs)
-                height: qb._sm ? Theme.controlSm : Theme.controlMd
-                radius: Theme.radiusPrimary
-                color: qb.disabled ? (qb.variant === "ghost" ? "transparent" : Theme.surfaceRaised)
-                     : qb.variant === "primary" ? (qbMa.pressed ? Theme.accentPressed : qbMa.containsMouse ? Theme.accentHover : Theme.accent)
-                     : qb.variant === "danger" ? (qbMa.pressed ? Qt.tint(Theme.danger, Theme.withAlpha(Theme.textPrimary, 0.24))
-                                                : qbMa.containsMouse ? Qt.tint(Theme.danger, Theme.withAlpha(Theme.textPrimary, 0.12)) : Theme.danger)
-                     : qb.variant === "secondary" ? (qbMa.pressed ? Theme.surfacePressed : qbMa.containsMouse ? Theme.surfaceHover : Theme.surfaceRaised)
-                     : (qbMa.pressed ? Theme.surfacePressed : qbMa.containsMouse ? Theme.surfaceHover : "transparent")
-                border.color: qb.disabled ? (qb.variant === "ghost" ? "transparent" : Theme.borderSubtle)
-                            : qb.variant === "secondary" ? Theme.borderStrong : "transparent"
-                border.width: Theme.borderWidth1
-                Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
-                Row {
-                    id: qbRow
-                    anchors.centerIn: parent
-                    spacing: Theme.spaceXs
-                    Spinner {
-                        visible: qb.busy; anchors.verticalCenter: parent.verticalCenter
-                        size: qb._sm ? Theme.iconSm : Theme.iconMd
-                        tone: qb.variant === "primary" ? "on-accent" : "neutral"
-                    }
-                    Glyph {
-                        visible: qb.ic !== "" && !qb.busy; anchors.verticalCenter: parent.verticalCenter
-                        text: qb.ic; color: qb._ink
-                        font.pixelSize: qb._sm ? Theme.iconSm : Theme.iconMd
-                    }
-                    Text {
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: qb.label; color: qb._ink
-                        font.family: Theme.type.label.family
-                        font.pixelSize: qb._sm ? Theme.type.label.size : Theme.type.body.size
-                        font.weight: Theme.fontWeightMedium
-                    }
-                }
-                MouseArea { id: qbMa; anchors.fill: parent; hoverEnabled: true; enabled: !qb.disabled && !qb.busy; cursorShape: Qt.PointingHandCursor; onClicked: qb.go() }
-            }
-
-            // Icon button (design system: Icon button), ghost: textSecondary,
-            // hover surfaceHover with a textPrimary glyph, selected accentSubtle
-            // with an accentText glyph. `square` draws the stop mark.
-            component IconBtn: Rectangle {
-                id: ib
-                property string ic: ""
-                property bool selected: false
-                property bool danger: false          // the glyph turns danger on hover
-                property bool square: false
-                property string size: "sm"           // sm · md
-                property color glyph: Theme.textSecondary
-                readonly property alias hovered: ibMa.containsMouse
-                signal go()
-                width: ib.size === "sm" ? Theme.controlSm : Theme.controlMd
-                height: width
-                radius: Theme.radiusPrimary
-                color: ib.selected ? Theme.accentSubtle
-                     : ibMa.pressed ? Theme.surfacePressed
-                     : ibMa.containsMouse ? Theme.surfaceHover : "transparent"
-                Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
-                readonly property color _ink: ib.selected ? Theme.accentText
-                                            : ibMa.containsMouse ? (ib.danger ? Theme.danger : Theme.textPrimary) : ib.glyph
-                Glyph {
-                    visible: !ib.square
-                    anchors.centerIn: parent; text: ib.ic; color: ib._ink
-                    font.pixelSize: ib.size === "sm" ? Theme.iconSm : Theme.iconMd
-                }
-                Rectangle {
-                    visible: ib.square
-                    anchors.centerIn: parent
-                    width: Theme.spaceS; height: Theme.spaceS
-                    radius: Theme.radiusSlight / 2
-                    color: ib._ink
-                }
-                MouseArea { id: ibMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: ib.go() }
-            }
-
-            // Text field box (design system: Text field, md): surfaceSunken
-            // behind a borderStrong outline that turns textMuted on hover,
-            // focusRing with focus and danger on an error. The TextInput is
-            // the child, so its id stays reachable from the page.
-            component Field: Rectangle {
-                id: fd
-                property bool focused: false
-                property bool error: false
-                width: parent ? parent.width : Theme.panelSm
-                height: Theme.controlMd
-                radius: Theme.radiusPrimary
-                color: Theme.surfaceSunken
-                border.color: fd.error ? Theme.danger : fd.focused ? Theme.focusRing
-                            : fdHover.hovered ? Theme.textMuted : Theme.borderStrong
-                border.width: Theme.fieldBorderWidth
-                HoverHandler { id: fdHover }
-            }
-            component FieldInput: TextInput {
-                id: fi
-                property string placeholder: ""
-                verticalAlignment: TextInput.AlignVCenter
-                color: Theme.textPrimary
-                selectionColor: Theme.accentSubtle
-                selectedTextColor: Theme.textPrimary
-                font.family: Theme.type.body.family
-                font.pixelSize: Theme.type.body.size
-                clip: true
-                Text {
-                    anchors.verticalCenter: parent.verticalCenter
-                    visible: fi.text.length === 0
-                    text: fi.placeholder
-                    color: Theme.textMuted
-                    font: fi.font
-                }
-            }
-
-            // Segmented control (md, full width): a surfaceSunken well, the
-            // chosen segment surfaceSelected
-            component Segmented: Rectangle {
-                id: seg
-                property var options: []            // [{ label, value, disabled }]
-                property var value
-                signal picked(var v)
-                width: parent ? parent.width : Theme.panelSm
-                height: Theme.controlMd
-                radius: Theme.radiusPrimary
-                color: Theme.surfaceSunken
-                border.color: Theme.borderSubtle; border.width: Theme.borderWidth1
-                Row {
-                    id: segRow
-                    anchors.fill: parent
-                    anchors.margins: Theme.spaceXxs + seg.border.width
-                    spacing: Theme.spaceXxs
-                    Repeater {
-                        model: seg.options
-                        delegate: Rectangle {
-                            id: sgItem
-                            required property var modelData
-                            readonly property bool sel: String(modelData.value) === String(seg.value)
-                            readonly property bool dis: !!modelData.disabled
-                            width: (segRow.width - (seg.options.length - 1) * segRow.spacing) / Math.max(1, seg.options.length)
-                            height: segRow.height
-                            radius: Theme.radiusSecondary
-                            color: sgItem.sel ? Theme.surfaceSelected : "transparent"
-                            border.color: sgItem.sel ? Theme.borderSubtle : "transparent"
-                            border.width: Theme.borderWidth1
-                            Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
-                            Text {
-                                anchors.centerIn: parent
-                                width: Math.min(implicitWidth, parent.width - 2 * Theme.spaceXs)
-                                text: sgItem.modelData.label
-                                elide: Text.ElideRight
-                                color: sgItem.dis ? Theme.textDisabled : (sgItem.sel || sgMa.containsMouse) ? Theme.textPrimary : Theme.textSecondary
-                                font.family: Theme.type.label.family
-                                font.pixelSize: Theme.type.label.size
-                                font.weight: Theme.type.label.weight
-                            }
-                            MouseArea { id: sgMa; anchors.fill: parent; hoverEnabled: true; enabled: !sgItem.dis; cursorShape: Qt.PointingHandCursor; onClicked: seg.picked(sgItem.modelData.value) }
-                        }
-                    }
-                }
-            }
-
-            // a settings row: glyph, label and description on the left, the
-            // Switch on the right; clicking anywhere on the row toggles
-            component SwitchRow: Item {
-                id: sr
-                property string ic: ""
-                property string label: ""
-                property string desc: ""
-                property bool on: false
-                property bool disabled: false
-                property bool busy: false
-                signal toggled()
-                width: parent ? parent.width : Theme.panelSm
-                height: Math.max(Theme.controlLg, srText.implicitHeight + 2 * Theme.spaceXs)
-                Rectangle {
-                    anchors.fill: parent
-                    radius: Theme.radiusSecondary
-                    color: (srMa.containsMouse && !sr.disabled) ? Theme.surfaceHover : "transparent"
-                    Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
-                }
-                MouseArea { id: srMa; anchors.fill: parent; hoverEnabled: true; enabled: !sr.disabled; cursorShape: Qt.PointingHandCursor; onClicked: sr.toggled() }
-                Glyph {
-                    id: srIc
-                    visible: sr.ic !== ""
-                    width: visible ? Theme.iconMd : 0
-                    anchors.left: parent.left; anchors.leftMargin: Theme.spaceS
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: sr.ic
-                    color: sr.disabled ? Theme.textDisabled : sr.on ? Theme.accentText : Theme.textSecondary
-                }
-                Column {
-                    id: srText
-                    anchors.left: srIc.right; anchors.leftMargin: sr.ic !== "" ? Theme.spaceS + Theme.spaceXs : Theme.spaceS
-                    anchors.right: srSw.left; anchors.rightMargin: Theme.spaceS
-                    anchors.verticalCenter: parent.verticalCenter
-                    TBody { width: parent.width; text: sr.label; color: sr.disabled ? Theme.textDisabled : Theme.textPrimary }
-                    Row {
-                        visible: sr.desc !== "" || sr.busy
-                        spacing: Theme.spaceXs
-                        Spinner { visible: sr.busy; anchors.verticalCenter: parent.verticalCenter; size: Theme.iconSm }
-                        TCaption { width: Math.min(implicitWidth, srText.width - (sr.busy ? Theme.iconSm + Theme.spaceXs : 0)); text: sr.desc }
-                    }
-                }
-                Toggle {
-                    id: srSw
-                    anchors.right: parent.right; anchors.rightMargin: Theme.spaceS
-                    anchors.verticalCenter: parent.verticalCenter
-                    on: sr.on; disabled: sr.disabled
-                    onToggled: sr.toggled()
-                }
-            }
-
-            // a detail page's head: back, the feature's name (and a quiet
-            // status), extra actions, and the feature's Switch
-            component PageHead: Item {
-                id: ph
-                property string title: ""
-                property string note: ""
-                property bool busy: false
-                property bool hasSwitch: false
-                property bool on: false
-                property bool switchDisabled: false
-                default property alias actions: phAct.data
-                signal toggled()
-                width: parent ? parent.width : Theme.panelSm
-                height: Theme.controlLg
-                IconBtn {
-                    id: phBack
-                    anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter
-                    size: "md"; ic: Theme.icBack
-                    onGo: root.setTab("home")
-                }
-                Row {
-                    anchors.left: phBack.right; anchors.leftMargin: Theme.spaceS
-                    anchors.right: phAct.left; anchors.rightMargin: Theme.spaceS
-                    anchors.verticalCenter: parent.verticalCenter
-                    spacing: Theme.spaceS
-                    TStrong { id: phTitle; anchors.verticalCenter: parent.verticalCenter; text: ph.title; width: Math.min(implicitWidth, parent.width) }
-                    Spinner { visible: ph.busy; anchors.verticalCenter: parent.verticalCenter; size: Theme.iconSm }
-                    TCaption {
-                        visible: ph.note !== ""
-                        anchors.verticalCenter: parent.verticalCenter
-                        width: Math.min(implicitWidth, parent.width - phTitle.width - (ph.busy ? Theme.iconSm + Theme.spaceS : 0) - Theme.spaceS)
-                        text: ph.note
-                    }
-                }
-                Row {
-                    id: phAct
-                    anchors.right: phSw.visible ? phSw.left : parent.right
-                    anchors.rightMargin: phSw.visible ? Theme.spaceS : 0
-                    anchors.verticalCenter: parent.verticalCenter
-                    spacing: Theme.spaceXxs
-                }
-                Toggle {
-                    id: phSw
-                    visible: ph.hasSwitch
-                    anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
-                    on: ph.on; disabled: ph.switchDisabled
-                    onToggled: ph.toggled()
-                }
-            }
-
-            // Empty state, compact: a controlLg circle, a body-strong title,
-            // a description, an optional action
-            component Empty: Column {
-                id: em
-                property string ic: ""
-                property string title: ""
-                property string desc: ""
-                default property alias actions: emAct.data
-                width: parent ? parent.width : Theme.panelSm
-                spacing: Theme.spaceXs
-                topPadding: Theme.spaceMd; bottomPadding: Theme.spaceMd
-                Rectangle {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    width: Theme.controlLg; height: Theme.controlLg
-                    radius: Theme.radiusFull
-                    color: Theme.surfaceHover
-                    Glyph { anchors.centerIn: parent; text: em.ic }
-                }
-                TStrong {
-                    width: parent.width; horizontalAlignment: Text.AlignHCenter
-                    text: em.title
-                    font.weight: Theme.fontWeightSemibold
-                }
-                Text {
-                    visible: em.desc !== ""
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    width: Math.min(parent.width, Theme.panelSm - Theme.spaceXl - Theme.spaceMd)
-                    horizontalAlignment: Text.AlignHCenter
-                    wrapMode: Text.Wrap
-                    text: em.desc
-                    color: Theme.textSecondary
-                    font.family: Theme.type.body.family
-                    font.pixelSize: Theme.type.body.size
-                }
-                Row {
-                    id: emAct
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    topPadding: children.length > 0 ? Theme.spaceXs : 0
-                    spacing: Theme.spaceS
-                }
-            }
-
-            // a two-line message row (a phone conversation, a mail): an unread
-            // dot, the sender, a line of preview and the time
-            component MsgRow: Item {
-                id: mr
-                property string title: ""
-                property string line: ""
-                property string time: ""
-                property bool unread: false
-                signal clicked()
-                width: parent ? parent.width : Theme.panelSm
-                height: Math.max(Theme.controlXl, mrCol.implicitHeight + 2 * Theme.spaceXs)
-                Rectangle {
-                    anchors.fill: parent
-                    radius: Theme.radiusSecondary
-                    color: mrMa.pressed ? Theme.surfacePressed : mrMa.containsMouse ? Theme.surfaceHover : "transparent"
-                    Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
-                }
-                MouseArea { id: mrMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: mr.clicked() }
-                Badge {
-                    visible: mr.unread; dot: true
-                    anchors.left: parent.left; anchors.leftMargin: Theme.spaceXs
-                    anchors.verticalCenter: parent.verticalCenter
-                }
-                Column {
-                    id: mrCol
-                    anchors.left: parent.left; anchors.leftMargin: Theme.spaceMd
-                    anchors.right: mrTime.left; anchors.rightMargin: Theme.spaceS
-                    anchors.verticalCenter: parent.verticalCenter
-                    TBody { width: parent.width; text: mr.title; font.weight: mr.unread ? Theme.fontWeightSemibold : Theme.fontWeightMedium }
-                    TCaption { width: parent.width; text: mr.line; color: mr.unread ? Theme.textSecondary : Theme.textMuted }
-                }
-                TCaption {
-                    id: mrTime
-                    anchors.right: parent.right; anchors.rightMargin: Theme.spaceS
-                    anchors.top: parent.top; anchors.topMargin: Theme.spaceXs + Theme.spaceXxs
-                    text: mr.time
-                }
-            }
+            // ══ shared pieces: TextBody/TextStrong/TextCaption/TextMono, Glyph,
+            //    QsNote, QsButton, QsIconButton, QsField(+Input), QsSegmented,
+            //    QsSwitchRow, QsPageHead, QsEmpty, QsMsgRow — promoted to their own
+            //    files in API 3 (public to plugins, docs/PLUGINS.md) ══
 
             // ── one rail item (Side navigation, collapsed) ──
             component RailBtn: Rectangle {
@@ -1379,6 +983,17 @@ Scope {
                             onGo: root.setTab(modelData.key)
                         }
                     }
+                    // plugin pages (API 3 quick-page): after the built-ins, in
+                    // manifest order; the icon is a Theme glyph NAME
+                    Repeater {
+                        model: PluginHost.quickPages
+                        delegate: RailBtn {
+                            required property var modelData
+                            ic: Theme[modelData.icon] || Theme.icApps
+                            current: root.tab === modelData.key
+                            onGo: root.setTab(modelData.key)
+                        }
+                    }
                 }
                 Column {
                     id: railBottom
@@ -1419,7 +1034,7 @@ Scope {
                         text: parent.charging ? Theme.icBolt : (parent.pct >= 60 ? Theme.icBattFull : parent.pct >= 30 ? Theme.icBatt50 : Theme.icBattEmpty)
                         color: parent.charging ? Theme.success : (parent.pct <= 15 ? Theme.danger : Theme.textSecondary)
                     }
-                    TMono { anchors.verticalCenter: parent.verticalCenter; text: Math.round(parent.pct) + "%" }
+                    TextMono { anchors.verticalCenter: parent.verticalCenter; text: Math.round(parent.pct) + "%" }
                 }
             }
 
@@ -1592,17 +1207,41 @@ Scope {
                             Meter { label: "Memory"; glyph: Theme.icMemory; value: Globals.memUsage }
                         }
                     }
+                    // ═══ plugin tiles (API 3 quick-tile): after the built-ins,
+                    //     two per row (span 1) or the whole row (span 2), in
+                    //     manifest order. The host sizes the Loader; the
+                    //     plugin fills a Tile. ═══
+                    Flow {
+                        visible: root.tab === "home" && PluginHost.quickTiles.length > 0
+                        width: parent.width; spacing: Theme.spaceS
+                        Repeater {
+                            model: PluginHost.quickTiles
+                            delegate: Loader {
+                                id: tileSlot
+                                required property var modelData
+                                width: modelData.span >= 2 ? parent.width : Math.floor((parent.width - Theme.spaceS) / 2)
+                                source: "file://" + modelData.entry
+                                readonly property bool shown: Globals.quickSettingsOpen && root.tab === "home"
+                                onShownChanged: if (status === Loader.Ready && item && ("panelOpen" in item)) item.panelOpen = tileSlot.shown
+                                onStatusChanged: {
+                                    if (status === Loader.Error) Log.warn("plugins", modelData.id + "/quick-tile failed to load (see the qml error above)")
+                                    else if (status === Loader.Ready) PluginHost.inject(item, modelData.id, { panelOpen: tileSlot.shown })
+                                }
+                                Connections { target: PluginHost; function onSettingsChanged() { if (tileSlot.status === Loader.Ready) PluginHost._giveSettings(tileSlot.item, tileSlot.modelData.id) } }
+                            }
+                        }
+                    }
 
                     // ═══ SOUND: output and input devices ═══
                     Column {
                         visible: root.tab === "audio"
                         width: parent.width; spacing: Theme.spaceS
-                        PageHead {
+                        QsPageHead {
                             title: "Sound"
                             note: Pipewire.defaultAudioSink ? root.audioLabel(Pipewire.defaultAudioSink) : ""
                         }
                         // GNOME-style: one switch for every event chime
-                        SwitchRow {
+                        QsSwitchRow {
                             ic: Theme.icBellRing; label: "Event sounds"
                             on: Globals.eventSounds
                             onToggled: { Globals.eventSounds = !Globals.eventSounds; root.writePrefsPoke.restart(); if (Globals.eventSounds) Globals.playSound("audio-volume-change") }
@@ -1645,7 +1284,7 @@ Scope {
                     Column {
                         visible: root.expanded === "wifi"
                         width: parent.width; spacing: Theme.spaceS
-                        PageHead {
+                        QsPageHead {
                             title: "Wi-Fi"
                             busy: wifiScan.running
                             hasSwitch: true; on: root.wifiOn
@@ -1654,7 +1293,7 @@ Scope {
                         // WIRED — only when the machine has a port. The switch is
                         // the "I'm on Wi-Fi, ignore the cable" control; unplugged,
                         // it just says so.
-                        SwitchRow {
+                        QsSwitchRow {
                             visible: root.wiredPresent
                             ic: Theme.icEthernet; label: "Wired"
                             desc: root.wiredStateStr === "unavailable" ? "No cable"
@@ -1672,9 +1311,9 @@ Scope {
                             spacing: Theme.spaceS
                             leftPadding: Theme.spaceS
                             Spinner { visible: wifiScan.running; anchors.verticalCenter: parent.verticalCenter; size: Theme.iconSm }
-                            TCaption { anchors.verticalCenter: parent.verticalCenter; text: wifiScan.running ? "Looking for networks…" : "No networks found" }
+                            TextCaption { anchors.verticalCenter: parent.verticalCenter; text: wifiScan.running ? "Looking for networks…" : "No networks found" }
                         }
-                        Empty {
+                        QsEmpty {
                             visible: !root.wifiOn
                             ic: Theme.icWifiOff; title: "Wi-Fi is off"
                             desc: "Turn it on to see networks nearby."
@@ -1714,10 +1353,10 @@ Scope {
                                         width: parent.width
                                         spacing: Theme.spaceS
                                         bottomPadding: Theme.spaceXs
-                                        Field {
+                                        QsField {
                                             width: parent.width - pwJoin.width - parent.spacing
                                             focused: pwInput.activeFocus
-                                            FieldInput {
+                                            QsFieldInput {
                                                 id: pwInput
                                                 anchors.fill: parent; anchors.leftMargin: Theme.spaceS; anchors.rightMargin: Theme.controlSm + Theme.spaceXs
                                                 placeholder: "Password"
@@ -1728,7 +1367,7 @@ Scope {
                                                 Keys.onEscapePressed: Globals.quickSettingsOpen = false
                                             }
                                             // show or hide the password while typing
-                                            IconBtn {
+                                            QsIconButton {
                                                 anchors.right: parent.right; anchors.rightMargin: Theme.spaceXxs
                                                 anchors.verticalCenter: parent.verticalCenter
                                                 ic: root.pwShow ? Theme.icEyeOff : Theme.icEye
@@ -1736,7 +1375,7 @@ Scope {
                                                 onGo: root.pwShow = !root.pwShow
                                             }
                                         }
-                                        QsBtn {
+                                        QsButton {
                                             id: pwJoin
                                             anchors.verticalCenter: parent.verticalCenter
                                             size: "md"; variant: "primary"; label: "Join"
@@ -1752,7 +1391,7 @@ Scope {
                     Column {
                         visible: root.expanded === "bt"
                         width: parent.width; spacing: Theme.spaceS
-                        PageHead {
+                        QsPageHead {
                             title: "Bluetooth"
                             busy: Bluetooth.defaultAdapter && Bluetooth.defaultAdapter.discovering
                             note: (Bluetooth.defaultAdapter && Bluetooth.defaultAdapter.discovering) ? "Searching…" : ""
@@ -1761,7 +1400,7 @@ Scope {
                             switchDisabled: !Bluetooth.defaultAdapter
                             onToggled: if (Bluetooth.defaultAdapter) Bluetooth.defaultAdapter.enabled = !Bluetooth.defaultAdapter.enabled
                         }
-                        Empty {
+                        QsEmpty {
                             visible: !Bluetooth.defaultAdapter
                             ic: Theme.icBluetooth; title: "No Bluetooth adapter"
                             desc: "This computer has no Bluetooth, or it is turned off in the firmware."
@@ -1792,7 +1431,7 @@ Scope {
                                     busy: working
                                     onClicked: root.btTap(modelData)
                                     // forget: a trash button on hover, for anything paired
-                                    IconBtn {
+                                    QsIconButton {
                                         id: bForget
                                         visible: (bRow.hovered || bForget.hovered) && bRow.modelData.paired && !bRow.working
                                         anchors.verticalCenter: parent.verticalCenter
@@ -1807,8 +1446,8 @@ Scope {
                         }
                         // why the last tap failed ("codes did not match", "not in
                         // pairing mode", …) — from BtAgent; cleared by the next tap
-                        Note { visible: BtAgent.lastError !== ""; tone: "danger"; text: BtAgent.lastError }
-                        Note {
+                        QsNote { visible: BtAgent.lastError !== ""; tone: "danger"; text: BtAgent.lastError }
+                        QsNote {
                             visible: Bluetooth.defaultAdapter && Bluetooth.defaultAdapter.enabled && !BtAgent.registered
                             tone: "warning"
                             text: BtAgent.bridgeError !== "" ? BtAgent.bridgeError : "The pairing agent isn’t running yet. Devices that ask for a code can’t pair."
@@ -1819,8 +1458,8 @@ Scope {
                     Column {
                         visible: root.expanded === "vpn"
                         width: parent.width; spacing: Theme.spaceS
-                        PageHead { title: "VPN"; busy: root.vpnBusyName !== "" }
-                        Empty {
+                        QsPageHead { title: "VPN"; busy: root.vpnBusyName !== "" }
+                        QsEmpty {
                             visible: root.vpnList.length === 0
                             ic: Theme.icVpn; title: "No VPN connections"
                             desc: "Add a VPN connection, and it shows up here."
@@ -1854,11 +1493,11 @@ Scope {
                                         spacing: Theme.spaceS
                                         leftPadding: Theme.spaceS; rightPadding: Theme.spaceS; bottomPadding: Theme.spaceS
                                         readonly property real w: width - leftPadding - rightPadding
-                                        Note { width: parent.w; text: "Enter your sign-in details once. They’re kept in the connection." }
-                                        Field {
+                                        QsNote { width: parent.w; text: "Enter your sign-in details once. They’re kept in the connection." }
+                                        QsField {
                                             width: parent.w
                                             focused: vUser.activeFocus
-                                            FieldInput {
+                                            QsFieldInput {
                                                 id: vUser
                                                 anchors.fill: parent; anchors.leftMargin: Theme.spaceS; anchors.rightMargin: Theme.spaceS
                                                 placeholder: "Username"
@@ -1868,11 +1507,11 @@ Scope {
                                                 Keys.onEscapePressed: root.vpnCloseCredentials()
                                             }
                                         }
-                                        Field {
+                                        QsField {
                                             width: parent.w
                                             focused: vPass.activeFocus
                                             error: root.vpnCredError !== ""
-                                            FieldInput {
+                                            QsFieldInput {
                                                 id: vPass
                                                 anchors.fill: parent; anchors.leftMargin: Theme.spaceS; anchors.rightMargin: Theme.controlSm + Theme.spaceXs
                                                 placeholder: "Password"
@@ -1883,7 +1522,7 @@ Scope {
                                                 onAccepted: root.vpnCredNeedsPsk ? vPsk.forceActiveFocus() : root.vpnSaveCredentials()
                                                 Keys.onEscapePressed: root.vpnCloseCredentials()
                                             }
-                                            IconBtn {
+                                            QsIconButton {
                                                 anchors.right: parent.right; anchors.rightMargin: Theme.spaceXxs
                                                 anchors.verticalCenter: parent.verticalCenter
                                                 ic: root.vpnCredShow ? Theme.icEyeOff : Theme.icEye
@@ -1891,11 +1530,11 @@ Scope {
                                                 onGo: root.vpnCredShow = !root.vpnCredShow
                                             }
                                         }
-                                        Field {
+                                        QsField {
                                             visible: root.vpnCredNeedsPsk
                                             width: parent.w
                                             focused: vPsk.activeFocus
-                                            FieldInput {
+                                            QsFieldInput {
                                                 id: vPsk
                                                 anchors.fill: parent; anchors.leftMargin: Theme.spaceS; anchors.rightMargin: Theme.spaceS
                                                 placeholder: "Pre-shared key (IPsec), if there is one"
@@ -1906,12 +1545,12 @@ Scope {
                                                 Keys.onEscapePressed: root.vpnCloseCredentials()
                                             }
                                         }
-                                        Note { visible: root.vpnCredError !== ""; width: parent.w; tone: "danger"; text: root.vpnCredError }
+                                        QsNote { visible: root.vpnCredError !== ""; width: parent.w; tone: "danger"; text: root.vpnCredError }
                                         Row {
                                             anchors.right: parent.right; anchors.rightMargin: parent.rightPadding
                                             spacing: Theme.spaceS
-                                            QsBtn { size: "md"; variant: "ghost"; label: "Cancel"; onGo: root.vpnCloseCredentials() }
-                                            QsBtn {
+                                            QsButton { size: "md"; variant: "ghost"; label: "Cancel"; onGo: root.vpnCloseCredentials() }
+                                            QsButton {
                                                 size: "md"; variant: "primary"
                                                 busy: root.vpnBusyName === vRow.modelData.name
                                                 disabled: root.vpnBusyName !== "" && root.vpnBusyName !== vRow.modelData.name
@@ -1932,11 +1571,11 @@ Scope {
                     Column {
                         visible: root.expanded === "ssh"
                         width: parent.width; spacing: Theme.spaceS
-                        PageHead { title: "SSH"; note: "~/.ssh/config" }
+                        QsPageHead { title: "SSH"; note: "~/.ssh/config" }
                         Column {
                             visible: root.sshList.length === 0
                             width: parent.width; spacing: Theme.spaceS
-                            Empty { ic: Theme.icSsh; title: "No SSH hosts"; desc: "Add a host to ~/.ssh/config, like this:" }
+                            QsEmpty { ic: Theme.icSsh; title: "No SSH hosts"; desc: "Add a host to ~/.ssh/config, like this:" }
                             Rectangle {
                                 width: parent.width; height: sshSample.implicitHeight + 2 * Theme.spaceS
                                 radius: Theme.radiusPrimary
@@ -1970,13 +1609,13 @@ Scope {
                                         active: sshRow.modelData.tunnel
                                         // the whole row (under the buttons) → a terminal
                                         onClicked: root.sshTerm(sshRow.modelData.host)
-                                        IconBtn {
+                                        QsIconButton {
                                             visible: sshRow.modelData.tunnel
                                             anchors.verticalCenter: parent.verticalCenter
                                             square: true; danger: true
                                             onGo: root.sshStopTunnel(sshRow.modelData.host)
                                         }
-                                        IconBtn {
+                                        QsIconButton {
                                             visible: sshRow.modelData.script
                                             anchors.verticalCenter: parent.verticalCenter
                                             ic: Theme.icPencil
@@ -1985,7 +1624,7 @@ Scope {
                                         }
                                         // globe: run the host's browse script (or open the
                                         // editor if none is saved yet)
-                                        IconBtn {
+                                        QsIconButton {
                                             anchors.verticalCenter: parent.verticalCenter
                                             ic: Theme.icWeb
                                             onGo: root.sshBrowse(sshRow.modelData.host, sshRow.modelData.script)
@@ -2027,7 +1666,7 @@ Scope {
                                                     }
                                                 }
                                             }
-                                            Note {
+                                            QsNote {
                                                 visible: seEdit.text.length === 0
                                                 anchors.fill: parent; anchors.margins: Theme.spaceS
                                                 text: "Paste the shell script to run for “" + sshRow.modelData.host + "”, such as a browser that goes through the tunnel.\n\nIt runs with SSH_HOST and SOCKS_PORT set, once a SOCKS5 tunnel to the host is up on 127.0.0.1:$SOCKS_PORT (1080 by default; needs key or agent sign-in). Saved to ~/.config/quickshell/ssh-browse/."
@@ -2036,13 +1675,13 @@ Scope {
                                         Row {
                                             anchors.right: parent.right
                                             spacing: Theme.spaceS
-                                            QsBtn {
+                                            QsButton {
                                                 visible: sshRow.modelData.script
                                                 variant: "danger"; label: "Delete script"
                                                 onGo: root.sshDeleteScript(sshRow.modelData.host)
                                             }
-                                            QsBtn { variant: "ghost"; label: "Cancel"; onGo: root.scriptTarget = "" }
-                                            QsBtn {
+                                            QsButton { variant: "ghost"; label: "Cancel"; onGo: root.scriptTarget = "" }
+                                            QsButton {
                                                 variant: "primary"; label: "Save and run"
                                                 disabled: seEdit.text.trim().length === 0
                                                 onGo: root.sshSaveScript(sshRow.modelData.host, seEdit.text)
@@ -2069,7 +1708,7 @@ Scope {
                         }
                         onVisibleChanged: if (visible) KdeConnect.markAllSeen()
 
-                        PageHead {
+                        QsPageHead {
                             title: KdeConnect.connected ? KdeConnect.device.name : "Mobile"
                             note: KdeConnect.connected ? "" : "KDE Connect"
                             // the connected phone's battery
@@ -2084,13 +1723,13 @@ Scope {
                                     font.pixelSize: Theme.iconSm
                                     color: KdeConnect.connected && KdeConnect.device.isCharging ? Theme.success : Theme.textSecondary
                                 }
-                                TMono { anchors.verticalCenter: parent.verticalCenter; text: KdeConnect.connected ? KdeConnect.device.batteryCharge + "%" : "" }
+                                TextMono { anchors.verticalCenter: parent.verticalCenter; text: KdeConnect.connected ? KdeConnect.device.batteryCharge + "%" : "" }
                             }
-                            IconBtn { anchors.verticalCenter: parent.verticalCenter; ic: Theme.icRefresh; onGo: KdeConnect.refresh() }
+                            QsIconButton { anchors.verticalCenter: parent.verticalCenter; ic: Theme.icRefresh; onGo: KdeConnect.refresh() }
                         }
 
                         // — not installed —
-                        Empty {
+                        QsEmpty {
                             visible: KdeConnect.bridgeUp && !KdeConnect.installed
                             ic: Theme.icPhone; title: "KDE Connect isn’t installed"
                             desc: "Install it with sudo pacman -S kdeconnect, then install the app on your phone. Both need the same Wi-Fi network."
@@ -2099,23 +1738,23 @@ Scope {
                         Row {
                             visible: KdeConnect.installed && !KdeConnect.daemonRunning
                             width: parent.width; spacing: Theme.spaceS
-                            TBody { anchors.verticalCenter: parent.verticalCenter; width: parent.width - kdStart.width - parent.spacing; text: "KDE Connect isn’t running."; color: Theme.textSecondary }
-                            QsBtn { id: kdStart; anchors.verticalCenter: parent.verticalCenter; variant: "primary"; label: "Start"; onGo: KdeConnect.refresh() }
+                            TextBody { anchors.verticalCenter: parent.verticalCenter; width: parent.width - kdStart.width - parent.spacing; text: "KDE Connect isn’t running."; color: Theme.textSecondary }
+                            QsButton { id: kdStart; anchors.verticalCenter: parent.verticalCenter; variant: "primary"; label: "Start"; onGo: KdeConnect.refresh() }
                         }
 
                         // — incoming pair request —
                         Column {
                             width: parent.width; spacing: Theme.spaceS
                             visible: KdeConnect.device !== null && KdeConnect.device.pairRequestedByPeer
-                            TBody {
+                            TextBody {
                                 width: parent.width; wrapMode: Text.Wrap; elide: Text.ElideNone
                                 text: "“" + (KdeConnect.device ? KdeConnect.device.name : "") + "” wants to pair with this computer."
                             }
                             Row {
                                 anchors.right: parent.right
                                 spacing: Theme.spaceS
-                                QsBtn { variant: "ghost"; label: "Reject"; onGo: KdeConnect.cancelPair(KdeConnect.device.id) }
-                                QsBtn { variant: "primary"; label: "Accept"; onGo: KdeConnect.acceptPair(KdeConnect.device.id) }
+                                QsButton { variant: "ghost"; label: "Reject"; onGo: KdeConnect.cancelPair(KdeConnect.device.id) }
+                                QsButton { variant: "primary"; label: "Accept"; onGo: KdeConnect.acceptPair(KdeConnect.device.id) }
                             }
                         }
 
@@ -2124,10 +1763,10 @@ Scope {
                             visible: KdeConnect.pairingId !== ""
                             width: parent.width; spacing: Theme.spaceS
                             Spinner { anchors.verticalCenter: parent.verticalCenter; size: Theme.iconSm }
-                            TBody { anchors.verticalCenter: parent.verticalCenter; width: parent.width - Theme.iconSm - kpCancel.width - 2 * parent.spacing; text: "Pairing… Accept the request on your phone."; color: Theme.textSecondary }
-                            QsBtn { id: kpCancel; anchors.verticalCenter: parent.verticalCenter; variant: "ghost"; label: "Cancel"; onGo: KdeConnect.cancelPair(KdeConnect.pairingId) }
+                            TextBody { anchors.verticalCenter: parent.verticalCenter; width: parent.width - Theme.iconSm - kpCancel.width - 2 * parent.spacing; text: "Pairing… Accept the request on your phone."; color: Theme.textSecondary }
+                            QsButton { id: kpCancel; anchors.verticalCenter: parent.verticalCenter; variant: "ghost"; label: "Cancel"; onGo: KdeConnect.cancelPair(KdeConnect.pairingId) }
                         }
-                        Note { visible: KdeConnect.pairError !== ""; tone: "danger"; text: KdeConnect.pairError }
+                        QsNote { visible: KdeConnect.pairError !== ""; tone: "danger"; text: KdeConnect.pairError }
 
                         // — no paired device: the phones in reach —
                         Column {
@@ -2135,7 +1774,7 @@ Scope {
                             visible: KdeConnect.installed && KdeConnect.daemonRunning
                                      && (KdeConnect.device === null || (!KdeConnect.device.isPaired && !KdeConnect.device.pairRequestedByPeer))
                                      && KdeConnect.pairingId === ""
-                            Empty {
+                            QsEmpty {
                                 visible: KdeConnect.devices.length === 0
                                 ic: Theme.icPhone; title: "No phones found"
                                 desc: "Open KDE Connect on your phone. Both devices need the same network."
@@ -2153,7 +1792,7 @@ Scope {
                                         desc: modelData.isReachable ? "" : "Offline"
                                         disabled: !modelData.isReachable
                                         onClicked: if (kpRow.modelData.isReachable) KdeConnect.requestPair(kpRow.modelData.id)
-                                        QsBtn {
+                                        QsButton {
                                             visible: kpRow.modelData.isReachable
                                             anchors.verticalCenter: parent.verticalCenter
                                             variant: "secondary"; label: "Pair"
@@ -2165,7 +1804,7 @@ Scope {
                         }
 
                         // — paired but out of reach —
-                        Note {
+                        QsNote {
                             visible: KdeConnect.device !== null && KdeConnect.device.isPaired && !KdeConnect.device.isReachable
                             text: "“" + (KdeConnect.device ? KdeConnect.device.name : "") + "” is offline. Put it on the same network with KDE Connect open, then refresh."
                         }
@@ -2177,7 +1816,7 @@ Scope {
 
                             Row {
                                 width: parent.width; spacing: Theme.spaceS
-                                Segmented {
+                                QsSegmented {
                                     width: parent.width - ringBtn.width - parent.spacing
                                     options: [{ label: "Notifications" + (KdeConnect.unreadCount > 0 ? " · " + KdeConnect.unreadCount : ""), value: "notifs" },
                                               { label: "Messages", value: "msgs" }]
@@ -2189,13 +1828,13 @@ Scope {
                                     }
                                 }
                                 // ring (find my phone)
-                                IconBtn { id: ringBtn; anchors.verticalCenter: parent.verticalCenter; size: "md"; ic: Theme.icBellRing; onGo: KdeConnect.ring() }
+                                QsIconButton { id: ringBtn; anchors.verticalCenter: parent.verticalCenter; size: "md"; ic: Theme.icBellRing; onGo: KdeConnect.ring() }
                             }
 
                             // ── the phone's notifications ──
                             Column {
                                 width: parent.width; spacing: Theme.spaceS; visible: root.mobileView === "notifs"
-                                Empty { visible: KdeConnect.notifs.length === 0; ic: Theme.icBell; title: "No notifications on the phone" }
+                                QsEmpty { visible: KdeConnect.notifs.length === 0; ic: Theme.icBell; title: "No notifications on the phone" }
                                 Flickable {
                                     width: parent.width
                                     visible: KdeConnect.notifs.length > 0
@@ -2241,7 +1880,7 @@ Scope {
                                                         anchors.right: knBtns.left; anchors.rightMargin: Theme.spaceXs
                                                         anchors.top: parent.top; anchors.topMargin: Theme.spaceS
                                                         spacing: Theme.spaceXxs
-                                                        TStrong { width: parent.width; text: knRow.modelData.title || knRow.modelData.appName }
+                                                        TextStrong { width: parent.width; text: knRow.modelData.title || knRow.modelData.appName }
                                                         Text {
                                                             width: parent.width
                                                             visible: text !== ""
@@ -2251,7 +1890,7 @@ Scope {
                                                             font.pixelSize: Theme.type.body.size
                                                             wrapMode: Text.Wrap; maximumLineCount: 3; elide: Text.ElideRight
                                                         }
-                                                        TCaption { text: knRow.modelData.appName }
+                                                        TextCaption { text: knRow.modelData.appName }
                                                     }
                                                     Row {
                                                         id: knBtns
@@ -2259,13 +1898,13 @@ Scope {
                                                         anchors.top: parent.top; anchors.topMargin: Theme.spaceXs
                                                         spacing: Theme.spaceXxs
                                                         // reply (only when the app allows it)
-                                                        IconBtn {
+                                                        QsIconButton {
                                                             visible: knRow.modelData.replyId !== ""
                                                             ic: Theme.icSend
                                                             selected: root.replyTarget === knRow.modelData.id
                                                             onGo: root.replyTarget = root.replyTarget === knRow.modelData.id ? "" : knRow.modelData.id
                                                         }
-                                                        IconBtn {
+                                                        QsIconButton {
                                                             visible: knRow.modelData.dismissable
                                                             ic: Theme.icClose
                                                             onGo: KdeConnect.dismissNotif(knRow.modelData.id)
@@ -2277,10 +1916,10 @@ Scope {
                                                     visible: root.replyTarget === knRow.modelData.id
                                                     width: parent.width; spacing: Theme.spaceS
                                                     leftPadding: Theme.spaceS; rightPadding: Theme.spaceS; bottomPadding: Theme.spaceS
-                                                    Field {
+                                                    QsField {
                                                         width: parent.width - parent.leftPadding - parent.rightPadding - knSend.width - parent.spacing
                                                         focused: knReply.activeFocus
-                                                        FieldInput {
+                                                        QsFieldInput {
                                                             id: knReply
                                                             anchors.fill: parent; anchors.leftMargin: Theme.spaceS; anchors.rightMargin: Theme.spaceS
                                                             placeholder: "Reply…"
@@ -2288,7 +1927,7 @@ Scope {
                                                             onAccepted: { if (text.trim() !== "") { KdeConnect.replyNotif(knRow.modelData.replyId, text.trim()); root.replyTarget = "" } }
                                                         }
                                                     }
-                                                    QsBtn {
+                                                    QsButton {
                                                         id: knSend
                                                         anchors.verticalCenter: parent.verticalCenter
                                                         size: "md"; variant: "primary"; label: "Send"
@@ -2314,7 +1953,7 @@ Scope {
                                         spacing: Theme.spaceS
                                         leftPadding: Theme.spaceS
                                         Spinner { visible: KdeConnect.convsRequested; anchors.verticalCenter: parent.verticalCenter; size: Theme.iconSm }
-                                        TCaption { anchors.verticalCenter: parent.verticalCenter; text: KdeConnect.convsRequested ? "Loading conversations from the phone…" : "No conversations yet" }
+                                        TextCaption { anchors.verticalCenter: parent.verticalCenter; text: KdeConnect.convsRequested ? "Loading conversations from the phone…" : "No conversations yet" }
                                     }
                                     Flickable {
                                         width: parent.width
@@ -2328,7 +1967,7 @@ Scope {
                                             width: parent.width
                                             Repeater {
                                                 model: KdeConnect.conversations
-                                                delegate: MsgRow {
+                                                delegate: QsMsgRow {
                                                     required property var modelData
                                                     title: modelData.display
                                                     line: modelData.body
@@ -2346,8 +1985,8 @@ Scope {
                                     width: parent.width; spacing: Theme.spaceS; visible: KdeConnect.openThread >= 0
                                     Row {
                                         width: parent.width; spacing: Theme.spaceS
-                                        IconBtn { anchors.verticalCenter: parent.verticalCenter; size: "md"; ic: Theme.icBack; onGo: KdeConnect.openThread = -1 }
-                                        TStrong {
+                                        QsIconButton { anchors.verticalCenter: parent.verticalCenter; size: "md"; ic: Theme.icBack; onGo: KdeConnect.openThread = -1 }
+                                        TextStrong {
                                             anchors.verticalCenter: parent.verticalCenter
                                             width: parent.width - Theme.controlMd - parent.spacing
                                             text: {
@@ -2415,17 +2054,17 @@ Scope {
                                     // compose
                                     Row {
                                         width: parent.width; spacing: Theme.spaceS
-                                        Field {
+                                        QsField {
                                             width: parent.width - kdcSend.width - parent.spacing
                                             focused: kdcCompose.activeFocus
-                                            FieldInput {
+                                            QsFieldInput {
                                                 id: kdcCompose
                                                 anchors.fill: parent; anchors.leftMargin: Theme.spaceS; anchors.rightMargin: Theme.spaceS
                                                 placeholder: "Message…"
                                                 onAccepted: { if (text.trim() !== "") { KdeConnect.sendMessage(text.trim()); text = "" } }
                                             }
                                         }
-                                        QsBtn {
+                                        QsButton {
                                             id: kdcSend
                                             anchors.verticalCenter: parent.verticalCenter
                                             size: "md"; variant: "primary"; ic: Theme.icSend; label: "Send"
@@ -2442,19 +2081,19 @@ Scope {
                     Column {
                         visible: root.expanded === "mail"
                         width: parent.width; spacing: Theme.spaceS
-                        PageHead {
+                        QsPageHead {
                             title: Mail.available ? "Inbox" : "Mail"
                             note: Mail.available && Mail.unread > 0 ? Mail.unread + " unread" : ""
                             // new-mail notifications on or off
-                            IconBtn { visible: Mail.available; anchors.verticalCenter: parent.verticalCenter; ic: Theme.icBellRing; selected: Mail.notify; onGo: Mail.setNotify(!Mail.notify) }
-                            IconBtn { visible: Mail.available; anchors.verticalCenter: parent.verticalCenter; ic: Theme.icRefresh; onGo: Mail.fetch() }
-                            QsBtn { anchors.verticalCenter: parent.verticalCenter; label: Mail.inboxLabel; onGo: Mail.openInbox() }
+                            QsIconButton { visible: Mail.available; anchors.verticalCenter: parent.verticalCenter; ic: Theme.icBellRing; selected: Mail.notify; onGo: Mail.setNotify(!Mail.notify) }
+                            QsIconButton { visible: Mail.available; anchors.verticalCenter: parent.verticalCenter; ic: Theme.icRefresh; onGo: Mail.fetch() }
+                            QsButton { anchors.verticalCenter: parent.verticalCenter; label: Mail.inboxLabel; onGo: Mail.openInbox() }
                         }
-                        Note { visible: !Mail.available; text: Mail.hint }
-                        Note { visible: Mail.available && Mail.error !== ""; tone: "warning"; text: Mail.error }
-                        QsBtn { visible: Mail.needsReconnect; variant: "primary"; label: "Reconnect Google"; onGo: Mail.reconnect() }
-                        Note { visible: Mail.available && Mail.state === "offline"; text: "Offline. Showing the last check." }
-                        Empty {
+                        QsNote { visible: !Mail.available; text: Mail.hint }
+                        QsNote { visible: Mail.available && Mail.error !== ""; tone: "warning"; text: Mail.error }
+                        QsButton { visible: Mail.needsReconnect; variant: "primary"; label: "Reconnect Google"; onGo: Mail.reconnect() }
+                        QsNote { visible: Mail.available && Mail.state === "offline"; text: "Offline. Showing the last check." }
+                        QsEmpty {
                             visible: Mail.available && Mail.state === "" && Mail.list.length === 0
                             ic: Theme.icMail; title: "No mail"; desc: "Your inbox is empty."
                         }
@@ -2464,7 +2103,7 @@ Scope {
                             visible: Mail.available && Mail.list.length > 0
                             Repeater {
                                 model: Mail.list.slice(0, 10)
-                                delegate: MsgRow {
+                                delegate: QsMsgRow {
                                     required property var modelData
                                     title: modelData.from
                                     line: modelData.subject
@@ -2485,7 +2124,7 @@ Scope {
                         width: parent.width; spacing: Theme.spaceS
                         property bool castOpen: root.tab === "cast"
                         // the switch is on while a session runs; turning it off hangs up
-                        PageHead {
+                        QsPageHead {
                             title: "Cast"
                             busy: Globals.casting && Globals.castState !== "streaming"
                             note: Globals.castState === "streaming" ? "Casting to " + Globals.castSinkName
@@ -2496,14 +2135,14 @@ Scope {
                         }
                         // while a session is being built, narrate the daemon's state
                         // where the person is looking — the same line the toasts carry
-                        Note { visible: Globals.casting && Globals.castState !== "streaming" && Globals.castDetail !== ""; text: Globals.castDetail }
+                        QsNote { visible: Globals.casting && Globals.castState !== "streaming" && Globals.castDetail !== ""; text: Globals.castDetail }
                         // nothing yet — an honest empty state instead of a broken-looking box
                         Row {
                             visible: castCard.castOpen && !Globals.casting && Globals.castSinks.length === 0
                             spacing: Theme.spaceS
                             leftPadding: Theme.spaceS
                             Spinner { visible: Globals.castDetail.indexOf("not installed") === -1; anchors.verticalCenter: parent.verticalCenter; size: Theme.iconSm }
-                            TCaption {
+                            TextCaption {
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: Globals.castDetail.indexOf("not installed") !== -1 ? Globals.castDetail : "Looking for displays…"
                             }
@@ -2532,8 +2171,8 @@ Scope {
                         // header: month and year
                         Item {
                             width: parent.width; height: Theme.controlLg
-                            IconBtn { id: calBack; anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; size: "md"; ic: Theme.icBack; onGo: root.setTab("home") }
-                            TStrong {
+                            QsIconButton { id: calBack; anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; size: "md"; ic: Theme.icBack; onGo: root.setTab("home") }
+                            TextStrong {
                                 anchors.left: calBack.right; anchors.leftMargin: Theme.spaceS
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: root.monthNames[root.calMonth] + " " + root.calYear
@@ -2549,7 +2188,7 @@ Scope {
                                 delegate: Item {
                                     required property int index
                                     width: calGrid.cellW; height: Theme.controlSm
-                                    TCaption {
+                                    TextCaption {
                                         anchors.centerIn: parent
                                         text: Qt.locale().dayName((root.firstDow + index) % 7, Locale.ShortFormat).slice(0, 2)
                                     }
@@ -2575,7 +2214,7 @@ Scope {
                                         visible: calDay.isToday
                                         color: Theme.accent
                                     }
-                                    TMono {
+                                    TextMono {
                                         anchors.centerIn: parent
                                         text: calDay.valid ? calDay.dayNum : ""
                                         color: calDay.isToday ? Theme.onAccent : calDay.weekend ? Theme.textSecondary : Theme.textPrimary
@@ -2606,16 +2245,16 @@ Scope {
                                 anchors.left: offIc.right; anchors.leftMargin: Theme.spaceS
                                 anchors.right: parent.right; anchors.rightMargin: Theme.spaceS + Theme.spaceXs
                                 anchors.top: parent.top; anchors.topMargin: Theme.spaceS
-                                TStrong { text: "Offline"; color: Theme.warning }
-                                TBody { width: parent.width; text: "Showing events from the last sync."; wrapMode: Text.Wrap }
+                                TextStrong { text: "Offline"; color: Theme.warning }
+                                TextBody { width: parent.width; text: "Showing events from the last sync."; wrapMode: Text.Wrap }
                             }
                         }
-                        Empty {
+                        QsEmpty {
                             visible: root.agenda.length === 0
                             ic: Theme.icCalendar
                             title: Agenda.hintTitle
                             desc: Agenda.hintBody
-                            QsBtn {
+                            QsButton {
                                 visible: !Agenda.connected
                                 size: "md"; label: "Open Settings"
                                 onGo: { Globals.quickSettingsOpen = false; Globals.openSettings() }
@@ -2640,7 +2279,7 @@ Scope {
                                         height: Math.max(Theme.controlXl, evText.implicitHeight + 2 * Theme.spaceXs)
                                         radius: Theme.radiusSecondary
                                         color: evRow.now ? Theme.accentSubtle : "transparent"
-                                        TMono {
+                                        TextMono {
                                             id: evTime
                                             anchors.left: parent.left; anchors.leftMargin: Theme.spaceS
                                             anchors.top: evText.top
@@ -2662,8 +2301,8 @@ Scope {
                                             anchors.left: evBar.right; anchors.leftMargin: Theme.spaceS
                                             anchors.right: parent.right; anchors.rightMargin: Theme.spaceS
                                             anchors.verticalCenter: parent.verticalCenter
-                                            TBody { width: parent.width; text: evRow.modelData.summary }
-                                            TCaption { visible: text !== ""; width: parent.width; text: root.eventMeta(evRow.modelData) }
+                                            TextBody { width: parent.width; text: evRow.modelData.summary }
+                                            TextCaption { visible: text !== ""; width: parent.width; text: root.eventMeta(evRow.modelData) }
                                         }
                                     }
                                 }
@@ -2679,7 +2318,7 @@ Scope {
                         readonly property bool any: Globals.server && Globals.server.trackedNotifications.values.length > 0
                         Item {
                             width: parent.width; height: Theme.controlLg
-                            IconBtn { id: ntBack; anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; size: "md"; ic: Theme.icBack; onGo: root.setTab("home") }
+                            QsIconButton { id: ntBack; anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; size: "md"; ic: Theme.icBack; onGo: root.setTab("home") }
                             Text {
                                 anchors.left: ntBack.right; anchors.leftMargin: Theme.spaceS
                                 anchors.verticalCenter: parent.verticalCenter
@@ -2689,20 +2328,20 @@ Scope {
                                 font.pixelSize: Theme.type.h4.size
                                 font.weight: Theme.type.h4.weight
                             }
-                            QsBtn {
+                            QsButton {
                                 visible: parent.parent.any
                                 anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
                                 size: "md"; variant: "ghost"; label: "Clear all"
                                 onGo: root.clearAll()
                             }
                         }
-                        SwitchRow {
+                        QsSwitchRow {
                             ic: Theme.icDnd; label: "Do not disturb"
                             on: Globals.dnd
                             onToggled: Globals.dnd = !Globals.dnd
                         }
                         Rectangle { width: parent.width; height: Theme.borderWidth1; color: Theme.borderSubtle }
-                        Empty {
+                        QsEmpty {
                             visible: !parent.any
                             ic: Globals.dnd ? Theme.icDnd : Theme.icBell
                             title: "No notifications"
@@ -2797,7 +2436,7 @@ Scope {
                                                                 : Quickshell.iconPath("dialog-information")
                                                     }
                                                 }
-                                                TCaption {
+                                                TextCaption {
                                                     anchors.verticalCenter: parent.verticalCenter
                                                     text: nGroup.modelData.app
                                                     color: Theme.textSecondary
@@ -2813,7 +2452,7 @@ Scope {
                                                 }
                                             }
                                             // close dismisses the whole group
-                                            IconBtn {
+                                            QsIconButton {
                                                 id: nClose
                                                 anchors.right: parent.right; anchors.rightMargin: -Theme.spaceXs
                                                 anchors.verticalCenter: parent.verticalCenter
@@ -2834,7 +2473,7 @@ Scope {
                                                 Row {
                                                     width: parent.width; spacing: Theme.spaceXs
                                                     Glyph { visible: nGroup.critical; anchors.verticalCenter: parent.verticalCenter; text: Theme.icWarning; color: Theme.danger }
-                                                    TStrong {
+                                                    TextStrong {
                                                         anchors.verticalCenter: parent.verticalCenter
                                                         width: parent.width - (nGroup.critical ? Theme.iconMd + parent.spacing : 0)
                                                         text: nGroup.latest.summary || ""
@@ -2888,7 +2527,7 @@ Scope {
                                                     anchors.left: parent.left; anchors.right: iClose.left; anchors.rightMargin: Theme.spaceXs
                                                     anchors.bottom: parent.bottom
                                                     spacing: Theme.spaceXxs
-                                                    TStrong { width: parent.width; text: nItem.modelData.summary || "" }
+                                                    TextStrong { width: parent.width; text: nItem.modelData.summary || "" }
                                                     Text {
                                                         visible: text.length > 0
                                                         width: parent.width
@@ -2900,7 +2539,7 @@ Scope {
                                                         textFormat: Text.PlainText
                                                     }
                                                 }
-                                                IconBtn {
+                                                QsIconButton {
                                                     id: iClose
                                                     anchors.right: parent.right; anchors.rightMargin: -Theme.spaceXs
                                                     anchors.top: iCol.top
@@ -2913,13 +2552,38 @@ Scope {
                                 }
 
                                 // "N more from App", below the stack
-                                TCaption {
+                                TextCaption {
                                     id: nMore
                                     visible: nGroup.stacked
                                     anchors.top: nCard.bottom; anchors.topMargin: Theme.spaceS + Theme.spaceXs
                                     anchors.horizontalCenter: parent.horizontalCenter
                                     text: (nGroup.count - 1) + " more from " + nGroup.modelData.app
                                 }
+                            }
+                        }
+                    }
+
+                    // ═══ plugin pages (API 3 quick-page): one Column per
+                    //     registered page, shown while its key is the tab —
+                    //     the same way the built-in pages above are ═══
+                    Repeater {
+                        model: PluginHost.quickPages
+                        delegate: Column {
+                            id: pageSlot
+                            required property var modelData
+                            visible: root.tab === modelData.key
+                            width: parent.width; spacing: Theme.spaceS
+                            readonly property bool shown: Globals.quickSettingsOpen && root.tab === modelData.key
+                            onShownChanged: if (pageLoader.status === Loader.Ready && pageLoader.item && ("panelOpen" in pageLoader.item)) pageLoader.item.panelOpen = pageSlot.shown
+                            Loader {
+                                id: pageLoader
+                                width: parent.width
+                                source: "file://" + pageSlot.modelData.entry
+                                onStatusChanged: {
+                                    if (status === Loader.Error) Log.warn("plugins", pageSlot.modelData.id + "/quick-page failed to load (see the qml error above)")
+                                    else if (status === Loader.Ready) PluginHost.inject(item, pageSlot.modelData.id, { panelOpen: pageSlot.shown })
+                                }
+                                Connections { target: PluginHost; function onSettingsChanged() { if (pageLoader.status === Loader.Ready) PluginHost._giveSettings(pageLoader.item, pageSlot.modelData.id) } }
                             }
                         }
                     }
@@ -2948,7 +2612,7 @@ Scope {
                     anchors.verticalCenter: parent.verticalCenter
                     spacing: Theme.spaceS
                     Glyph { anchors.verticalCenter: parent.verticalCenter; text: pit.ic; color: pit.danger ? Theme.danger : Theme.textSecondary }
-                    TBody { anchors.verticalCenter: parent.verticalCenter; text: pit.label; color: (pit.danger && pitMa.containsMouse) ? Theme.danger : Theme.textPrimary }
+                    TextBody { anchors.verticalCenter: parent.verticalCenter; text: pit.label; color: (pit.danger && pitMa.containsMouse) ? Theme.danger : Theme.textPrimary }
                 }
                 MouseArea { id: pitMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: pit.go() }
             }
@@ -2991,7 +2655,7 @@ Scope {
                         spacing: Theme.spaceS
                         padding: Theme.spaceS
                         SectionTitle { text: "Power mode"; first: true }
-                        Segmented {
+                        QsSegmented {
                             width: parent.width - 2 * parent.padding
                             value: PowerProfiles.profile
                             options: [{ label: "Power saver", value: PowerProfile.PowerSaver },
@@ -3101,8 +2765,8 @@ Scope {
                         Row {
                             anchors.right: parent.right
                             spacing: Theme.spaceS
-                            QsBtn { size: "md"; variant: "ghost"; label: "Cancel"; onGo: root.confirmAction = "" }
-                            QsBtn {
+                            QsButton { size: "md"; variant: "ghost"; label: "Cancel"; onGo: root.confirmAction = "" }
+                            QsButton {
                                 size: "md"
                                 variant: confirmPop.danger ? "danger" : "primary"
                                 label: root.confirmVerb
