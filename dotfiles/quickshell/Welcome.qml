@@ -219,6 +219,7 @@ Scope {
         // the add-ons step from the driver (no pointer in the nested harness)
         function pick(id: string): void { root.toggleAddon(id) }
         function install(): void { root.installAddons() }
+        function finish(): void { root.finish() }
     }
 
     // the network step (WifiPicker, inside the card below) polls only while
