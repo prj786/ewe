@@ -10,14 +10,18 @@ import Quickshell.Wayland
 // ignores exclusive zones, so the bar's strip is ours to clear) for a top
 // one. Esc closes; the
 // keyboard is OnDemand while open. Declare the card's content as children.
+// One add-on popup at a time: opening calls Shell.closePopups(<owner>) and
+// every popup honours Shell.popupsClosing — set `owner` to your plugin id
+// so your own closePopups(id) calls spare this popup.
 //
-//   AnchoredPopup { id: pop; action: "acme.music.toggle"; implicitWidth: Theme.panelSm
+//   AnchoredPopup { id: pop; owner: "acme.music"; action: "acme.music.toggle"; implicitWidth: Theme.panelSm
 //                   Column { anchors.fill: parent; anchors.margins: Theme.spaceS … } }
 //   Shell.registerAction("acme.music.toggle", function (a) { pop.toggleAt(a) })
 Scope {
     id: pop
     property bool open: false
     property string name: "popup"         // layer-shell namespace suffix: quickshell:<name>
+    property string owner: ""             // the plugin id — what Shell.closePopups(id) spares
     property string action: ""            // Shell.isActive(action) follows `open` (the dock item lights)
     property int implicitWidth: Theme.panelSm
     property int implicitHeight: Theme.panelSm
@@ -26,12 +30,23 @@ Scope {
     signal opened()
     signal closed()
 
-    function openAt(a) { if (a) pop.anchor = a; pop.open = true }
+    // the id this popup answers to in Shell.closePopups(): the owner, else
+    // the action, else its namespace — never "" (which would spare nothing)
+    readonly property string _token: pop.owner !== "" ? pop.owner : pop.action !== "" ? pop.action : "popup:" + pop.name
+    function openAt(a) { if (a) pop.anchor = a; Shell.closePopups(pop._token); pop.open = true }
     function toggleAt(a) { if (pop.open) pop.close(); else pop.openAt(a) }
     function close() { pop.open = false }
     onOpenChanged: {
         if (pop.action !== "") Shell.setActive(pop.action, pop.open)
         if (pop.open) pop.opened(); else pop.closed()
+    }
+    Connections {
+        target: Shell
+        function onPopupsClosing(exceptId) {
+            if (!pop.open) return
+            if (exceptId === pop._token || (exceptId !== "" && (exceptId === pop.owner || exceptId === pop.action || exceptId === pop.name))) return
+            pop.close()
+        }
     }
 
     PanelWindow {

@@ -279,18 +279,23 @@ features, the `_private` plumbing) is internal and may move without notice.
 | read | `dockPrefs` | `{ enabled, autohide, iconSize }` — the user's `[desktop.dock]` prefs (`iconSize` is `"small"`, `"normal"` or `"large"`); what a dock plugin obeys. Read-only: Settings and ewe-settings write them |
 | read | `pinnedApps` | the pinned desktop ids (`ewe-conf` `apps.pinned`), bindable |
 | read | `activeCount` | how many actions report themselves open (an autohide dock stays out while > 0) |
+| read | `primaryScreenName` | the primary output's name — a shell concept (the display profile's primary, else the first output); what a dock pins itself to |
+| read | `dockItems` | the dock-item registry: `[{ id, name, icon, label, action, order }]` of every enabled plugin with a `dockItem`, in order — read-only, bindable; a dock plugin renders it, filtered by `dockItemShown(id)` |
 | call | `toast(text, kind)` | a bottom-centre Toast; `kind` is `""`/`"info"`, `"warning"` or `"danger"`, or a Toast options object (`{ actionLabel, action, icon, timeout }`) |
 | call | `openQuickSettings(tab)`, `closeQuickSettings()` | a built-in key or a plugin page's `quickPage.key`; same route as `qs ipc call quicksettings tab <key>` |
 | call | `openSettings(page)`, `openStore(page)` | ewe-settings / Komble, focused if already open; `page` is forwarded (`komble --<page>`, e.g. `"addons"`; `ewe-settings --page <name>`) |
+| call | `toggleOverview()` | open or close the Overview in-shell (what a dock's Overview button does — no `qs ipc` spawn) |
 | call | `launch(desktopId)` | run a `.desktop` id (focuses an existing window first); `false` when unknown |
 | call | `focusApp([classes])` | bring the window of one of these app classes forward; `false` when none |
 | call | `registerAction(name, fn)`, `runAction(name, anchor)` | a named function (`dockItem.action` names one) and how the dock — or another plugin — runs it; `runAction` returns `false` when none is registered |
 | call | `setActive(name, on)`, `isActive(name)` | an action's open state (its dock item lights); `AnchoredPopup` reports it through `action` |
 | call | `setDockItemShown(pluginId, on)`, `dockItemShown(pluginId)` | hide or show your own dock item at runtime (default shown) — a player with nothing playing, a "bar only" setting; the dock filters on it live |
+| call | `closePopups(exceptId)` | **one add-on popup at a time**: asks every popup but `exceptId`'s to close — emits `popupsClosing(exceptId)`. Every `AnchoredPopup` honours it (and calls it when it opens, with its `owner`); a plugin with its own `PanelWindow` listens to the signal and calls `closePopups(<its id>)` when it opens |
 | call | `setBottomInset(pluginId, px, reserved)` | what a dock plugin publishes; `0` withdraws it |
 | call | `setPinned(desktopId, on)` | pin or unpin an app; the shell persists it through `ewe-conf` and `pinnedApps` follows |
 | call | `anchorFor(item, window)` | `{ screen, x, y, edge, item }` for a popup: the item's centre in its window (screen-local for a full-width bar or dock), `edge` `"top"` or `"bottom"`. Pass the window when you have it (`barWindow`, your own `PanelWindow`); without it the focused monitor is assumed and the edge is bottom |
 | signal | `aboutToSleep()`, `resumed()` | the system is about to suspend; the wake sequence reached its network step (about three seconds after wake — refresh what you cache then) |
+| signal | `popupsClosing(exceptId)` | another popup is opening (or a plugin asked for the field): close yours unless `exceptId` is your plugin id |
 
 ### Public components
 
@@ -309,7 +314,7 @@ features, the `_private` plumbing) is internal and may move without notice.
 | `TextBody`, `TextStrong`, `TextCaption`, `TextMono` | text in the system's styles |
 | `Glyph` | one icon-font glyph (`text: Theme.icStar`) |
 | `BarModule`, `BarSep`, `BarStatusGlyph` | the bar's module, divider and pill glyph (`ink`, `shown`) |
-| `AnchoredPopup` | a popup card for a plugin: `openAt(anchor)`, `toggleAt(anchor)`, `close()`, `open`, `name` (layer-shell namespace suffix), `action` (reports open state), `implicitWidth/Height`, content as children. One `PanelWindow` on the anchor's screen; click outside or Esc closes; keyboard OnDemand; above the dock (`Shell.bottomInset`) for a bottom anchor, under the bar for a top one |
+| `AnchoredPopup` | a popup card for a plugin: `openAt(anchor)`, `toggleAt(anchor)`, `close()`, `open`, `name` (layer-shell namespace suffix), `owner` (your plugin id — what `Shell.closePopups(id)` spares), `action` (reports open state), `implicitWidth/Height`, content as children. One `PanelWindow` on the anchor's screen; click outside or Esc closes; keyboard OnDemand; above the dock (`Shell.bottomInset`) for a bottom anchor, under the bar for a top one; opening closes every other add-on popup (`Shell.closePopups`) and it closes when another opens |
 | `Toggle`, `Slider`, `Meter`, `ListWell`, `ListRow`, `SectionTitle`, `Badge`, `Spinner`, `Avatar`, `Elevation` | the rest of the kit the first-party panels are built from |
 
 ### `Theme`, `Globals`, `Log`
