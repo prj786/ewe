@@ -226,7 +226,7 @@ External control (keybinds, scripts) uses **`qs ipc call <target> <fn>`** agains
 lock osd overview settings applauncher store updates plugins widgets sync cloud google
 display power saver welcome toast` (plus each plugin's own, `ewe.clipboard ewe.screenshot
 ewe.passwords`…; the legacy targets `cast launcher places player mail` are the add-ons'
-\`ipcAliases\` now — present only while that add-on is installed). Most expose
+`ipcAliases` now — present only while that add-on is installed). Most expose
 `toggle`/`show`/`hide`. Gotcha: `qs ipc call <t> show` collides with the `qs ipc
 show` subcommand and no-ops — bind to **`toggle`**.
 

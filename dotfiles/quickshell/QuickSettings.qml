@@ -202,7 +202,22 @@ Scope {
     property string tab: "home"
     readonly property string expanded: tab === "home" ? "" : tab
     Connections { target: Globals; function onQuickSettingsTabRequested(name) { root.setTab(name) } }
+    // the pages the shell itself has; anything else is an add-on's quickPage.key
+    readonly property var builtinTabs: ["home", "wifi", "bt", "audio", "cal", "notifs"]
+    function hasTab(t) {
+        if (root.builtinTabs.indexOf(t) >= 0) return true
+        var ps = PluginHost.quickPages
+        for (var i = 0; i < ps.length; i++) if (ps[i].key === t) return true
+        return false
+    }
     function setTab(t) {
+        // Rule 4: `quicksettings tab vpn` (an old keybind, a script) with the
+        // VPN add-on not installed must not open an empty panel — fall back
+        // to home, and say which add-on would have answered.
+        if (!root.hasTab(t)) {
+            Log.info("quicksettings", "tab", t, "— no such page (an add-on that is not installed?); showing home")
+            t = "home"
+        }
         if (t !== "bt" && Bluetooth.defaultAdapter) Bluetooth.defaultAdapter.discovering = false
         root.tab = t
         if (t === "wifi") { wifiScan.running = true; wifiSavedScan.running = true }
