@@ -26,8 +26,7 @@ import Quickshell.Bluetooth
 //            sound, VPN, SSH, Cast, Mobile, Mail, Calendar, Notifications) on
 //            surfaceBase; the selected page is accentSubtle with an
 //            accentText glyph; Settings and Power sit at its foot
-//   home     the tile grid (Tile.qml), spaceS apart, and the CPU / memory
-//            meters
+//   home     the tile grid (Tile.qml), spaceS apart
 //   pages    a detail page per tile: the feature's name and Switch, then its
 //            list (ListWell + ListRow), notes and actions
 //   foot     volume and brightness Sliders under a divider, always shown
@@ -1185,23 +1184,7 @@ Scope {
                             onClicked: Globals.castCommand("stop", "")
                         }
                     }
-                    // system load (CPU + memory; RunCat reads the same CPU value),
-                    // on the tiles' surfaceOverlay
-                    Rectangle {
-                        visible: root.tab === "home"
-                        width: parent.width; height: sysCol.implicitHeight + 2 * panel.pad
-                        radius: Theme.radiusRounded
-                        color: Theme.surfaceOverlay
-                        border.color: Theme.borderSubtle; border.width: Theme.borderWidth1
-                        Column {
-                            id: sysCol
-                            anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top
-                            anchors.margins: panel.pad
-                            spacing: Theme.spaceS + Theme.spaceXs
-                            Meter { label: "CPU"; glyph: Theme.icCpu; value: Globals.cpuUsage }
-                            Meter { label: "Memory"; glyph: Theme.icMemory; value: Globals.memUsage }
-                        }
-                    }
+                    // (the CPU / memory meters are the ewe.sysmon add-on's span-2 quick-tile)
                     // ═══ plugin tiles (API 3 quick-tile): after the built-ins,
                     //     two per row (span 1) or the whole row (span 2), in
                     //     manifest order. The host sizes the Loader; the

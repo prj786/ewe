@@ -591,7 +591,7 @@ Scope {
                             spacing: Theme.spaceS
 
                             // ORDER is the Bar card's, each shown only while it
-                            // applies: network busy → keep awake · casting ·
+                            // applies: network busy → casting ·
                             // SSH · VPN → sync → notifications · mail ·
                             // calendar · phone → wired/Wi-Fi · sound · mic ·
                             // Bluetooth → power profile · battery.

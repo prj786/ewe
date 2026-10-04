@@ -524,42 +524,6 @@ QtObject {
     property Process _faceChk: Process { running: true; command: ["sh", "-c", 'test -f "$HOME/.face"']; onExited: function (code) { g.hasFace = (code === 0) } }
     function recheckFace() { g.avatarVersion++; g._faceChk.running = false; g._faceChk.running = true }
 
-    // ── CPU / memory sampling (the Quick Settings meters) ─────────────────────
-    // Sampled ONLY while the panel that shows it is open. This used to run at
-    // 1.5 s for the whole session, spawning three processes per tick — roughly
-    // 170k fork/exec a day — to feed two meters behind a closed panel and a
-    // RunCat widget that was deleted in 191d969.
-    property real cpuUsage: 0      // 0..1
-    property real memUsage: 0      // 0..1
-    property var _prevCpu: null
-    // drop the baseline when we stop sampling, so the first tick after reopening
-    // doesn't compute a delta across the whole closed period
-    onQuickSettingsOpenChanged: if (!g.quickSettingsOpen) g._prevCpu = null
-    property Process _statProc: Process {
-        command: ["sh", "-c", "head -1 /proc/stat; echo SEP; grep -E 'MemTotal|MemAvailable' /proc/meminfo"]
-        stdout: StdioCollector {
-            onStreamFinished: {
-                try {
-                    var parts = this.text.split("SEP")
-                    var nums = parts[0].trim().split(/\s+/).slice(1).map(Number)
-                    var idle = (nums[3] || 0) + (nums[4] || 0)
-                    var total = 0; for (var i = 0; i < nums.length; i++) total += (nums[i] || 0)
-                    if (g._prevCpu) { var dt = total - g._prevCpu.total, di = idle - g._prevCpu.idle; if (dt > 0) g.cpuUsage = Math.max(0, Math.min(1, (dt - di) / dt)) }
-                    g._prevCpu = { total: total, idle: idle }
-                    var mt = 0, ma = 0, ml = (parts[1] || "").split("\n")
-                    for (var j = 0; j < ml.length; j++) { if (ml[j].indexOf("MemTotal") >= 0) mt = parseInt(ml[j].replace(/\D/g, "")); else if (ml[j].indexOf("MemAvailable") >= 0) ma = parseInt(ml[j].replace(/\D/g, "")) }
-                    if (mt > 0) g.memUsage = Math.max(0, Math.min(1, (mt - ma) / mt))
-                } catch (e) {}
-            }
-        }
-    }
-    property Timer _statTimer: Timer {
-        interval: g.lowPower ? 3000 : 1500
-        running: g.quickSettingsOpen
-        repeat: true; triggeredOnStart: true
-        onTriggered: g._statProc.running = true
-    }
-
     property Process _pinWriter: Process {}
     property Process _tilingWriter: Process {}
     property Process _pinLoad: Process {
