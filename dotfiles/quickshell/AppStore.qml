@@ -277,11 +277,11 @@ Scope {
 
         Rectangle {
             id: box
-            // Launcher panel placement: above the dock's store button, kept
-            // spaceS + spaceXs from the screen edges and above the dock
+            // Placement: bottom-centre, spaceS + spaceXs from the screen edges
+            // and clear of a dock add-on (Shell.bottomInset)
             readonly property int edgeGap: Theme.spaceS + Theme.spaceXs
             readonly property int dockGap: Shell.bottomInset + edgeGap
-            x: Math.max(edgeGap, Math.min(parent.width - width - edgeGap, Globals.storeAnchorX - width / 2))
+            x: Math.round((parent.width - width) / 2)
             width: Theme.panelMd
             height: Math.min(Theme.panelMd + Theme.controlXl + Theme.spaceMd + Theme.spaceXs, parent.height - dockGap - 2 * edgeGap)
             radius: Theme.radiusRounded; color: Theme.surfaceRaised

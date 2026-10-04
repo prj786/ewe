@@ -65,8 +65,6 @@ SharePicker 1.0 SharePicker.qml
 Osd 1.0 Osd.qml
 Overview 1.0 Overview.qml
 Settings 1.0 Settings.qml
-Dock 1.0 Dock.qml
-LauncherPanel 1.0 LauncherPanel.qml
 AppStore 1.0 AppStore.qml
 TrayIcon 1.0 TrayIcon.qml
 TrayMenu 1.0 TrayMenu.qml

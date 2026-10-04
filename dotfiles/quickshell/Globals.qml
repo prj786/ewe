@@ -53,7 +53,7 @@ QtObject {
     property string netBusy: ""            // "wifi" (or "vpn", set by the VPN add-on) while a connection attempt runs (bar spinner)
     property int netEpoch: 0               // bumped by the bar on every NetworkManager event (nmcli monitor) — panels re-read on change
     property bool overviewOpen: false      // GNOME-style window overview (Super tapped alone)
-    property bool overviewCover: false     // the Overview owns the screen: backdrop up, bar and dock out of view (Overview.qml sequences it)
+    property bool overviewCover: false     // the Overview owns the screen: backdrop up, bar (and a dock add-on) out of view (Overview.qml sequences it)
     property bool widgetsArrange: false    // desktop widgets in arrange mode (Super+Shift+W): drag to move, frames with sticky/hide
     property bool settingsOpen: false      // the Quickshell Settings window (Super+, or the CC gear)
     // the first-run Welcome overlay is up — Google.qml holds every auto-push
@@ -377,7 +377,9 @@ QtObject {
         g._csApply.running = false; g._csApply.running = true
     }
 
-    // ── Dock prefs (bottom dock; persisted in user-theme.json) ─────────────────
+    // ── Dock prefs (persisted in user-theme.json / ewe.conf desktop.dock.*) ──
+    // The dock itself is the ewe.dock add-on since 0.25; it reads these through
+    // Shell.dockPrefs, and Settings keeps writing them.
     property bool dockEnabled: true
     property bool dockAutohide: false       // intelligent hide: slide away, reveal on bottom-edge hover
     property string dockIconSize: "normal"  // dock icon size: "small" | "normal" | "large"
@@ -404,11 +406,8 @@ QtObject {
     // moving, rather than something you discover afterwards.
     property bool saverDimming: false
 
-    // ── Dock popups ────────────────────────────────────────────────────────────
-    property bool launcherOpen: false       // pinned-apps / launcher panel
+    // ── the AppStore fallback panel (Komble absent) ───────────────────────────
     property bool storeOpen: false           // app-store panel
-    property real launcherAnchorX: 200       // screen-local x of the launcher dock button (popup centers on it)
-    property real storeAnchorX: 200          // screen-local x of the store dock button
 
     // ── System-tray context menu (themed, rendered by TrayMenu.qml) ─────────────
     property bool trayMenuOpen: false
@@ -424,6 +423,7 @@ QtObject {
     readonly property string eweConf: Quickshell.env("HOME") + "/.config/quickshell/../../bin/ewe-conf"
 
     // ── Pinned apps (desktop ids; persisted via ewe-conf → apps.pinned) ───────
+    // Read by the Launcher and, through Shell.pinnedApps / setPinned, the dock add-on.
     property var pinnedApps: []
     function isPinned(id) { return (g.pinnedApps || []).indexOf(id) >= 0 }
     function togglePin(id) {

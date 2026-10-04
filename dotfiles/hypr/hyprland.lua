@@ -503,12 +503,13 @@ hl.bind("switch:on:Lid Switch",  hl.dsp.exec_cmd(scripts .. "/lid.sh close"), { 
 hl.bind("switch:off:Lid Switch", hl.dsp.exec_cmd(scripts .. "/lid.sh open"),  { locked = true })
 -- Layout toggle disabled: single (US) layout. Re-enable with a second kb_layout.
 -- hl.bind(mainMod .. " + SHIFT + Space", hl.dsp.exec_cmd("hyprctl switchxkblayout current next"))
-hl.bind(mainMod .. " + period",        hl.dsp.exec_cmd("qs ipc call clipboard toggle"))          -- clipboard + emoji
+-- Super+period (clipboard + emoji) is the ewe.clipboard add-on's manifest keybind;
+-- the old bind here called a `clipboard` target that no longer exists.
 
 -- The Pen (Hyprland "special" workspace) -------------------------------------
 -- ewe's hidden workspace: stash a window out of sight, get it back later. The
--- dock grows a Pen box (package glyph) whenever something is inside — click a
--- tile to fetch that window, click the box to show/hide the whole Pen.
+-- dock add-on grows a Pen box (package glyph) whenever something is inside —
+-- click a tile to fetch that window, click the box to show/hide the whole Pen.
 hl.bind(mainMod .. " + grave",     hl.dsp.workspace.toggle_special("pen"))
 hl.bind(mainMod .. " + S",         hl.dsp.workspace.toggle_special("pen"))
 hl.bind(mainMod .. " + Z",         hl.dsp.workspace.toggle_special("pen"))   -- same, muscle-memory alias
@@ -687,8 +688,10 @@ hl.window_rule({
 -- add-on's inhibitor surface)
 -- keep the compositor fade — the bar's one-shot QML slide-in at startup rides
 -- inside its surface, so the map fade composes with it rather than fighting
--- it. The dock is listed because it animates its own Overview slide in QML and
--- remaps on enable/disable; the compositor fade would fight both.
+-- it. The dock (the ewe.dock add-on, same namespace) is listed because it
+-- animates its own Overview slide in QML and remaps on enable/disable; the
+-- compositor fade would fight both. The add-ons keep today's namespaces
+-- (launcher, places, dock, mediaplayer), so this rule still covers them.
 hl.layer_rule({
     name    = "quickshell-self-animated",
     match   = { namespace = "^quickshell:(overview|control|launcher|applauncher|store|clipboard|places|traymenu|osd|preview|dock)$" },

@@ -82,7 +82,7 @@ Scope {
         target: "store"
         function toggle(): void {
             if (Globals.kombleInstalled) { Globals.openStore(); return }
-            Globals.launcherOpen = false; Globals.storeOpen = !Globals.storeOpen
+            Globals.storeOpen = !Globals.storeOpen
         }
         function show(): void { Globals.openStore() }
         function hide(): void { Globals.storeOpen = false }

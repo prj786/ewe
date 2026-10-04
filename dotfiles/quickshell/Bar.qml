@@ -336,7 +336,7 @@ Scope {
                     // with a spaceMd × borderWidth2 accent underline spaceXs
                     // above its bottom edge. The underline is ALWAYS there: it
                     // is what says "this is where you are". Click toggles the
-                    // Overview; the full workspace list lives in the dock.
+                    // Overview; the full workspace list lives in the dock add-on.
                     BarModule {
                         id: wsChip
                         anchors.verticalCenter: parent.verticalCenter
@@ -384,8 +384,9 @@ Scope {
                     BarPluginSlots { section: "left"; screen: win.screen; barWindow: win; anchors.verticalCenter: parent.verticalCenter }
                 }
 
-                // ── CENTRE: no first-party module (workspace switching moved to the
-                //    bottom dock) — only plugin widgets that ask for the middle. ──
+                // ── CENTRE: no first-party module (workspace switching is the
+                //    Overview's and the dock add-on's) — only plugin widgets that ask
+                //    for the middle. ──
                 BarPluginSlots {
                     id: centerSlots
                     section: "center"

@@ -41,7 +41,7 @@ Scope {
         { key: "wallpaper", ic: 0xE0F6, label: "Wallpaper",     desc: "Pictures and videos behind your windows." },
         { key: "saver",     ic: 0xE410, label: "Screensaver",   desc: "What happens when you step away." },
         { key: "power",     ic: 0xE140, label: "Power",         desc: "The lid, the battery and what keeps this machine awake." },
-        { key: "dock",      ic: 0xE4CF, label: "Dock",          desc: "The launcher, Overview and workspaces at the bottom." },
+        { key: "dock",      ic: 0xE4CF, label: "Dock",          desc: "An add-on: pinned apps and workspaces at the bottom." },
         { key: "startup",   ic: 0xE286, label: "Startup",       desc: "Apps that start when you sign in." },
         { key: "user",      ic: 0xE19F, label: "User",          desc: "Your name, your picture and your accounts." },
         { key: "accessibility", ic: 0xE297, label: "Accessibility", desc: "Motion, transparency, contrast and text size for the whole desktop." }
@@ -2957,35 +2957,21 @@ Scope {
             }
 
             // ════════ PANE — Dock ════════
+            // The dock is the ewe.dock add-on since 0.25. Its prefs (show,
+            // autohide, icon size — desktop.dock.*) stay in Globals and the
+            // add-on reads them through Shell.dockPrefs; the controls live in
+            // ewe-settings → Layout and in Komble → Add-ons.
             Component {
                 id: cDock
                 Column {
                     spacing: Theme.spaceS
                     SectionTitle { text: "Dock" }
                     Card {
-                        ToggleRow {
-                            title: "Show the dock"
-                            sub: "The launcher, Overview and your workspaces at the bottom of the screen."
-                            on: Globals.dockEnabled
-                            onToggled: { Globals.dockEnabled = !Globals.dockEnabled; root.writePrefs() }
-                        }
-                        ToggleRow {
-                            title: "Hide automatically"
-                            sub: "Moves away when a window needs the space; point at the bottom edge to bring it back."
-                            dim: !Globals.dockEnabled
-                            on: Globals.dockAutohide
-                            onToggled: { if (Globals.dockEnabled) { Globals.dockAutohide = !Globals.dockAutohide; root.writePrefs() } }
-                        }
-                        SetRow {
-                            title: "Icon size"; desc: "Small is 40 pixels, medium 48, large 64."
-                            dim: !Globals.dockEnabled
-                            Seg {
-                                anchors.verticalCenter: parent.verticalCenter
-                                dim: !Globals.dockEnabled
-                                options: [{ label: "Small", value: "small" }, { label: "Medium", value: "normal" }, { label: "Large", value: "large" }]
-                                value: Globals.dockIconSize
-                                onPicked: function (v) { Globals.dockIconSize = v; root.writePrefs() }
-                            }
+                        TBody { width: parent.width; color: Theme.textSecondary; wrapMode: Text.WordWrap
+                            text: "The dock is an add-on. Install it from Komble → Add-ons; its settings (show, hide automatically, icon size) are in the Settings app under Layout." }
+                        Row {
+                            spacing: Theme.spaceS
+                            Pill { label: "Open Add-ons"; primary: true; onGo: Shell.openStore("addons") }
                         }
                     }
                 }
