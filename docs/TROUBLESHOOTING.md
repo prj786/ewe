@@ -14,7 +14,7 @@ found, in the order it bit:
    screencopy` → `tried scheduling on already scheduled cb` and then never
    asks the compositor for another frame. Upstream fixed it after the release
    (commits #422/#424/#425). ewe ships them as **`xdg-desktop-portal-hyprland
-   1.4.1-1.1`** from `packages/patched/` (phase 20 builds it; it retires
+   1.4.1-2.1`** from `packages/patched/` (phase 20 builds it; it retires
    itself once the repos ship something newer). Check with
    `pacman -Q xdg-desktop-portal-hyprland` and
    `journalctl --user -u xdg-desktop-portal-hyprland | grep -c "Out of buffers"`.
