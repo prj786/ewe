@@ -49,8 +49,8 @@ configuration is restored automatically.
 | `~/.config/quickshell/window-rules.json` | Window Rules | source of truth for the rules list (app name, window class, workspace, float/tile) |
 | `~/.config/quickshell/display-profiles.json` | Displays | source of truth for the display profiles (below) |
 | `~/.config/quickshell/input-devices.json` | Keyboard & Mouse | per-device pointer overrides (mirrors the `hl.device{}` lines) |
-| `~/.config/quickshell/google-*` | User (Google) | OAuth client config + non-secret caches (profile, events, mail cursor/list, sync meta, restore bundle/package lists) — all gitignored; the refresh token is in the keyring only |
-| `~/.config/quickshell/kdeconnect-state.json` | Mobile card | seen phone-notification ids (unread badge) + chosen device — pairing keys stay in kdeconnectd |
+| `~/.config/quickshell/google-*` | User (Google) | OAuth client config + non-secret caches (profile, events, sync meta, restore bundle/package lists) — all gitignored; the refresh token is in the keyring only. `google-mail.json` (the Gmail cursor/list) is the **mail add-on's** |
+| `~/.config/quickshell/kdeconnect-state.json` | Phone add-on | seen phone-notification ids (unread badge) + chosen device — pairing keys stay in kdeconnectd. Written by `ewe.phone`, not the shell |
 | `~/.config/quickshell/startup-apps.json` | Startup | user startup applications; `autostart.sh` launches the enabled entries via `jq` at login |
 
 `hyprland.lua` sources `user.lua`, then `input.lua`, then `monitors.lua`, then
@@ -124,14 +124,17 @@ through the shared `FileDropTarget` component (portal chooser + drop zone).
   honour per-event/calendar popup overrides (else 10 min lead), fire through
   the shell's own notification server via `notify-send`, and are de-duped
   across restarts in `google-notified.json`.
-- **Gmail** (read-only): `labels.get(INBOX)` feeds the unread badge (bar
-  envelope + Mail tile); `users.history.list` with a persisted `historyId`
-  cursor detects genuinely new arrivals (404 → silent re-baseline; first sync
-  marks existing unread as seen so sign-in never floods notifications); rows
-  are metadata-only fetches (From/Subject/Date + snippet, never bodies) that
-  deep-link to Gmail in the browser. Poll: 2 min + on QS open when stale.
-  State in `google-mail.json`. Tokens minted before the `gmail.readonly`
-  scope get `mailState=scope` → a "Reconnect Google" pill re-runs consent.
+- **Gmail** (read-only) is the **mail add-on's** (`ewe.mail`) since 0.25,
+  using the same `ewe-auth token` path: `labels.get(INBOX)` feeds the unread
+  badge (bar envelope + Mail page); `users.history.list` with a persisted
+  `historyId` cursor detects genuinely new arrivals (404 → silent
+  re-baseline; first sync marks existing unread as seen so sign-in never
+  floods notifications); rows are metadata-only fetches (From/Subject/Date +
+  snippet, never bodies) that deep-link to Gmail in the browser. Poll: 2 min
+  + on QS open when stale. State in `google-mail.json`. Tokens minted before
+  the `gmail.readonly` scope get a "Reconnect Google" button that re-runs
+  consent. `Google.qml` itself keeps OAuth, Calendar, Drive and the `google`
+  IPC verbs (`syncSoon` is how ewe-settings pokes settings sync).
 - **EDS** (`evolution-data-server`) remains an optional secondary source:
   `scripts/eds-query.py` still feeds the contacts list, and the Quick
   Settings calendar falls back to `Accounts.events` when no Google account
@@ -142,20 +145,24 @@ Everything degrades cleanly: not configured → actionable message (no
 spinners), signed out/offline → cached or empty states, keyring missing →
 explicit install hint.
 
-## Mobile (KDE Connect) — the D-Bus bridge
+## Mobile (KDE Connect) — the D-Bus bridge (the `ewe.phone` add-on)
 
-Quickshell has no generic QML D-Bus client (its D-Bus features are compiled
-C++ types), so `scripts/kdeconnect-bridge.py` (dbus-python + GLib) owns every
-KDE Connect D-Bus call and speaks newline-delimited JSON over stdio to the
+The whole feature is the **phone add-on** since 0.25 (repo
+`prj786/ewe-plugin-phone`); the design is unchanged. Quickshell has no
+generic QML D-Bus client (its D-Bus features are compiled C++ types), so the
+add-on's `kdeconnect-bridge.py` (dbus-python + GLib) owns every
+KDE Connect D-Bus call and speaks newline-delimited JSON over stdio to its
 `KdeConnect.qml` singleton — events out (devices, pair state, battery,
 notifications, messages), commands in (pair/accept/cancel/unpair, dismiss,
 reply, request/send SMS, ring, share). Signals are subscribed globally with
 the device id parsed from the object path, so device add/remove needs no
 re-subscription. The bridge D-Bus-activates `kdeconnectd` (or spawns the
 binary) and survives daemon restarts via a name-owner watch; the QML side
-restarts the bridge if it dies. The Quick Settings Mobile card, the bar
-phone indicator and the SMS panel are pure consumers of the singleton —
-nothing else in the shell knows a D-Bus path. Interface signatures pinned
+restarts the bridge if it dies. The Quick Settings Mobile page, the bar's
+phone glyph and the SMS panel are pure consumers of the singleton —
+nothing in the shell knows a D-Bus path; the shell starts no `kdeconnectd`
+(autostart.sh used to) and re-probes nothing on wake — the add-on does both
+on `Shell.resumed()`. Interface signatures pinned
 against kdeconnect 26.04 (conversations arrive as single message events;
 the conversation list is "latest message per thread"; sends are echoed
 optimistically and reconciled on the real signal).
@@ -210,13 +217,14 @@ battery idle-suspend always kept) and restarts hypridle. `Screensaver.qml`
 renders a per-output overlay (clock/blank, pluggable), dismissed by any
 key/click/motion — hypridle's `on-resume` is the backstop. Playing media or a
 fullscreen focused window hold a wayland `IdleInhibitor` (same mechanism as
-the bar's Insomnia toggle), which keeps saver, lock *and* suspend away.
+the Insomnia add-on's toggle), which keeps saver, lock *and* suspend away.
 
 ## Runtime dependencies added in 0.3
 
 Installed by `packages/common.list`: `awww` (swww), `mpvpaper`, `libsecret`
 (secret-tool; gnome-keyring was already shipped), `kdeconnect` +
-`python-dbus` + `python-gobject` (the Mobile card's daemon and bridge).
+`python-dbus` + `python-gobject` (the phone add-on's daemon and bridge; the
+Bluetooth agent and the logind bridge need the Python ones too).
 Optional (contacts/EDS fallback): `evolution-data-server`.
 
 ## Display profiles

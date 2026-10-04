@@ -651,8 +651,8 @@ Scope {
                     Column {
                         width: parent.width; spacing: Theme.spaceS + Theme.spaceXs
                         TourRow { ic: Theme.icKeyboard; head: "The Super key"; text: "Tap Super for the Overview of your windows and workspaces. Super+D searches apps and files; Super+Return opens a terminal." }
-                        TourRow { ic: Theme.icApps; head: "The dock"; text: "Your pinned apps and open windows live at the bottom. Right-click any app to pin it; the first icon is the launcher." }
-                        TourRow { ic: Theme.icCog; head: "Quick settings and Settings"; text: "Super+N (or the clock) opens Quick settings — Wi-Fi, sound, cast, calendar, notifications. Super+, opens Settings." }
+                        TourRow { ic: Theme.icApps; head: "Add-ons"; text: "The dock, music, Places, your phone, mail, Cast to TV and more are add-ons: install the ones you want with one click in Komble → Add-ons." }
+                        TourRow { ic: Theme.icCog; head: "Quick settings and Settings"; text: "Super+N (or the clock) opens Quick settings — Wi-Fi, sound, calendar, notifications. Super+, opens Settings." }
                         TourRow { ic: Theme.icDownload; head: "Komble"; text: "One store for everything: the Arch repositories, the AUR and AppImages, with updates in one place — the download glyph in the bar tells you when." }
                     }
                 }

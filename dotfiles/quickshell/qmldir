@@ -11,8 +11,6 @@ singleton Accounts 1.0 Accounts.qml
 singleton Cloud 1.0 Cloud.qml
 singleton Google 1.0 Google.qml
 singleton Agenda 1.0 Agenda.qml
-singleton Mail 1.0 Mail.qml
-singleton KdeConnect 1.0 KdeConnect.qml
 singleton BtAgent 1.0 BtAgent.qml
 singleton PluginHost 1.0 PluginHost.qml
 singleton Shell 1.0 Shell.qml
@@ -63,17 +61,11 @@ BtPairing 1.0 BtPairing.qml
 DesktopWidgets 1.0 DesktopWidgets.qml
 InvertedCorner 1.0 InvertedCorner.qml
 Lock 1.0 Lock.qml
-Caffeine 1.0 Caffeine.qml
-Cast 1.0 Cast.qml
 SharePicker 1.0 SharePicker.qml
 Osd 1.0 Osd.qml
 Overview 1.0 Overview.qml
 Settings 1.0 Settings.qml
-Dock 1.0 Dock.qml
-LauncherPanel 1.0 LauncherPanel.qml
 AppStore 1.0 AppStore.qml
-Places 1.0 Places.qml
-MediaPlayer 1.0 MediaPlayer.qml
 TrayIcon 1.0 TrayIcon.qml
 TrayMenu 1.0 TrayMenu.qml
 Battery 1.0 Battery.qml

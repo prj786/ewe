@@ -31,7 +31,8 @@
 #   HS_CONF=<file>               # use this ewe.conf instead (HS_SCHEME ignored)
 #   HS_WALLPAPER=<file>          # seed generated/wallpapers.conf (Overview/lock backdrop)
 #   HS_WELCOME=1                 # let the first-run Welcome screen appear
-#   HS_PLUGINS=1                 # install every bundled add-on (plugins/) into the sandbox
+#   HS_PLUGINS=1                 # install every add-on of the payload into the sandbox
+#   HS_PAYLOAD=<dir>             # that payload (default $EWE_PAYLOAD_PLUGINS, else this checkout's plugins/)
 #   HS_PLUGIN_DIRS=a:b           # add + enable these plugin directories too (fixtures)
 #   HS_NO_APPS=1                 # hide Komble/ewe-settings/ewe-sync: the in-shell fallbacks open
 #   HS_SANDBOX=0                 # old behaviour: the live HOME and config
@@ -55,6 +56,14 @@ export AQ_DRM_DEVICES="${AQ_DRM_DEVICES:-/dev/dri/renderD128}"
 # the nested shell tests THIS checkout's ewe-plugin, not the installed one
 # (PluginHost.qml honours the override); reads real ~/.config/ewe/plugins
 export EWE_PLUGIN_TOOL="${EWE_PLUGIN_TOOL:-$REPO/bin/ewe-plugin}"
+# Every ewe-plugin call the driver makes goes through here: the sandbox HOME
+# (sandbox_env, set by the caller) and NEVER the host's compositor. The tool's
+# keybind writer runs `hyprctl reload` against $HYPRLAND_INSTANCE_SIGNATURE and
+# its placement verbs poke `qs ipc call plugins reload` at $WAYLAND_DISPLAY —
+# from here both are the user's LIVE session (2026-10-04: HS_PLUGINS reloaded
+# the live Hyprland). The nested compositor does not exist yet when the
+# sandbox is prepared, so there is nothing to point them at: unset both.
+plugin_tool() { env -u HYPRLAND_INSTANCE_SIGNATURE -u WAYLAND_DISPLAY "$EWE_PLUGIN_TOOL" "$@"; }
 mkdir -p "$WORK"
 SANDBOX="${HS_SANDBOX:-1}"
 SBHOME="$WORK/home"
@@ -111,14 +120,16 @@ sandbox_prepare() {
   # writes only the sandbox ewe.conf (--no-hooks), and --no-restart keeps it
   # off the HOST's ewe.service (systemctl --user is not sandboxed: without
   # it, seeding restarts the live shell). EWE_PAYLOAD_PLUGINS points the
-  # tool at this checkout's plugins/ for every later verb too.
-  export EWE_PAYLOAD_PLUGINS="$REPO/plugins"
+  # tool at the payload for every later verb too: HS_PAYLOAD=<dir>, else an
+  # EWE_PAYLOAD_PLUGINS already in the environment (an add-on agent's
+  # scratch payload), else this checkout's plugins/.
+  export EWE_PAYLOAD_PLUGINS="${HS_PAYLOAD:-${EWE_PAYLOAD_PLUGINS:-$REPO/plugins}}"
   if [ "${HS_PLUGINS:-0}" = "1" ]; then
     ( sandbox_env
-      "$REPO/bin/ewe-plugin" seed "$REPO/plugins" --no-restart >"$WORK/plugins.log" 2>&1 || exit 1
-      for d in "$REPO"/plugins/*/; do
+      plugin_tool seed "$EWE_PAYLOAD_PLUGINS" --no-restart >"$WORK/plugins.log" 2>&1 || exit 1
+      for d in "$EWE_PAYLOAD_PLUGINS"/*/; do
         [ -f "$d/manifest.json" ] || continue
-        "$REPO/bin/ewe-plugin" install "$(basename "$d")" --no-restart >>"$WORK/plugins.log" 2>&1 || exit 1
+        plugin_tool install "$(basename "$d")" --no-restart >>"$WORK/plugins.log" 2>&1 || exit 1
       done
     ) || die "ewe-plugin seed/install failed — see $WORK/plugins.log"
   fi
@@ -129,7 +140,7 @@ sandbox_prepare() {
     ( sandbox_env
       IFS=: ; for d in $HS_PLUGIN_DIRS; do
         [ -f "$d/manifest.json" ] || { echo "HS_PLUGIN_DIRS: no manifest in $d" >&2; exit 1; }
-        "$REPO/bin/ewe-plugin" add "$d" --yes --enable --no-restart >>"$WORK/plugins.log" 2>&1 || exit 1
+        plugin_tool add "$d" --yes --enable --no-restart >>"$WORK/plugins.log" 2>&1 || exit 1
       done
     ) || die "ewe-plugin add (HS_PLUGIN_DIRS) failed — see $WORK/plugins.log"
   fi

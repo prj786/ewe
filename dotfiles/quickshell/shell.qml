@@ -72,10 +72,6 @@ ShellRoot {
         }
     }
     Bar {}
-    Dock {}
-    LauncherPanel {}
-    Places {}
-    MediaPlayer {}
     TrayMenu {}
     Launcher {}
     QuickSettings {}
@@ -83,8 +79,6 @@ ShellRoot {
     BtPairing {}
     DesktopWidgets {}
     Lock {}
-    Caffeine {}
-    Cast {}
     SharePicker {}
     Screensaver {}
     Osd {}

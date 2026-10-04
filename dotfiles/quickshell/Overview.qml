@@ -9,12 +9,13 @@ import Quickshell.Widgets
 // Overview — GNOME/macOS-style activities view (per the user's SVG mockup).
 //
 // The Overview takes the WHOLE screen, wallpaper first: the top bar slides up
-// and the dock slides down out of view, then the window cards appear over the
-// wallpaper. Closing is the reverse. (Owner decision 2026-09-21, reversing the
-// earlier "overview reads as a MODE of the desktop" — see the vault note
-// "Overview Takes the Screen".) Exclusive zones are NOT released: bar and dock
-// keep their reserved strips, only their visuals translate, so windows
-// underneath never relayout.
+// (and a dock add-on slides down — it follows Globals.overviewCover) out of
+// view, then the window cards appear over the wallpaper. Closing is the
+// reverse. (Owner decision 2026-09-21, reversing the earlier "overview reads
+// as a MODE of the desktop" — see the vault note "Overview Takes the
+// Screen".) Exclusive zones are NOT released: the bar (and the dock) keep
+// their reserved strips, only their visuals translate, so windows underneath
+// never relayout.
 //
 //   · centre-top LAUNCHER: rounded search field; typing fuses a results panel
 //     under it — Apps ("Application"), open Windows ("Jump to", with their
@@ -411,9 +412,9 @@ Scope {
         screen: modelData
         visible: Globals.overviewOpen || root.held
         color: "transparent"
-        // IGNORE exclusive zones: the Overview owns the whole output, bar and
-        // dock keep their reserved strips (windows must not relayout) and both
-        // simply translate out of view while this is open.
+        // IGNORE exclusive zones: the Overview owns the whole output, the bar
+        // (and a dock add-on) keep their reserved strips (windows must not
+        // relayout) and simply translate out of view while this is open.
         exclusionMode: ExclusionMode.Ignore
         WlrLayershell.layer: WlrLayer.Overlay
         // ONE window takes the keyboard — the focused output's, and only while
@@ -1035,7 +1036,7 @@ Scope {
             Row {
                 id: pagerRow
                 anchors.horizontalCenter: parent.horizontalCenter
-                // the dock is gone while the Overview is open, so the pager sits
+                // a dock is gone while the Overview is open, so the pager sits
                 // spaceXl from the bottom edge — symmetric with the search field
                 anchors.bottom: parent.bottom
                 anchors.bottomMargin: Theme.spaceXl

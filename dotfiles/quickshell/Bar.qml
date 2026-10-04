@@ -119,22 +119,17 @@ Scope {
         }
     }
 
-    // ── network state: VPN active → Globals.vpnActive, Wi-Fi connected → wifiUp,
-    //    wired (ethernet) connected → wiredUp (shown when no Wi-Fi, e.g. VMs) ──
+    // ── network state: Wi-Fi connected → wifiUp, wired (ethernet) connected →
+    //    wiredUp (shown when no Wi-Fi, e.g. VMs) ──
     //
     // This was a 5 s timer firing FOUR processes — ~170k spawns a day, of which
     // the wifi and wired ones ran the identical nmcli query and the keyboard one
     // duplicated an event we already receive. `nmcli monitor` is a single
     // long-lived process that prints a line whenever NetworkManager changes
-    // anything, so we now re-query only when the world actually moves.
+    // anything, so we now re-query only when the world actually moves. The
+    // VPN add-on (ewe.vpn) listens to Globals.netEpoch for its own state.
     property bool wifiUp: false
     property bool wiredUp: false
-    Process {
-        id: vpnProc
-        running: true                     // one read at startup; nmcli monitor drives the rest
-        command: ["sh", "-c", "nmcli -t -f TYPE,STATE connection show --active 2>/dev/null | awk -F: '($1 ~ /vpn|wireguard|tun/) && $2==\"activated\"{print \"yes\"; exit}'"]
-        stdout: StdioCollector { onStreamFinished: Globals.vpnActive = (this.text.trim() === "yes") }
-    }
     // one query answers both wifi and wired — they used to be two identical calls
     Process {
         id: devProc
@@ -149,7 +144,6 @@ Scope {
         }
     }
     function netRefresh() {
-        vpnProc.running = false; vpnProc.running = true
         devProc.running = false; devProc.running = true
         Globals.netEpoch++                  // Quick Settings re-reads its lists on this
     }
@@ -342,7 +336,7 @@ Scope {
                     // with a spaceMd × borderWidth2 accent underline spaceXs
                     // above its bottom edge. The underline is ALWAYS there: it
                     // is what says "this is where you are". Click toggles the
-                    // Overview; the full workspace list lives in the dock.
+                    // Overview; the full workspace list lives in the dock add-on.
                     BarModule {
                         id: wsChip
                         anchors.verticalCenter: parent.verticalCenter
@@ -390,8 +384,9 @@ Scope {
                     BarPluginSlots { section: "left"; screen: win.screen; barWindow: win; anchors.verticalCenter: parent.verticalCenter }
                 }
 
-                // ── CENTRE: no first-party module (workspace switching moved to the
-                //    bottom dock) — only plugin widgets that ask for the middle. ──
+                // ── CENTRE: no first-party module (workspace switching is the
+                //    Overview's and the dock add-on's) — only plugin widgets that ask
+                //    for the middle. ──
                 BarPluginSlots {
                     id: centerSlots
                     section: "center"
@@ -591,9 +586,8 @@ Scope {
                             spacing: Theme.spaceS
 
                             // ORDER is the Bar card's, each shown only while it
-                            // applies: network busy → keep awake · casting ·
-                            // SSH · VPN → sync → notifications · mail ·
-                            // calendar · phone → wired/Wi-Fi · sound · mic ·
+                            // applies: network busy → sync → notifications ·
+                            // calendar → wired/Wi-Fi · sound · mic ·
                             // Bluetooth → power profile · battery.
                             // Metrics are uniform on purpose: every glyph is
                             // Theme.barIcon, every count a Badge, every figure
@@ -608,41 +602,8 @@ Scope {
                                 size: Theme.barIcon
                             }
 
-                            // ── toggler states ──
-                            // Insomnia / keep-awake — eye glyph, matches the CC toggle
-                            Text {
-                                visible: Globals.caffeine
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: Theme.icEye
-                                font.family: Theme.fontIcons; font.pixelSize: Theme.barIcon
-                                color: ctlGroup.ink
-                            }
-                            // Cast to TV — screencast glyph while a cast session exists;
-                            // accent = picture on glass, dim = still handshaking
-                            Text {
-                                visible: Globals.casting
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: Theme.icCast
-                                font.family: Theme.fontIcons; font.pixelSize: Theme.barIcon
-                                color: Globals.castState === "streaming" || Globals.castLegacy
-                                       ? Theme.barAccentText : ctlGroup.ink
-                            }
-                            // SSH tunnel (a Quick Settings port-forward is up)
-                            Text {
-                                visible: Globals.sshTunnelUp
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: Theme.icSsh
-                                font.family: Theme.fontIcons; font.pixelSize: Theme.barIcon
-                                color: ctlGroup.ink
-                            }
-                            // VPN (only when active)
-                            Text {
-                                visible: Globals.vpnActive
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: Theme.icVpn
-                                font.family: Theme.fontIcons; font.pixelSize: Theme.barIcon
-                                color: ctlGroup.ink
-                            }
+                            // (the add-ons' glyphs — Insomnia's eye, Cast, SSH, VPN,
+                            // phone, mail — are bar-status slots, after the built-ins)
 
                             // ewe-sync — the account app's state, so "is my
                             // stuff safe" is answerable from the bar. Hidden
@@ -689,14 +650,6 @@ Scope {
                                 color: Theme.barAccentText
                                 count: Globals.server ? Globals.server.trackedNotifications.values.length : 0
                             }
-                            // Mail (IMAP or Gmail) — envelope + count, only when there is unread mail
-                            BarIcon {
-                                visible: Mail.available && Mail.unread > 0
-                                anchors.verticalCenter: parent.verticalCenter
-                                glyph: Theme.icMail
-                                color: ctlGroup.ink
-                                count: Mail.unread
-                            }
                             // Calendar — an event is running or starts within the hour
                             Text {
                                 visible: bar.calSoon
@@ -704,31 +657,6 @@ Scope {
                                 text: Theme.icCalendar
                                 font.family: Theme.fontIcons; font.pixelSize: Theme.barIcon
                                 color: ctlGroup.ink
-                            }
-                            // Phone (KDE Connect) — only when paired + reachable;
-                            // battery % and an accent dot for unread phone notifications
-                            Row {
-                                visible: KdeConnect.connected
-                                anchors.verticalCenter: parent.verticalCenter
-                                spacing: Theme.spaceXs
-                                BarIcon {
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    glyph: Theme.icPhone
-                                    color: ctlGroup.ink
-                                    // the phone's own count is already on the
-                                    // phone — here it only has to say "unread"
-                                    count: KdeConnect.unreadCount
-                                    dotOnly: true
-                                }
-                                Text {
-                                    visible: KdeConnect.connected && KdeConnect.device.batteryCharge >= 0
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    text: KdeConnect.connected ? KdeConnect.device.batteryCharge + "%" : ""
-                                    font.family: Theme.type.label.family
-                                    font.pixelSize: Theme.barLarge ? Theme.fontSizeMd : Theme.fontSizeS
-                                    font.features: ({ "tnum": 1 })
-                                    color: ctlGroup.ink
-                                }
                             }
                             // Wired / ethernet (shown when a wired link is up and
                             // Wi-Fi isn't — the common case in VMs and on docks)

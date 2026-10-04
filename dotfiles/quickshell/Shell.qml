@@ -10,11 +10,13 @@ import Quickshell.Hyprland
 // plugins noticing.
 //
 //   read     overviewOpen · quickSettingsOpen · lowPower · onBattery · locked ·
-//            dnd · bottomInset · bottomReserved · dockPresent
+//            dnd · bottomInset · bottomReserved · dockPresent · dockPrefs ·
+//            pinnedApps
 //   call     toast() · openQuickSettings() · closeQuickSettings() ·
 //            openSettings() · openStore() · launch() · focusApp() ·
 //            registerAction() · runAction() · setBottomInset() · anchorFor() ·
-//            setActive() · isActive()
+//            setActive() · isActive() · setPinned() · setDockItemShown() ·
+//            dockItemShown()
 //   signals  aboutToSleep() · resumed()   (Resume.qml emits them)
 QtObject {
     id: sh
@@ -35,8 +37,8 @@ QtObject {
     // installed. `bottomReserved` says the dock RESERVES that strip as a
     // layer-shell exclusive zone (always-visible dock) — a bottom-anchored
     // surface is then already pushed up by the compositor and only adds its
-    // own small gap (Toast, OSD). The built-in Dock publishes both; a dock
-    // plugin does the same through setBottomInset().
+    // own small gap (Toast, OSD). A dock plugin (ewe.dock) publishes both
+    // through setBottomInset(); nothing in the core does.
     property var _insets: ({})           // pluginId -> { px, reserved }
     readonly property int bottomInset: {
         var m = 0
@@ -54,6 +56,19 @@ QtObject {
         else m[pluginId] = { px: Math.round(px), reserved: !!reserved }
         sh._insets = m
     }
+
+    // The user's dock prefs (ewe.conf [desktop.dock] enabled / autohide /
+    // icon_size, loaded by Globals from user-theme.json, written by Settings
+    // and ewe-settings): the dock add-on reads them here, read-only — the
+    // dock is an add-on since 0.25, its settings are not. `iconSize` is
+    // "small" | "normal" | "large".
+    readonly property var dockPrefs: ({ enabled: Globals.dockEnabled, autohide: Globals.dockAutohide, iconSize: Globals.dockIconSize })
+
+    // Pinned apps (desktop ids, ewe-conf apps.pinned): read-only here; a
+    // plugin pins or unpins through setPinned — Globals keeps the one
+    // writer path (ewe-conf), so the file never has two authors.
+    readonly property var pinnedApps: Globals.pinnedApps
+    function setPinned(desktopId, on) { Globals.setPinned(String(desktopId), !!on) }
 
     // ── call ───────────────────────────────────────────────────────────────
     // toast(text, kind): kind is "" · "info" · "warning" · "danger" (the
@@ -125,6 +140,17 @@ QtObject {
         sh._active = m
     }
     function isActive(name) { return !!sh._active[String(name)] }
+    // A plugin's dock item is shown by default; the plugin hides its own at
+    // runtime (the music player has no button while no player exists, or
+    // when its setting says bar-only). The dock add-on filters on this;
+    // `_dockHidden` is bindable so the dock follows live.
+    property var _dockHidden: ({})
+    function setDockItemShown(pluginId, on) {
+        var m = Object.assign({}, sh._dockHidden)
+        if (on === false) m[String(pluginId)] = true; else delete m[String(pluginId)]
+        sh._dockHidden = m
+    }
+    function dockItemShown(pluginId) { return !sh._dockHidden[String(pluginId)] }
 
     // anchorFor(item, window) → { screen, x, y, edge, item } for a popup: x/y
     // are the item's centre in its window (screen-local for a full-width

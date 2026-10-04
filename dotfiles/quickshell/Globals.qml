@@ -45,28 +45,15 @@ QtObject {
     property bool barVisible: true          // the top bar (Super+Shift+B toggles)
     property bool quickSettingsOpen: false  // the Quick Settings panel
     // "open Quick settings ON this tab" for components outside the panel
-    // (Cast's IPC toggle lands on the sink list); QuickSettings.qml listens
+    // (Shell.openQuickSettings, add-on pages); QuickSettings.qml listens
     signal quickSettingsTabRequested(string name)
     function openQuickSettingsTab(name) { g.quickSettingsOpen = true; g.quickSettingsTabRequested(name) }
     property bool dnd: false               // Do Not Disturb (suppresses toasts)
     property var server: null              // set by Notifications.qml (the live NotificationServer)
-    property bool vpnActive: false         // any VPN connection up (bar shows a VPN glyph)
-    property string netBusy: ""            // "wifi" | "vpn" while a connection attempt runs (bar spinner)
+    property string netBusy: ""            // "wifi" (or "vpn", set by the VPN add-on) while a connection attempt runs (bar spinner)
     property int netEpoch: 0               // bumped by the bar on every NetworkManager event (nmcli monitor) — panels re-read on change
-    property bool sshTunnelUp: false       // any background ssh -f -N tunnel from Quick Settings is up (bar shows a console glyph)
-    property bool caffeine: false          // keep-awake: holds a wayland idle inhibitor (no lock/blank/sleep)
-    // ── Cast to TV (RFC-004: ewe-castd owns the protocols, Cast.qml owns the
-    //    socket, this is the shared truth the tile/bar/card all render) ──
-    property string castState: "idle"      // idle·picking·connecting·waiting·negotiating·starting·streaming·error
-    property string castDetail: ""         // one narrated line for the current state
-    property string castSinkName: ""       // who we're casting to, while active
-    property var castSinks: []             // [{id, name, kind}] — displays in range
-    property bool castLegacy: false        // the gnome-network-displays fallback is up
-    signal castCommand(string cmd, string arg)   // QS card → Cast.qml → daemon socket
-    // derived: anything that makes the bar glyph and the tile light up
-    readonly property bool casting: castLegacy || (castState !== "idle" && castState !== "error")
     property bool overviewOpen: false      // GNOME-style window overview (Super tapped alone)
-    property bool overviewCover: false     // the Overview owns the screen: backdrop up, bar and dock out of view (Overview.qml sequences it)
+    property bool overviewCover: false     // the Overview owns the screen: backdrop up, bar (and a dock add-on) out of view (Overview.qml sequences it)
     property bool widgetsArrange: false    // desktop widgets in arrange mode (Super+Shift+W): drag to move, frames with sticky/hide
     property bool settingsOpen: false      // the Quickshell Settings window (Super+, or the CC gear)
     // the first-run Welcome overlay is up — Google.qml holds every auto-push
@@ -390,7 +377,9 @@ QtObject {
         g._csApply.running = false; g._csApply.running = true
     }
 
-    // ── Dock prefs (bottom dock; persisted in user-theme.json) ─────────────────
+    // ── Dock prefs (persisted in user-theme.json / ewe.conf desktop.dock.*) ──
+    // The dock itself is the ewe.dock add-on since 0.25; it reads these through
+    // Shell.dockPrefs, and Settings keeps writing them.
     property bool dockEnabled: true
     property bool dockAutohide: false       // intelligent hide: slide away, reveal on bottom-edge hover
     property string dockIconSize: "normal"  // dock icon size: "small" | "normal" | "large"
@@ -417,16 +406,8 @@ QtObject {
     // moving, rather than something you discover afterwards.
     property bool saverDimming: false
 
-    // ── Dock popups ────────────────────────────────────────────────────────────
-    property bool launcherOpen: false       // pinned-apps / launcher panel
+    // ── the AppStore fallback panel (Komble absent) ───────────────────────────
     property bool storeOpen: false           // app-store panel
-    property bool placesOpen: false          // places / directories panel (Home, Desktop, … + pinned folders)
-    property bool mediaOpen: false           // now-playing popup (MediaPlayer.qml, above the dock's music button)
-    property real launcherAnchorX: 200       // screen-local x of the launcher dock button (popup centers on it)
-    property real storeAnchorX: 200          // screen-local x of the store dock button
-    property real placesAnchorX: 200         // screen-local x of the places dock button
-    property real mediaAnchorX: 200          // screen-local x of the media dock button
-    property var  mediaPlayer: null          // active MPRIS player (resolved by MediaPlayer.qml; dock button shows iff non-null)
 
     // ── System-tray context menu (themed, rendered by TrayMenu.qml) ─────────────
     property bool trayMenuOpen: false
@@ -442,30 +423,24 @@ QtObject {
     readonly property string eweConf: Quickshell.env("HOME") + "/.config/quickshell/../../bin/ewe-conf"
 
     // ── Pinned apps (desktop ids; persisted via ewe-conf → apps.pinned) ───────
+    // Read by the Launcher and, through Shell.pinnedApps / setPinned, the dock add-on.
     property var pinnedApps: []
     function isPinned(id) { return (g.pinnedApps || []).indexOf(id) >= 0 }
-    function togglePin(id) {
+    function togglePin(id) { g.setPinned(id, !g.isPinned(id)) }
+    // the ONE writer of the pinned list (Shell.setPinned lands here too)
+    function setPinned(id, on) {
         var a = (g.pinnedApps || []).slice()
         var i = a.indexOf(id)
-        if (i >= 0) a.splice(i, 1); else a.push(id)
+        if (on && i < 0) a.push(id)
+        else if (!on && i >= 0) a.splice(i, 1)
+        else return
         g.pinnedApps = a
         g._pinWriter.command = [g.eweConf, "set", "--no-hooks", "apps.pinned", JSON.stringify(a)]
         g._pinWriter.running = false; g._pinWriter.running = true
     }
-    // ── Pinned places (folder paths; persisted in places.json) ────────────────
-    // The Places panel always shows the standard XDG dirs; these are the EXTRA
-    // folders the user pinned. Same pattern as pinnedApps.
-    property var pinnedPlaces: []
-    function isPinnedPlace(p) { return (g.pinnedPlaces || []).indexOf(p) >= 0 }
-    function togglePinPlace(p) {
-        if (!p) return
-        var a = (g.pinnedPlaces || []).slice()
-        var i = a.indexOf(p)
-        if (i >= 0) a.splice(i, 1); else a.push(p)
-        g.pinnedPlaces = a
-        g._placesWriter.command = [g.eweConf, "set", "--no-hooks", "apps.places", JSON.stringify(a)]
-        g._placesWriter.running = false; g._placesWriter.running = true
-    }
+    // (Pinned places — places.json / ewe-conf apps.places — belong to the
+    // ewe.places add-on since 0.25; lib/deploy.sh still seeds places.json.default
+    // and ewe-conf still owns the key, so the file is where the add-on reads it.)
     // Re-read every JSON state file this singleton owns — used after a settings
     // restore rewrites them on disk (Google.applyRestore), and by the `settings
     // reload` IPC verb after the out-of-process Settings app has written one.
@@ -479,7 +454,6 @@ QtObject {
         g._reloadPending = true
         g._themeLoad.running = false; g._themeLoad.running = true
         g._pinLoad.running = false; g._pinLoad.running = true
-        g._placesLoad.running = false; g._placesLoad.running = true
         g._animLoad.running = false; g._animLoad.running = true
         // The accent lives in ewe.conf, so picking one re-runs `ewe-theme
         // build` and REWRITES theme-tokens.json. Without this line the shell
@@ -508,13 +482,6 @@ QtObject {
         }
     }
 
-    property Process _placesWriter: Process {}
-    property Process _placesLoad: Process {
-        running: true
-        command: ["sh", "-c", "cat \"$HOME/.config/quickshell/places.json\" 2>/dev/null"]
-        stdout: StdioCollector { onStreamFinished: { try { var j = JSON.parse(this.text); if (Array.isArray(j)) g.pinnedPlaces = j } catch (e) {} } }
-    }
-
     // ── Avatar (~/.face) — shared by Settings (account card) and the lock screen.
     // faceUrl is THE avatar image source everywhere: "" while no ~/.face exists,
     // and cache-busted (?v=) after Settings saves a new one.
@@ -524,42 +491,6 @@ QtObject {
     readonly property string faceUrl: hasFace ? "file://" + Quickshell.env("HOME") + "/.face?v=" + avatarVersion : ""
     property Process _faceChk: Process { running: true; command: ["sh", "-c", 'test -f "$HOME/.face"']; onExited: function (code) { g.hasFace = (code === 0) } }
     function recheckFace() { g.avatarVersion++; g._faceChk.running = false; g._faceChk.running = true }
-
-    // ── CPU / memory sampling (the Quick Settings meters) ─────────────────────
-    // Sampled ONLY while the panel that shows it is open. This used to run at
-    // 1.5 s for the whole session, spawning three processes per tick — roughly
-    // 170k fork/exec a day — to feed two meters behind a closed panel and a
-    // RunCat widget that was deleted in 191d969.
-    property real cpuUsage: 0      // 0..1
-    property real memUsage: 0      // 0..1
-    property var _prevCpu: null
-    // drop the baseline when we stop sampling, so the first tick after reopening
-    // doesn't compute a delta across the whole closed period
-    onQuickSettingsOpenChanged: if (!g.quickSettingsOpen) g._prevCpu = null
-    property Process _statProc: Process {
-        command: ["sh", "-c", "head -1 /proc/stat; echo SEP; grep -E 'MemTotal|MemAvailable' /proc/meminfo"]
-        stdout: StdioCollector {
-            onStreamFinished: {
-                try {
-                    var parts = this.text.split("SEP")
-                    var nums = parts[0].trim().split(/\s+/).slice(1).map(Number)
-                    var idle = (nums[3] || 0) + (nums[4] || 0)
-                    var total = 0; for (var i = 0; i < nums.length; i++) total += (nums[i] || 0)
-                    if (g._prevCpu) { var dt = total - g._prevCpu.total, di = idle - g._prevCpu.idle; if (dt > 0) g.cpuUsage = Math.max(0, Math.min(1, (dt - di) / dt)) }
-                    g._prevCpu = { total: total, idle: idle }
-                    var mt = 0, ma = 0, ml = (parts[1] || "").split("\n")
-                    for (var j = 0; j < ml.length; j++) { if (ml[j].indexOf("MemTotal") >= 0) mt = parseInt(ml[j].replace(/\D/g, "")); else if (ml[j].indexOf("MemAvailable") >= 0) ma = parseInt(ml[j].replace(/\D/g, "")) }
-                    if (mt > 0) g.memUsage = Math.max(0, Math.min(1, (mt - ma) / mt))
-                } catch (e) {}
-            }
-        }
-    }
-    property Timer _statTimer: Timer {
-        interval: g.lowPower ? 3000 : 1500
-        running: g.quickSettingsOpen
-        repeat: true; triggeredOnStart: true
-        onTriggered: g._statProc.running = true
-    }
 
     property Process _pinWriter: Process {}
     property Process _tilingWriter: Process {}

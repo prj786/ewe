@@ -3,8 +3,9 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 
-// Google — the OPTIONAL Google extra (RFC-005): Gmail for the mail badge and
-// Google Drive as a folder, and only when the user brings their own OAuth
+// Google — the OPTIONAL Google extra (RFC-005): Google Calendar (an Agenda
+// source), Google Drive as a folder and the OAuth session the ewe.mail add-on
+// uses for Gmail, and only when the user brings their own OAuth
 // client file (~/.config/ewe/oauth-client.json). ewe ships no Google client,
 // and the ewe account, settings sync and the restore live in Cloud.qml
 // (Nextcloud). The OAuth heavy lifting (PKCE + loopback redirect + Secret
@@ -111,7 +112,6 @@ QtObject {
                 keyringState: goo.keyringState, keyringTrouble: goo.keyringTrouble, keyringResetDone: goo.keyringResetDone,
                 consentUrl: goo.consentUrl,
                 signedIn: goo.signedIn, busy: goo.busy, error: goo.error, errorCode: goo.errorCode,
-                mailUnread: goo.mailUnread, mailState: goo.mailState,
                 profile: goo.profile
             })
         }
@@ -164,7 +164,7 @@ QtObject {
     // Called by Resume, not by a timer. After a multi-hour suspend every access
     // token is expired and ensureToken's 60s skew check cannot help — the cached
     // token is simply stale. Drop it and force one refresh up front, so the
-    // calendar and mail come back on their own instead of the next poll
+    // calendar comes back on its own instead of the next poll
     // discovering the expiry by failing a request.
     function refreshAfterResume() {
         if (!goo.configured) return
@@ -182,7 +182,6 @@ QtObject {
         goo.ensureToken(function (tok) {
             if (tok === "") { Log.warn("google", "resume: token refresh failed — services keep their own retries"); return }
             goo.fetchCalendar()
-            goo.fetchMail()
         })
     }
 
@@ -330,15 +329,13 @@ QtObject {
 
     property Connections _sessionHooks: Connections {
         target: goo
-        function onSessionReady() { goo.fetchCalendar(); goo.fetchMail() }
+        function onSessionReady() { goo.fetchCalendar() }
         function onSessionClosed() {
             // reset the fan-out latch too: a sign-out landing mid-fetch left
             // _calPending non-zero, and fetchCalendar early-returns on that —
             // wedging the calendar for the rest of the session
             goo._calPending = 0; goo._calOk = 0; goo._calFail = 0
             goo.events = []; goo.calState = ""; goo._writeEventsCache()
-            goo.mailUnread = 0; goo.mailList = []; goo.mailState = ""; goo.mailError = ""
-            goo._mailHistoryId = ""; goo._mailIds = []; goo._saveMailState()
         }
     }
 
@@ -456,211 +453,9 @@ QtObject {
         }
     }
 
-    // ══════════════════════════════════════════════════════════════════════════
-    // Gmail — INBOX unread badge, new-mail notifications and the Quick Settings
-    // mail list. Read-only scope. The History API cursor detects genuinely NEW
-    // arrivals (no notification storm for pre-existing unread mail); the cursor
-    // and a bounded notified-set persist so restarts never re-notify.
-    // ══════════════════════════════════════════════════════════════════════════
-    property int mailUnread: 0
-    property var mailList: []            // [{id, from, subject, snippet, date, unread}]
-    property string mailState: ""        // "" | "offline" | "scope" (re-consent needed) | "api" (API disabled)
-    property string mailError: ""
-    property bool mailNotify: true       // desktop notifications for new mail
-    property double mailLastFetch: 0
-    property string _mailHistoryId: ""
-    property var _mailNotified: ({})     // messageId -> epoch-ms (bounded, persisted)
-    property var _mailIds: []            // current unread id set (change detector)
-    readonly property string mailStatePath: Quickshell.env("HOME") + "/.config/quickshell/google-mail.json"
-
-    property Process _mailWriter: Process {}
-    // _saveMailState fires from several callbacks that can land in the same tick
-    // (history → baseline → list refresh). They all share _mailWriter, and
-    // atomicWrite restarts the process, so the earlier `sh` was killed mid-heredoc
-    // and its write silently lost — taking the historyId cursor with it and
-    // leaving a stray .tmp behind. Coalesce the burst into one write.
-    property Timer _mailSaveT: Timer {
-        interval: 200
-        onTriggered: HyprMon.atomicWrite(goo._mailWriter, goo.mailStatePath, JSON.stringify({
-            historyId: goo._mailHistoryId, notified: goo._mailNotified,
-            notify: goo.mailNotify, unread: goo.mailUnread, list: goo.mailList.slice(0, 15)
-        }))
-    }
-    function _saveMailState() {
-        var cut = Date.now() - 7 * 86400000
-        for (var k in goo._mailNotified) if (goo._mailNotified[k] < cut) delete goo._mailNotified[k]
-        goo._mailSaveT.restart()
-    }
-    property Process _mailLoad: Process {
-        running: true
-        command: ["sh", "-c", "cat \"$HOME/.config/quickshell/google-mail.json\" 2>/dev/null"]
-        stdout: StdioCollector {
-            onStreamFinished: {
-                try {
-                    var j = JSON.parse(this.text)
-                    if (j.historyId) goo._mailHistoryId = String(j.historyId)
-                    if (j.notified && typeof j.notified === "object") goo._mailNotified = j.notified
-                    if (j.notify !== undefined) goo.mailNotify = !!j.notify
-                    if (goo.mailLastFetch === 0) {
-                        if (j.unread !== undefined) goo.mailUnread = j.unread
-                        if (Array.isArray(j.list)) goo.mailList = j.list
-                    }
-                } catch (e) {}
-            }
-        }
-    }
-    function setMailNotify(v) { goo.mailNotify = v; goo._saveMailState() }
-
-    function fetchMail() {
-        if (!goo.signedIn) return
-        goo.api("GET", "https://gmail.googleapis.com/gmail/v1/users/me/labels/INBOX", null, function (st, j, err) {
-            if (st === 200 && j) {
-                goo.mailState = ""; goo.mailError = ""
-                goo.mailUnread = j.messagesUnread || 0
-                goo.mailLastFetch = Date.now()
-                goo._mailHistory()
-            } else if (st === 403 || st === 401) {
-                var m = (j && j.error && j.error.message) ? String(j.error.message) : ""
-                if (m.indexOf("disabled") >= 0 || m.indexOf("has not been used") >= 0) {
-                    goo.mailState = "api"
-                    goo.mailError = "Enable the Gmail API for your project in the Google Cloud console, then retry."
-                } else {
-                    goo.mailState = "scope"   // token predates the gmail scope
-                    goo.mailError = "Gmail needs a new permission — reconnect your Google account."
-                }
-            } else if (err === "offline" || st === 0) {
-                goo.mailState = "offline"
-            }
-        })
-    }
-    // How many new-mail toasts a single history walk may fire before it stops
-    // naming them individually. A multi-hour suspend can surface dozens at once.
-    readonly property int mailNotifyBurst: 5
-
-    property var _mailFresh: ({})        // message ids gathered across history pages
-
-    function _mailHistory() {
-        if (goo._mailHistoryId === "") { goo._mailBaseline(); return }
-        goo._mailFresh = {}
-        goo._mailHistoryPage("", 0)
-    }
-    // history.list pages at ~100 records. Reading only the first page while still
-    // advancing the cursor to j.historyId (which is the mailbox's CURRENT id, not
-    // the last id on the page) silently dropped every arrival past page one and
-    // left the cursor looking healthy — so walk the pages before committing.
-    function _mailHistoryPage(pageToken, depth) {
-        var url = "https://gmail.googleapis.com/gmail/v1/users/me/history?historyTypes=messageAdded&labelId=INBOX&startHistoryId="
-                + goo._mailHistoryId
-        if (pageToken !== "") url += "&pageToken=" + encodeURIComponent(pageToken)
-        goo.api("GET", url, null, function (st, j, err) {
-            if (st === 404) { goo._mailFresh = {}; goo._mailBaseline(); return }   // cursor aged out — reconcile silently
-            if (st !== 200 || !j) { goo._mailFresh = {}; goo._refreshMailList(); return }
-            var hs = j.history || []
-            for (var h = 0; h < hs.length; h++)
-                for (var a = 0; a < (hs[h].messagesAdded || []).length; a++) {
-                    var msg = hs[h].messagesAdded[a].message
-                    if (msg && msg.id && !goo._mailNotified[msg.id]) goo._mailFresh[msg.id] = true
-                }
-            if (j.nextPageToken) {
-                if (depth < 20) { goo._mailHistoryPage(String(j.nextPageToken), depth + 1); return }
-                // gap too large to walk — rebaseline rather than advance the cursor
-                // past pages we never read
-                Log.warn("google", "gmail history gap over", depth, "pages — rebaselining")
-                goo._mailFresh = {}
-                goo._mailBaseline()
-                return
-            }
-            if (j.historyId) goo._mailHistoryId = String(j.historyId)
-            var ids = Object.keys(goo._mailFresh)
-            goo._mailFresh = {}
-            if (ids.length > 0) Log.info("google", "gmail:", ids.length, "new message(s) since the cursor")
-            for (var i = 0; i < ids.length; i++) {
-                goo._mailNotified[ids[i]] = Date.now()
-                if (goo.mailNotify && i < goo.mailNotifyBurst) goo._notifyMail(ids[i])
-            }
-            // one summary instead of a toast storm for the rest
-            if (goo.mailNotify && ids.length > goo.mailNotifyBurst)
-                Quickshell.execDetached(["notify-send", "-a", "Gmail", "-i", "mail-unread",
-                    "New mail", (ids.length - goo.mailNotifyBurst) + " more new messages in your inbox."])
-            goo._saveMailState()
-            goo._refreshMailList()
-        })
-    }
-    // (re)baseline the history cursor; everything currently unread is "seen"
-    function _mailBaseline() {
-        goo.api("GET", "https://gmail.googleapis.com/gmail/v1/users/me/profile", null, function (st, j, err) {
-            if (st === 200 && j && j.historyId) goo._mailHistoryId = String(j.historyId)
-            goo.api("GET", "https://gmail.googleapis.com/gmail/v1/users/me/messages?q=" + encodeURIComponent("is:unread in:inbox") + "&maxResults=15",
-                    null, function (st2, j2, err2) {
-                var ms = (st2 === 200 && j2 && j2.messages) ? j2.messages : []
-                for (var i = 0; i < ms.length; i++) goo._mailNotified[ms[i].id] = Date.now()
-                goo._saveMailState()
-                goo._refreshMailList()
-            })
-        })
-    }
-    function _refreshMailList() {
-        goo.api("GET", "https://gmail.googleapis.com/gmail/v1/users/me/messages?q=" + encodeURIComponent("in:inbox") + "&maxResults=10",
-                null, function (st, j, err) {
-            if (st !== 200 || !j) return
-            var ms = j.messages || []
-            var ids = ms.map(function (m) { return m.id })
-            if (JSON.stringify(ids) === JSON.stringify(goo._mailIds) && goo.mailList.length > 0) return
-            goo._mailIds = ids
-            if (ids.length === 0) { goo.mailList = []; goo._saveMailState(); return }
-            var out = [], pending = ids.length
-            for (var i = 0; i < ids.length; i++) goo._mailMeta(ids[i], function (row) {
-                if (row) out.push(row)
-                if (--pending === 0) {
-                    out.sort(function (a, b) { return b.date - a.date })
-                    goo.mailList = out
-                    goo._saveMailState()
-                }
-            })
-        })
-    }
-    function _mailMeta(id, cb) {
-        goo.api("GET", "https://gmail.googleapis.com/gmail/v1/users/me/messages/" + id
-                + "?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date", null, function (st, j, err) {
-            if (st !== 200 || !j) { cb(null); return }
-            var from = "", subject = ""
-            var hs = (j.payload && j.payload.headers) ? j.payload.headers : []
-            for (var i = 0; i < hs.length; i++) {
-                if (hs[i].name === "From") from = hs[i].value
-                else if (hs[i].name === "Subject") subject = hs[i].value
-            }
-            var nice = from.replace(/\s*<[^>]*>/, "").replace(/^"|"$/g, "").trim() || from
-            cb({
-                id: j.id, from: nice, subject: subject || "(no subject)",
-                snippet: j.snippet || "", date: Number(j.internalDate || 0),
-                unread: (j.labelIds || []).indexOf("UNREAD") >= 0
-            })
-        })
-    }
-    function _notifyMail(id) {
-        goo._mailMeta(id, function (row) {
-            if (!row) return
-            Quickshell.execDetached(["notify-send", "-a", "Gmail", "-i", "mail-unread",
-                row.from || "New mail", (row.subject || "") + (row.snippet ? "\n" + row.snippet : "")])
-        })
-    }
-    function openMail(id) {
-        Quickshell.execDetached(["xdg-open", "https://mail.google.com/mail/u/0/#inbox/" + id])
-    }
-
-    // back off on battery: each poll is an HTTPS round-trip that wakes the Wi-Fi
-    // radio out of power-save, 720 times a day at the 2-minute cadence
-    property Timer _mailPoll: Timer {
-        interval: (Globals.lowPower ? 5 : 2) * 60 * 1000
-        running: goo.signedIn; repeat: true   // sessionReady does the first fetch
-        onTriggered: goo.fetchMail()
-    }
-    property Connections _mailQsHook: Connections {
-        target: Globals
-        function onQuickSettingsOpenChanged() {
-            if (Globals.quickSettingsOpen && goo.signedIn && Date.now() - goo.mailLastFetch > 60 * 1000) goo.fetchMail()
-        }
-    }
+    // (Gmail — the INBOX unread badge, new-mail notifications and the inbox
+    // list — is the ewe.mail add-on's since 0.25; it uses the same `ewe-auth
+    // token` path. Its state file stays ~/.config/quickshell/google-mail.json.)
 
     // ── thin API layer: Bearer header, one 401-refresh-retry, JSON parse ───────
     // cb(status, json, err) — err ∈ "" | "offline" | "not-authorized"

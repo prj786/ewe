@@ -6,7 +6,9 @@ import Quickshell.Wayland
 // PanelWindow on the anchor's screen, spanning it so a click outside
 // closes; the card is a surfaceRaised, borderSubtle, radiusRounded panel
 // centred on the anchor's x, above the dock (Shell.bottomInset) for a
-// bottom anchor or spaceXs under the bar for a top one. Esc closes; the
+// bottom anchor or spaceXs under the bar (Theme.barHeight — this window
+// ignores exclusive zones, so the bar's strip is ours to clear) for a top
+// one. Esc closes; the
 // keyboard is OnDemand while open. Declare the card's content as children.
 //
 //   AnchoredPopup { id: pop; action: "acme.music.toggle"; implicitWidth: Theme.panelSm
@@ -60,10 +62,13 @@ Scope {
             readonly property real ax: pop.anchor ? pop.anchor.x : parent.width / 2
             x: Math.round(Math.max(edgeGap, Math.min(parent.width - width - edgeGap, ax - width / 2)))
             // bottom: the dock's inset plus the card's own gap; top: spaceXs
-            // under the bar (the layer already sits below its exclusive zone)
-            y: fromBottom ? Math.max(edgeGap, parent.height - height - (Shell.bottomInset + edgeGap)) : Theme.spaceXs
+            // under the bar — ExclusionMode.Ignore spans the whole output, so
+            // y = 0 is the top of the SCREEN, not the bottom of the bar (a
+            // Music card sat over the clock, 2026-10-04)
+            readonly property int topGap: (Globals.barVisible ? Theme.barHeight : 0) + Theme.spaceXs
+            y: fromBottom ? Math.max(edgeGap, parent.height - height - (Shell.bottomInset + edgeGap)) : topGap
             width: Math.min(pop.implicitWidth, parent.width - 2 * edgeGap)
-            height: Math.min(pop.implicitHeight, parent.height - Shell.bottomInset - 2 * edgeGap)
+            height: Math.min(pop.implicitHeight, parent.height - Shell.bottomInset - topGap - edgeGap)
             radius: Theme.radiusRounded
             color: Theme.surfaceRaised
             border.color: Theme.borderSubtle

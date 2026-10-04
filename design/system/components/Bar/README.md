@@ -25,14 +25,14 @@ Each shows only while it applies, always in this order:
 | Indicator | Glyph | Color |
 | --- | --- | --- |
 | Network busy | `loader-circle`, spinning | `accent-text` |
-| Keep awake | `eye` | `text-secondary` |
-| Casting | `cast` | `accent-text` while streaming |
-| SSH tunnel · VPN | `square-terminal` · `shield-check` | `text-secondary` |
+| Insomnia (add-on) | `eye` | `text-secondary` |
+| Casting (add-on) | `cast` | `accent-text` while streaming |
+| SSH tunnel · VPN (add-ons) | `square-terminal` · `shield-check` | `text-secondary` |
 | Sync | `refresh-cw` spinning · `cloud-alert` · `cloud-off` | `accent-text` · `danger` · `text-muted` |
 | Notifications | `bell` with a count Badge | `accent-text` |
-| Mail | `mail` with a count Badge | `text-secondary` |
+| Mail (add-on) | `mail` with a count Badge | `text-secondary` |
 | Event within the hour | `calendar` | `text-secondary` |
-| Phone (KDE Connect) | `smartphone`, a dot when it has unread items, and its battery % | `text-secondary` |
+| Phone (KDE Connect, add-on) | `smartphone`, a dot when it has unread items, and its battery % | `text-secondary` |
 | Wired or Wi-Fi | `ethernet-port` or `wifi` | `text-secondary` |
 | Sound | the output's glyph; `volume-x` when muted | `text-secondary`; `text-muted` when muted |
 | Microphone in use | `mic` | `accent-text` |

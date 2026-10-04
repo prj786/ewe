@@ -41,7 +41,13 @@ Row {
             required property var modelData
             anchors.verticalCenter: parent.verticalCenter
             active: Globals.barShows("plugin:" + modelData.id)
-            visible: active && status === Loader.Ready
+            // a widget with nothing to draw (implicitWidth 0, or `shown`
+            // false like a bar-status glyph) must not cost the Row a spacing:
+            // collapse the slot. Read the item's implicit size and `shown`,
+            // never item.visible — that reads back the EFFECTIVE visibility
+            // and would lock the slot hidden (the bar-status gotcha).
+            visible: active && status === Loader.Ready && item !== null
+                     && item.implicitWidth > 0 && (item.shown === undefined || item.shown)
             source: "file://" + modelData.entry
             onStatusChanged: {
                 if (status === Loader.Error) Log.warn("plugins", modelData.id + "/bar-widget failed to load (see the qml error above)")

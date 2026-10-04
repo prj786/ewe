@@ -23,11 +23,10 @@ import Quickshell.Bluetooth
 //            OutCubic, and nothing moves under Reduce motion
 //   rail     the collapsed Side navigation: the sheep mark, then one
 //            controlLg × controlMd item per page (home, Wi-Fi, Bluetooth,
-//            sound, VPN, SSH, Cast, Mobile, Mail, Calendar, Notifications) on
+//            sound, Calendar, Notifications; the add-ons' pages follow) on
 //            surfaceBase; the selected page is accentSubtle with an
 //            accentText glyph; Settings and Power sit at its foot
-//   home     the tile grid (Tile.qml), spaceS apart, and the CPU / memory
-//            meters
+//   home     the tile grid (Tile.qml), spaceS apart
 //   pages    a detail page per tile: the feature's name and Switch, then its
 //            list (ListWell + ListRow), notes and actions
 //   foot     volume and brightness Sliders under a divider, always shown
@@ -196,33 +195,33 @@ Scope {
         return parts.join(" · ")
     }
 
-    // which section is expanded: "" | "audio" | "wifi" | "bt" | "vpn" | "ssh" | "mobile" | "mail"
+    // which section is expanded: "" | "audio" | "wifi" | "bt" | an add-on page key
     // ── tabs (the 2026-09 revamp): home is the toggle grid, every list
     //    lives on its own tab; `expanded` survives as a read-only alias so
     //    the section visibles below keep working unchanged ──
     property string tab: "home"
     readonly property string expanded: tab === "home" ? "" : tab
     Connections { target: Globals; function onQuickSettingsTabRequested(name) { root.setTab(name) } }
+    // the pages the shell itself has; anything else is an add-on's quickPage.key
+    readonly property var builtinTabs: ["home", "wifi", "bt", "audio", "cal", "notifs"]
+    function hasTab(t) {
+        if (root.builtinTabs.indexOf(t) >= 0) return true
+        var ps = PluginHost.quickPages
+        for (var i = 0; i < ps.length; i++) if (ps[i].key === t) return true
+        return false
+    }
     function setTab(t) {
+        // Rule 4: `quicksettings tab vpn` (an old keybind, a script) with the
+        // VPN add-on not installed must not open an empty panel — fall back
+        // to home, and say which add-on would have answered.
+        if (!root.hasTab(t)) {
+            Log.info("quicksettings", "tab", t, "— no such page (an add-on that is not installed?); showing home")
+            t = "home"
+        }
         if (t !== "bt" && Bluetooth.defaultAdapter) Bluetooth.defaultAdapter.discovering = false
         root.tab = t
         if (t === "wifi") { wifiScan.running = true; wifiSavedScan.running = true }
         if (t === "bt" && Bluetooth.defaultAdapter) Bluetooth.defaultAdapter.discovering = true
-        if (t === "vpn") vpnScan.running = true
-        if (t === "ssh") sshScan.running = true
-        if (t === "mobile") { root.mobileView = "notifs"; KdeConnect.refresh() }
-        if (t === "mail" && Mail.available) Mail.fetch()
-        if (t === "cast") Globals.castCommand("scan", "")
-    }
-
-    // mobile (KDE Connect) sub-state
-    property string mobileView: "notifs"      // "notifs" | "msgs"
-    property string replyTarget: ""           // notification id with the reply box open
-    function fmtMsgTime(ms) {
-        var d = new Date(ms), now = new Date()
-        if (d.toDateString() === now.toDateString()) return Qt.formatTime(d, "h:mm AP")
-        if (now.getTime() - ms < 6 * 86400000) return Qt.formatDateTime(d, "ddd")
-        return Qt.formatDateTime(d, "d MMM")
     }
 
     // wifi
@@ -233,18 +232,6 @@ Scope {
     property bool pwShow: false        // reveal the Wi-Fi password while typing
     property string pwText: ""
     function curSsid() { for (var i = 0; i < wifiList.length; i++) if (wifiList[i].active) return wifiList[i].ssid; return "" }
-
-    // vpn
-    property var vpnList: []
-
-    // ssh — hosts parsed from ~/.ssh/config (+ config.d/*). Each entry:
-    //   { host, tunnel (bool), script (bool) }
-    // "tunnel" = a background `ssh -f -N` we started is alive for that host;
-    // "script" = the user saved a browse script (ssh-browse/<host>.sh, see below).
-    property var sshList: []
-    property string scriptTarget: ""    // host whose browse-script editor is open
-    property string scriptText: ""      // editor prefill (existing script when editing)
-    function sq(s) { return "'" + String(s).replace(/'/g, "'\\''") + "'" }   // shell single-quote
 
     // sliders (0..1), read on open, updated optimistically on drag
     property real brightnessVal: 0.5
@@ -260,10 +247,7 @@ Scope {
         Globals.openDd = ""   // never reopen with a stale dropdown expanded
         root.today = d; root.calYear = d.getFullYear(); root.calMonth = d.getMonth(); root.calDate = d.getDate()
         wifiState.running = true; wiredState.running = true; brightnessProc.running = true; volumeProc.running = true; wifiSavedScan.running = true
-        sshScan.running = true   // always: the SSH tile's sub-label needs the host count
-        vpnScan.running = true   // always: the VPN card only exists when profiles do
         if (root.expanded === "wifi") wifiScan.running = true
-        if (root.expanded === "vpn") vpnScan.running = true
     }
     function clearAll() {
         if (!Globals.server) return
@@ -362,120 +346,6 @@ Scope {
         wifiConnProc.command = cmd
         wifiConnProc.running = true
         root.pwTarget = ""; root.pwText = ""
-    }
-    // ── ssh actions ──
-    // Open a terminal already ssh'd into the host (kitty runs the command directly).
-    function sshTerm(host) {
-        Quickshell.execDetached(["kitty", "ssh", host])
-        Globals.quickSettingsOpen = false
-    }
-    // Browse: run the user's saved per-host script (a proxied-browser launcher,
-    // pasted once via the inline editor and kept forever in
-    // ~/.config/quickshell/ssh-browse/<host>.sh — gitignored user state). Before
-    // the script runs, a background SOCKS5 tunnel `ssh -f -N -D $SOCKS_PORT` to
-    // the host is brought up if none is alive (BatchMode: needs key/agent auth —
-    // there is no terminal to type a password into), and SSH_HOST + SOCKS_PORT
-    // (default 1080) are exported so the script can point a browser at
-    // socks5://127.0.0.1:$SOCKS_PORT. No saved script yet → open the editor.
-    function sshBrowse(host, hasScript) {
-        if (!hasScript) {
-            root.scriptText = ""
-            root.scriptTarget = root.scriptTarget === host ? "" : host
-            return
-        }
-        Quickshell.execDetached(["sh", "-c", root.sshRunCmd(host)])
-        sshRescan.restart()
-        Globals.quickSettingsOpen = false
-    }
-    // The tunnel-then-script shell command (shared by sshBrowse and Save & Run).
-    function sshRunCmd(host) {
-        var pat = root.sq("^ssh -f -N .*" + host + "$")
-        return "export SSH_HOST=" + root.sq(host) + " SOCKS_PORT=\"${SOCKS_PORT:-1080}\"; " +
-               "if ! pgrep -f " + pat + " >/dev/null 2>&1; then " +
-               "ssh -f -N -D \"$SOCKS_PORT\" -o BatchMode=yes -o ConnectTimeout=5 -o ExitOnForwardFailure=yes " + root.sq(host) +
-               " || { notify-send -u critical -a SSH " + root.sq("Tunnel to " + host + " failed") +
-               " 'Needs key/agent auth (no password prompt in the background).'; exit 1; }; fi; " +
-               "exec \"$HOME/.config/quickshell/ssh-browse/" + host + ".sh\""
-    }
-    // Save the pasted script (quoted heredoc: content lands verbatim), mark it
-    // executable, then immediately run it via the same tunnel-first path.
-    function sshSaveScript(host, text) {
-        var p = "\"$HOME/.config/quickshell/ssh-browse/" + host + ".sh\""
-        var cmd = "mkdir -p \"$HOME/.config/quickshell/ssh-browse\" && cat > " + p +
-                  " <<'QS_EOF'\n" + text.replace(/\n+$/, "") + "\nQS_EOF\nchmod +x " + p + " && " + root.sshRunCmd(host)
-        Quickshell.execDetached(["sh", "-c", cmd])
-        root.scriptTarget = ""
-        sshRescan.restart()
-        Globals.quickSettingsOpen = false
-    }
-    // Pencil button: load the saved script into the editor (or close it again).
-    function sshEditScript(host) {
-        if (root.scriptTarget === host) { root.scriptTarget = ""; return }
-        sshScriptLoad.host = host
-        sshScriptLoad.command = ["sh", "-c", "cat \"$HOME/.config/quickshell/ssh-browse/" + host + ".sh\" 2>/dev/null"]
-        sshScriptLoad.running = false; sshScriptLoad.running = true
-    }
-    function sshDeleteScript(host) {
-        Quickshell.execDetached(["sh", "-c", "rm -f \"$HOME/.config/quickshell/ssh-browse/" + host + ".sh\""])
-        root.scriptTarget = ""
-        sshRescan.restart()
-    }
-    function sshStopTunnel(host) {
-        Quickshell.execDetached(["sh", "-c", "pkill -f " + root.sq("^ssh -f -N .*" + host + "$")])
-        sshRescan.restart()
-    }
-
-    property string vpnPending: ""
-    property string vpnBusyName: ""   // connection being brought up/down — its row + the bar spin
-    function toggleVpn(name, up) {
-        root.vpnPending = (up ? "connect to " : "disconnect from ") + name
-        root.vpnBusyName = name
-        vpnUpProc.name = name
-        Globals.netBusy = "vpn"
-        vpnUpProc.command = ["nmcli", "connection", up ? "up" : "down", name]
-        vpnUpProc.running = true
-    }
-    // ── VPN credentials, inline ──
-    // Nothing in ewe is a NetworkManager secret agent, so a profile without
-    // stored secrets can only fail with "secrets were required … --ask". The
-    // row then opens a credentials form; the secrets are written INTO the
-    // profile (password-flags=0 — GNOME's "store for all users", root-only
-    // file under /etc/NetworkManager) and the toggle just works from then on.
-    // L2TP/IPsec (the corporate kind: server + user + password + PSK) is the
-    // case that surfaced this (metal, 2026-09-02); OpenVPN gets the same form.
-    property string vpnCredTarget: ""    // profile whose form is open
-    property string vpnCredService: ""   // …l2tp | …openvpn | …
-    property bool vpnCredNeedsPsk: false
-    property string vpnCredUser: ""
-    property string vpnCredPass: ""
-    property string vpnCredPsk: ""
-    property string vpnCredError: ""
-    property bool vpnCredShow: false
-    function vpnAskCredentials(name) {
-        root.vpnCredTarget = name; root.vpnCredError = ""; root.vpnCredPass = ""; root.vpnCredPsk = ""
-        root.vpnCredService = ""; root.vpnCredNeedsPsk = false
-        vpnInfoProc.command = ["nmcli", "-t", "-g", "vpn.service-type,vpn.data", "connection", "show", name]
-        vpnInfoProc.running = true
-    }
-    function vpnCloseCredentials() { root.vpnCredTarget = ""; root.vpnCredPass = ""; root.vpnCredPsk = ""; root.vpnCredError = "" }
-    function nmEsc(v) { return String(v).replace(/,/g, "\\,") }   // nmcli splits dict values on ','
-    function vpnSaveCredentials() {
-        var name = root.vpnCredTarget
-        if (name === "" || root.vpnCredUser === "" || root.vpnCredPass === "") { root.vpnCredError = "Enter a username and a password."; return }
-        var l2tp = /l2tp$/.test(root.vpnCredService), ovpn = /openvpn$/.test(root.vpnCredService)
-        var args = ["nmcli", "connection", "modify", name, "vpn.user-name", root.vpnCredUser, "+vpn.data", "password-flags=0"]
-        if (l2tp) args.push("+vpn.data", "user=" + root.nmEsc(root.vpnCredUser))
-        if (ovpn) args.push("+vpn.data", "username=" + root.nmEsc(root.vpnCredUser))
-        args.push("+vpn.secrets", "password=" + root.nmEsc(root.vpnCredPass))
-        if (l2tp && root.vpnCredPsk !== "") {
-            args.push("+vpn.data", "ipsec-enabled=yes", "+vpn.data", "ipsec-psk-flags=0")
-            args.push("+vpn.secrets", "ipsec-psk=" + root.nmEsc(root.vpnCredPsk))
-        }
-        root.vpnCredError = ""
-        root.vpnBusyName = name; Globals.netBusy = "vpn"
-        vpnCredProc.name = name
-        vpnCredProc.command = args
-        vpnCredProc.running = true
     }
     // logind writes the backlight for us (no udev rule, no setuid helper); fall
     // back to brightnessctl when the bridge is down or the machine has no
@@ -595,24 +465,6 @@ Scope {
         wiredSetProc.command = ["nmcli", "device", on ? "connect" : "disconnect", root.wiredDev]
         wiredSetProc.running = true
     }
-    Process {
-        id: vpnScan
-        command: ["sh", "-c", "nmcli -t -f NAME,TYPE,ACTIVE connection show 2>/dev/null"]
-        stdout: StdioCollector {
-            onStreamFinished: {
-                var lines = this.text.split("\n"), arr = []
-                for (var i = 0; i < lines.length; i++) {
-                    if (!lines[i]) continue
-                    var p = lines[i].split(":")
-                    var type = p[p.length - 2], active = p[p.length - 1] === "yes"
-                    var name = p.slice(0, p.length - 2).join(":")
-                    if (type && (type.indexOf("vpn") >= 0 || type.indexOf("wireguard") >= 0 || type.indexOf("tun") >= 0))
-                        arr.push({ name: name, active: active })
-                }
-                root.vpnList = arr
-            }
-        }
-    }
     Process { id: brightnessProc; command: ["sh", "-c", "brightnessctl -m 2>/dev/null | cut -d, -f4 | tr -d '%'"]; stdout: StdioCollector { onStreamFinished: { var n = parseInt(this.text.trim()); if (!isNaN(n)) root.brightnessVal = n / 100 } } }
     Process { id: volumeProc; command: ["sh", "-c", "wpctl get-volume @DEFAULT_AUDIO_SINK@ 2>/dev/null | grep -oE '[0-9]+\\.[0-9]+'"]; stdout: StdioCollector { onStreamFinished: { var f = parseFloat(this.text.trim()); if (!isNaN(f)) root.volumeVal = Math.min(1, f) } } }
     Timer { id: rescanTimer; interval: 2500; onTriggered: { wifiState.running = true; wifiScan.running = true } }
@@ -621,7 +473,7 @@ Scope {
     Timer { id: wifiConfirmTimer; interval: 4000; onTriggered: { root.wifiConfirm = ""; root.wifiPending = "" } }
     // NetworkManager events (the bar's `nmcli monitor`) — re-read while the
     // panel is open instead of waiting for the 6 s poll; this is what makes a
-    // cable plug, a Wi-Fi join or a VPN coming up show at once
+    // cable plug or a Wi-Fi join show at once
     Connections {
         target: Globals
         function onNetEpochChanged() {
@@ -630,153 +482,7 @@ Scope {
             if (root.expanded === "wifi") wifiScan.running = true
         }
     }
-    Timer { id: vpnRescan; interval: 2000; onTriggered: vpnScan.running = true }
-    Timer { id: sshRescan; interval: 1500; onTriggered: sshScan.running = true }
 
-    // ── ssh host scan: ~/.ssh/config (+ config.d/*) + live tunnels + scripts ──
-    // One process emits the config, then (behind marker lines) `pgrep -af` of the
-    // background tunnels we start (they all match "^ssh -f -N") and the saved
-    // browse scripts (ssh-browse/<host>.sh).
-    Process {
-        id: sshScan
-        command: ["sh", "-c", "cat \"$HOME/.ssh/config\" \"$HOME/.ssh/config.d\"/* 2>/dev/null; printf '\\n@TUNNELS@\\n'; pgrep -af '^ssh -f -N' 2>/dev/null; printf '@SCRIPTS@\\n'; ls \"$HOME/.config/quickshell/ssh-browse\" 2>/dev/null; true"]
-        stdout: StdioCollector {
-            onStreamFinished: {
-                var ls = this.text.split("\n"), sec = 0   // 0 config · 1 tunnels · 2 scripts
-                var hosts = [], seen = {}, tunHosts = {}, scripts = {}
-                for (var i = 0; i < ls.length; i++) {
-                    var ln = ls[i].trim()
-                    if (ln === "@TUNNELS@") { sec = 1; continue }
-                    if (ln === "@SCRIPTS@") { sec = 2; continue }
-                    if (!ln || (sec === 0 && ln.charAt(0) === "#")) continue
-                    if (sec === 1) {
-                        // "PID ssh -f -N [-o …] [-D …] host" — host is the last token
-                        var tk = ln.split(/\s+/)
-                        tunHosts[tk[tk.length - 1]] = true
-                        continue
-                    }
-                    if (sec === 2) {
-                        if (/\.sh$/.test(ln)) scripts[ln.slice(0, -3)] = true
-                        continue
-                    }
-                    var mh = ln.match(/^Host\s+(.+)$/i)
-                    if (mh) {
-                        var names = mh[1].split(/\s+/)
-                        for (var n = 0; n < names.length; n++) {
-                            var h = names[n]
-                            if (!h || /[*?!]/.test(h)) continue   // skip wildcard/negated patterns
-                            if (!seen[h]) { seen[h] = true; hosts.push(h) }
-                        }
-                    }
-                }
-                var arr = [], anyTun = false
-                for (var k = 0; k < hosts.length; k++) {
-                    var t = tunHosts[hosts[k]] === true
-                    if (t) anyTun = true
-                    arr.push({ host: hosts[k], tunnel: t, script: scripts[hosts[k]] === true })
-                }
-                root.sshList = arr
-                Globals.sshTunnelUp = anyTun
-            }
-        }
-    }
-    // cat's an existing browse script into the editor, then opens it
-    Process {
-        id: sshScriptLoad
-        property string host: ""
-        stdout: StdioCollector {
-            onStreamFinished: {
-                root.scriptText = this.text
-                root.scriptTarget = sshScriptLoad.host
-            }
-        }
-    }
-    // brings a VPN up/down; on failure raises a system notification with the error
-    Process {
-        id: vpnUpProc
-        property string name: ""
-        stderr: StdioCollector { id: vpnErr }
-        onExited: function (exitCode, exitStatus) {
-            root.vpnBusyName = ""
-            Globals.netBusy = ""
-            vpnRescan.restart()
-            if (exitCode !== 0) {
-                var msg = (vpnErr.text || "").trim()
-                // no stored secrets (and no secret agent to ask): open the
-                // credentials form on that row instead of only shouting
-                if (/secrets|--ask|no agents|agent/i.test(msg)) { root.setTab("vpn"); root.vpnAskCredentials(vpnUpProc.name); return }
-                if (root.vpnCredTarget === vpnUpProc.name) { root.vpnCredError = msg !== "" ? msg.split("\n")[0] : ("nmcli exited with code " + exitCode); return }
-                var title = "Couldn’t " + root.vpnPending, body = msg !== "" ? msg : ("nmcli exited with code " + exitCode)
-                // "The VPN service failed to start" says nothing — the reason
-                // is a journal line back; fetch it before shouting
-                if (/VPN service failed to start|activation failed/i.test(msg)) {
-                    vpnWhyProc.name = vpnUpProc.name; vpnWhyProc.title = title; vpnWhyProc.fallback = body
-                    vpnWhyProc.running = false; vpnWhyProc.running = true
-                    return
-                }
-                Quickshell.execDetached(["notify-send", "-u", "critical", "-a", "VPN", title, body])
-            }
-        }
-    }
-    // NetworkManager reports a VPN plugin failure as "The VPN service failed
-    // to start" and keeps the actual reason for the journal:
-    //   vpn[…,"work-vpn"]: failed to connect: 'Could not establish IPsec connection.'
-    // (that one is the strongSwan-6.1-has-no-IKEv1 case, 2026-09-10). Read the
-    // last such line for this profile and put IT in the notification. The
-    // journal is readable for wheel/systemd-journal members (the installing
-    // user); anyone else just gets nmcli's line.
-    Process {
-        id: vpnWhyProc
-        property string name: ""
-        property string title: ""
-        property string fallback: ""
-        command: ["journalctl", "-u", "NetworkManager", "-n", "150", "-o", "cat", "--since", "-3min", "--no-pager"]
-        stdout: StdioCollector {
-            onStreamFinished: {
-                var why = "", lines = (this.text || "").split("\n")
-                for (var i = lines.length - 1; i >= 0; i--) {
-                    if (lines[i].indexOf('"' + vpnWhyProc.name + '"') < 0) continue
-                    var m = /failed to connect: '([^']+)'/.exec(lines[i])
-                    if (m) { why = m[1]; break }
-                }
-                var body = vpnWhyProc.fallback
-                if (why !== "") body = why + (/ipsec/i.test(why) ? " — L2TP/IPsec needs IKEv1: libreswan with ikev1-policy=accept (install.sh sets it up; see the manual's VPN section)" : "")
-                Quickshell.execDetached(["notify-send", "-u", "critical", "-a", "VPN", vpnWhyProc.title, body])
-            }
-        }
-    }
-    // what kind of profile is asking: service type decides the fields (L2TP
-    // gets a pre-shared key), vpn.data prefills the username
-    Process {
-        id: vpnInfoProc
-        stdout: StdioCollector {
-            onStreamFinished: {
-                var rows = this.text.split("\n")
-                root.vpnCredService = (rows[0] || "").trim()
-                var data = rows[1] || "", user = ""
-                var m = /(?:^|,)\s*user(?:name)?\s*=\s*([^,]*)/.exec(data)
-                if (m) user = m[1].trim()
-                root.vpnCredUser = user
-                root.vpnCredNeedsPsk = /l2tp$/.test(root.vpnCredService)
-            }
-        }
-    }
-    // writes the credentials into the profile, then brings it up
-    Process {
-        id: vpnCredProc
-        property string name: ""
-        stderr: StdioCollector { id: vpnCredErr }
-        onExited: function (exitCode, exitStatus) {
-            if (exitCode !== 0) {
-                root.vpnBusyName = ""; Globals.netBusy = ""
-                var msg = (vpnCredErr.text || "").trim()
-                root.vpnCredError = msg !== "" ? msg.split("\n")[0] : ("nmcli exited with code " + exitCode)
-                return
-            }
-            root.vpnCloseCredentials()
-            root.toggleVpn(vpnCredProc.name, true)
-        }
-    }
     // joins a Wi-Fi network; same deal — spinner while running, notify on failure
     Process {
         id: wifiConnProc
@@ -808,7 +514,7 @@ Scope {
     }
     // gated on the panel, not just no-op'd inside it: this used to wake every 6 s
     // for the whole session only to hit the early return on the first line
-    Timer { interval: 6000; running: Globals.quickSettingsOpen; repeat: true; onTriggered: { wifiState.running = true; wiredState.running = true; if (root.expanded === "wifi") wifiScan.running = true; if (root.expanded === "ssh") sshScan.running = true } }
+    Timer { interval: 6000; running: Globals.quickSettingsOpen; repeat: true; onTriggered: { wifiState.running = true; wiredState.running = true; if (root.expanded === "wifi") wifiScan.running = true } }
 
     PanelWindow {
         id: win
@@ -918,8 +624,7 @@ Scope {
             }
 
             // ══ the icon rail: pages down the left edge, Settings and Power
-            //    pinned at its foot. VPN, SSH and Mail obey the same "only what
-            //    exists" rule as their home tiles. ══
+            //    pinned at its foot. The add-ons' pages follow the built-ins. ══
             Rectangle {
                 id: rail
                 // inset by the panel's own outline, so the rail never paints
@@ -963,20 +668,11 @@ Scope {
                             { key: "wifi",   icon: Theme.icWifi },
                             { key: "bt",     icon: Theme.icBluetooth },
                             { key: "audio",  icon: Theme.icVolHigh },
-                            { key: "vpn",    icon: Theme.icVpn },
-                            { key: "ssh",    icon: Theme.icSsh },
-                            { key: "cast",   icon: Theme.icCast },
-                            { key: "mobile", icon: Theme.icPhone },
-                            { key: "mail",   icon: Theme.icMail },
                             { key: "cal",    icon: Theme.icCalendar },
                             { key: "notifs", icon: Theme.icBell }
                         ]
                         delegate: RailBtn {
                             required property var modelData
-                            visible: modelData.key === "mail" ? Mail.available
-                                   : modelData.key === "vpn"  ? (root.vpnList.length > 0 || Globals.vpnActive)
-                                   : modelData.key === "ssh"  ? (root.sshList.length > 0 || Globals.sshTunnelUp)
-                                   : true
                             ic: modelData.icon
                             current: root.tab === modelData.key
                             dot: modelData.key === "notifs" && Globals.server && Globals.server.trackedNotifications.values.length > 0
@@ -1080,9 +776,17 @@ Scope {
                     width: flick.width
                     spacing: panel.pad
 
-                    // ═══ HOME: the tile grid — a tile's body toggles, its
-                    //     details zone opens the matching page ═══
-                    Row {
+                    // ═══ HOME: ONE grid of tiles — a tile's body toggles, its
+                    //     details zone opens the matching page. The built-ins
+                    //     (Wi-Fi, Bluetooth, Do not disturb) come first, then the
+                    //     add-ons' quick-tiles (API 3) in manifest order, flowing
+                    //     two per row (span 1) or a whole row (span 2) — so Do
+                    //     not disturb pairs with the first add-on tile instead of
+                    //     sitting alone. VPN, SSH, Insomnia, Cast and the CPU /
+                    //     memory meters are add-ons (ewe.vpn, ewe.ssh,
+                    //     ewe.insomnia, ewe.cast, ewe.sysmon). ═══
+                    Flow {
+                        id: homeGrid
                         visible: root.tab === "home"
                         width: parent.width; spacing: Theme.spaceS
                         Tile {
@@ -1118,102 +822,13 @@ Scope {
                             onClicked: if (Bluetooth.defaultAdapter) Bluetooth.defaultAdapter.enabled = !Bluetooth.defaultAdapter.enabled
                             onMenu: root.setTab("bt")
                         }
-                    }
-                    Row {
-                        // (the tiles' own conditions — a child's `visible` reads false while
-                        // this row is hidden, so it cannot decide the row)
-                        visible: root.tab === "home" && (root.vpnList.length > 0 || Globals.vpnActive || root.sshList.length > 0 || Globals.sshTunnelUp)
-                        width: parent.width; spacing: Theme.spaceS
-                        Tile {
-                            id: vpnTile
-                            // home shows only what exists: no VPN profiles and
-                            // nothing active → no tile
-                            visible: root.vpnList.length > 0 || Globals.vpnActive
-                            ic: Theme.icVpn; label: "VPN"
-                            active: Globals.vpnActive
-                            opened: root.expanded === "vpn"
-                            hasMenu: true
-                            busy: root.vpnBusyName !== ""
-                            sub: root.vpnBusyName !== "" ? "Connecting…" : (Globals.vpnActive ? "On" : "Off")
-                            function openList() { root.setTab("vpn") }
-                            // body: GNOME semantics — disconnect the active VPN /
-                            // reconnect the single configured one; only when the
-                            // choice is ambiguous does the body open the list
-                            onClicked: {
-                                var act = null
-                                for (var i = 0; i < root.vpnList.length; i++) if (root.vpnList[i].active) { act = root.vpnList[i]; break }
-                                if (act) root.toggleVpn(act.name, false)
-                                else if (root.vpnList.length === 1) root.toggleVpn(root.vpnList[0].name, true)
-                                else vpnTile.openList()
-                            }
-                            onMenu: vpnTile.openList()
-                        }
-                        Tile {
-                            id: sshTile
-                            visible: root.sshList.length > 0 || Globals.sshTunnelUp
-                            ic: Theme.icSsh; label: "SSH"
-                            active: Globals.sshTunnelUp
-                            opened: root.expanded === "ssh"
-                            hasMenu: true
-                            sub: Globals.sshTunnelUp ? "Tunnel on"
-                               : root.sshList.length > 0 ? root.sshList.length + (root.sshList.length === 1 ? " host" : " hosts")
-                               : "Not set up"
-                            // hosts are a list, not a switch — body and details both open
-                            onClicked: root.setTab("ssh")
-                            onMenu: root.setTab("ssh")
-                        }
-                    }
-                    Row {
-                        visible: root.tab === "home"
-                        width: parent.width; spacing: Theme.spaceS
                         Tile {
                             ic: Theme.icDnd; label: "Do not disturb"; active: Globals.dnd
                             sub: Globals.dnd ? "On" : "Off"
                             onClicked: Globals.dnd = !Globals.dnd
                         }
-                        Tile {
-                            // eye open while awake, eye-off while the idle inhibitor is off
-                            ic: (Globals.caffeine ? Theme.icEye : Theme.icEyeOff); label: "Keep awake"; active: Globals.caffeine
-                            sub: Globals.caffeine ? "On" : "Off"
-                            onClicked: Globals.caffeine = !Globals.caffeine
-                        }
-                    }
-                    // an active cast earns a home tile; clicking it hangs up and
-                    // the tile leaves with the session
-                    Row {
-                        visible: root.tab === "home" && Globals.casting
-                        width: parent.width; spacing: Theme.spaceS
-                        Tile {
-                            ic: Theme.icCast; label: "Cast"; active: true
-                            busy: Globals.castState !== "streaming"
-                            sub: Globals.castState === "streaming" ? Globals.castSinkName : "Connecting…"
-                            onClicked: Globals.castCommand("stop", "")
-                        }
-                    }
-                    // system load (CPU + memory; RunCat reads the same CPU value),
-                    // on the tiles' surfaceOverlay
-                    Rectangle {
-                        visible: root.tab === "home"
-                        width: parent.width; height: sysCol.implicitHeight + 2 * panel.pad
-                        radius: Theme.radiusRounded
-                        color: Theme.surfaceOverlay
-                        border.color: Theme.borderSubtle; border.width: Theme.borderWidth1
-                        Column {
-                            id: sysCol
-                            anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top
-                            anchors.margins: panel.pad
-                            spacing: Theme.spaceS + Theme.spaceXs
-                            Meter { label: "CPU"; glyph: Theme.icCpu; value: Globals.cpuUsage }
-                            Meter { label: "Memory"; glyph: Theme.icMemory; value: Globals.memUsage }
-                        }
-                    }
-                    // ═══ plugin tiles (API 3 quick-tile): after the built-ins,
-                    //     two per row (span 1) or the whole row (span 2), in
-                    //     manifest order. The host sizes the Loader; the
-                    //     plugin fills a Tile. ═══
-                    Flow {
-                        visible: root.tab === "home" && PluginHost.quickTiles.length > 0
-                        width: parent.width; spacing: Theme.spaceS
+                        // the add-ons' tiles: the host sizes the Loader (half the
+                        // row, or all of it for span 2); the plugin fills a Tile
                         Repeater {
                             model: PluginHost.quickTiles
                             delegate: Loader {
@@ -1451,715 +1066,6 @@ Scope {
                             visible: Bluetooth.defaultAdapter && Bluetooth.defaultAdapter.enabled && !BtAgent.registered
                             tone: "warning"
                             text: BtAgent.bridgeError !== "" ? BtAgent.bridgeError : "The pairing agent isn’t running yet. Devices that ask for a code can’t pair."
-                        }
-                    }
-
-                    // ═══ VPN ═══
-                    Column {
-                        visible: root.expanded === "vpn"
-                        width: parent.width; spacing: Theme.spaceS
-                        QsPageHead { title: "VPN"; busy: root.vpnBusyName !== "" }
-                        QsEmpty {
-                            visible: root.vpnList.length === 0
-                            ic: Theme.icVpn; title: "No VPN connections"
-                            desc: "Add a VPN connection, and it shows up here."
-                        }
-                        ListWell {
-                            flush: true
-                            visible: root.vpnList.length > 0
-                            Repeater {
-                                model: root.vpnList
-                                delegate: Column {
-                                    id: vRow
-                                    required property var modelData
-                                    width: parent.width
-                                    spacing: Theme.spaceS
-                                    ListRow {
-                                        glyph: Theme.icVpn
-                                        glyphColor: vRow.modelData.active ? Theme.accentText : Theme.textSecondary
-                                        label: vRow.modelData.name
-                                        desc: root.vpnBusyName === vRow.modelData.name ? "Connecting…" : vRow.modelData.active ? "Connected" : ""
-                                        active: vRow.modelData.active
-                                        check: vRow.modelData.active && root.vpnBusyName !== vRow.modelData.name
-                                        busy: root.vpnBusyName === vRow.modelData.name
-                                        onClicked: (root.vpnCredTarget === vRow.modelData.name) ? root.vpnCloseCredentials() : root.toggleVpn(vRow.modelData.name, !vRow.modelData.active)
-                                    }
-                                    // the sign-in form: username · password · (L2TP) pre-shared
-                                    // key, stored in the profile on Connect, so the toggle works
-                                    // from then on
-                                    Column {
-                                        visible: root.vpnCredTarget === vRow.modelData.name
-                                        width: parent.width
-                                        spacing: Theme.spaceS
-                                        leftPadding: Theme.spaceS; rightPadding: Theme.spaceS; bottomPadding: Theme.spaceS
-                                        readonly property real w: width - leftPadding - rightPadding
-                                        QsNote { width: parent.w; text: "Enter your sign-in details once. They’re kept in the connection." }
-                                        QsField {
-                                            width: parent.w
-                                            focused: vUser.activeFocus
-                                            QsFieldInput {
-                                                id: vUser
-                                                anchors.fill: parent; anchors.leftMargin: Theme.spaceS; anchors.rightMargin: Theme.spaceS
-                                                placeholder: "Username"
-                                                text: root.vpnCredUser
-                                                onTextChanged: root.vpnCredUser = text
-                                                Component.onCompleted: if (root.vpnCredTarget === vRow.modelData.name && text === "") forceActiveFocus()
-                                                Keys.onEscapePressed: root.vpnCloseCredentials()
-                                            }
-                                        }
-                                        QsField {
-                                            width: parent.w
-                                            focused: vPass.activeFocus
-                                            error: root.vpnCredError !== ""
-                                            QsFieldInput {
-                                                id: vPass
-                                                anchors.fill: parent; anchors.leftMargin: Theme.spaceS; anchors.rightMargin: Theme.controlSm + Theme.spaceXs
-                                                placeholder: "Password"
-                                                echoMode: root.vpnCredShow ? TextInput.Normal : TextInput.Password
-                                                text: root.vpnCredPass
-                                                onTextChanged: root.vpnCredPass = text
-                                                Component.onCompleted: if (root.vpnCredTarget === vRow.modelData.name && root.vpnCredUser !== "") forceActiveFocus()
-                                                onAccepted: root.vpnCredNeedsPsk ? vPsk.forceActiveFocus() : root.vpnSaveCredentials()
-                                                Keys.onEscapePressed: root.vpnCloseCredentials()
-                                            }
-                                            QsIconButton {
-                                                anchors.right: parent.right; anchors.rightMargin: Theme.spaceXxs
-                                                anchors.verticalCenter: parent.verticalCenter
-                                                ic: root.vpnCredShow ? Theme.icEyeOff : Theme.icEye
-                                                selected: root.vpnCredShow
-                                                onGo: root.vpnCredShow = !root.vpnCredShow
-                                            }
-                                        }
-                                        QsField {
-                                            visible: root.vpnCredNeedsPsk
-                                            width: parent.w
-                                            focused: vPsk.activeFocus
-                                            QsFieldInput {
-                                                id: vPsk
-                                                anchors.fill: parent; anchors.leftMargin: Theme.spaceS; anchors.rightMargin: Theme.spaceS
-                                                placeholder: "Pre-shared key (IPsec), if there is one"
-                                                echoMode: root.vpnCredShow ? TextInput.Normal : TextInput.Password
-                                                text: root.vpnCredPsk
-                                                onTextChanged: root.vpnCredPsk = text
-                                                onAccepted: root.vpnSaveCredentials()
-                                                Keys.onEscapePressed: root.vpnCloseCredentials()
-                                            }
-                                        }
-                                        QsNote { visible: root.vpnCredError !== ""; width: parent.w; tone: "danger"; text: root.vpnCredError }
-                                        Row {
-                                            anchors.right: parent.right; anchors.rightMargin: parent.rightPadding
-                                            spacing: Theme.spaceS
-                                            QsButton { size: "md"; variant: "ghost"; label: "Cancel"; onGo: root.vpnCloseCredentials() }
-                                            QsButton {
-                                                size: "md"; variant: "primary"
-                                                busy: root.vpnBusyName === vRow.modelData.name
-                                                disabled: root.vpnBusyName !== "" && root.vpnBusyName !== vRow.modelData.name
-                                                label: root.vpnBusyName === vRow.modelData.name ? "Connecting…" : "Connect"
-                                                onGo: root.vpnSaveCredentials()
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    // ═══ SSH — hosts from ~/.ssh/config. Row click → a terminal
-                    //     ssh'd in; globe → SOCKS tunnel + the host's saved browse
-                    //     script (first click opens a paste-once editor); pencil
-                    //     edits the script; the stop mark stops a running tunnel. ═══
-                    Column {
-                        visible: root.expanded === "ssh"
-                        width: parent.width; spacing: Theme.spaceS
-                        QsPageHead { title: "SSH"; note: "~/.ssh/config" }
-                        Column {
-                            visible: root.sshList.length === 0
-                            width: parent.width; spacing: Theme.spaceS
-                            QsEmpty { ic: Theme.icSsh; title: "No SSH hosts"; desc: "Add a host to ~/.ssh/config, like this:" }
-                            Rectangle {
-                                width: parent.width; height: sshSample.implicitHeight + 2 * Theme.spaceS
-                                radius: Theme.radiusPrimary
-                                color: Theme.surfaceSunken
-                                border.color: Theme.borderSubtle; border.width: Theme.borderWidth1
-                                Text {
-                                    id: sshSample
-                                    anchors.fill: parent; anchors.margins: Theme.spaceS
-                                    text: "Host mypc\n    HostName 192.168.1.20\n    User you"
-                                    color: Theme.textSecondary
-                                    font.family: Theme.type.mono.family
-                                    font.pixelSize: Theme.type.mono.size
-                                }
-                            }
-                        }
-                        ListWell {
-                            flush: true
-                            visible: root.sshList.length > 0
-                            Repeater {
-                                model: root.sshList
-                                delegate: Column {
-                                    id: sshRow
-                                    required property var modelData
-                                    width: parent.width
-                                    spacing: Theme.spaceXs
-                                    ListRow {
-                                        glyph: Theme.icSsh
-                                        glyphColor: sshRow.modelData.tunnel ? Theme.accentText : Theme.textSecondary
-                                        label: sshRow.modelData.host
-                                        desc: sshRow.modelData.tunnel ? "Tunnel on" : ""
-                                        active: sshRow.modelData.tunnel
-                                        // the whole row (under the buttons) → a terminal
-                                        onClicked: root.sshTerm(sshRow.modelData.host)
-                                        QsIconButton {
-                                            visible: sshRow.modelData.tunnel
-                                            anchors.verticalCenter: parent.verticalCenter
-                                            square: true; danger: true
-                                            onGo: root.sshStopTunnel(sshRow.modelData.host)
-                                        }
-                                        QsIconButton {
-                                            visible: sshRow.modelData.script
-                                            anchors.verticalCenter: parent.verticalCenter
-                                            ic: Theme.icPencil
-                                            selected: root.scriptTarget === sshRow.modelData.host
-                                            onGo: root.sshEditScript(sshRow.modelData.host)
-                                        }
-                                        // globe: run the host's browse script (or open the
-                                        // editor if none is saved yet)
-                                        QsIconButton {
-                                            anchors.verticalCenter: parent.verticalCenter
-                                            ic: Theme.icWeb
-                                            onGo: root.sshBrowse(sshRow.modelData.host, sshRow.modelData.script)
-                                        }
-                                    }
-                                    // the browse-script editor — paste once, kept in
-                                    // ~/.config/quickshell/ssh-browse/<host>.sh
-                                    Column {
-                                        width: parent.width; spacing: Theme.spaceS
-                                        bottomPadding: Theme.spaceS
-                                        visible: root.scriptTarget === sshRow.modelData.host
-                                        onVisibleChanged: if (visible) { seEdit.text = root.scriptText; seEdit.forceActiveFocus() }
-                                        Rectangle {
-                                            width: parent.width; height: 3 * Theme.control2xl
-                                            radius: Theme.radiusPrimary
-                                            color: Theme.surfaceSunken
-                                            border.color: seEdit.activeFocus ? Theme.focusRing : Theme.borderStrong
-                                            border.width: Theme.fieldBorderWidth
-                                            Flickable {
-                                                id: seFlick
-                                                anchors.fill: parent; anchors.margins: Theme.spaceS; clip: true
-                                                contentWidth: width; contentHeight: seEdit.implicitHeight
-                                                TextEdit {
-                                                    id: seEdit
-                                                    width: seFlick.width
-                                                    textFormat: TextEdit.PlainText; wrapMode: TextEdit.WrapAnywhere
-                                                    selectByMouse: true
-                                                    color: Theme.textPrimary
-                                                    selectionColor: Theme.accentSubtle
-                                                    selectedTextColor: Theme.textPrimary
-                                                    font.family: Theme.type.mono.family
-                                                    font.pixelSize: Theme.type.mono.size
-                                                    Keys.onEscapePressed: root.scriptTarget = ""
-                                                    // keep the cursor in view while typing or pasting
-                                                    onCursorRectangleChanged: {
-                                                        if (cursorRectangle.y < seFlick.contentY) seFlick.contentY = cursorRectangle.y
-                                                        else if (cursorRectangle.y + cursorRectangle.height > seFlick.contentY + seFlick.height)
-                                                            seFlick.contentY = cursorRectangle.y + cursorRectangle.height - seFlick.height
-                                                    }
-                                                }
-                                            }
-                                            QsNote {
-                                                visible: seEdit.text.length === 0
-                                                anchors.fill: parent; anchors.margins: Theme.spaceS
-                                                text: "Paste the shell script to run for “" + sshRow.modelData.host + "”, such as a browser that goes through the tunnel.\n\nIt runs with SSH_HOST and SOCKS_PORT set, once a SOCKS5 tunnel to the host is up on 127.0.0.1:$SOCKS_PORT (1080 by default; needs key or agent sign-in). Saved to ~/.config/quickshell/ssh-browse/."
-                                            }
-                                        }
-                                        Row {
-                                            anchors.right: parent.right
-                                            spacing: Theme.spaceS
-                                            QsButton {
-                                                visible: sshRow.modelData.script
-                                                variant: "danger"; label: "Delete script"
-                                                onGo: root.sshDeleteScript(sshRow.modelData.host)
-                                            }
-                                            QsButton { variant: "ghost"; label: "Cancel"; onGo: root.scriptTarget = "" }
-                                            QsButton {
-                                                variant: "primary"; label: "Save and run"
-                                                disabled: seEdit.text.trim().length === 0
-                                                onGo: root.sshSaveScript(sshRow.modelData.host, seEdit.text)
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    // ═══ MOBILE (KDE Connect) ═══
-                    Column {
-                        visible: root.expanded === "mobile"
-                        width: parent.width; spacing: Theme.spaceS
-
-                        // mark everything seen while the list is on screen
-                        Connections {
-                            target: KdeConnect
-                            function onNotifsChanged() {
-                                if (Globals.quickSettingsOpen && root.expanded === "mobile" && root.mobileView === "notifs")
-                                    KdeConnect.markAllSeen()
-                            }
-                        }
-                        onVisibleChanged: if (visible) KdeConnect.markAllSeen()
-
-                        QsPageHead {
-                            title: KdeConnect.connected ? KdeConnect.device.name : "Mobile"
-                            note: KdeConnect.connected ? "" : "KDE Connect"
-                            // the connected phone's battery
-                            Row {
-                                visible: KdeConnect.connected && KdeConnect.device.batteryCharge >= 0
-                                anchors.verticalCenter: parent.verticalCenter
-                                spacing: Theme.spaceXs
-                                rightPadding: Theme.spaceXs
-                                Glyph {
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    text: KdeConnect.connected && KdeConnect.device.isCharging ? Theme.icBolt : Theme.icBattFull
-                                    font.pixelSize: Theme.iconSm
-                                    color: KdeConnect.connected && KdeConnect.device.isCharging ? Theme.success : Theme.textSecondary
-                                }
-                                TextMono { anchors.verticalCenter: parent.verticalCenter; text: KdeConnect.connected ? KdeConnect.device.batteryCharge + "%" : "" }
-                            }
-                            QsIconButton { anchors.verticalCenter: parent.verticalCenter; ic: Theme.icRefresh; onGo: KdeConnect.refresh() }
-                        }
-
-                        // — not installed —
-                        QsEmpty {
-                            visible: KdeConnect.bridgeUp && !KdeConnect.installed
-                            ic: Theme.icPhone; title: "KDE Connect isn’t installed"
-                            desc: "Install it with sudo pacman -S kdeconnect, then install the app on your phone. Both need the same Wi-Fi network."
-                        }
-                        // — installed, daemon down —
-                        Row {
-                            visible: KdeConnect.installed && !KdeConnect.daemonRunning
-                            width: parent.width; spacing: Theme.spaceS
-                            TextBody { anchors.verticalCenter: parent.verticalCenter; width: parent.width - kdStart.width - parent.spacing; text: "KDE Connect isn’t running."; color: Theme.textSecondary }
-                            QsButton { id: kdStart; anchors.verticalCenter: parent.verticalCenter; variant: "primary"; label: "Start"; onGo: KdeConnect.refresh() }
-                        }
-
-                        // — incoming pair request —
-                        Column {
-                            width: parent.width; spacing: Theme.spaceS
-                            visible: KdeConnect.device !== null && KdeConnect.device.pairRequestedByPeer
-                            TextBody {
-                                width: parent.width; wrapMode: Text.Wrap; elide: Text.ElideNone
-                                text: "“" + (KdeConnect.device ? KdeConnect.device.name : "") + "” wants to pair with this computer."
-                            }
-                            Row {
-                                anchors.right: parent.right
-                                spacing: Theme.spaceS
-                                QsButton { variant: "ghost"; label: "Reject"; onGo: KdeConnect.cancelPair(KdeConnect.device.id) }
-                                QsButton { variant: "primary"; label: "Accept"; onGo: KdeConnect.acceptPair(KdeConnect.device.id) }
-                            }
-                        }
-
-                        // — pairing in progress (we asked) —
-                        Row {
-                            visible: KdeConnect.pairingId !== ""
-                            width: parent.width; spacing: Theme.spaceS
-                            Spinner { anchors.verticalCenter: parent.verticalCenter; size: Theme.iconSm }
-                            TextBody { anchors.verticalCenter: parent.verticalCenter; width: parent.width - Theme.iconSm - kpCancel.width - 2 * parent.spacing; text: "Pairing… Accept the request on your phone."; color: Theme.textSecondary }
-                            QsButton { id: kpCancel; anchors.verticalCenter: parent.verticalCenter; variant: "ghost"; label: "Cancel"; onGo: KdeConnect.cancelPair(KdeConnect.pairingId) }
-                        }
-                        QsNote { visible: KdeConnect.pairError !== ""; tone: "danger"; text: KdeConnect.pairError }
-
-                        // — no paired device: the phones in reach —
-                        Column {
-                            width: parent.width; spacing: Theme.spaceS
-                            visible: KdeConnect.installed && KdeConnect.daemonRunning
-                                     && (KdeConnect.device === null || (!KdeConnect.device.isPaired && !KdeConnect.device.pairRequestedByPeer))
-                                     && KdeConnect.pairingId === ""
-                            QsEmpty {
-                                visible: KdeConnect.devices.length === 0
-                                ic: Theme.icPhone; title: "No phones found"
-                                desc: "Open KDE Connect on your phone. Both devices need the same network."
-                            }
-                            ListWell {
-                                flush: true
-                                visible: KdeConnect.devices.length > 0
-                                Repeater {
-                                    model: KdeConnect.devices
-                                    delegate: ListRow {
-                                        id: kpRow
-                                        required property var modelData
-                                        glyph: Theme.icPhone
-                                        label: modelData.name
-                                        desc: modelData.isReachable ? "" : "Offline"
-                                        disabled: !modelData.isReachable
-                                        onClicked: if (kpRow.modelData.isReachable) KdeConnect.requestPair(kpRow.modelData.id)
-                                        QsButton {
-                                            visible: kpRow.modelData.isReachable
-                                            anchors.verticalCenter: parent.verticalCenter
-                                            variant: "secondary"; label: "Pair"
-                                            onGo: KdeConnect.requestPair(kpRow.modelData.id)
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        // — paired but out of reach —
-                        QsNote {
-                            visible: KdeConnect.device !== null && KdeConnect.device.isPaired && !KdeConnect.device.isReachable
-                            text: "“" + (KdeConnect.device ? KdeConnect.device.name : "") + "” is offline. Put it on the same network with KDE Connect open, then refresh."
-                        }
-
-                        // — connected: notifications ⇄ messages, and ring —
-                        Column {
-                            width: parent.width; spacing: Theme.spaceS
-                            visible: KdeConnect.connected
-
-                            Row {
-                                width: parent.width; spacing: Theme.spaceS
-                                QsSegmented {
-                                    width: parent.width - ringBtn.width - parent.spacing
-                                    options: [{ label: "Notifications" + (KdeConnect.unreadCount > 0 ? " · " + KdeConnect.unreadCount : ""), value: "notifs" },
-                                              { label: "Messages", value: "msgs" }]
-                                    value: root.mobileView
-                                    onPicked: function (v) {
-                                        root.mobileView = v
-                                        if (v === "notifs") KdeConnect.markAllSeen()
-                                        else KdeConnect.loadConversations()
-                                    }
-                                }
-                                // ring (find my phone)
-                                QsIconButton { id: ringBtn; anchors.verticalCenter: parent.verticalCenter; size: "md"; ic: Theme.icBellRing; onGo: KdeConnect.ring() }
-                            }
-
-                            // ── the phone's notifications ──
-                            Column {
-                                width: parent.width; spacing: Theme.spaceS; visible: root.mobileView === "notifs"
-                                QsEmpty { visible: KdeConnect.notifs.length === 0; ic: Theme.icBell; title: "No notifications on the phone" }
-                                Flickable {
-                                    width: parent.width
-                                    visible: KdeConnect.notifs.length > 0
-                                    height: Math.min(kdcNotifCol.implicitHeight, Theme.panelSm - Theme.spaceXl - Theme.spaceLg)
-                                    clip: true
-                                    contentHeight: kdcNotifCol.implicitHeight
-                                    boundsBehavior: Flickable.StopAtBounds
-                                    Column {
-                                        id: kdcNotifCol
-                                        width: parent.width
-                                        Repeater {
-                                            model: KdeConnect.notifs
-                                            delegate: Column {
-                                                id: knRow
-                                                required property var modelData
-                                                width: kdcNotifCol.width
-                                                Item {
-                                                    width: parent.width
-                                                    height: knBody.implicitHeight + 2 * Theme.spaceS
-                                                    Rectangle {
-                                                        anchors.fill: parent; radius: Theme.radiusSecondary
-                                                        color: knMa.containsMouse ? Theme.surfaceHover : "transparent"
-                                                        Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
-                                                    }
-                                                    MouseArea { id: knMa; anchors.fill: parent; hoverEnabled: true }
-                                                    Image {
-                                                        anchors.left: parent.left; anchors.leftMargin: Theme.spaceS
-                                                        anchors.top: parent.top; anchors.topMargin: Theme.spaceS
-                                                        width: Theme.iconMd; height: Theme.iconMd
-                                                        visible: knRow.modelData.iconPath !== ""
-                                                        source: knRow.modelData.iconPath !== "" ? "file://" + knRow.modelData.iconPath : ""
-                                                        sourceSize.width: 2 * Theme.iconMd; sourceSize.height: 2 * Theme.iconMd; mipmap: true
-                                                    }
-                                                    Glyph {
-                                                        visible: knRow.modelData.iconPath === ""
-                                                        anchors.left: parent.left; anchors.leftMargin: Theme.spaceS
-                                                        anchors.top: parent.top; anchors.topMargin: Theme.spaceS
-                                                        text: Theme.icPhone
-                                                    }
-                                                    Column {
-                                                        id: knBody
-                                                        anchors.left: parent.left; anchors.leftMargin: Theme.spaceS + Theme.iconMd + Theme.spaceS + Theme.spaceXs
-                                                        anchors.right: knBtns.left; anchors.rightMargin: Theme.spaceXs
-                                                        anchors.top: parent.top; anchors.topMargin: Theme.spaceS
-                                                        spacing: Theme.spaceXxs
-                                                        TextStrong { width: parent.width; text: knRow.modelData.title || knRow.modelData.appName }
-                                                        Text {
-                                                            width: parent.width
-                                                            visible: text !== ""
-                                                            text: knRow.modelData.text || knRow.modelData.ticker
-                                                            color: Theme.textSecondary
-                                                            font.family: Theme.type.body.family
-                                                            font.pixelSize: Theme.type.body.size
-                                                            wrapMode: Text.Wrap; maximumLineCount: 3; elide: Text.ElideRight
-                                                        }
-                                                        TextCaption { text: knRow.modelData.appName }
-                                                    }
-                                                    Row {
-                                                        id: knBtns
-                                                        anchors.right: parent.right; anchors.rightMargin: Theme.spaceXs
-                                                        anchors.top: parent.top; anchors.topMargin: Theme.spaceXs
-                                                        spacing: Theme.spaceXxs
-                                                        // reply (only when the app allows it)
-                                                        QsIconButton {
-                                                            visible: knRow.modelData.replyId !== ""
-                                                            ic: Theme.icSend
-                                                            selected: root.replyTarget === knRow.modelData.id
-                                                            onGo: root.replyTarget = root.replyTarget === knRow.modelData.id ? "" : knRow.modelData.id
-                                                        }
-                                                        QsIconButton {
-                                                            visible: knRow.modelData.dismissable
-                                                            ic: Theme.icClose
-                                                            onGo: KdeConnect.dismissNotif(knRow.modelData.id)
-                                                        }
-                                                    }
-                                                }
-                                                // the inline reply
-                                                Row {
-                                                    visible: root.replyTarget === knRow.modelData.id
-                                                    width: parent.width; spacing: Theme.spaceS
-                                                    leftPadding: Theme.spaceS; rightPadding: Theme.spaceS; bottomPadding: Theme.spaceS
-                                                    QsField {
-                                                        width: parent.width - parent.leftPadding - parent.rightPadding - knSend.width - parent.spacing
-                                                        focused: knReply.activeFocus
-                                                        QsFieldInput {
-                                                            id: knReply
-                                                            anchors.fill: parent; anchors.leftMargin: Theme.spaceS; anchors.rightMargin: Theme.spaceS
-                                                            placeholder: "Reply…"
-                                                            Component.onCompleted: if (root.replyTarget === knRow.modelData.id) forceActiveFocus()
-                                                            onAccepted: { if (text.trim() !== "") { KdeConnect.replyNotif(knRow.modelData.replyId, text.trim()); root.replyTarget = "" } }
-                                                        }
-                                                    }
-                                                    QsButton {
-                                                        id: knSend
-                                                        anchors.verticalCenter: parent.verticalCenter
-                                                        size: "md"; variant: "primary"; label: "Send"
-                                                        disabled: knReply.text.trim() === ""
-                                                        onGo: { KdeConnect.replyNotif(knRow.modelData.replyId, knReply.text.trim()); root.replyTarget = "" }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-
-                            // ── messages: the conversation list ⇄ a thread ──
-                            Column {
-                                width: parent.width; spacing: Theme.spaceS; visible: root.mobileView === "msgs"
-
-                                // conversation list
-                                Column {
-                                    width: parent.width; spacing: Theme.spaceS; visible: KdeConnect.openThread < 0
-                                    Row {
-                                        visible: KdeConnect.conversations.length === 0
-                                        spacing: Theme.spaceS
-                                        leftPadding: Theme.spaceS
-                                        Spinner { visible: KdeConnect.convsRequested; anchors.verticalCenter: parent.verticalCenter; size: Theme.iconSm }
-                                        TextCaption { anchors.verticalCenter: parent.verticalCenter; text: KdeConnect.convsRequested ? "Loading conversations from the phone…" : "No conversations yet" }
-                                    }
-                                    Flickable {
-                                        width: parent.width
-                                        visible: KdeConnect.conversations.length > 0
-                                        height: Math.min(kdcConvCol.implicitHeight, Theme.panelSm - Theme.spaceXl - Theme.spaceMd)
-                                        clip: true
-                                        contentHeight: kdcConvCol.implicitHeight
-                                        boundsBehavior: Flickable.StopAtBounds
-                                        Column {
-                                            id: kdcConvCol
-                                            width: parent.width
-                                            Repeater {
-                                                model: KdeConnect.conversations
-                                                delegate: QsMsgRow {
-                                                    required property var modelData
-                                                    title: modelData.display
-                                                    line: modelData.body
-                                                    time: root.fmtMsgTime(modelData.date)
-                                                    unread: modelData.unread
-                                                    onClicked: KdeConnect.openConversation(modelData.threadId)
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-
-                                // thread view
-                                Column {
-                                    width: parent.width; spacing: Theme.spaceS; visible: KdeConnect.openThread >= 0
-                                    Row {
-                                        width: parent.width; spacing: Theme.spaceS
-                                        QsIconButton { anchors.verticalCenter: parent.verticalCenter; size: "md"; ic: Theme.icBack; onGo: KdeConnect.openThread = -1 }
-                                        TextStrong {
-                                            anchors.verticalCenter: parent.verticalCenter
-                                            width: parent.width - Theme.controlMd - parent.spacing
-                                            text: {
-                                                for (var i = 0; i < KdeConnect.conversations.length; i++)
-                                                    if (KdeConnect.conversations[i].threadId === KdeConnect.openThread) return KdeConnect.conversations[i].display
-                                                return "Conversation"
-                                            }
-                                        }
-                                    }
-                                    Rectangle {
-                                        width: parent.width; height: Theme.panelSm - Theme.spaceXl - Theme.spaceLg
-                                        radius: Theme.radiusRounded
-                                        color: Theme.surfaceSunken
-                                        border.color: Theme.borderSubtle; border.width: Theme.borderWidth1
-                                        Flickable {
-                                            id: kdcThreadFlick
-                                            anchors.fill: parent; anchors.margins: Theme.spaceS; clip: true
-                                            contentHeight: kdcThreadCol.implicitHeight
-                                            boundsBehavior: Flickable.StopAtBounds
-                                            // stick to the newest message
-                                            onContentHeightChanged: contentY = Math.max(0, contentHeight - height)
-                                            // pull past the top → page older messages in
-                                            onAtYBeginningChanged: if (atYBeginning && contentHeight > height) KdeConnect.loadOlder()
-                                            Column {
-                                                id: kdcThreadCol
-                                                width: parent.width; spacing: Theme.spaceXs
-                                                Repeater {
-                                                    model: KdeConnect.thread
-                                                    delegate: Item {
-                                                        id: kmRow
-                                                        required property var modelData
-                                                        readonly property bool sent: modelData.type === 2
-                                                        width: kdcThreadCol.width
-                                                        height: kmBubble.height
-                                                        Rectangle {
-                                                            id: kmBubble
-                                                            anchors.right: kmRow.sent ? parent.right : undefined
-                                                            anchors.left: kmRow.sent ? undefined : parent.left
-                                                            width: Math.min(kmTxt.implicitWidth + 2 * (Theme.spaceS + Theme.spaceXs), kmRow.width * 0.8)
-                                                            height: kmTxt.implicitHeight + 2 * Theme.spaceS
-                                                            radius: Theme.radiusRounded
-                                                            color: kmRow.sent ? Theme.accent : Theme.surfaceOverlay
-                                                            border.color: kmRow.sent ? "transparent" : Theme.borderSubtle
-                                                            border.width: Theme.borderWidth1
-                                                            opacity: kmRow.modelData.pending ? Theme.opacityApp : 1
-                                                            Text {
-                                                                id: kmTxt
-                                                                anchors.fill: parent
-                                                                anchors.topMargin: Theme.spaceS; anchors.bottomMargin: Theme.spaceS
-                                                                anchors.leftMargin: Theme.spaceS + Theme.spaceXs; anchors.rightMargin: Theme.spaceS + Theme.spaceXs
-                                                                text: kmRow.modelData.body !== "" ? kmRow.modelData.body
-                                                                    : (kmRow.modelData.hasAttachments ? "Attachment. Open it on the phone." : "No text (MMS)")
-                                                                color: kmRow.sent ? Theme.onAccent : Theme.textPrimary
-                                                                font.family: Theme.type.body.family
-                                                                font.pixelSize: Theme.type.body.size
-                                                                font.italic: kmRow.modelData.body === ""
-                                                                wrapMode: Text.Wrap
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                    // compose
-                                    Row {
-                                        width: parent.width; spacing: Theme.spaceS
-                                        QsField {
-                                            width: parent.width - kdcSend.width - parent.spacing
-                                            focused: kdcCompose.activeFocus
-                                            QsFieldInput {
-                                                id: kdcCompose
-                                                anchors.fill: parent; anchors.leftMargin: Theme.spaceS; anchors.rightMargin: Theme.spaceS
-                                                placeholder: "Message…"
-                                                onAccepted: { if (text.trim() !== "") { KdeConnect.sendMessage(text.trim()); text = "" } }
-                                            }
-                                        }
-                                        QsButton {
-                                            id: kdcSend
-                                            anchors.verticalCenter: parent.verticalCenter
-                                            size: "md"; variant: "primary"; ic: Theme.icSend; label: "Send"
-                                            disabled: kdcCompose.text.trim() === ""
-                                            onGo: { KdeConnect.sendMessage(kdcCompose.text.trim()); kdcCompose.text = "" }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    // ═══ MAIL (Gmail) ═══
-                    Column {
-                        visible: root.expanded === "mail"
-                        width: parent.width; spacing: Theme.spaceS
-                        QsPageHead {
-                            title: Mail.available ? "Inbox" : "Mail"
-                            note: Mail.available && Mail.unread > 0 ? Mail.unread + " unread" : ""
-                            // new-mail notifications on or off
-                            QsIconButton { visible: Mail.available; anchors.verticalCenter: parent.verticalCenter; ic: Theme.icBellRing; selected: Mail.notify; onGo: Mail.setNotify(!Mail.notify) }
-                            QsIconButton { visible: Mail.available; anchors.verticalCenter: parent.verticalCenter; ic: Theme.icRefresh; onGo: Mail.fetch() }
-                            QsButton { anchors.verticalCenter: parent.verticalCenter; label: Mail.inboxLabel; onGo: Mail.openInbox() }
-                        }
-                        QsNote { visible: !Mail.available; text: Mail.hint }
-                        QsNote { visible: Mail.available && Mail.error !== ""; tone: "warning"; text: Mail.error }
-                        QsButton { visible: Mail.needsReconnect; variant: "primary"; label: "Reconnect Google"; onGo: Mail.reconnect() }
-                        QsNote { visible: Mail.available && Mail.state === "offline"; text: "Offline. Showing the last check." }
-                        QsEmpty {
-                            visible: Mail.available && Mail.state === "" && Mail.list.length === 0
-                            ic: Theme.icMail; title: "No mail"; desc: "Your inbox is empty."
-                        }
-                        // the latest 10, compact two-line rows — no inner scrolling
-                        ListWell {
-                            flush: true
-                            visible: Mail.available && Mail.list.length > 0
-                            Repeater {
-                                model: Mail.list.slice(0, 10)
-                                delegate: QsMsgRow {
-                                    required property var modelData
-                                    title: modelData.from
-                                    line: modelData.subject
-                                    time: root.fmtMsgTime(modelData.date)
-                                    unread: modelData.unread
-                                    onClicked: Mail.open(modelData.id)
-                                }
-                            }
-                        }
-                    }
-
-                    // ═══ CAST to a TV — the whole flow lives here (RFC-004):
-                    //     the sink list from ewe-castd (Miracast + Chromecast),
-                    //     pick a TV → SharePicker → streaming. No foreign window. ═══
-                    Column {
-                        id: castCard
-                        visible: root.tab === "cast"
-                        width: parent.width; spacing: Theme.spaceS
-                        property bool castOpen: root.tab === "cast"
-                        // the switch is on while a session runs; turning it off hangs up
-                        QsPageHead {
-                            title: "Cast"
-                            busy: Globals.casting && Globals.castState !== "streaming"
-                            note: Globals.castState === "streaming" ? "Casting to " + Globals.castSinkName
-                                : Globals.casting ? "Connecting…" : ""
-                            hasSwitch: Globals.casting
-                            on: Globals.casting
-                            onToggled: Globals.castCommand("stop", "")
-                        }
-                        // while a session is being built, narrate the daemon's state
-                        // where the person is looking — the same line the toasts carry
-                        QsNote { visible: Globals.casting && Globals.castState !== "streaming" && Globals.castDetail !== ""; text: Globals.castDetail }
-                        // nothing yet — an honest empty state instead of a broken-looking box
-                        Row {
-                            visible: castCard.castOpen && !Globals.casting && Globals.castSinks.length === 0
-                            spacing: Theme.spaceS
-                            leftPadding: Theme.spaceS
-                            Spinner { visible: Globals.castDetail.indexOf("not installed") === -1; anchors.verticalCenter: parent.verticalCenter; size: Theme.iconSm }
-                            TextCaption {
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: Globals.castDetail.indexOf("not installed") !== -1 ? Globals.castDetail : "Looking for displays…"
-                            }
-                        }
-                        ListWell {
-                            flush: true
-                            visible: castCard.castOpen && !Globals.casting && Globals.castSinks.length > 0
-                            Repeater {
-                                model: castCard.castOpen ? Globals.castSinks : []
-                                delegate: ListRow {
-                                    required property var modelData
-                                    glyph: Theme.icCast
-                                    label: modelData.name
-                                    kind: modelData.kind === "chromecast" ? "Chromecast" : modelData.kind === "miracast" ? "Miracast" : ""
-                                    onClicked: Globals.castCommand("start", modelData.id)
-                                }
-                            }
                         }
                     }
 
