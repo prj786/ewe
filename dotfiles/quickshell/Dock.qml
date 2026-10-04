@@ -16,6 +16,20 @@ Scope {
 
     function g(c) { return String.fromCodePoint(c) }
 
+    // The dock's clearance, published for every panel that opens above it
+    // (Shell.bottomInset, API 3): its strip plus windowGap while enabled, 0
+    // when off — and whether the strip is a layer-shell exclusive zone
+    // (autohide off), which bottom-anchored surfaces read as bottomReserved.
+    // A dock plugin does the same, so when this built-in goes nothing
+    // changes for the panels.
+    readonly property int publishedInset: Globals.dockEnabled ? Theme.dockClearance : 0
+    readonly property bool publishedReserved: Globals.dockEnabled && !Globals.dockAutohide
+    function publishInset() { Shell.setBottomInset("ewe.dock", root.publishedInset, root.publishedReserved) }
+    onPublishedInsetChanged: root.publishInset()
+    onPublishedReservedChanged: root.publishInset()
+    Component.onCompleted: root.publishInset()
+    Component.onDestruction: Shell.setBottomInset("ewe.dock", 0, false)
+
     // Inside Glass the dock reads Theme.bar*/dock* (hover and pressed tint
     // the glass, accent text deepens, muted text rises): the Glass card's
     // role remap, made once in Theme.
@@ -162,8 +176,9 @@ Scope {
                                  || dockHov.hovered
                                  || closeHold.running || Globals.launcherOpen || Globals.storeOpen
                                  || Globals.placesOpen || Globals.mediaOpen || Globals.overviewOpen
+                                 || Shell.activeCount > 0
         Timer { id: closeHold; interval: 280 }
-        function maybeHide() { if (!edgeHov.hovered && !dockHov.hovered && !Globals.launcherOpen && !Globals.storeOpen && !Globals.placesOpen && !Globals.mediaOpen) closeHold.restart() }
+        function maybeHide() { if (!edgeHov.hovered && !dockHov.hovered && !Globals.launcherOpen && !Globals.storeOpen && !Globals.placesOpen && !Globals.mediaOpen && Shell.activeCount === 0) closeHold.restart() }
         Connections { target: edgeHov; function onHoveredChanged() { win.maybeHide() } }
         Connections { target: dockHov; function onHoveredChanged() { win.maybeHide() } }
 
@@ -288,6 +303,29 @@ Scope {
                 DockBtn { id: placesBtn; a11yName: "Places"; glyph: Theme.icFolder; activeState: Globals.placesOpen; anchors.verticalCenter: parent.verticalCenter; onGo: { Globals.placesAnchorX = placesBtn.mapToItem(null, placesBtn.width / 2, 0).x; Globals.launcherOpen = false; Globals.storeOpen = false; Globals.mediaOpen = false; Globals.placesOpen = !Globals.placesOpen } }
                 // now-playing — only exists while an MPRIS player does (MediaPlayer.qml resolves it)
                 DockBtn { id: mediaBtn; a11yName: "Media player"; visible: Globals.mediaPlayer !== null; glyph: Theme.icMusic; activeState: Globals.mediaOpen; anchors.verticalCenter: parent.verticalCenter; onGo: { Globals.mediaAnchorX = mediaBtn.mapToItem(null, mediaBtn.width / 2, 0).x; Globals.launcherOpen = false; Globals.storeOpen = false; Globals.placesOpen = false; Globals.mediaOpen = !Globals.mediaOpen } }
+                // ── plugin dock items (API 3 dock-item): after the built-in
+                //    buttons, in manifest order. A click runs the manifest's
+                //    action with this button as the anchor (an AnchoredPopup
+                //    opens above it); without a registered action it falls
+                //    back to `qs ipc call <id> toggle`. Lit while the action's
+                //    popup reports itself open. ──
+                Repeater {
+                    model: PluginHost.dockItems
+                    delegate: DockBtn {
+                        id: pluginBtn
+                        required property var modelData
+                        a11yName: modelData.label
+                        glyph: Theme[modelData.icon] || Theme.icApps
+                        activeState: modelData.action !== "" && Shell.isActive(modelData.action)
+                        anchors.verticalCenter: parent.verticalCenter
+                        onGo: {
+                            Globals.launcherOpen = false; Globals.storeOpen = false; Globals.placesOpen = false; Globals.mediaOpen = false
+                            var a = Shell.anchorFor(pluginBtn, win)
+                            if (modelData.action === "" || !Shell.runAction(modelData.action, a))
+                                Quickshell.execDetached(["qs", "ipc", "call", modelData.id, "toggle"])
+                        }
+                    }
+                }
 
                 // spaceS shorter than the items beside it (Dock card #3)
                 Rectangle { anchors.verticalCenter: parent.verticalCenter; width: Theme.borderWidth1; height: win.cell - Theme.spaceS; color: Theme.dockOutline }

@@ -162,8 +162,9 @@ Scope {
             focus: true
             readonly property int edgeGap: Theme.spaceS + Theme.spaceXs
             // the dock's own strip (items + spaceS padding, windowGap above
-            // the edge) plus the card's spaceS + spaceXs gap above it
-            readonly property int dockGap: Theme.dockClearance + edgeGap
+            // the edge) plus the card's spaceS + spaceXs gap above it —
+            // Shell.bottomInset, so no gap is left when no dock is there
+            readonly property int dockGap: Shell.bottomInset + edgeGap
             x: Math.max(edgeGap, Math.min(parent.width - width - edgeGap, Globals.placesAnchorX - width / 2))
             width: Theme.panelMd
             // at most panelMd + controlXl + spaceMd + spaceXs (a dozen rows)

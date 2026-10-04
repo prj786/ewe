@@ -28,14 +28,24 @@ import Quickshell.Io
 // Kinds: service | panel | overlay | menu are instantiated identically — the
 // plugin owns its windows and IpcHandlers. bar-widget is not instantiated
 // here: Bar.qml's BarPluginSlots read `barWidgets` and Loader one per bar.
+// API 3 (docs/PLUGINS.md): quick-tile / quick-page / bar-status are
+// Loader-ed by Quick settings and the bar's pill from the registries
+// below (`quickTiles`, `quickPages`, `barStatus`, sorted by `order`);
+// dock-item is static — `dockItems` carries the manifest's icon, label and
+// action and the dock renders a button. Every entry point gets the
+// injected properties through `inject()` — pluginId, pluginDir, stateDir,
+// settings, and per slot screen/barWindow/ink or panelOpen — but only the
+// ones its root declares.
 QtObject {
     id: host
 
     // Bump on an incompatible change to what plugins may rely on (the Theme
-    // roles, the public Globals subset in docs/PLUGINS.md). ewe-plugin refuses
-    // a manifest whose apiVersion differs, so an old plugin fails at install,
-    // not at login.
-    readonly property int apiVersion: 2
+    // roles, the public Globals subset and the Shell singleton in
+    // docs/PLUGINS.md). ewe-plugin refuses a manifest whose apiVersion it
+    // does not know, so an old plugin fails at install, not at login; the
+    // host still loads every version in `apiVersions` (3 is a superset of 2).
+    readonly property int apiVersion: 3
+    readonly property var apiVersions: [2, 3]
 
     // Same idiom as Globals.eweConf: the payload's bin/, reached through the
     // ~/.config/quickshell symlink (the kernel resolves the link before the
@@ -54,6 +64,17 @@ QtObject {
     // WHERE each sits is `placement[id]` ({x, y, output, layer, visible}),
     // kept apart so a drag or `ewe-plugin place` moves it without a reload
     property var desktopWidgets: []
+    // API 3 registries, each sorted by manifest `order` then id:
+    //   quickTiles  [{ id, name, entry, span, order }]        Quick settings home grid
+    //   quickPages  [{ id, name, entry, key, label, icon, order }]   rail + page stack
+    //   barStatus   [{ id, name, entry, order }]              glyphs in the bar's pill
+    //   dockItems   [{ id, name, icon, label, action, order }]  static dock buttons
+    property var quickTiles: []
+    property var quickPages: []
+    property var barStatus: []
+    property var dockItems: []
+    // id -> plugin directory (absolute path), for `pluginDir`
+    property var dirs: ({})
     property var placement: ({})
     // id -> {key: value}: what the plugin declared in manifest.json under the
     // user's values (ewe.conf plugins.settings.<id>). Handed to every entry
@@ -108,6 +129,34 @@ QtObject {
     }
     function settingsFor(id) { return host.settings[id] || ({}) }
 
+    // ── API 3 injection ───────────────────────────────────────────────────
+    // Set on an entry point's root ONLY the properties it declares: pluginId,
+    // pluginDir (a file:// url), stateDir (a path under
+    // $XDG_STATE_HOME/ewe/plugins/<id>/, created the first time a plugin asks
+    // for it), settings, plus whatever the slot passes in `extra` (screen,
+    // barWindow, ink for the bar; panelOpen for Quick settings).
+    readonly property string stateRoot: (Quickshell.env("XDG_STATE_HOME") || (Quickshell.env("HOME") + "/.local/state")) + "/ewe/plugins"
+    property var _stateMade: ({})
+    function stateDirFor(id) {
+        var d = host.stateRoot + "/" + id
+        if (!host._stateMade[id]) {
+            var m = Object.assign({}, host._stateMade); m[id] = true; host._stateMade = m
+            Quickshell.execDetached(["mkdir", "-p", d])
+        }
+        return d
+    }
+    function dirFor(id) { return host.dirs[id] || "" }
+    function inject(obj, id, extra) {
+        if (!obj) return
+        if ("pluginId" in obj) obj.pluginId = id
+        if ("pluginDir" in obj) obj.pluginDir = "file://" + host.dirFor(id)
+        if ("stateDir" in obj) obj.stateDir = host.stateDirFor(id)
+        if ("settings" in obj) obj.settings = host.settings[id] || ({})
+        if (extra) for (var k in extra) if (k in obj) obj[k] = extra[k]
+    }
+    function _byOrder(a, b) { return (a.order - b.order) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0) }
+    function _ord(o) { return (o && typeof o.order === "number") ? o.order : 0 }
+
     // a drag in arrange mode, or a Komble control: remember in memory now
     // (the widget follows the binding), persist through ewe-plugin, which
     // pokes `reload` back at us — a no-op round trip
@@ -153,11 +202,13 @@ QtObject {
             host.loaded()
             return
         }
-        var inst = {}, widgets = [], desk = [], pl = {}, st = {}, n = 0
+        var inst = {}, widgets = [], desk = [], pl = {}, st = {}, dirs = {}, n = 0
+        var tiles = [], pages = [], status = [], dock = [], pageKeys = {}
         for (var i = 0; i < j.plugins.length; i++) {
             var p = j.plugins[i]
             if (p.widget) pl[p.id] = p.widget
             st[p.id] = p.settings || {}
+            if (p.dir) dirs[p.id] = p.dir
             if (!p.enabled) continue
             if (!p.installed) {
                 Log.warn("plugins", p.id, "is enabled but not installed" + (p.source ? " — ewe-plugin add " + p.source : ""))
@@ -167,8 +218,19 @@ QtObject {
                 Log.warn("plugins", p.id, "skipped:", (p.problems || []).join("; "))
                 continue
             }
+            if (host.apiVersions.indexOf(p.apiVersion) < 0) {
+                Log.warn("plugins", p.id, "skipped: apiVersion", p.apiVersion, "is not one of", host.apiVersions.join(", "))
+                continue
+            }
+            host.dirs = dirs
             for (var k = 0; k < p.kinds.length; k++) {
                 var kind = p.kinds[k]
+                if (kind === "dock-item") {
+                    var di = p.dockItem || {}
+                    dock.push({ id: p.id, name: p.name, icon: di.icon || "icApps", label: di.label || p.name || p.id,
+                                action: di.action || "", order: host._ord(di) })
+                    continue
+                }
                 var rel = p.entryPoints[kind]
                 if (!rel) continue
                 var path = p.dir + "/" + rel
@@ -180,9 +242,30 @@ QtObject {
                     desk.push({ id: p.id, name: p.name, entry: path })
                     continue
                 }
+                if (kind === "quick-tile") {
+                    var qt = p.quickTile || {}
+                    tiles.push({ id: p.id, name: p.name, entry: path, span: qt.span === 2 ? 2 : 1, order: host._ord(qt) })
+                    continue
+                }
+                if (kind === "quick-page") {
+                    var qp = p.quickPage || {}
+                    if (!qp.key || pageKeys[qp.key]) {
+                        Log.warn("plugins", p.id, "quick-page skipped:", qp.key ? "key \"" + qp.key + "\" is taken by " + pageKeys[qp.key] : "no key")
+                        continue
+                    }
+                    pageKeys[qp.key] = p.id
+                    pages.push({ id: p.id, name: p.name, entry: path, key: qp.key, label: qp.label || p.name || qp.key,
+                                 icon: qp.icon || "icApps", order: host._ord(qp) })
+                    continue
+                }
+                if (kind === "bar-status") {
+                    status.push({ id: p.id, name: p.name, entry: path, order: host._ord(p.barStatus) })
+                    continue
+                }
                 var obj = host._instantiate(p.id, kind, path)
                 if (obj) {
-                    if ("settings" in obj) obj.settings = st[p.id] || ({})
+                    host.settings = st
+                    host.inject(obj, p.id)
                     if (!inst[p.id]) inst[p.id] = {}
                     inst[p.id][kind] = obj
                     n++
@@ -192,8 +275,14 @@ QtObject {
         host.instances = inst
         host.placement = pl
         host.settings = st
+        host.dirs = dirs
         host.barWidgets = widgets
         host.desktopWidgets = desk
+        tiles.sort(host._byOrder); pages.sort(host._byOrder); status.sort(host._byOrder); dock.sort(host._byOrder)
+        host.quickTiles = tiles
+        host.quickPages = pages
+        host.barStatus = status
+        host.dockItems = dock
         Log.info("plugins", n + " entry point(s) loaded from " + Object.keys(inst).length + " plugin(s)")
         host._settle.start()
         host.loaded()
@@ -244,6 +333,13 @@ QtObject {
             if (!kinds[dw.id]) kinds[dw.id] = []
             kinds[dw.id].push("desktop-widget")
         }
+        var regs = { "quick-tile": host.quickTiles, "quick-page": host.quickPages, "bar-status": host.barStatus, "dock-item": host.dockItems }
+        for (var kn in regs)
+            for (var r = 0; r < regs[kn].length; r++) {
+                var e = regs[kn][r]
+                if (!kinds[e.id]) kinds[e.id] = []
+                kinds[e.id].push(kn)
+            }
         var out = []
         for (var k in kinds) out.push({ id: k, kinds: kinds[k] })
         return out

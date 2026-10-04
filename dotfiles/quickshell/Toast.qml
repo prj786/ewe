@@ -132,9 +132,9 @@ Scope {
             id: card
             anchors.horizontalCenter: parent.horizontalCenter
             anchors.bottom: parent.bottom
-            // the dock's own layer reserves its height, so this margin is
-            // measured from the dock's edge
-            anchors.bottomMargin: (Globals.dockEnabled && !Globals.dockAutohide)
+            // the dock's own layer reserves its height (Shell.bottomReserved),
+            // so this margin is measured from the dock's edge
+            anchors.bottomMargin: Shell.bottomReserved
                                   ? Theme.spaceS + Theme.spaceXs : Theme.windowGap
             width: Math.min(Theme.panelLg, row.implicitWidth + Theme.spaceS + Theme.spaceXs + Theme.spaceXs)
             height: Math.max(Theme.controlXl, row.implicitHeight + 2 * Theme.spaceXs)
