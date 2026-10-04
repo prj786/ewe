@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "id": "acme.v3demo",
+  "name": "API 3 demo",
+  "version": "0.1.0",
+  "apiVersion": 3,
+  "description": "Exercises every API 3 kind: a span-2 Quick settings tile, a page (key demo), a glyph in the bar's pill, a dock item whose action opens an AnchoredPopup, and a toast.",
+  "homepage": "https://github.com/prj786/ewe",
+  "author": "ewe tests",
+  "icon": "icStar",
+  "category": "Demo",
+  "kinds": ["quick-tile", "quick-page", "bar-status", "dock-item", "panel"],
+  "entryPoints": {
+    "quick-tile": "Tile.qml",
+    "quick-page": "Page.qml",
+    "bar-status": "Status.qml",
+    "panel": "Panel.qml"
+  },
+  "quickTile": { "span": 2, "order": 10 },
+  "quickPage": { "key": "demo", "label": "Demo", "icon": "icStar", "order": 10 },
+  "barStatus": { "order": 10 },
+  "dockItem": { "icon": "icStar", "label": "Demo", "action": "acme.v3demo.toggle", "order": 10 },
+  "requires": { "packages": ["ewe-demo-no-such-package"], "commands": ["sh"] },
+  "settings": [
+    { "key": "label", "type": "string", "default": "Demo", "label": "Label" }
+  ]
+}

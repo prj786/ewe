@@ -29,8 +29,10 @@ bit. The code runs unsandboxed inside your shell process the moment it is
 enabled, so read it first. Enabling and disabling restart the shell
 (ewe.service); there is no QML hot-reload.
 
-    add <git-url> [--enable] [--yes]   clone, validate, record the source
-    list [--json]                      every plugin: enabled, version, kinds
+    add <git-url> [--enable] [--yes]   clone, validate, record the source (a first-party
+                                       URL or id that ships in the payload installs from it)
+    list [--json]                      every plugin: enabled, version, kinds; --json also
+                                       lists the payload's add-ons (`available`) and `removed`
     info <id> [--json]                 one plugin's manifest + state
     enable <id> [--no-restart]         add to [plugins].enabled, restart the shell
     disable <id> [--no-restart]
@@ -41,8 +43,20 @@ enabled, so read it first. Enabling and disabling restart the shell
                                        moved to <id>.bak.<stamp> instead
     validate <path>                    check a manifest + its entry points (exit 1 on problems)
     restore [--yes]                    clone every plugin ewe.conf knows that is not here
+    install <id> [--no-restart]        an ADD-ON from the payload: copy, source bundled, enable (JSON)
+    migrate [--no-restart] [--fresh]   one-time: install the add-ons that replace features an
+                                       upgrader had built in (ewe-setup/install.sh run it; JSON)
+    seed [dir] [--restore <id>]        the payload's default plugins + refresh installed copies
     path                               print the plugins directory
     boot-ok                            (the shell calls this) a start survived a minute
+
+Add-ons (0.25): every first-party plugin ships INSIDE the ewe payload
+(plugins/<id>/ + plugins/bundle.json) but is NOT installed on a fresh
+machine — Komble's Add-ons page, the Welcome screen and `install` put one in
+with one click. `bundle.json` says which ids are `default` (seeded on every
+machine) and which `migrate` (installed once for upgraders who had the
+feature built in). The migration marker is ~/.local/state/ewe/addons-migrated
+— local, never synced (ewe.conf is).
 
 [plugins.sources] IS the installed set: `add` records a plugin there whether or
 not it is enabled, `remove` forgets it, and the file syncs — so on another
@@ -66,7 +80,12 @@ Kinds: service (headless), panel, overlay, menu — the host instantiates all of
 them the same way and the plugin owns its windows and IPC. bar-widget is an
 Item the bar packs like a built-in indicator; "barWidget": {"defaultSection":
 "left" | "center" | "right"} picks the section (right when absent), and the
-Settings → Top bar map hides it under the key plugin:<id>.
+Settings → Top bar map hides it under the key plugin:<id>. API 3 adds
+quick-tile (a Quick settings home tile, "quickTile": {span, order}),
+quick-page (a Quick settings page + rail entry, "quickPage": {key, label,
+icon, order}), bar-status (a glyph inside the bar's Quick settings pill,
+"barStatus": {order}) and dock-item (a static dock button, "dockItem":
+{icon, label, action, order} — no entry point; the dock runs the action).
 
 Python stdlib only, like every other ewe tool. Machine-facing verbs print one
 JSON object; the rest talk to a person.
@@ -80,9 +99,25 @@ import sys
 import time
 import tomllib
 
-API_VERSION = 2
+API_VERSION = 3                 # what `create` writes and the host reports
+API_VERSIONS = (2, 3)           # what the host (PluginHost.qml) still loads
 SCHEMA = 1
-KINDS = ("service", "panel", "overlay", "menu", "bar-widget", "desktop-widget")
+KINDS = ("service", "panel", "overlay", "menu", "bar-widget", "desktop-widget",
+         "quick-tile", "quick-page", "bar-status", "dock-item")
+# the API-3 kinds: a v2 manifest may not use them
+V3_KINDS = ("quick-tile", "quick-page", "bar-status", "dock-item")
+# a dock item is static (icon + label + action in the manifest) — no QML
+NO_ENTRY_KINDS = ("dock-item",)
+# Quick settings pages the shell keeps for itself; a plugin page cannot take
+# these keys (vpn/ssh/cast/mobile/mail are NOT here: those pages move out)
+QS_CORE_KEYS = ("home", "wifi", "bt", "audio", "cal", "notifs")
+# icons are Theme property NAMES ("icMusic"), resolved by the host as Theme[icon]
+ICON_RE = re.compile(r"^ic[A-Z][A-Za-z0-9]*$")
+QS_KEY_RE = re.compile(r"^[a-z][a-z0-9_-]{0,23}$")
+ACTION_RE = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
+IPC_TARGET_RE = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
+PKG_RE = re.compile(r"^[a-z0-9][a-z0-9@._+-]*$")
+CMD_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]*$")
 # a plugin's declared options -- what Komble renders as a form and the shell
 # hands the plugin as `settings`; values live in ewe.conf plugins.settings.<id>
 SETTING_TYPES = ("bool", "int", "string", "choice", "color")
@@ -108,9 +143,34 @@ BOOTS = os.path.join(STATE_DIR, "plugin-boots.json")
 CRASH_WINDOW = 60     # seconds
 CRASH_LIMIT = 3       # shell starts inside the window → safe mode
 # first-party plugins ship INSIDE the payload (plugins/<id>/, vendored from
-# their own repos) and are seeded into the user's plugins dir by ewe-setup
-# with source "bundled". Only those may use the reserved "ewe." namespace.
-PAYLOAD_PLUGINS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "plugins")
+# their own repos, listed in plugins/bundle.json). Only those may use the
+# reserved "ewe." namespace. Found through the REAL path of this tool:
+# ~/.local/bin/ewe-plugin is a symlink into ~/.local/share/ewe/bin, so
+# realpath lands in the deployed payload (abspath used to resolve the LINK's
+# directory — ~/.local/plugins — and `seed --restore` seeded nothing). The
+# package installs a copy at /usr/bin, hence the fallbacks; EWE_PAYLOAD_PLUGINS
+# overrides for tests and the nested harness.
+def _payload_plugins():
+    env = os.environ.get("EWE_PAYLOAD_PLUGINS")
+    if env:
+        return os.path.abspath(env)
+    data_home = os.environ.get("XDG_DATA_HOME") or os.path.join(os.path.expanduser("~"), ".local", "share")
+    cands = [os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "plugins"),
+             os.path.join(data_home, "ewe", "plugins"),
+             os.path.join(os.path.expanduser("~"), ".local", "share", "ewe", "plugins"),
+             "/usr/share/ewe/plugins"]
+    for c in cands:
+        if os.path.isdir(c):
+            return c
+    return cands[0]
+
+
+PAYLOAD_PLUGINS = _payload_plugins()
+BUNDLE = "bundle.json"          # plugins/bundle.json: {"plugins": {id: {repo, commit, version, default, migrate}}}
+# the one-time add-on migration's marker (plan D3): a JSON file naming the
+# add-ons already CONSIDERED, so an add-on that moves out of the shell in a
+# later release is still migrated for the users who had it built in
+MIGRATED = os.path.join(STATE_DIR, "addons-migrated")
 HYPR_GEN = os.path.join(CFG_DIR, "hypr", "generated")
 PLUGIN_KEYBINDS = os.path.join(HYPR_GEN, "plugin-keybinds.lua")
 
@@ -267,8 +327,9 @@ def validate_manifest(d, m, expect_dirname=None, allow_reserved=False):
     api = m.get("apiVersion", API_VERSION)
     if not isinstance(api, int) or isinstance(api, bool):
         p.append("apiVersion must be an integer")
-    elif api != API_VERSION:
-        p.append("apiVersion %d is not supported by this shell (wants %d)" % (api, API_VERSION))
+        api = API_VERSION
+    elif api not in API_VERSIONS:
+        p.append("apiVersion %d is not supported by this shell (wants one of %s)" % (api, ", ".join(map(str, API_VERSIONS))))
     kinds = m.get("kinds")
     if not isinstance(kinds, list) or not kinds:
         p.append("kinds must be a non-empty list")
@@ -277,6 +338,8 @@ def validate_manifest(d, m, expect_dirname=None, allow_reserved=False):
         for k in kinds:
             if k not in KINDS:
                 p.append("unknown kind \"%s\" (one of: %s)" % (k, ", ".join(KINDS)))
+            elif k in V3_KINDS and api < 3:
+                p.append("kind \"%s\" needs apiVersion 3" % k)
         if len(set(kinds)) != len(kinds):
             p.append("kinds lists the same kind twice")
     eps = m.get("entryPoints")
@@ -284,7 +347,7 @@ def validate_manifest(d, m, expect_dirname=None, allow_reserved=False):
         p.append("entryPoints must be an object mapping each kind to a .qml file")
         eps = {}
     for k in kinds:
-        if k in KINDS and k not in eps:
+        if k in KINDS and k not in NO_ENTRY_KINDS and k not in eps:
             p.append("kind \"%s\" has no entry point" % k)
     real_dir = os.path.realpath(d)
     for k, rel in eps.items():
@@ -317,6 +380,75 @@ def validate_manifest(d, m, expect_dirname=None, allow_reserved=False):
                 p.append("desktopWidget.%s must be a number" % k)
         if "layer" in dw and dw["layer"] not in WIDGET_LAYERS:
             p.append("desktopWidget.layer must be desktop or top")
+    # ── API 3 fields ──────────────────────────────────────────────────────
+    def _int(obj, key, where):
+        if key in obj and (not isinstance(obj[key], int) or isinstance(obj[key], bool)):
+            p.append("%s.%s must be an integer" % (where, key))
+    aliases = []
+    al = m.get("ipcAliases")
+    if al is not None:
+        if not isinstance(al, list) or not all(isinstance(a, str) and IPC_TARGET_RE.match(a) for a in al):
+            p.append("ipcAliases must be a list of IPC target names (lowercase [a-z0-9._-])")
+        elif isinstance(pid, str) and not pid.startswith(RESERVED_PREFIX):
+            p.append("ipcAliases: only first-party (\"%s\") plugins may claim legacy IPC targets" % RESERVED_PREFIX)
+        else:
+            aliases = list(al)
+    qt = m.get("quickTile")
+    if qt is not None and not isinstance(qt, dict):
+        p.append("quickTile must be an object {span, order}")
+    elif isinstance(qt, dict):
+        if "span" in qt and qt["span"] not in (1, 2):
+            p.append("quickTile.span must be 1 or 2")
+        _int(qt, "order", "quickTile")
+    qp = m.get("quickPage")
+    if "quick-page" in kinds and not isinstance(qp, dict):
+        p.append("kind quick-page needs \"quickPage\": {key, label, icon, order}")
+    elif qp is not None and not isinstance(qp, dict):
+        p.append("quickPage must be an object {key, label, icon, order}")
+    elif isinstance(qp, dict):
+        key = qp.get("key")
+        if not isinstance(key, str) or not QS_KEY_RE.match(key):
+            p.append("quickPage.key must be lowercase [a-z0-9_-] starting with a letter (e.g. \"vpn\")")
+        elif key in QS_CORE_KEYS:
+            p.append("quickPage.key \"%s\" belongs to the shell (reserved: %s)" % (key, ", ".join(QS_CORE_KEYS)))
+        if not isinstance(qp.get("label"), str) or not qp["label"].strip():
+            p.append("quickPage.label must be a non-empty string")
+        if "icon" in qp and (not isinstance(qp["icon"], str) or not ICON_RE.match(qp["icon"])):
+            p.append("quickPage.icon must be a Theme icon name like \"icShield\"")
+        _int(qp, "order", "quickPage")
+    bs = m.get("barStatus")
+    if bs is not None and not isinstance(bs, dict):
+        p.append("barStatus must be an object {order}")
+    elif isinstance(bs, dict):
+        _int(bs, "order", "barStatus")
+    di = m.get("dockItem")
+    if "dock-item" in kinds and not isinstance(di, dict):
+        p.append("kind dock-item needs \"dockItem\": {icon, label, action, order}")
+    elif di is not None and not isinstance(di, dict):
+        p.append("dockItem must be an object {icon, label, action, order}")
+    elif isinstance(di, dict):
+        if not isinstance(di.get("icon"), str) or not ICON_RE.match(di["icon"]):
+            p.append("dockItem.icon must be a Theme icon name like \"icMusic\"")
+        if not isinstance(di.get("label"), str) or not di["label"].strip():
+            p.append("dockItem.label must be a non-empty string")
+        if "action" in di and (not isinstance(di["action"], str) or not ACTION_RE.match(di["action"])):
+            p.append("dockItem.action must be an action name like \"ewe.media.toggle\"")
+        _int(di, "order", "dockItem")
+    rq = m.get("requires")
+    if rq is not None and not isinstance(rq, dict):
+        p.append("requires must be an object {packages: [...], commands: [...]}")
+    elif isinstance(rq, dict):
+        for key, rx in (("packages", PKG_RE), ("commands", CMD_RE)):
+            v = rq.get(key)
+            if v is not None and (not isinstance(v, list) or not all(isinstance(x, str) and rx.match(x) for x in v)):
+                p.append("requires.%s must be a list of names" % key)
+        for key in rq:
+            if key not in ("packages", "commands"):
+                p.append("requires.%s: unknown (packages, commands)" % key)
+    if "icon" in m and (not isinstance(m["icon"], str) or not ICON_RE.match(m["icon"])):
+        p.append("icon must be a Theme icon name like \"icStar\"")
+    if "category" in m and (not isinstance(m["category"], str) or not m["category"].strip()):
+        p.append("category must be a non-empty string")
     kbs = m.get("keybinds")
     if kbs is not None and not isinstance(kbs, list):
         p.append("keybinds must be a list of {combo, ipc}")
@@ -326,6 +458,10 @@ def validate_manifest(d, m, expect_dirname=None, allow_reserved=False):
                 p.append("keybinds[%d] needs a combo like \"SUPER + P\"" % i)
             elif not isinstance(kb.get("ipc"), str) or not IPC_RE.match(kb["ipc"]):
                 p.append("keybinds[%d].ipc must be \"<target> <verb> [args]\"" % i)
+            elif api >= 3 and isinstance(pid, str) and kb["ipc"].split()[0] not in [pid] + aliases:
+                # API 3: a keybind reaches the plugin's own target or one of
+                # its declared aliases — never another component's
+                p.append("keybinds[%d].ipc must target this plugin (%s)" % (i, ", ".join([pid] + aliases)))
     st = m.get("settings")
     if st is not None and not isinstance(st, list):
         p.append("settings must be a list of {key, type, default, label}")
@@ -470,10 +606,26 @@ def describe(d, dirname=None, enabled=(), sources=None):
         "linked": os.path.islink(d.rstrip("/")),
         "bundled": (sources or {}).get(pid) == "bundled",
         "keybinds": [kb for kb in (m.get("keybinds") or []) if isinstance(kb, dict)] if isinstance(m.get("keybinds"), list) else [],
+        # API 3 (docs/PLUGINS.md "Kinds"): the host reads these to place the
+        # tile, the page + rail entry, the pill glyph and the dock button
+        "quickTile": m.get("quickTile") if isinstance(m.get("quickTile"), dict) else None,
+        "quickPage": m.get("quickPage") if isinstance(m.get("quickPage"), dict) else None,
+        "barStatus": m.get("barStatus") if isinstance(m.get("barStatus"), dict) else None,
+        "dockItem": m.get("dockItem") if isinstance(m.get("dockItem"), dict) else None,
+        "requires": _requires(m),
+        "ipcAliases": [a for a in (m.get("ipcAliases") or []) if isinstance(a, str)] if isinstance(m.get("ipcAliases"), list) else [],
+        "icon": m.get("icon") if isinstance(m.get("icon"), str) else None,
+        "category": m.get("category") if isinstance(m.get("category"), str) else None,
         "enabled": pid in enabled,
         "valid": not problems,
         "problems": problems,
     }
+
+
+def _requires(m):
+    rq = m.get("requires") if isinstance(m.get("requires"), dict) else {}
+    return {"packages": [x for x in (rq.get("packages") or []) if isinstance(x, str)] if isinstance(rq.get("packages"), list) else [],
+            "commands": [x for x in (rq.get("commands") or []) if isinstance(x, str)] if isinstance(rq.get("commands"), list) else []}
 
 
 def scan():
@@ -500,16 +652,203 @@ def scan():
                         "git": False, "source": src, "name": None,
                         "version": None, "description": None, "homepage": None,
                         "author": None, "apiVersion": None, "kinds": [],
-                        "entryPoints": {}, "barWidget": None, "enabled": pid in enabled,
-                        "valid": False, "problems": [why]})
+                        "entryPoints": {}, "barWidget": None, "widget": None,
+                        "settingsSchema": [], "settings": {}, "linked": False,
+                        "bundled": src == "bundled", "keybinds": [],
+                        "quickTile": None, "quickPage": None, "barStatus": None, "dockItem": None,
+                        "requires": {"packages": [], "commands": []}, "ipcAliases": [],
+                        "icon": None, "category": None,
+                        "enabled": pid in enabled, "valid": False, "problems": [why]})
     return out
 
 
 def missing_ids(plugins):
     """What `restore` would fetch: known, absent, and fetchable."""
     # "local" and "bundled" cannot be fetched: one came from a directory, the
-    # other from the ewe package (ewe-setup seeds it; `seed --restore` if removed)
+    # other from the ewe package (`restore` installs those from the payload)
     return [p["id"] for p in plugins if not p["installed"] and p["source"] and p["source"] not in ("local", "bundled")]
+
+
+# ── the payload: plugins/<id>/ + plugins/bundle.json ──────────────────────────
+
+def bundle_meta(src_dir=None):
+    """{id: {repo, commit, version, default, migrate}} from bundle.json, {} when
+    the payload has none (then nothing is default and nothing migrates)."""
+    try:
+        with open(os.path.join(src_dir or PAYLOAD_PLUGINS, BUNDLE)) as f:
+            j = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return {}
+    p = j.get("plugins") if isinstance(j, dict) else None
+    return {k: v for k, v in (p or {}).items() if isinstance(v, dict)}
+
+
+def payload_plugins(src_dir=None):
+    """Every plugin directory in the payload: [(id, dir, manifest, problems)],
+    by id. A directory without a manifest is not a plugin and is skipped;
+    one that fails validation is listed with its problems so `available`
+    can say why it cannot be installed."""
+    d0 = src_dir or PAYLOAD_PLUGINS
+    out = []
+    if not os.path.isdir(d0):
+        return out
+    for name in sorted(os.listdir(d0)):
+        d = os.path.join(d0, name)
+        if name.startswith(".") or not os.path.isdir(d):
+            continue
+        m, problems = read_manifest(d)
+        if m is None:
+            continue
+        problems = validate_manifest(d, m, expect_dirname=name, allow_reserved=True)
+        pid = m.get("id") if isinstance(m.get("id"), str) else name
+        out.append((pid, d, m, problems))
+    return out
+
+
+def payload_find(pid, src_dir=None):
+    for p, d, m, problems in payload_plugins(src_dir):
+        if p == pid:
+            return d, m, problems
+    return None, None, ["\"%s\" is not in the payload (%s)" % (pid, src_dir or PAYLOAD_PLUGINS)]
+
+
+_PKG_PRESENT = None
+
+
+def _packages_present(names):
+    """The subset of `names` pacman knows as installed. One `pacman -Q` per
+    process; without pacman (a dev host) every name counts as present —
+    reporting is honest only where it can be."""
+    global _PKG_PRESENT
+    names = sorted(set(names))
+    if not names:
+        return set()
+    if _PKG_PRESENT is None:
+        _PKG_PRESENT = {}
+    todo = [n for n in names if n not in _PKG_PRESENT]
+    if todo:
+        if not shutil.which("pacman"):
+            for n in todo:
+                _PKG_PRESENT[n] = True
+        else:
+            try:
+                r = subprocess.run(["pacman", "-Q", *todo], capture_output=True, text=True, timeout=20)
+                have = {ln.split()[0] for ln in r.stdout.splitlines() if ln.strip()}
+            except (OSError, subprocess.TimeoutExpired):
+                have = set(todo)
+            for n in todo:
+                _PKG_PRESENT[n] = n in have
+    return {n for n in names if _PKG_PRESENT.get(n)}
+
+
+def check_requires(req):
+    """{packages: [missing], commands: [missing]} — reported, never installed
+    by this tool (Komble offers the packages; plan D7)."""
+    pk = req.get("packages") or []
+    have = _packages_present(pk)
+    return {"packages": [p for p in pk if p not in have],
+            "commands": [c for c in (req.get("commands") or []) if not shutil.which(c)]}
+
+
+def available_list(plugins=None, src_dir=None):
+    """`list --json`'s `available`: every add-on the payload carries, with
+    its install state — what Komble's Add-ons page and the Welcome screen
+    render. `missing` says which declared packages/commands are absent."""
+    plugins = plugins if plugins is not None else scan()
+    by_id = {p["id"]: p for p in plugins}
+    meta = bundle_meta(src_dir)
+    removed = set(conf_removed())
+    out = []
+    for pid, d, m, problems in payload_plugins(src_dir):
+        req = _requires(m)
+        inst = by_id.get(pid)
+        bm = meta.get(pid) or {}
+        out.append({
+            "id": pid,
+            "name": m.get("name"),
+            "description": m.get("description"),
+            "icon": m.get("icon") if isinstance(m.get("icon"), str) else None,
+            "category": m.get("category") if isinstance(m.get("category"), str) else None,
+            "version": m.get("version"),
+            "apiVersion": m.get("apiVersion", API_VERSION),
+            "kinds": m.get("kinds") if isinstance(m.get("kinds"), list) else [],
+            "repo": bm.get("repo") if isinstance(bm.get("repo"), str) else (m.get("homepage") if isinstance(m.get("homepage"), str) else None),
+            "default": bm.get("default") is True,
+            "migrate": bm.get("migrate") is True,
+            "installed": bool(inst and inst["installed"]),
+            "enabled": bool(inst and inst["enabled"]),
+            "source": inst["source"] if inst else None,
+            "removed": pid in removed,
+            "requires": req,
+            "missing": check_requires(req),
+            "valid": not problems,
+            "problems": problems,
+        })
+    return out
+
+
+def install_from_payload(pid, src_dir=None, enable=True):
+    """Copy plugins/<id> out of the payload into the user's plugins dir with
+    source "bundled" (what `seed` does for defaults), forget a removal, and
+    enable it. Returns (manifest, dest) or dies. Never runs plugin code."""
+    d, m, problems = payload_find(pid, src_dir)
+    if d is None:
+        die(problems[0])
+    if problems:
+        die("%s does not validate:\n%s" % (pid, "".join("  ! %s\n" % x for x in problems).rstrip()))
+    dest = os.path.join(PLUGINS_DIR, pid)
+    if os.path.islink(dest):
+        die("\"%s\" is a linked working copy (ewe-plugin dev) — `ewe-plugin remove %s` first" % (pid, pid))
+    enabled, sources = conf_state()
+    if os.path.exists(dest):
+        if sources.get(pid) not in (None, "bundled"):
+            die("\"%s\" is already installed from %s — `ewe-plugin remove %s` first" % (pid, sources[pid], pid))
+        cur, _ = read_manifest(dest)
+        if (cur or {}).get("version") != m.get("version"):
+            tmp = dest + ".tmp-install"
+            shutil.rmtree(tmp, ignore_errors=True)
+            shutil.copytree(d, tmp, symlinks=False)
+            shutil.rmtree(dest)
+            os.rename(tmp, dest)
+    else:
+        os.makedirs(PLUGINS_DIR, exist_ok=True)
+        tmp = dest + ".tmp-install"
+        shutil.rmtree(tmp, ignore_errors=True)
+        shutil.copytree(d, tmp, symlinks=False)
+        os.rename(tmp, dest)
+    sources[pid] = "bundled"
+    set_sources(sources)
+    if pid in conf_removed():
+        set_removed([x for x in conf_removed() if x != pid])
+    if enable and pid not in enabled:
+        set_enabled(enabled + [pid])
+    return m, dest
+
+
+def payload_match(src, src_dir=None):
+    """The payload id a user-typed `add` argument means: a reserved id itself
+    ("ewe.media"), the add-on's repository URL (bundle.json `repo`, or the
+    manifest's homepage), or a prj786/ewe-plugin-<name> URL. None when it
+    is not one of ours."""
+    s = src.strip().rstrip("/")
+    if s.endswith(".git"):
+        s = s[:-4]
+    ids = {pid: (m, problems) for pid, _, m, problems in payload_plugins(src_dir)}
+    if ID_RE.match(s) and s in ids:
+        return s
+    if not SOURCE_RE.match(src):
+        return None
+    meta = bundle_meta(src_dir)
+    for pid, (m, _) in ids.items():
+        urls = [meta.get(pid, {}).get("repo"), m.get("homepage")]
+        for u in urls:
+            if isinstance(u, str) and u.strip().rstrip("/").removesuffix(".git") == s:
+                return pid
+    # https://github.com/prj786/ewe-plugin-clipboard → ewe.clipboard
+    mm = re.search(r"/ewe-plugin-([a-z0-9_-]+)$", s)
+    if mm and ("ewe." + mm.group(1)) in ids:
+        return "ewe." + mm.group(1)
+    return None
 
 
 def find(pid):
@@ -539,26 +878,29 @@ def confirm(prompt, yes):
     return ans in ("y", "yes")
 
 
-def restart_shell(wanted=True):
+def restart_shell(wanted=True, quiet=False):
+    """quiet: the JSON verbs (install, migrate) print one object and nothing
+    else on stdout, so the human lines are dropped."""
+    tell = (lambda *_: None) if quiet else say
     try:
         write_plugin_keybinds()
     except Exception as e:  # never let a keybind file stop an enable/disable
-        say("(plugin keybinds not written: %s)" % e)
+        tell("(plugin keybinds not written: %s)" % e)
     if not wanted:
-        say("(shell not restarted — the change applies at the next login or `systemctl --user restart %s`)" % SHELL_UNIT)
+        tell("(shell not restarted — the change applies at the next login or `systemctl --user restart %s`)" % SHELL_UNIT)
         return False
     if not shutil.which("systemctl"):
         return False
     r = subprocess.run(["systemctl", "--user", "is-active", "--quiet", SHELL_UNIT])
     if r.returncode != 0:
-        say("shell not running — the change applies at the next login")
+        tell("shell not running — the change applies at the next login")
         return False
     clear_boots(forget_safe=False)   # a deliberate restart must not count as a crash
     r = subprocess.run(["systemctl", "--user", "restart", SHELL_UNIT], capture_output=True, text=True)
     if r.returncode != 0:
-        say("could not restart the shell: %s" % (r.stderr or r.stdout).strip())
+        tell("could not restart the shell: %s" % (r.stderr or r.stdout).strip())
         return False
-    say("shell restarted")
+    tell("shell restarted")
     return True
 
 
@@ -663,6 +1005,20 @@ def cmd_add(args):
     if len(rest) != 1:
         die("usage: ewe-plugin add <git-url> [--enable] [--yes]", 2)
     src = rest[0]
+    no_restart = "--no-restart" in args
+    # one of ours? The three plugin repos' README and the vault say `add <url>`
+    # — that used to be REFUSED (reserved namespace). The payload copy is the
+    # same code at the version this ewe was built with: install that.
+    ours = payload_match(src) if not os.path.isdir(src) else None
+    if ours:
+        say("%s ships inside ewe — installing the payload copy (%s)" % (ours, PAYLOAD_PLUGINS))
+        m, dest = install_from_payload(ours, enable=enable)
+        say("installed %s %s (%s) → %s" % (ours, m.get("version", ""), ", ".join(m.get("kinds") or []), dest))
+        if enable:
+            restart_shell(not no_restart)
+        else:
+            say("enable it with: ewe-plugin enable %s" % ours)
+        return
     if not (SOURCE_RE.match(src) or os.path.isdir(src)):
         die("\"%s\" is not a git URL (https://, ssh://, git@…) or a local repository" % src)
     if os.path.isdir(src):
@@ -690,7 +1046,7 @@ def cmd_add(args):
     kinds = ", ".join(m.get("kinds") or [])
     say("installed %s %s (%s) → %s" % (pid, m.get("version", ""), kinds, dest))
     if enable:
-        cmd_enable([pid])
+        cmd_enable([pid] + (["--no-restart"] if no_restart else []))
     else:
         say("enable it with: ewe-plugin enable %s" % pid)
 
@@ -733,8 +1089,22 @@ def cmd_restore(args):
     plugins = scan()
     todo = missing_ids(plugins)
     local = [p["id"] for p in plugins if not p["installed"] and p["source"] == "local"]
+    # add-ons this ewe.conf had (source bundled, or enabled and in the
+    # payload) come from the payload, not from git — the synced-file case
+    # on a second machine, and the Welcome flow's restore step
+    payload_ids = {pid for pid, _, _, problems in payload_plugins() if not problems}
+    bundled = [p["id"] for p in plugins if not p["installed"]
+               and (p["source"] == "bundled" or (p["enabled"] and not p["source"])) and p["id"] in payload_ids]
+    got_bundled = []
+    for pid in bundled:
+        m, dest = install_from_payload(pid, enable=False)
+        say("installed %s %s from the payload → %s" % (pid, m.get("version", ""), dest))
+        got_bundled.append(pid)
     if not todo:
-        say("nothing to restore" + (" — %s came from a local directory elsewhere; nothing to fetch" % ", ".join(local) if local else ""))
+        if not got_bundled:
+            say("nothing to restore" + (" — %s came from a local directory elsewhere; nothing to fetch" % ", ".join(local) if local else ""))
+        elif any(p["enabled"] for p in plugins if p["id"] in got_bundled):
+            restart_shell("--no-restart" not in args)
         return
     _, sources = conf_state()
     say("ewe.conf knows %d plugin%s that %s not installed here:" % (len(todo), "" if len(todo) == 1 else "s", "is" if len(todo) == 1 else "are"))
@@ -753,16 +1123,21 @@ def cmd_restore(args):
         got += 1
     if local:
         say("skipped %s: a local directory on another machine — add it from its files if you have them" % ", ".join(local))
-    if any(pid in enabled for pid in todo):
-        restart_shell()
+    if any(pid in enabled for pid in todo + got_bundled):
+        restart_shell("--no-restart" not in args)
 
 
 def cmd_list(args):
     plugins = scan()
     if "--json" in args:
         safe = record_boot(plugins) if "--boot" in args else None
-        print(json.dumps({"ok": True, "apiVersion": API_VERSION, "dir": PLUGINS_DIR,
+        print(json.dumps({"ok": True, "apiVersion": API_VERSION, "apiVersions": list(API_VERSIONS),
+                          "dir": PLUGINS_DIR, "payload": PAYLOAD_PLUGINS,
                           "plugins": plugins, "missing": missing_ids(plugins),
+                          # the add-ons catalogue (Komble, Welcome) and the
+                          # bundled ids the user removed — offered back from there
+                          "available": available_list(plugins),
+                          "removed": conf_removed(),
                           "safeMode": bool(safe),
                           "suspects": safe["suspects"] if safe else []}))
         return
@@ -1093,8 +1468,57 @@ QtObject {{
 }
 TEMPLATES["overlay"] = TEMPLATES["panel"]
 TEMPLATES["menu"] = TEMPLATES["panel"]
+# API 3 kinds (docs/PLUGINS.md "Kinds"): the host sizes the tile and the
+# page, injects pluginId/stateDir/settings/panelOpen, and hands a bar-status
+# glyph the pill's ink. Nothing here is a raw colour, size or duration.
+TEMPLATES.update({"quick-tile": '''import QtQuick
+import qs
+
+// {name} -- a Quick settings home tile. ewe sizes it (span 1 = half a row,
+// 2 = the row) and places it after its own tiles; you fill a Tile.
+Tile {{
+    id: root
+    property string pluginId: ""
+    property var settings: ({{}})
+    property bool panelOpen: false          // this tile is on screen
+    property bool on: false
+    ic: Theme.icStar; label: "{name}"; active: root.on
+    sub: root.on ? "On" : "Off"
+    onClicked: {{ root.on = !root.on; Shell.toast("{name} " + (root.on ? "on" : "off")) }}
+}}
+''',
+    "quick-page": '''import QtQuick
+import qs
+
+// {name} -- a Quick settings page: the rail shows quickPage.icon, the page
+// opens from it, from the tile's details zone, from
+// `qs ipc call quicksettings tab <key>` and from Shell.openQuickSettings(key).
+Column {{
+    id: root
+    property string pluginId: ""
+    property var settings: ({{}})
+    property bool panelOpen: false          // this page is on screen
+    spacing: Theme.spaceS
+    QsPageHead {{ title: "{name}" }}
+    QsEmpty {{ ic: Theme.icStar; title: "Nothing here yet"; desc: "Fill this page in QuickPage.qml." }}
+}}
+''',
+    "bar-status": '''import QtQuick
+import qs
+
+// {name} -- a glyph inside the bar's Quick settings pill, after the shell's
+// own. `shown` only while it says something (not shown = no space taken).
+BarStatusGlyph {{
+    property string pluginId: ""
+    property var settings: ({{}})
+    text: Theme.icStar
+    shown: true
+}}
+''',
+})
 ENTRY_FILE = {"bar-widget": "Widget.qml", "desktop-widget": "DesktopWidget.qml", "panel": "Panel.qml",
-              "overlay": "Overlay.qml", "menu": "Menu.qml", "service": "Service.qml"}
+              "overlay": "Overlay.qml", "menu": "Menu.qml", "service": "Service.qml",
+              "quick-tile": "QuickTile.qml", "quick-page": "QuickPage.qml", "bar-status": "Status.qml"}
 
 README_TPL = '''# {name}
 
@@ -1197,10 +1621,18 @@ def cmd_create(args):
     os.makedirs(dest, exist_ok=True)
     manifest = {"schemaVersion": SCHEMA, "id": pid, "name": name, "version": "0.1.0",
                 "apiVersion": API_VERSION, "description": "%s for the ewe desktop." % name,
-                "author": author, "kinds": kinds,
-                "entryPoints": {k: ENTRY_FILE[k] for k in kinds}}
+                "author": author, "icon": "icStar", "category": "Other", "kinds": kinds,
+                "entryPoints": {k: ENTRY_FILE[k] for k in kinds if k in ENTRY_FILE}}
     if "bar-widget" in kinds:
         manifest["barWidget"] = {"defaultSection": section}
+    if "quick-tile" in kinds:
+        manifest["quickTile"] = {"span": 1, "order": 0}
+    if "quick-page" in kinds:
+        manifest["quickPage"] = {"key": pid.split(".")[-1].replace("_", "-"), "label": name, "icon": "icStar", "order": 0}
+    if "bar-status" in kinds:
+        manifest["barStatus"] = {"order": 0}
+    if "dock-item" in kinds:
+        manifest["dockItem"] = {"icon": "icStar", "label": name, "action": pid + ".toggle", "order": 0}
     if "desktop-widget" in kinds:
         manifest["desktopWidget"] = {"x": 48, "y": 64, "layer": "desktop"}
         manifest["settings"] = [{"key": "seconds", "type": "bool", "default": False, "label": "Show seconds"}]
@@ -1210,8 +1642,9 @@ def cmd_create(args):
         json.dump(manifest, f, indent=2)
         f.write("\n")
     for k in kinds:
-        with open(os.path.join(dest, ENTRY_FILE[k]), "w") as f:
-            f.write(TEMPLATES[k].format(id=pid, name=name))
+        if k in ENTRY_FILE:
+            with open(os.path.join(dest, ENTRY_FILE[k]), "w") as f:
+                f.write(TEMPLATES[k].format(id=pid, name=name))
     with open(os.path.join(dest, "README.md"), "w") as f:
         f.write(README_TPL.format(id=pid, name=name, url_hint="https://github.com/%s/%s.git" % (pid.split(".")[0], pid.split(".")[-1])))
     with open(os.path.join(dest, "LICENSE"), "w") as f:
@@ -1267,9 +1700,9 @@ def cmd_dev(args):
     set_sources(sources)
     if pid not in enabled:
         set_enabled(enabled + [pid])
-    say("linked %s -> %s, enabled; restarting the shell..." % (dest, src))
-    restart_shell()
-    if "--no-follow" in args:
+    say("linked %s -> %s, enabled%s" % (dest, src, "" if "--no-restart" in args else "; restarting the shell..."))
+    restart_shell("--no-restart" not in args)
+    if "--no-follow" in args or "--no-restart" in args:
         return
     say("following the shell's log for \"%s\" (Ctrl-C stops following; the plugin stays enabled)" % pid)
     try:
@@ -1362,33 +1795,36 @@ def cmd_get(args):
 # ── seed: the first-party plugins that ship inside the payload ────────────────
 
 def cmd_seed(args):
-    """Copy every plugin under the payload's plugins/ into the user's plugins
-    dir (source "bundled", enabled) unless the user removed it; refresh a
-    seeded copy when the payload carries a newer version. ewe-setup runs
-    this at every deploy. --restore <id> forgets a removal first."""
+    """The payload's plugins into the user's plugins dir: an id bundle.json
+    marks `default: true` is copied in (source "bundled", enabled) unless
+    the user removed it; an already-installed bundled copy is refreshed
+    when the payload carries another version (add-ons included — that is
+    how an upgrade moves them along). Everything else in the payload is an
+    add-on: listed by `list --json` as available, put in by `install`.
+    ewe-setup runs this at every deploy. --restore <id> forgets a removal
+    and installs that id whether or not it is a default."""
     rest = [a for a in args if not a.startswith("--")]
-    src_dir = rest[0] if rest and os.path.isdir(rest[0]) else PAYLOAD_PLUGINS
+    restore_id = None
     if "--restore" in args:
         i = args.index("--restore")
         if i + 1 < len(args):
-            set_removed([x for x in conf_removed() if x != args[i + 1]])
+            restore_id = args[i + 1]
+            if restore_id in rest:
+                rest.remove(restore_id)
+            set_removed([x for x in conf_removed() if x != restore_id])
+    src_dir = rest[0] if rest and os.path.isdir(rest[0]) else PAYLOAD_PLUGINS
     if not os.path.isdir(src_dir):
         print(json.dumps({"ok": True, "seeded": [], "refreshed": [], "skipped": [], "note": "no bundled plugins in %s" % src_dir}))
         return
+    meta = bundle_meta(src_dir)
     removed = set(conf_removed())
     enabled, sources = conf_state()
     seeded, refreshed, skipped = [], [], []
     os.makedirs(PLUGINS_DIR, exist_ok=True)
-    for name in sorted(os.listdir(src_dir)):
-        d = os.path.join(src_dir, name)
-        m, problems = read_manifest(d)
-        if m is None:
-            continue
-        problems = validate_manifest(d, m, expect_dirname=name, allow_reserved=True)
+    for pid, d, m, problems in payload_plugins(src_dir):
         if problems:
-            skipped.append({"id": name, "why": problems[0]})
+            skipped.append({"id": pid, "why": problems[0]})
             continue
-        pid = m["id"]
         dest = os.path.join(PLUGINS_DIR, pid)
         if pid in removed:
             skipped.append({"id": pid, "why": "removed by the user"})
@@ -1397,6 +1833,9 @@ def cmd_seed(args):
             skipped.append({"id": pid, "why": "a linked working copy (ewe-plugin dev)"})
             continue
         if not os.path.exists(dest):
+            if not (meta.get(pid, {}).get("default") is True or pid == restore_id):
+                skipped.append({"id": pid, "why": "an add-on — ewe-plugin install %s" % pid})
+                continue
             shutil.copytree(d, dest, symlinks=False)
             sources[pid] = "bundled"
             if pid not in enabled:
@@ -1425,6 +1864,117 @@ def cmd_seed(args):
             pass
 
 
+# ── install / migrate: the add-ons model (plan D1–D3) ─────────────────────────
+
+def _json_fail(msg):
+    """The machine-facing failure: one JSON object, exit 1 (the `validate
+    --json` precedent — Komble reads `ok`, a script sees the status)."""
+    print(json.dumps({"ok": False, "error": msg}))
+    sys.exit(1)
+
+
+def cmd_install(args):
+    """ewe-plugin install <id> [--no-restart] — an add-on out of the payload:
+    copied in with source "bundled", any removal forgotten, enabled, the
+    keybinds regenerated, the shell restarted. One JSON object."""
+    rest = [a for a in args if not a.startswith("--")]
+    if len(rest) != 1:
+        _json_fail("usage: ewe-plugin install <id> [--no-restart]")
+    pid = rest[0]
+    d, m, problems = payload_find(pid)
+    if d is None or problems:
+        _json_fail(problems[0])
+    dest = os.path.join(PLUGINS_DIR, pid)
+    _, sources = conf_state()
+    if os.path.islink(dest):
+        _json_fail("\"%s\" is a linked working copy (ewe-plugin dev) — remove it first" % pid)
+    if os.path.exists(dest) and sources.get(pid) not in (None, "bundled"):
+        _json_fail("\"%s\" is already installed from %s — remove it first" % (pid, sources[pid]))
+    was = os.path.isdir(dest)
+    m, dest = install_from_payload(pid, enable=True)
+    restarted = restart_shell("--no-restart" not in args, quiet=True)
+    print(json.dumps({"ok": True, "id": pid, "version": m.get("version"), "dir": dest,
+                      "installed": True, "enabled": True, "refreshed": was,
+                      "missing": check_requires(_requires(m)), "restarted": restarted}))
+
+
+def _migrated_read():
+    """{considered: [ids], at: epoch} — an older empty marker (a touch) means
+    every add-on of that day was considered."""
+    try:
+        with open(MIGRATED) as f:
+            txt = f.read()
+    except OSError:
+        return None
+    try:
+        j = json.loads(txt)
+        if isinstance(j, dict) and isinstance(j.get("considered"), list):
+            return {"considered": [x for x in j["considered"] if isinstance(x, str)], "at": j.get("at")}
+    except json.JSONDecodeError:
+        pass
+    return {"considered": None, "at": None}      # legacy marker: all considered
+
+
+def _migrated_write(considered):
+    os.makedirs(STATE_DIR, exist_ok=True)
+    tmp = MIGRATED + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump({"considered": sorted(set(considered)), "at": int(time.time())}, f)
+    os.replace(tmp, MIGRATED)
+
+
+def cmd_migrate(args):
+    """ewe-plugin migrate [--no-restart] [--fresh] — plan D3. For every
+    bundle.json id with `migrate: true` that this machine has not CONSIDERED
+    yet: install + enable it, so an upgrader keeps the feature that used to
+    be built in; skipped when the user removed it, when the id is not in
+    the payload, when it is installed already, and the dock (ewe.dock) when
+    [desktop.dock] enabled = false. --fresh (a machine with no previous ewe)
+    records every id as considered and installs nothing. Idempotent: the
+    marker ~/.local/state/ewe/addons-migrated (local, never synced) names
+    the ids; a later release's new add-on is still migrated once."""
+    fresh = "--fresh" in args
+    meta = bundle_meta()
+    todo = sorted(pid for pid, bm in meta.items() if bm.get("migrate") is True)
+    st = _migrated_read()
+    considered = set(st["considered"]) if st and st["considered"] is not None else (set(todo) if st else set())
+    pending = [pid for pid in todo if pid not in considered]
+    migrated, skipped = [], []
+    if not pending:
+        _migrated_write(considered | set(todo))
+        print(json.dumps({"ok": True, "migrated": [], "skipped": [], "fresh": fresh,
+                          "note": "nothing to migrate" + (" (already migrated)" if st else "")}))
+        return
+    if fresh:
+        _migrated_write(considered | set(pending))
+        print(json.dumps({"ok": True, "migrated": [], "fresh": True,
+                          "skipped": [{"id": pid, "why": "fresh install — add-ons are opt-in"} for pid in pending]}))
+        return
+    removed = set(conf_removed())
+    enabled, sources = conf_state()
+    dock = conf_table("desktop.dock")
+    for pid in pending:
+        if pid in removed:
+            skipped.append({"id": pid, "why": "removed by the user"})
+            continue
+        if pid == "ewe.dock" and dock.get("enabled") is False:
+            skipped.append({"id": pid, "why": "desktop.dock.enabled is false"})
+            continue
+        d, m, problems = payload_find(pid)
+        if d is None or problems:
+            skipped.append({"id": pid, "why": problems[0]})
+            continue
+        dest = os.path.join(PLUGINS_DIR, pid)
+        if os.path.exists(dest) or os.path.islink(dest):
+            skipped.append({"id": pid, "why": "already installed"})
+            continue
+        install_from_payload(pid, enable=True)
+        migrated.append(pid)
+    _migrated_write(considered | set(pending))
+    restarted = restart_shell(bool(migrated) and "--no-restart" not in args, quiet=True)
+    print(json.dumps({"ok": True, "migrated": migrated, "skipped": skipped, "fresh": False, "restarted": restarted}))
+
+
 def main(argv):
     if not argv or argv[0] in ("-h", "--help", "help"):
         print(__doc__.strip())
@@ -1434,7 +1984,8 @@ def main(argv):
              "disable": cmd_disable, "update": cmd_update, "remove": cmd_remove,
              "validate": cmd_validate, "restore": cmd_restore,
              "create": cmd_create, "new": cmd_create, "dev": cmd_dev,
-             "place": cmd_place, "set": cmd_set, "get": cmd_get, "seed": cmd_seed}
+             "place": cmd_place, "set": cmd_set, "get": cmd_get, "seed": cmd_seed,
+             "install": cmd_install, "migrate": cmd_migrate}
     if verb == "path":
         print(PLUGINS_DIR)
         return 0
@@ -1444,7 +1995,7 @@ def main(argv):
     if verb not in verbs:
         die("unknown verb \"%s\" — try `ewe-plugin help`" % verb, 2)
     verbs[verb](args)
-    if verb in ("add", "enable", "disable", "update", "remove", "restore", "dev", "seed"):
+    if verb in ("add", "enable", "disable", "update", "remove", "restore", "dev", "seed", "install", "migrate"):
         # the keybinds file follows the enabled set — even on a no-op verb
         # (an already-enabled plugin, a seed with nothing new), so a shell
         # that lost the file gets it back
