@@ -35,6 +35,8 @@
 #   HS_PAYLOAD=<dir>             # that payload (default $EWE_PAYLOAD_PLUGINS, else this checkout's plugins/)
 #   HS_PLUGIN_DIRS=a:b           # add + enable these plugin directories too (fixtures)
 #   HS_NO_APPS=1                 # hide Komble/ewe-settings/ewe-sync: the in-shell fallbacks open
+#   HS_NO_SYSTEMCTL=1            # the nested shell sees a no-op systemctl (logged to $HS_WORK/systemctl.log):
+#                                # a flow that restarts ewe.service (Welcome's add-ons step) cannot reach the host's
 #   HS_SANDBOX=0                 # old behaviour: the live HOME and config
 #
 # PARALLEL RUNS: HS_WORK=<dir> gives a run its own state, sandbox and logs
@@ -244,6 +246,18 @@ except Exception: pass" 2>/dev/null)"
     done
     IFS="$IFS_OLD"
     qs_path="$pdir"
+  fi
+  # HS_NO_SYSTEMCTL=1: a systemctl shim first on the nested shell's PATH —
+  # `ewe-plugin install <id>` (without --no-restart, as Welcome's Finish runs
+  # it) would otherwise `systemctl --user restart ewe.service` on the HOST.
+  # The shim records the call and exits 0, so the log proves the request.
+  if [ "${HS_NO_SYSTEMCTL:-0}" = "1" ]; then
+    local sdir="$WORK/path-nosystemctl"
+    rm -rf "$sdir"; mkdir -p "$sdir"
+    printf '#!/bin/sh\necho "systemctl $*" >> "%s/systemctl.log"\nexit 0\n' "$WORK" > "$sdir/systemctl"
+    chmod +x "$sdir/systemctl"
+    : > "$WORK/systemctl.log"
+    qs_path="$sdir:$qs_path"
   fi
   ( sandbox_env
     export PATH="$qs_path"
