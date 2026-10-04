@@ -31,8 +31,12 @@
 #   HS_CONF=<file>               # use this ewe.conf instead (HS_SCHEME ignored)
 #   HS_WALLPAPER=<file>          # seed generated/wallpapers.conf (Overview/lock backdrop)
 #   HS_WELCOME=1                 # let the first-run Welcome screen appear
-#   HS_PLUGINS=1                 # seed the bundled plugins (plugins/) into the sandbox
+#   HS_PLUGINS=1                 # install every add-on of the payload into the sandbox
+#   HS_PAYLOAD=<dir>             # that payload (default $EWE_PAYLOAD_PLUGINS, else this checkout's plugins/)
+#   HS_PLUGIN_DIRS=a:b           # add + enable these plugin directories too (fixtures)
 #   HS_NO_APPS=1                 # hide Komble/ewe-settings/ewe-sync: the in-shell fallbacks open
+#   HS_NO_SYSTEMCTL=1            # the nested shell sees a no-op systemctl (logged to $HS_WORK/systemctl.log):
+#                                # a flow that restarts ewe.service (Welcome's add-ons step) cannot reach the host's
 #   HS_SANDBOX=0                 # old behaviour: the live HOME and config
 #
 # PARALLEL RUNS: HS_WORK=<dir> gives a run its own state, sandbox and logs
@@ -54,6 +58,14 @@ export AQ_DRM_DEVICES="${AQ_DRM_DEVICES:-/dev/dri/renderD128}"
 # the nested shell tests THIS checkout's ewe-plugin, not the installed one
 # (PluginHost.qml honours the override); reads real ~/.config/ewe/plugins
 export EWE_PLUGIN_TOOL="${EWE_PLUGIN_TOOL:-$REPO/bin/ewe-plugin}"
+# Every ewe-plugin call the driver makes goes through here: the sandbox HOME
+# (sandbox_env, set by the caller) and NEVER the host's compositor. The tool's
+# keybind writer runs `hyprctl reload` against $HYPRLAND_INSTANCE_SIGNATURE and
+# its placement verbs poke `qs ipc call plugins reload` at $WAYLAND_DISPLAY —
+# from here both are the user's LIVE session (2026-10-04: HS_PLUGINS reloaded
+# the live Hyprland). The nested compositor does not exist yet when the
+# sandbox is prepared, so there is nothing to point them at: unset both.
+plugin_tool() { env -u HYPRLAND_INSTANCE_SIGNATURE -u WAYLAND_DISPLAY "$EWE_PLUGIN_TOOL" "$@"; }
 mkdir -p "$WORK"
 SANDBOX="${HS_SANDBOX:-1}"
 SBHOME="$WORK/home"
@@ -103,15 +115,36 @@ sandbox_prepare() {
   ( sandbox_env
     "$REPO/bin/ewe-theme" build --json "$XDG_CONFIG_HOME/quickshell/theme-tokens.json" --css /dev/null >"$WORK/theme.log" 2>&1
   ) || die "ewe-theme build failed — see $WORK/theme.log"
-  # HS_PLUGINS=1: seed this checkout's bundled plugins (plugins/) into the
-  # sandbox, as ewe-setup does on a real machine, so their widgets and
-  # panels load. ewe-plugin writes only the sandbox ewe.conf (--no-hooks),
-  # and --no-restart keeps it off the HOST's ewe.service (systemctl --user
-  # is not sandboxed: without it, seeding restarts the live shell).
+  # HS_PLUGINS=1: install every add-on this checkout's payload carries
+  # (plugins/ + bundle.json) into the sandbox — `seed` alone puts in only
+  # the bundle's defaults (none since 0.25), so each id is `install`ed, which
+  # is what an upgrader's `migrate` or a Komble click does. ewe-plugin
+  # writes only the sandbox ewe.conf (--no-hooks), and --no-restart keeps it
+  # off the HOST's ewe.service (systemctl --user is not sandboxed: without
+  # it, seeding restarts the live shell). EWE_PAYLOAD_PLUGINS points the
+  # tool at the payload for every later verb too: HS_PAYLOAD=<dir>, else an
+  # EWE_PAYLOAD_PLUGINS already in the environment (an add-on agent's
+  # scratch payload), else this checkout's plugins/.
+  export EWE_PAYLOAD_PLUGINS="${HS_PAYLOAD:-${EWE_PAYLOAD_PLUGINS:-$REPO/plugins}}"
   if [ "${HS_PLUGINS:-0}" = "1" ]; then
     ( sandbox_env
-      "$REPO/bin/ewe-plugin" seed "$REPO/plugins" --no-restart >"$WORK/plugins.log" 2>&1
-    ) || die "ewe-plugin seed failed — see $WORK/plugins.log"
+      plugin_tool seed "$EWE_PAYLOAD_PLUGINS" --no-restart >"$WORK/plugins.log" 2>&1 || exit 1
+      for d in "$EWE_PAYLOAD_PLUGINS"/*/; do
+        [ -f "$d/manifest.json" ] || continue
+        plugin_tool install "$(basename "$d")" --no-restart >>"$WORK/plugins.log" 2>&1 || exit 1
+      done
+    ) || die "ewe-plugin seed/install failed — see $WORK/plugins.log"
+  fi
+  # HS_PLUGIN_DIRS=dir1:dir2: extra plugin directories (test fixtures such as
+  # tests/fixtures/plugins/acme.v3demo) copied in as hand-made plugins and
+  # enabled — the API 3 slots can then be screenshotted.
+  if [ -n "${HS_PLUGIN_DIRS:-}" ]; then
+    ( sandbox_env
+      IFS=: ; for d in $HS_PLUGIN_DIRS; do
+        [ -f "$d/manifest.json" ] || { echo "HS_PLUGIN_DIRS: no manifest in $d" >&2; exit 1; }
+        plugin_tool add "$d" --yes --enable --no-restart >>"$WORK/plugins.log" 2>&1 || exit 1
+      done
+    ) || die "ewe-plugin add (HS_PLUGIN_DIRS) failed — see $WORK/plugins.log"
   fi
   echo "sandbox: $SBHOME ($(python3 -c "import json,sys;j=json.load(open(sys.argv[1]));print(j['input']['scheme'])" "$SBHOME/.config/quickshell/theme-tokens.json"))"
 }
@@ -213,6 +246,18 @@ except Exception: pass" 2>/dev/null)"
     done
     IFS="$IFS_OLD"
     qs_path="$pdir"
+  fi
+  # HS_NO_SYSTEMCTL=1: a systemctl shim first on the nested shell's PATH —
+  # `ewe-plugin install <id>` (without --no-restart, as Welcome's Finish runs
+  # it) would otherwise `systemctl --user restart ewe.service` on the HOST.
+  # The shim records the call and exits 0, so the log proves the request.
+  if [ "${HS_NO_SYSTEMCTL:-0}" = "1" ]; then
+    local sdir="$WORK/path-nosystemctl"
+    rm -rf "$sdir"; mkdir -p "$sdir"
+    printf '#!/bin/sh\necho "systemctl $*" >> "%s/systemctl.log"\nexit 0\n' "$WORK" > "$sdir/systemctl"
+    chmod +x "$sdir/systemctl"
+    : > "$WORK/systemctl.log"
+    qs_path="$sdir:$qs_path"
   fi
   ( sandbox_env
     export PATH="$qs_path"

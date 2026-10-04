@@ -119,22 +119,17 @@ Scope {
         }
     }
 
-    // ── network state: VPN active → Globals.vpnActive, Wi-Fi connected → wifiUp,
-    //    wired (ethernet) connected → wiredUp (shown when no Wi-Fi, e.g. VMs) ──
+    // ── network state: Wi-Fi connected → wifiUp, wired (ethernet) connected →
+    //    wiredUp (shown when no Wi-Fi, e.g. VMs) ──
     //
     // This was a 5 s timer firing FOUR processes — ~170k spawns a day, of which
     // the wifi and wired ones ran the identical nmcli query and the keyboard one
     // duplicated an event we already receive. `nmcli monitor` is a single
     // long-lived process that prints a line whenever NetworkManager changes
-    // anything, so we now re-query only when the world actually moves.
+    // anything, so we now re-query only when the world actually moves. The
+    // VPN add-on (ewe.vpn) listens to Globals.netEpoch for its own state.
     property bool wifiUp: false
     property bool wiredUp: false
-    Process {
-        id: vpnProc
-        running: true                     // one read at startup; nmcli monitor drives the rest
-        command: ["sh", "-c", "nmcli -t -f TYPE,STATE connection show --active 2>/dev/null | awk -F: '($1 ~ /vpn|wireguard|tun/) && $2==\"activated\"{print \"yes\"; exit}'"]
-        stdout: StdioCollector { onStreamFinished: Globals.vpnActive = (this.text.trim() === "yes") }
-    }
     // one query answers both wifi and wired — they used to be two identical calls
     Process {
         id: devProc
@@ -149,7 +144,6 @@ Scope {
         }
     }
     function netRefresh() {
-        vpnProc.running = false; vpnProc.running = true
         devProc.running = false; devProc.running = true
         Globals.netEpoch++                  // Quick Settings re-reads its lists on this
     }
@@ -253,101 +247,8 @@ Scope {
         }
     }
 
-    // ── a BAR MODULE (design system: Bar → Module states) ────────────────
-    // barModule tall (28 / 32 / 40 by icon size), radiusPrimary, spaceS of
-    // side padding, no fill until you point at it. Default glyphs are
-    // textSecondary; hover takes surfaceHover and textPrimary, an open popup
-    // surfacePressed — inside Glass those are the glass tints, which
-    // Theme.barHoverFill / barActive already resolve.
-    //
-    // Declare content as children (they land centred in a Row, spaceXs
-    // apart); `glyph` alone draws one icon and is the common case.
-    component BarModule: Item {
-        id: si
-        property string glyph: ""
-        property color fg: Theme.textSecondary
-        property int fontPx: Theme.barIcon
-        property bool active: false      // its popup is open
-        // .ewe-barmod: spaceS of side padding (spaceS + spaceXs on the large
-        // bar); a glyph-only module has none and is just barModule square
-        property int padH: si.glyph !== "" ? 0 : Theme.barLarge ? Theme.spaceS + Theme.spaceXs : Theme.spaceS
-        // the workspace chip's mark: a spaceMd × borderWidth2 accent rule
-        // spaceXs above the chip's bottom edge, always on
-        property bool underline: false
-        default property alias content: inner.data
-        readonly property alias hovered: ma.containsMouse
-        // each module is a button named with its state (Bar card, Accessibility)
-        property string a11yName: ""
-        Accessible.role: Accessible.Button
-        Accessible.name: si.a11yName
-        signal activated()
-        signal secondary()
-        signal tertiary()
-        signal scrolled(real dy)
-        implicitWidth: Math.max(Theme.barModule, inner.implicitWidth + 2 * si.padH)
-        // barModule, or taller when its content is (a larger text size,
-        // Georgian) — the bar grows with it
-        implicitHeight: Math.max(Theme.barModule, inner.implicitHeight + 2 * Theme.spaceXxs)
-        height: implicitHeight
-        Rectangle {
-            anchors.fill: parent
-            radius: Theme.radiusPrimary
-            color: si.active ? Theme.barPressedFill
-                 : ma.containsMouse ? Theme.barHoverFill : "transparent"
-            Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
-        }
-        Row {
-            id: inner
-            anchors.centerIn: parent
-            spacing: Theme.spaceXs
-            Text {
-                visible: si.glyph !== ""
-                anchors.verticalCenter: parent.verticalCenter
-                text: si.glyph
-                color: ma.containsMouse && si.fg === Theme.textSecondary ? Theme.textPrimary : si.fg
-                font.family: Theme.fontIcons
-                font.pixelSize: si.fontPx
-                Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
-            }
-        }
-        Rectangle {
-            visible: si.underline
-            anchors.bottom: parent.bottom
-            anchors.bottomMargin: Theme.spaceXs
-            anchors.horizontalCenter: parent.horizontalCenter
-            width: Theme.spaceMd; height: Theme.borderWidth2
-            radius: Theme.borderWidth2
-            color: Theme.accent
-        }
-        MouseArea {
-            id: ma
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
-            acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
-            onClicked: function (m) {
-                if (m.button === Qt.RightButton) si.secondary()
-                else if (m.button === Qt.LeftButton) si.activated()
-            }
-            // middle-click fires on press — onClicked is unreliable for the
-            // middle button (wheel-press / trackpad taps often aren't "clicks").
-            onPressed: function (m) {
-                if (m.button === Qt.MiddleButton) si.tertiary()
-            }
-            onWheel: function (w) { si.scrolled(w.angleDelta.y) }
-        }
-    }
-
-    // ── the bar's own divider: borderWidth1 × iconMd, spaceXs each side ──
-    component BarSep: Item {
-        implicitWidth: Theme.borderWidth1 + 2 * Theme.spaceXs
-        implicitHeight: Theme.barLarge ? Theme.iconLg : Theme.iconMd
-        Rectangle {
-            anchors.centerIn: parent
-            width: Theme.borderWidth1; height: parent.height
-            color: Theme.barOutline
-        }
-    }
+    // BarModule and BarSep — the bar's module and divider — are their own
+    // files since API 3 (public to plugins, docs/PLUGINS.md).
 
     // ── one bar per monitor ───────────────────────────────────────────────
     Variants {
@@ -435,7 +336,7 @@ Scope {
                     // with a spaceMd × borderWidth2 accent underline spaceXs
                     // above its bottom edge. The underline is ALWAYS there: it
                     // is what says "this is where you are". Click toggles the
-                    // Overview; the full workspace list lives in the dock.
+                    // Overview; the full workspace list lives in the dock add-on.
                     BarModule {
                         id: wsChip
                         anchors.verticalCenter: parent.verticalCenter
@@ -480,14 +381,16 @@ Scope {
                     }
 
                     // third-party bar widgets whose manifest says defaultSection = left
-                    BarPluginSlots { section: "left"; anchors.verticalCenter: parent.verticalCenter }
+                    BarPluginSlots { section: "left"; screen: win.screen; barWindow: win; anchors.verticalCenter: parent.verticalCenter }
                 }
 
-                // ── CENTRE: no first-party module (workspace switching moved to the
-                //    bottom dock) — only plugin widgets that ask for the middle. ──
+                // ── CENTRE: no first-party module (workspace switching is the
+                //    Overview's and the dock add-on's) — only plugin widgets that ask
+                //    for the middle. ──
                 BarPluginSlots {
                     id: centerSlots
                     section: "center"
+                    screen: win.screen; barWindow: win
                     anchors.horizontalCenter: parent.horizontalCenter
                     anchors.verticalCenter: parent.verticalCenter
                     // yield on a narrow output instead of overlapping the clusters
@@ -572,7 +475,7 @@ Scope {
                             }
                         }
                         }
-                        BarPluginSlots { section: "right"; anchors.verticalCenter: parent.verticalCenter }
+                        BarPluginSlots { section: "right"; screen: win.screen; barWindow: win; anchors.verticalCenter: parent.verticalCenter }
                     }
 
                     // tiling ⇄ floating — the icon IS the state (grid = tiling,
@@ -683,9 +586,8 @@ Scope {
                             spacing: Theme.spaceS
 
                             // ORDER is the Bar card's, each shown only while it
-                            // applies: network busy → keep awake · casting ·
-                            // SSH · VPN → sync → notifications · mail ·
-                            // calendar · phone → wired/Wi-Fi · sound · mic ·
+                            // applies: network busy → sync → notifications ·
+                            // calendar → wired/Wi-Fi · sound · mic ·
                             // Bluetooth → power profile · battery.
                             // Metrics are uniform on purpose: every glyph is
                             // Theme.barIcon, every count a Badge, every figure
@@ -700,41 +602,8 @@ Scope {
                                 size: Theme.barIcon
                             }
 
-                            // ── toggler states ──
-                            // Insomnia / keep-awake — eye glyph, matches the CC toggle
-                            Text {
-                                visible: Globals.caffeine
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: Theme.icEye
-                                font.family: Theme.fontIcons; font.pixelSize: Theme.barIcon
-                                color: ctlGroup.ink
-                            }
-                            // Cast to TV — screencast glyph while a cast session exists;
-                            // accent = picture on glass, dim = still handshaking
-                            Text {
-                                visible: Globals.casting
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: Theme.icCast
-                                font.family: Theme.fontIcons; font.pixelSize: Theme.barIcon
-                                color: Globals.castState === "streaming" || Globals.castLegacy
-                                       ? Theme.barAccentText : ctlGroup.ink
-                            }
-                            // SSH tunnel (a Quick Settings port-forward is up)
-                            Text {
-                                visible: Globals.sshTunnelUp
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: Theme.icSsh
-                                font.family: Theme.fontIcons; font.pixelSize: Theme.barIcon
-                                color: ctlGroup.ink
-                            }
-                            // VPN (only when active)
-                            Text {
-                                visible: Globals.vpnActive
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: Theme.icVpn
-                                font.family: Theme.fontIcons; font.pixelSize: Theme.barIcon
-                                color: ctlGroup.ink
-                            }
+                            // (the add-ons' glyphs — Insomnia's eye, Cast, SSH, VPN,
+                            // phone, mail — are bar-status slots, after the built-ins)
 
                             // ewe-sync — the account app's state, so "is my
                             // stuff safe" is answerable from the bar. Hidden
@@ -781,14 +650,6 @@ Scope {
                                 color: Theme.barAccentText
                                 count: Globals.server ? Globals.server.trackedNotifications.values.length : 0
                             }
-                            // Mail (IMAP or Gmail) — envelope + count, only when there is unread mail
-                            BarIcon {
-                                visible: Mail.available && Mail.unread > 0
-                                anchors.verticalCenter: parent.verticalCenter
-                                glyph: Theme.icMail
-                                color: ctlGroup.ink
-                                count: Mail.unread
-                            }
                             // Calendar — an event is running or starts within the hour
                             Text {
                                 visible: bar.calSoon
@@ -796,31 +657,6 @@ Scope {
                                 text: Theme.icCalendar
                                 font.family: Theme.fontIcons; font.pixelSize: Theme.barIcon
                                 color: ctlGroup.ink
-                            }
-                            // Phone (KDE Connect) — only when paired + reachable;
-                            // battery % and an accent dot for unread phone notifications
-                            Row {
-                                visible: KdeConnect.connected
-                                anchors.verticalCenter: parent.verticalCenter
-                                spacing: Theme.spaceXs
-                                BarIcon {
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    glyph: Theme.icPhone
-                                    color: ctlGroup.ink
-                                    // the phone's own count is already on the
-                                    // phone — here it only has to say "unread"
-                                    count: KdeConnect.unreadCount
-                                    dotOnly: true
-                                }
-                                Text {
-                                    visible: KdeConnect.connected && KdeConnect.device.batteryCharge >= 0
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    text: KdeConnect.connected ? KdeConnect.device.batteryCharge + "%" : ""
-                                    font.family: Theme.type.label.family
-                                    font.pixelSize: Theme.barLarge ? Theme.fontSizeMd : Theme.fontSizeS
-                                    font.features: ({ "tnum": 1 })
-                                    color: ctlGroup.ink
-                                }
                             }
                             // Wired / ethernet (shown when a wired link is up and
                             // Wi-Fi isn't — the common case in VMs and on docks)
@@ -918,6 +754,33 @@ Scope {
                                     color: ctlGroup.ink
                                 }
                             }
+                            // ── plugin bar-status glyphs (API 3) — after every
+                            //    built-in, before the clock, in manifest order.
+                            //    Hidden under the same Top bar key as the
+                            //    plugin's bar widget (plugin:<id>); a glyph the
+                            //    plugin hides takes no space. ──
+                            Repeater {
+                                model: PluginHost.barStatus
+                                delegate: Loader {
+                                    id: statusSlot
+                                    required property var modelData
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    active: Globals.barShows("plugin:" + modelData.id)
+                                    // `shown` (a plain property), never item.visible — that reads back
+                                    // the EFFECTIVE visibility and would lock the slot hidden
+                                    visible: active && status === Loader.Ready && item && (item.shown === undefined || item.shown)
+                                    source: "file://" + modelData.entry
+                                    function feed() { PluginHost.inject(item, modelData.id, { screen: win.screen, barWindow: win, ink: ctlGroup.ink }) }
+                                    Component.onCompleted: Log.debug("plugins", "bar-status slot for", modelData.id)
+                                    onStatusChanged: {
+                                        if (status === Loader.Error) Log.warn("plugins", modelData.id + "/bar-status failed to load (see the qml error above)")
+                                        else if (status === Loader.Ready) { statusSlot.feed(); Log.debug("plugins", "bar-status", modelData.id, "ready", item.width + "x" + item.height, "shown", item.shown) }
+                                    }
+                                    Connections { target: ctlGroup; function onInkChanged() { if (statusSlot.status === Loader.Ready && statusSlot.item && ("ink" in statusSlot.item)) statusSlot.item.ink = ctlGroup.ink } }
+                                    Connections { target: PluginHost; function onSettingsChanged() { if (statusSlot.status === Loader.Ready) PluginHost._giveSettings(statusSlot.item, statusSlot.modelData.id) } }
+                                }
+                            }
+
                             // the clock — date and time inside the pill, so the
                             // one button holds every status indicator plus the
                             // time (Bar card #10). Tabular figures keep the

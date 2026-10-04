@@ -9,7 +9,7 @@ does not run blueman-applet (its tray icon duplicated the bar). So from the
 GUI every device that needed an answer failed silently. This is that agent.
 
 BtAgent.qml runs it as a Process and speaks newline-delimited JSON, the same
-shape as kdeconnect-bridge.py (dbus-python + GLib — both already in ewe's
+shape as logind-bridge.py (dbus-python + GLib — both already in ewe's
 package set):
 
   stdout → events   {"event": "request", "id": 3, "kind": "confirm", ...}

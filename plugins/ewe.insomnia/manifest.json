@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "id": "ewe.insomnia",
+  "name": "Insomnia",
+  "version": "1.0.0",
+  "apiVersion": 3,
+  "description": "Keeps the screen awake and stops sleep until you turn it off.",
+  "homepage": "https://github.com/prj786/ewe-plugin-insomnia",
+  "author": "prj786",
+  "icon": "icEye",
+  "category": "System",
+  "kinds": [
+    "service",
+    "quick-tile",
+    "bar-status"
+  ],
+  "entryPoints": {
+    "service": "Service.qml",
+    "quick-tile": "Tile.qml",
+    "bar-status": "Status.qml"
+  },
+  "quickTile": {
+    "span": 1,
+    "order": 10
+  },
+  "barStatus": {
+    "order": 10
+  },
+  "requires": {
+    "packages": [],
+    "commands": []
+  },
+  "settings": [
+    {
+      "key": "auto_off",
+      "type": "int",
+      "default": 0,
+      "min": 0,
+      "max": 1440,
+      "label": "Turn off after (minutes)"
+    }
+  ]
+}

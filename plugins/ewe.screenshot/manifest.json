@@ -2,9 +2,11 @@
   "schemaVersion": 1,
   "id": "ewe.screenshot",
   "name": "Screenshot",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "apiVersion": 2,
   "description": "A camera in the bar and the Print keys: region, screen or window to ~/Pictures/Screenshots, with a draggable preview stack.",
+  "icon": "icCamera",
+  "category": "Desktop",
   "homepage": "https://github.com/prj786/ewe-plugin-screenshot",
   "author": "prj786",
   "kinds": [

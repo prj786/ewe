@@ -181,7 +181,7 @@ lights up around it:
 | **restore** | a machine that signs in and finds a backup is offered it, out loud; your apps line up in Komble → For you |
 | **files** | the account mounted at `~/Nextcloud` (Files → sidebar); full folder sync, your machines and a tray are the account app, ewe-sync (below) |
 | **calendar** | CalDAV — the Control Center's calendar and reminders |
-| **mail** | any IMAP account (ewe-sync → Mail adds it; Settings → User shows it and its notification switch): unread badge, latest mail, new-mail notifications |
+| **mail** | any IMAP account (ewe-sync → Mail adds it): the **Mail add-on** (`ewe.mail`, Komble → Add-ons) shows the unread badge, the latest mail and new-mail notifications |
 
 Signing in is Nextcloud's own **Login Flow v2**: the browser opens your
 server's page, you sign in there (password, 2FA, SSO — whatever your server
@@ -209,15 +209,16 @@ and unlocks it with your login password — but a machine carrying an older
 
 ## Google (optional)
 
-Google is an extra, not the account: **Gmail** in the Control Center and
-**Google Drive** as `~/Google Drive`. ewe ships **no Google client** — to use
+Google is an extra, not the account: Google **Calendar** in the Control
+Center, **Google Drive** as `~/Google Drive`, and **Gmail** for the Mail
+add-on. ewe ships **no Google client** — to use
 it, create your own OAuth client of type *Desktop app* (Gmail + Drive APIs)
 and save it as `~/.config/ewe/oauth-client.json`
 ([GOOGLE-CLIENT.md](GOOGLE-CLIENT.md)); **ewe-sync → Google** says whether
 the file parses and connects the account. A personal client needs no Google verification — the
 consent screen shows a warning you click through once. Settings sync never
 uses Google; an IMAP mail account, when set up, takes precedence over Gmail
-in the Control Center.
+in the Mail add-on.
 
 ## VPN
 
@@ -232,14 +233,16 @@ connection". Re-running `install.sh` (or `install.sh --check-only` to just
 look) swaps the backend and flips the policy. Add a VPN in **Settings → Network → Add VPN** — an
 L2TP one from its four facts, an OpenVPN or WireGuard one from its file —
 or import from a terminal (`nmcli connection import type openvpn file
-x.ovpn`). Then toggle it in the **Control Center → VPN** card. The first
-connect asks for the credentials once, inline, and keeps them in the
+x.ovpn`). Then toggle it in the **Control Center → VPN** card — the **VPN
+add-on** (`ewe.vpn`, Komble → Add-ons; Settings → Network works without it).
+The first connect asks for the credentials once, inline, and keeps them in the
 profile (root-only, under `/etc/NetworkManager`); the one file records the
 definition, never the secrets, so a restored machine asks once again.
 
-## Phone (KDE Connect, optional)
+## Phone (KDE Connect, optional) — an add-on
 
-The control centre has a **Mobile** card that pairs your Android phone through
+The **Phone add-on** (`ewe.phone`, Komble → Add-ons) gives the control centre
+a **Mobile** card that pairs your Android phone through
 **KDE Connect's daemon** (only the daemon — the UI is all ewe): device
 discovery + pairing (both directions), phone battery in the bar, the phone's
 notifications (read, dismiss, inline-reply), and **SMS** — full conversation
@@ -249,16 +252,17 @@ Setup: `kdeconnect` is in the package set (phase 20); install the KDE Connect
 app on the phone ([F-Droid](https://f-droid.org/packages/org.kde.kdeconnect_tp/)
 / Play Store), put both devices on the same Wi-Fi, open the Mobile card and tap
 **Pair** — accept on the phone, then grant the app's notification/SMS
-permissions there. `kdeconnectd` is started by autostart and D-Bus-activated on
-demand; the shell talks to it through
-`dotfiles/quickshell/scripts/kdeconnect-bridge.py`. Pairing keys stay in
-kdeconnectd; the shell only persists which notifications you've seen and the
-chosen device. MMS bodies often aren't exposed over D-Bus — threads label them
+permissions there. The add-on D-Bus-activates `kdeconnectd` on demand and
+talks to it through its own `kdeconnect-bridge.py`. Pairing keys stay in
+kdeconnectd; the add-on only persists which notifications you've seen and the
+chosen device (`~/.config/quickshell/kdeconnect-state.json`). MMS bodies often aren't exposed over D-Bus — threads label them
 instead of showing garbage.
 
-## Cast to TV (screen mirroring)
+## Cast to TV (screen mirroring) — an add-on
 
-The control centre has a **Cast** tile (also `Super+Shift+C`) that mirrors the
+The **Cast add-on** (`ewe.cast`, Komble → Add-ons; the system side — avahi,
+the Wi-Fi power-save hook, the packages — is installed for everyone) gives the
+control centre a **Cast** tile (also `Super+Shift+C`) that mirrors the
 desktop to a smart TV. It runs **`gnome-network-displays`** (AUR, phase 20),
 the one app that speaks both protocols a TV may offer, and captures the screen
 through the xdg-desktop-portal ScreenCast — the Hyprland portal — so it works
@@ -275,8 +279,8 @@ Turning the tile on launches the app: its window lists the TVs it can see, you
 pick one, and the TV asks you to accept. Closing that window (or toggling the
 tile off, which SIGTERMs the app so the session ends cleanly) stops the
 mirror; the tile and the bar's screencast glyph follow the process, not the
-other way round. The first toggle of a session runs
-`hypr/scripts/cast-check.sh`, which toasts anything missing together with the
+other way round. The first toggle of a session runs the add-on's
+`cast-check.sh`, which toasts anything missing together with the
 fix (`paru -S gnome-network-displays`, `sudo pacman -S iw`,
 `sudo systemctl enable --now avahi-daemon`); a missing app is the only fatal
 case — a Chromecast-only or Miracast-only setup still launches.
@@ -305,7 +309,7 @@ debug output is kept in `~/.local/state/ewe/cast.log`; for the raw story run
 a screen share for good the first time the consumer returns a buffer late —
 on the TV that's a static image, or a connect that drops after ~10 s. The
 three upstream fixes (#422/#424/#425) landed after the release, so phase 20
-builds **`xdg-desktop-portal-hyprland 1.4.1-1.1`** from `packages/patched/`
+builds **`xdg-desktop-portal-hyprland 1.4.1-2.1`** from `packages/patched/`
 (Arch's PKGBUILD + the patches; it retires itself once the repos ship newer).
 For quality, `gst-plugin-va` gives hardware H.264 (the app prefers it), and
 phase 30 sets the Wi-Fi regulatory domain so Wi-Fi Direct may use 5 GHz —
@@ -522,7 +526,7 @@ Set expectations before you daily-drive it:
 - **Low battery is handled automatically:** a warning at 20% and 10%, and a
   **suspend at 5%** to protect unsaved work.
 - **The shell auto-respawns.** Quickshell runs as a `Restart=on-failure`
-  systemd user service, so a crash brings the bar/dock/lock back on its own.
+  systemd user service, so a crash brings the bar, lock and add-ons back on their own.
   The lock uses the Wayland session-lock protocol, so outputs stay locked even
   if the shell dies while locked.
 - **The session lock is a young component**, not battle-tested hyprlock. It

@@ -46,6 +46,8 @@ QtObject {
         // step and clear busy, or the NEXT wake would be ignored as "already
         // running" and never refresh its tokens.
         function onAboutToSleep() {
+            // plugins (API 3) hear it from Shell, so none of them needs Logind
+            Shell.aboutToSleep()
             if (!rs.busy) return
             rs._netStep.stop()
             rs.busy = false
@@ -77,21 +79,25 @@ QtObject {
 
         // 3. displays — the dock state can have changed while asleep, which no
         //    hotplug event will tell us about because we were not running to
-        //    hear it. reassert(false) re-queries first and only corrects real
-        //    drift, so this is cheap when nothing moved. Wake is GUARDED
-        //    (wakeIfAsleep: dpms-on only for outputs reporting dpms-off) — the
-        //    old unconditional dpms("on") here cycled already-lit panels and
-        //    produced a visible blink on every keyboard wake. The lid-open
-        //    "powered but dark" xe failure keeps its unconditional insurance in
-        //    Lid.qml, which is the path where that failure actually occurs.
+        //    hear it. reassert(false) re-reads the LID from ACPI first (the
+        //    cached flag is stale after a hibernate: it still says closed while
+        //    the person has just opened it, and a re-assert on that disabled
+        //    the panel they were looking at), then re-queries the monitors and
+        //    touches only the outputs that actually drifted — so this is free
+        //    when nothing moved. Wake is GUARDED (wakeIfAsleep: dpms-on only
+        //    for outputs reporting dpms-off) — the old unconditional dpms("on")
+        //    cycled already-lit panels and produced a visible blink on every
+        //    wake. Nothing in the shell issues an unconditional dpms-on any
+        //    more except Reset displays, which the user presses on purpose.
         Log.info("resume", "3/6 displays")
         HyprMon.wakeIfAsleep()
         HyprMon.reassert(false)
 
         // 4. bridges — a helper whose bus connection died does not necessarily
-        //    exit; it can sit there looking alive and reporting nothing.
+        //    exit; it can sit there looking alive and reporting nothing. The
+        //    shell's own bridges (logind, bluez) re-arm themselves; the add-ons
+        //    that run one (the phone) probe theirs on Shell.resumed() below.
         Log.info("resume", "4/6 bridge liveness")
-        KdeConnect.probeLiveness()
 
         // 5+6 need the network, which is very unlikely to be up yet.
         rs._netStep.restart()
@@ -111,7 +117,9 @@ QtObject {
             Log.info("resume", "6/6 accounts")
             Cloud.refreshAfterResume()
             Google.refreshAfterResume()
-            Mail.refreshAfterResume()
+            // Shell.resumed (API 3): the plugins' turn — the phone and mail
+            // add-ons refresh their bridges and inboxes here.
+            Shell.resumed()
 
             rs.busy = false
             Log.info("resume", "=== wake sequence done ===")

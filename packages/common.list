@@ -16,7 +16,7 @@ libsecret               # secret-tool — Google refresh token lives in the keyr
 kdeconnect              # phone integration daemon (Quick Settings "Mobile" card drives it over D-Bus)
 accountsservice         # user icon store (greeter avatar; Settings writes it via busctl)
 plocate                 # launcher file search (Super+D); phase 30 enables the updatedb timer
-python-dbus             # kdeconnect-bridge.py + logind-bridge.py (D-Bus side)
+python-dbus             # logind-bridge.py, bt-agent.py and the phone add-on's kdeconnect-bridge.py (D-Bus side)
 python-gobject          # those two bridges' GLib loop (also the optional EDS helper)
 qt5-wayland
 qt6-wayland
@@ -58,8 +58,8 @@ networkmanager-l2tp     # L2TP/IPsec profiles (server + user + password + PSK �
                         # The IPsec half is libreswan (aur.list), NOT strongswan: strongSwan 6.1 (Arch, 2026-09)
                         # dropped IKEv1 at build time and L2TP/IPsec is IKEv1-only — every profile died with
                         # "The VPN service failed to start" (charon: "IKE version 1 not supported").
-# Cast to TV (the control-centre "Cast" tile → gnome-network-displays, aur.list):
-iw                      # `iw list` — cast-check.sh verifies the Wi-Fi card does Wi-Fi Direct (P2P), which Miracast needs
+# Cast to TV (the ewe.cast add-on's "Cast" tile → gnome-network-displays, aur.list; deps stay here, D7):
+iw                      # `iw list` — the add-on's cast-check.sh verifies the Wi-Fi card does Wi-Fi Direct (P2P), which Miracast needs
 avahi                   # mDNS — Chromecast / Google TV discovery (phase 30 enables avahi-daemon)
 wireless-regdb          # regulatory database; phase 30 sets the country. Without it the kernel runs the
                         # "world" domain: 5 GHz is receive-only, so hotspot / Wi-Fi Direct (Miracast) are

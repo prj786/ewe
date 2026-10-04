@@ -33,7 +33,8 @@ cat > "$SHORTCUTS" <<'J'
 [{"name":"com.onepassword.OnePassword:CDEEB48EE23AC5C54505DF91D419005F-Ctrl+Shift+Space","description":"1Password shortcut: Ctrl+Shift+Space"},
  {"name":"com.onepassword.OnePassword:9BB2FCB8F35F90E3434FCDE6A83B923B-","description":"1Password shortcut: "},
  {"name":"com.discordapp.Discord:0123456789ABCDEF0123456789ABCDEF-Super+D","description":"push to talk"},
- {"name":"obs:hotkey_start","description":"OBS start recording"}]
+ {"name":"obs:hotkey_start","description":"OBS start recording"},
+ {"name":"ewe:overview","description":"Toggle the Overview"}]
 J
 # ewe already binds Super+D (modmask 64, key D)
 echo '[{"modmask":64,"key":"D","dispatcher":"__lua","arg":"9"}]' > "$BINDS"
@@ -42,6 +43,7 @@ run bin/ewe-globalshortcuts sync
 check "sync ok" "grep -q '\"ok\": true' \"\$OUT\""
 check "1Password bound, Discord (Super+D taken) and OBS skipped" "grep -q '\"bound\": 1' \"\$OUT\" && grep -q 'already bound in ewe' \"\$OUT\" && grep -q 'not an Electron-style' \"\$OUT\""
 check "empty trigger explained" "grep -q 'no key assigned' \"\$OUT\""
+check "the shell's own ewe: shortcut is ignored, not reported" "! grep -q 'ewe:overview' \"\$OUT\""
 check "generated lua has the bind" "grep -q 'hl.bind(\"CTRL + SHIFT + Space\", hl.dsp.global(\"com.onepassword.OnePassword:CDEEB48EE23AC5C54505DF91D419005F-Ctrl+Shift+Space\"))' '$GEN'"
 check "applied live once" "[ \"\$(grep -c 'hl.bind' \"\$EVALS\")\" = 1 ]"
 

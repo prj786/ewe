@@ -153,7 +153,7 @@ elif command -v swayidle >/dev/null 2>&1 && ! pgrep -x swayidle >/dev/null 2>&1;
         before-sleep "$LOCK" >/dev/null 2>&1 &
 fi
 
-# ── User startup applications (Settings → Startup) + kdeconnectd — launched in
+# ── User startup applications (Settings → Startup) — launched in
 # a detached waiter that first blocks (max ~20 s) until the Quickshell bar owns
 # org.kde.StatusNotifierWatcher. Launching earlier has TWO silent failure
 # modes: tray apps register no icon (no watcher on the bus yet → the icon never
@@ -177,15 +177,6 @@ fi
         jq -r '.apps[] | select(.enabled != false) | .exec' "$SAPPS" 2>/dev/null | while IFS= read -r cmd; do
             [ -n "$cmd" ] && sh -c "$cmd" >/dev/null 2>&1 &
         done
-    fi
-
-    # KDE Connect daemon (phone integration — Quick Settings "Mobile" card).
-    # Hyprland doesn't process XDG autostart, so start it here; the shell's
-    # bridge can also D-Bus-activate it on demand.
-    if command -v kdeconnectd >/dev/null 2>&1; then
-        run_once kdeconnectd kdeconnectd
-    elif [ -x /usr/lib/kdeconnectd ]; then
-        run_once kdeconnectd /usr/lib/kdeconnectd
     fi
 ) >/dev/null 2>&1 &
 

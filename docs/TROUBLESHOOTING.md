@@ -2,7 +2,9 @@
 
 ## Cast to TV: frozen picture, lag, or the TV drops after ~10 s
 
-What the 2026-08-21 investigation found, in the order it bit:
+(Cast is the `ewe.cast` add-on since 0.25 — Komble → Add-ons; the system
+side below is installed for everyone.) What the 2026-08-21 investigation
+found, in the order it bit:
 
 1. **Capture freezes for good (static image on the TV, or the TV connects and
    drops ~10 s later because no frames ever arrive).** xdg-desktop-portal-
@@ -12,7 +14,7 @@ What the 2026-08-21 investigation found, in the order it bit:
    screencopy` → `tried scheduling on already scheduled cb` and then never
    asks the compositor for another frame. Upstream fixed it after the release
    (commits #422/#424/#425). ewe ships them as **`xdg-desktop-portal-hyprland
-   1.4.1-1.1`** from `packages/patched/` (phase 20 builds it; it retires
+   1.4.1-2.1`** from `packages/patched/` (phase 20 builds it; it retires
    itself once the repos ship something newer). Check with
    `pacman -Q xdg-desktop-portal-hyprland` and
    `journalctl --user -u xdg-desktop-portal-hyprland | grep -c "Out of buffers"`.
@@ -39,8 +41,8 @@ What the 2026-08-21 investigation found, in the order it bit:
    `iw dev wlan0 get power_save` should read `off` while casting.
 4. **No sound on the TV (audio stays on the laptop).** gnome-network-displays
    makes a null sink (`gnome_network_displays_*`) and streams *its* monitor, but
-   never moves your audio into it. ewe's `hypr/scripts/cast-audio.sh` (started by
-   Cast.qml while casting) makes that sink the default and moves live streams
+   never moves your audio into it. The add-on's `cast-audio.sh` (started
+   while casting) makes that sink the default and moves live streams
    onto it, restoring your speakers when casting stops. If sound doesn't follow,
    check `pactl get-default-sink` names the `gnome_network_displays` sink while
    casting; set it by hand in `pavucontrol` → Playback / Output Devices if not.
@@ -52,8 +54,8 @@ What the 2026-08-21 investigation found, in the order it bit:
    `supplicant-timeout` with no GO-negotiation lines = the TV wasn't listening
    (open Source → Screen Mirroring on it first).
 
-Run `~/.config/hypr/scripts/cast-check.sh` any time — it checks all of the
-above and prints the fix for each.
+Run the add-on's `cast-check.sh` (`~/.config/ewe/plugins/ewe.cast/`) any
+time — it checks all of the above and prints the fix for each.
 
 ## Sign-in: no keyring prompt, "keyring not showing up"
 

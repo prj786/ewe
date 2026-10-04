@@ -3,7 +3,7 @@
 
 Quickshell has no generic QML D-Bus client, so this long-lived helper owns ALL
 org.freedesktop.login1 traffic (dbus-python + GLib main loop — the same deps
-kdeconnect-bridge.py already needs). Logind.qml runs it as a Process and speaks
+bt-agent.py already needs). Logind.qml runs it as a Process and speaks
 newline-delimited JSON:
 
   stdout → events   {"event": "...", ...}   (signal relays, state pushes)
@@ -116,7 +116,15 @@ class Bridge:
             sub(self.on_session_props, dbus_interface=PROPS, signal_name="PropertiesChanged",
                 bus_name=SERVICE, path=self.session_path)
 
-        GLib.io_add_watch(sys.stdin, GLib.PRIORITY_DEFAULT, GLib.IO_IN | GLib.IO_HUP, self.on_stdin)
+        # stdin is read raw (os.read into a buffer), not with readline(): one
+        # wakeup can carry SEVERAL commands, and readline() took exactly one
+        # per wakeup. Lock.qml sends setLockedHint and sleepReady back-to-back,
+        # so sleepReady sat in Python's buffer with no wakeup left to fetch it
+        # — every lid-close suspend waited out the full delay timeout, and a
+        # lid reopened inside that window still went down (2026-10-04).
+        self.inbuf = b""
+        self.stdin_fd = sys.stdin.fileno()
+        GLib.io_add_watch(self.stdin_fd, GLib.PRIORITY_DEFAULT, GLib.IO_IN | GLib.IO_HUP, self.on_stdin)
 
     # ── objects ─────────────────────────────────────────────────────────────
     def manager(self):
@@ -298,24 +306,42 @@ class Bridge:
 
     # ── commands from QML ───────────────────────────────────────────────────
     def on_stdin(self, source, condition):
-        if condition & GLib.IO_HUP:
-            self.loop.quit()
-            return False
-        line = sys.stdin.readline()
-        if line == "":
-            self.loop.quit()
-            return False
+        """One wakeup: drain what is readable, handle EVERY complete line.
+
+        HUP is not acted on until the read returns nothing — a HUP can arrive
+        together with the shell's last command, and that command still counts."""
         try:
-            c = json.loads(line)
-        except ValueError:
+            chunk = os.read(self.stdin_fd, 65536)
+        except BlockingIOError:
             return True
+        except OSError:
+            chunk = b""
+        if not chunk:                       # EOF: the shell is gone
+            if self.inbuf.strip():
+                self.dispatch(self.inbuf)   # an unterminated last line still counts
+                self.inbuf = b""
+            self.loop.quit()
+            return False
+        self.inbuf += chunk
+        while b"\n" in self.inbuf:
+            line, self.inbuf = self.inbuf.split(b"\n", 1)
+            self.dispatch(line)
+        return True
+
+    def dispatch(self, raw):
+        """One command line → handle(); a bad line is skipped, never fatal."""
+        try:
+            c = json.loads(raw.decode("utf-8", "replace"))
+        except ValueError:
+            return
+        if not isinstance(c, dict):
+            return
         try:
             self.handle(c)
         except dbus.DBusException as e:
             emit({"event": "error", "cmd": c.get("cmd", "?"), "error": e.get_dbus_message()})
         except Exception as e:      # never die on a bad command
             emit({"event": "error", "cmd": c.get("cmd", "?"), "error": str(e)})
-        return True
 
     def handle(self, c):
         cmd = c.get("cmd", "")

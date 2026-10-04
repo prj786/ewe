@@ -78,6 +78,18 @@ if [ -x "$EWE_CONF_BIN" ]; then
 fi
 export DRY_RUN ASSUME_YES NO_PACKAGES GAMING DEV COEXIST EWE_CONF_BIN
 
+# Was ewe already on this account? Decided HERE, before phase 50 deploys the
+# dotfiles and creates ~/.config/ewe/ewe.conf itself — phase 60 needs the
+# answer to migrate the add-ons an upgrader had as built-in features (plan
+# D3) and to install none on a fresh machine. ewe.conf (RFC-001) or an
+# earlier deploy's user-theme.json counts; the repo being re-run from the
+# same checkout does not matter.
+EWE_PREVIOUS=0
+{ [ -e "${XDG_CONFIG_HOME:-$HOME/.config}/ewe/ewe.conf" ] \
+  || [ -e "${XDG_CONFIG_HOME:-$HOME/.config}/quickshell/user-theme.json" ] \
+  || [ -e "$HOME/.local/share/ewe/VERSION" ]; } && EWE_PREVIOUS=1
+export EWE_PREVIOUS
+
 # A fixed per-run timestamp for backups (passed without Date.now-style drift).
 RUN_STAMP="$(date -u +%Y%m%d-%H%M%S 2>/dev/null || echo manual)"
 export RUN_STAMP

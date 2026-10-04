@@ -4,7 +4,7 @@ import Quickshell
 import Quickshell.Io
 
 // BtAgent — the desktop's Bluetooth PAIRING agent. Owns the bridge process
-// (scripts/bt-agent.py, NDJSON over stdio — the KdeConnect pattern) that
+// (scripts/bt-agent.py, NDJSON over stdio — the pattern the phone add-on’s bridge uses too) that
 // registers as bluez's default org.bluez.Agent1, and the one `request` the
 // BtPairing dialog renders. Device STATE still comes from Quickshell.Bluetooth
 // (Bar, Quick Settings); this singleton only answers questions and runs the
