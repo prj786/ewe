@@ -156,13 +156,27 @@ Scope {
                     fillMode: Image.PreserveAspectCrop
                     asynchronous: true
                     cache: true
-                    sourceSize: Qt.size(surf.width, surf.height)
+                    // Decoded at the SCREEN's size, never the surface's — the
+                    // Overview's key, which Wallpaper.qml warms at shell start.
+                    // Bound to surf.width/height, every resize of the lock
+                    // surface (each monitor re-enable or scale change on a lid
+                    // open did one) re-keyed Qt's pixmap cache, re-decoded the
+                    // wallpaper and, while it decoded, dropped the blur below
+                    // to the black ground: one more blink before the password.
+                    sourceSize: surf.screen ? Qt.size(surf.screen.width, surf.screen.height) : Qt.size(0, 0)
                     visible: false
+                    // keep the last good frame up while a reload is in flight;
+                    // only a real failure (or no wallpaper) shows the ground
+                    property bool hasFrame: false
+                    onStatusChanged: {
+                        if (status === Image.Ready) hasFrame = true
+                        else if (status === Image.Error || status === Image.Null) hasFrame = false
+                    }
                 }
                 MultiEffect {
                     anchors.fill: parent
                     source: wallImg
-                    visible: wallImg.status === Image.Ready
+                    visible: wallImg.hasFrame
                     blurEnabled: true
                     blurMax: 2 * Theme.blurGlass
                     blur: 0.75
