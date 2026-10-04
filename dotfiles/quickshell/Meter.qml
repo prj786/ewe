@@ -13,7 +13,7 @@ import QtQuick
 // `segmented` draws the ten equal segments quick settings uses for the
 // battery. The thresholds are per resource — a battery is critical BELOW
 // 10%, so its caller passes its own.
-//     Meter { label: "CPU"; glyph: Theme.icCpu; value: Globals.cpuUsage }
+//     Meter { label: "CPU"; glyph: Theme.icCpu; value: cpuUsage }   // 0..1 (the sysmon add-on samples it)
 Column {
     id: m
     property string label: ""

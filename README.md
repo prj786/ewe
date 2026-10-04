@@ -97,16 +97,22 @@ Then reboot, pick **Ewe** at the greeter, and you're in —
 - **Curated GTK app set** — Nemo, Engrampa, imv, Zathura, mpv, kitty, Zed:
   borderless under Hyprland, defaults managed in one `mimeapps.list`.
 - **Komble + ewe-settings** — first-party software manager and settings app.
-- **Plugins** — `ewe-plugin add <git-url>` drops third-party bar widgets, panels and services into the shell ([docs/PLUGINS.md](docs/PLUGINS.md)).
-- **Optional Google account** — calendar, Gmail unread + notifications, settings
-  sync to Drive, and your Drive mounted as a folder. One consent screen for every
-  ewe app, native OAuth, no GNOME Online Accounts ([RFC-002](docs/RFC-002-broker-and-sync.md)).
-- **Optional phone link** — KDE Connect's daemon driven from the shell: phone
-  battery, notifications and SMS from the control centre.
-- **Cast to TV** — a control-centre card mirrors the desktop to a Samsung
-  (Miracast) or Chromecast/Google TV, served by ewe's own headless daemon
-  ([ewe-cast](https://github.com/prj786/ewe-cast)) — no foreign window — with
-  ewe's share picker (live previews, real display names) for every screen-share.
+- **Plugins and add-ons** — `ewe-plugin add <git-url>` drops third-party bar
+  widgets, panels and services into the shell; ewe's own extras ship as
+  **add-ons** in the payload, installed in one click from Komble → Add-ons
+  ([docs/PLUGINS.md](docs/PLUGINS.md)): the **dock**, the clipboard history,
+  screenshots, the password picker, **Insomnia** (keep awake), the system
+  monitor, **SSH** and **VPN** tiles, the **music** player, **Places**, the
+  **phone link** (KDE Connect's daemon driven from the shell: battery,
+  notifications, SMS), **mail** (any IMAP account or Gmail: unread badge,
+  latest mail, notifications) and **Cast to TV** (Miracast / Chromecast,
+  served by ewe's own headless daemon [ewe-cast](https://github.com/prj786/ewe-cast)).
+  Nothing of this is installed on a fresh machine; an upgrade keeps what you had.
+- **Optional Google account** — calendar, Google Drive as a folder, and Gmail
+  for the mail add-on. One consent screen for every ewe app, native OAuth, no
+  GNOME Online Accounts ([RFC-002](docs/RFC-002-broker-and-sync.md)).
+- **Share picker** — ewe's own portal picker (live previews, real display
+  names) for every screen-share: browser calls, OBS, recorders, casting.
 
 ## The CLI
 

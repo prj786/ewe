@@ -22,9 +22,12 @@ ewe-plugin disable acme.weather
 Preinstalled is the shell core (bar, launcher, Overview, the Quick settings
 basics, notifications, lock, OSD, polkit, Welcome), ewe-settings, Komble and
 ewe-sync. Everything else — the clipboard history, screenshots, the password
-picker, and from 0.25 the features that leave the shell (Insomnia, the system
-monitor, SSH, VPN, music, Places, phone, mail, cast, the dock) — is an
-**add-on**: a first-party plugin that
+picker, and from 0.25 the features that left the shell (Insomnia, the system
+monitor, SSH, VPN, music, Places, phone, mail, cast, the dock — none of them
+is in the core any more; their legacy IPC targets `cast launcher places
+player mail` and Quick settings keys `ssh vpn mobile mail cast` are the
+add-ons' `ipcAliases` / `quickPage.key`) — is an **add-on**: a first-party
+plugin that
 
 - **ships inside the ewe payload** (`plugins/<id>/`, vendored from its own
   repository `prj786/ewe-plugin-<name>` by `scripts/vendor-plugins.sh`,
