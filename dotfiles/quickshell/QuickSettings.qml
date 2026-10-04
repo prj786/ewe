@@ -761,9 +761,17 @@ Scope {
                     width: flick.width
                     spacing: panel.pad
 
-                    // ═══ HOME: the tile grid — a tile's body toggles, its
-                    //     details zone opens the matching page ═══
-                    Row {
+                    // ═══ HOME: ONE grid of tiles — a tile's body toggles, its
+                    //     details zone opens the matching page. The built-ins
+                    //     (Wi-Fi, Bluetooth, Do not disturb) come first, then the
+                    //     add-ons' quick-tiles (API 3) in manifest order, flowing
+                    //     two per row (span 1) or a whole row (span 2) — so Do
+                    //     not disturb pairs with the first add-on tile instead of
+                    //     sitting alone. VPN, SSH, Insomnia, Cast and the CPU /
+                    //     memory meters are add-ons (ewe.vpn, ewe.ssh,
+                    //     ewe.insomnia, ewe.cast, ewe.sysmon). ═══
+                    Flow {
+                        id: homeGrid
                         visible: root.tab === "home"
                         width: parent.width; spacing: Theme.spaceS
                         Tile {
@@ -799,26 +807,13 @@ Scope {
                             onClicked: if (Bluetooth.defaultAdapter) Bluetooth.defaultAdapter.enabled = !Bluetooth.defaultAdapter.enabled
                             onMenu: root.setTab("bt")
                         }
-                    }
-                    // (VPN and SSH are the ewe.vpn / ewe.ssh add-ons' quick-tiles and pages)
-                    Row {
-                        visible: root.tab === "home"
-                        width: parent.width; spacing: Theme.spaceS
                         Tile {
                             ic: Theme.icDnd; label: "Do not disturb"; active: Globals.dnd
                             sub: Globals.dnd ? "On" : "Off"
                             onClicked: Globals.dnd = !Globals.dnd
                         }
-                        // (Insomnia — keep awake — is the ewe.insomnia add-on's quick-tile)
-                    }
-                    // (the CPU / memory meters are the ewe.sysmon add-on's span-2 quick-tile)
-                    // ═══ plugin tiles (API 3 quick-tile): after the built-ins,
-                    //     two per row (span 1) or the whole row (span 2), in
-                    //     manifest order. The host sizes the Loader; the
-                    //     plugin fills a Tile. ═══
-                    Flow {
-                        visible: root.tab === "home" && PluginHost.quickTiles.length > 0
-                        width: parent.width; spacing: Theme.spaceS
+                        // the add-ons' tiles: the host sizes the Loader (half the
+                        // row, or all of it for span 2); the plugin fills a Tile
                         Repeater {
                             model: PluginHost.quickTiles
                             delegate: Loader {
