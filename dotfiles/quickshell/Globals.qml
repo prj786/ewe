@@ -53,7 +53,6 @@ QtObject {
     property bool vpnActive: false         // any VPN connection up (bar shows a VPN glyph)
     property string netBusy: ""            // "wifi" | "vpn" while a connection attempt runs (bar spinner)
     property int netEpoch: 0               // bumped by the bar on every NetworkManager event (nmcli monitor) — panels re-read on change
-    property bool sshTunnelUp: false       // any background ssh -f -N tunnel from Quick Settings is up (bar shows a console glyph)
     // ── Cast to TV (RFC-004: ewe-castd owns the protocols, Cast.qml owns the
     //    socket, this is the shared truth the tile/bar/card all render) ──
     property string castState: "idle"      // idle·picking·connecting·waiting·negotiating·starting·streaming·error

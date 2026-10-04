@@ -592,7 +592,7 @@ Scope {
 
                             // ORDER is the Bar card's, each shown only while it
                             // applies: network busy → casting ·
-                            // SSH · VPN → sync → notifications · mail ·
+                            // VPN → sync → notifications · mail ·
                             // calendar · phone → wired/Wi-Fi · sound · mic ·
                             // Bluetooth → power profile · battery.
                             // Metrics are uniform on purpose: every glyph is
@@ -619,14 +619,6 @@ Scope {
                                 font.family: Theme.fontIcons; font.pixelSize: Theme.barIcon
                                 color: Globals.castState === "streaming" || Globals.castLegacy
                                        ? Theme.barAccentText : ctlGroup.ink
-                            }
-                            // SSH tunnel (a Quick Settings port-forward is up)
-                            Text {
-                                visible: Globals.sshTunnelUp
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: Theme.icSsh
-                                font.family: Theme.fontIcons; font.pixelSize: Theme.barIcon
-                                color: ctlGroup.ink
                             }
                             // VPN (only when active)
                             Text {

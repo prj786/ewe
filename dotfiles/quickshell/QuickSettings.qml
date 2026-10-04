@@ -23,7 +23,7 @@ import Quickshell.Bluetooth
 //            OutCubic, and nothing moves under Reduce motion
 //   rail     the collapsed Side navigation: the sheep mark, then one
 //            controlLg × controlMd item per page (home, Wi-Fi, Bluetooth,
-//            sound, VPN, SSH, Cast, Mobile, Mail, Calendar, Notifications) on
+//            sound, VPN, Cast, Mobile, Mail, Calendar, Notifications) on
 //            surfaceBase; the selected page is accentSubtle with an
 //            accentText glyph; Settings and Power sit at its foot
 //   home     the tile grid (Tile.qml), spaceS apart
@@ -195,7 +195,7 @@ Scope {
         return parts.join(" · ")
     }
 
-    // which section is expanded: "" | "audio" | "wifi" | "bt" | "vpn" | "ssh" | "mobile" | "mail"
+    // which section is expanded: "" | "audio" | "wifi" | "bt" | "vpn" | "mobile" | "mail"
     // ── tabs (the 2026-09 revamp): home is the toggle grid, every list
     //    lives on its own tab; `expanded` survives as a read-only alias so
     //    the section visibles below keep working unchanged ──
@@ -208,7 +208,6 @@ Scope {
         if (t === "wifi") { wifiScan.running = true; wifiSavedScan.running = true }
         if (t === "bt" && Bluetooth.defaultAdapter) Bluetooth.defaultAdapter.discovering = true
         if (t === "vpn") vpnScan.running = true
-        if (t === "ssh") sshScan.running = true
         if (t === "mobile") { root.mobileView = "notifs"; KdeConnect.refresh() }
         if (t === "mail" && Mail.available) Mail.fetch()
         if (t === "cast") Globals.castCommand("scan", "")
@@ -236,15 +235,6 @@ Scope {
     // vpn
     property var vpnList: []
 
-    // ssh — hosts parsed from ~/.ssh/config (+ config.d/*). Each entry:
-    //   { host, tunnel (bool), script (bool) }
-    // "tunnel" = a background `ssh -f -N` we started is alive for that host;
-    // "script" = the user saved a browse script (ssh-browse/<host>.sh, see below).
-    property var sshList: []
-    property string scriptTarget: ""    // host whose browse-script editor is open
-    property string scriptText: ""      // editor prefill (existing script when editing)
-    function sq(s) { return "'" + String(s).replace(/'/g, "'\\''") + "'" }   // shell single-quote
-
     // sliders (0..1), read on open, updated optimistically on drag
     property real brightnessVal: 0.5
     property real volumeVal: 0.5
@@ -259,7 +249,6 @@ Scope {
         Globals.openDd = ""   // never reopen with a stale dropdown expanded
         root.today = d; root.calYear = d.getFullYear(); root.calMonth = d.getMonth(); root.calDate = d.getDate()
         wifiState.running = true; wiredState.running = true; brightnessProc.running = true; volumeProc.running = true; wifiSavedScan.running = true
-        sshScan.running = true   // always: the SSH tile's sub-label needs the host count
         vpnScan.running = true   // always: the VPN card only exists when profiles do
         if (root.expanded === "wifi") wifiScan.running = true
         if (root.expanded === "vpn") vpnScan.running = true
@@ -362,68 +351,6 @@ Scope {
         wifiConnProc.running = true
         root.pwTarget = ""; root.pwText = ""
     }
-    // ── ssh actions ──
-    // Open a terminal already ssh'd into the host (kitty runs the command directly).
-    function sshTerm(host) {
-        Quickshell.execDetached(["kitty", "ssh", host])
-        Globals.quickSettingsOpen = false
-    }
-    // Browse: run the user's saved per-host script (a proxied-browser launcher,
-    // pasted once via the inline editor and kept forever in
-    // ~/.config/quickshell/ssh-browse/<host>.sh — gitignored user state). Before
-    // the script runs, a background SOCKS5 tunnel `ssh -f -N -D $SOCKS_PORT` to
-    // the host is brought up if none is alive (BatchMode: needs key/agent auth —
-    // there is no terminal to type a password into), and SSH_HOST + SOCKS_PORT
-    // (default 1080) are exported so the script can point a browser at
-    // socks5://127.0.0.1:$SOCKS_PORT. No saved script yet → open the editor.
-    function sshBrowse(host, hasScript) {
-        if (!hasScript) {
-            root.scriptText = ""
-            root.scriptTarget = root.scriptTarget === host ? "" : host
-            return
-        }
-        Quickshell.execDetached(["sh", "-c", root.sshRunCmd(host)])
-        sshRescan.restart()
-        Globals.quickSettingsOpen = false
-    }
-    // The tunnel-then-script shell command (shared by sshBrowse and Save & Run).
-    function sshRunCmd(host) {
-        var pat = root.sq("^ssh -f -N .*" + host + "$")
-        return "export SSH_HOST=" + root.sq(host) + " SOCKS_PORT=\"${SOCKS_PORT:-1080}\"; " +
-               "if ! pgrep -f " + pat + " >/dev/null 2>&1; then " +
-               "ssh -f -N -D \"$SOCKS_PORT\" -o BatchMode=yes -o ConnectTimeout=5 -o ExitOnForwardFailure=yes " + root.sq(host) +
-               " || { notify-send -u critical -a SSH " + root.sq("Tunnel to " + host + " failed") +
-               " 'Needs key/agent auth (no password prompt in the background).'; exit 1; }; fi; " +
-               "exec \"$HOME/.config/quickshell/ssh-browse/" + host + ".sh\""
-    }
-    // Save the pasted script (quoted heredoc: content lands verbatim), mark it
-    // executable, then immediately run it via the same tunnel-first path.
-    function sshSaveScript(host, text) {
-        var p = "\"$HOME/.config/quickshell/ssh-browse/" + host + ".sh\""
-        var cmd = "mkdir -p \"$HOME/.config/quickshell/ssh-browse\" && cat > " + p +
-                  " <<'QS_EOF'\n" + text.replace(/\n+$/, "") + "\nQS_EOF\nchmod +x " + p + " && " + root.sshRunCmd(host)
-        Quickshell.execDetached(["sh", "-c", cmd])
-        root.scriptTarget = ""
-        sshRescan.restart()
-        Globals.quickSettingsOpen = false
-    }
-    // Pencil button: load the saved script into the editor (or close it again).
-    function sshEditScript(host) {
-        if (root.scriptTarget === host) { root.scriptTarget = ""; return }
-        sshScriptLoad.host = host
-        sshScriptLoad.command = ["sh", "-c", "cat \"$HOME/.config/quickshell/ssh-browse/" + host + ".sh\" 2>/dev/null"]
-        sshScriptLoad.running = false; sshScriptLoad.running = true
-    }
-    function sshDeleteScript(host) {
-        Quickshell.execDetached(["sh", "-c", "rm -f \"$HOME/.config/quickshell/ssh-browse/" + host + ".sh\""])
-        root.scriptTarget = ""
-        sshRescan.restart()
-    }
-    function sshStopTunnel(host) {
-        Quickshell.execDetached(["sh", "-c", "pkill -f " + root.sq("^ssh -f -N .*" + host + "$")])
-        sshRescan.restart()
-    }
-
     property string vpnPending: ""
     property string vpnBusyName: ""   // connection being brought up/down — its row + the bar spin
     function toggleVpn(name, up) {
@@ -630,66 +557,7 @@ Scope {
         }
     }
     Timer { id: vpnRescan; interval: 2000; onTriggered: vpnScan.running = true }
-    Timer { id: sshRescan; interval: 1500; onTriggered: sshScan.running = true }
 
-    // ── ssh host scan: ~/.ssh/config (+ config.d/*) + live tunnels + scripts ──
-    // One process emits the config, then (behind marker lines) `pgrep -af` of the
-    // background tunnels we start (they all match "^ssh -f -N") and the saved
-    // browse scripts (ssh-browse/<host>.sh).
-    Process {
-        id: sshScan
-        command: ["sh", "-c", "cat \"$HOME/.ssh/config\" \"$HOME/.ssh/config.d\"/* 2>/dev/null; printf '\\n@TUNNELS@\\n'; pgrep -af '^ssh -f -N' 2>/dev/null; printf '@SCRIPTS@\\n'; ls \"$HOME/.config/quickshell/ssh-browse\" 2>/dev/null; true"]
-        stdout: StdioCollector {
-            onStreamFinished: {
-                var ls = this.text.split("\n"), sec = 0   // 0 config · 1 tunnels · 2 scripts
-                var hosts = [], seen = {}, tunHosts = {}, scripts = {}
-                for (var i = 0; i < ls.length; i++) {
-                    var ln = ls[i].trim()
-                    if (ln === "@TUNNELS@") { sec = 1; continue }
-                    if (ln === "@SCRIPTS@") { sec = 2; continue }
-                    if (!ln || (sec === 0 && ln.charAt(0) === "#")) continue
-                    if (sec === 1) {
-                        // "PID ssh -f -N [-o …] [-D …] host" — host is the last token
-                        var tk = ln.split(/\s+/)
-                        tunHosts[tk[tk.length - 1]] = true
-                        continue
-                    }
-                    if (sec === 2) {
-                        if (/\.sh$/.test(ln)) scripts[ln.slice(0, -3)] = true
-                        continue
-                    }
-                    var mh = ln.match(/^Host\s+(.+)$/i)
-                    if (mh) {
-                        var names = mh[1].split(/\s+/)
-                        for (var n = 0; n < names.length; n++) {
-                            var h = names[n]
-                            if (!h || /[*?!]/.test(h)) continue   // skip wildcard/negated patterns
-                            if (!seen[h]) { seen[h] = true; hosts.push(h) }
-                        }
-                    }
-                }
-                var arr = [], anyTun = false
-                for (var k = 0; k < hosts.length; k++) {
-                    var t = tunHosts[hosts[k]] === true
-                    if (t) anyTun = true
-                    arr.push({ host: hosts[k], tunnel: t, script: scripts[hosts[k]] === true })
-                }
-                root.sshList = arr
-                Globals.sshTunnelUp = anyTun
-            }
-        }
-    }
-    // cat's an existing browse script into the editor, then opens it
-    Process {
-        id: sshScriptLoad
-        property string host: ""
-        stdout: StdioCollector {
-            onStreamFinished: {
-                root.scriptText = this.text
-                root.scriptTarget = sshScriptLoad.host
-            }
-        }
-    }
     // brings a VPN up/down; on failure raises a system notification with the error
     Process {
         id: vpnUpProc
@@ -807,7 +675,7 @@ Scope {
     }
     // gated on the panel, not just no-op'd inside it: this used to wake every 6 s
     // for the whole session only to hit the early return on the first line
-    Timer { interval: 6000; running: Globals.quickSettingsOpen; repeat: true; onTriggered: { wifiState.running = true; wiredState.running = true; if (root.expanded === "wifi") wifiScan.running = true; if (root.expanded === "ssh") sshScan.running = true } }
+    Timer { interval: 6000; running: Globals.quickSettingsOpen; repeat: true; onTriggered: { wifiState.running = true; wiredState.running = true; if (root.expanded === "wifi") wifiScan.running = true } }
 
     PanelWindow {
         id: win
@@ -917,7 +785,7 @@ Scope {
             }
 
             // ══ the icon rail: pages down the left edge, Settings and Power
-            //    pinned at its foot. VPN, SSH and Mail obey the same "only what
+            //    pinned at its foot. VPN and Mail obey the same "only what
             //    exists" rule as their home tiles. ══
             Rectangle {
                 id: rail
@@ -963,7 +831,6 @@ Scope {
                             { key: "bt",     icon: Theme.icBluetooth },
                             { key: "audio",  icon: Theme.icVolHigh },
                             { key: "vpn",    icon: Theme.icVpn },
-                            { key: "ssh",    icon: Theme.icSsh },
                             { key: "cast",   icon: Theme.icCast },
                             { key: "mobile", icon: Theme.icPhone },
                             { key: "mail",   icon: Theme.icMail },
@@ -974,7 +841,6 @@ Scope {
                             required property var modelData
                             visible: modelData.key === "mail" ? Mail.available
                                    : modelData.key === "vpn"  ? (root.vpnList.length > 0 || Globals.vpnActive)
-                                   : modelData.key === "ssh"  ? (root.sshList.length > 0 || Globals.sshTunnelUp)
                                    : true
                             ic: modelData.icon
                             current: root.tab === modelData.key
@@ -1121,7 +987,7 @@ Scope {
                     Row {
                         // (the tiles' own conditions — a child's `visible` reads false while
                         // this row is hidden, so it cannot decide the row)
-                        visible: root.tab === "home" && (root.vpnList.length > 0 || Globals.vpnActive || root.sshList.length > 0 || Globals.sshTunnelUp)
+                        visible: root.tab === "home" && (root.vpnList.length > 0 || Globals.vpnActive)
                         width: parent.width; spacing: Theme.spaceS
                         Tile {
                             id: vpnTile
@@ -1146,20 +1012,6 @@ Scope {
                                 else vpnTile.openList()
                             }
                             onMenu: vpnTile.openList()
-                        }
-                        Tile {
-                            id: sshTile
-                            visible: root.sshList.length > 0 || Globals.sshTunnelUp
-                            ic: Theme.icSsh; label: "SSH"
-                            active: Globals.sshTunnelUp
-                            opened: root.expanded === "ssh"
-                            hasMenu: true
-                            sub: Globals.sshTunnelUp ? "Tunnel on"
-                               : root.sshList.length > 0 ? root.sshList.length + (root.sshList.length === 1 ? " host" : " hosts")
-                               : "Not set up"
-                            // hosts are a list, not a switch — body and details both open
-                            onClicked: root.setTab("ssh")
-                            onMenu: root.setTab("ssh")
                         }
                     }
                     Row {
@@ -1534,135 +1386,6 @@ Scope {
                                                 disabled: root.vpnBusyName !== "" && root.vpnBusyName !== vRow.modelData.name
                                                 label: root.vpnBusyName === vRow.modelData.name ? "Connecting…" : "Connect"
                                                 onGo: root.vpnSaveCredentials()
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    // ═══ SSH — hosts from ~/.ssh/config. Row click → a terminal
-                    //     ssh'd in; globe → SOCKS tunnel + the host's saved browse
-                    //     script (first click opens a paste-once editor); pencil
-                    //     edits the script; the stop mark stops a running tunnel. ═══
-                    Column {
-                        visible: root.expanded === "ssh"
-                        width: parent.width; spacing: Theme.spaceS
-                        QsPageHead { title: "SSH"; note: "~/.ssh/config" }
-                        Column {
-                            visible: root.sshList.length === 0
-                            width: parent.width; spacing: Theme.spaceS
-                            QsEmpty { ic: Theme.icSsh; title: "No SSH hosts"; desc: "Add a host to ~/.ssh/config, like this:" }
-                            Rectangle {
-                                width: parent.width; height: sshSample.implicitHeight + 2 * Theme.spaceS
-                                radius: Theme.radiusPrimary
-                                color: Theme.surfaceSunken
-                                border.color: Theme.borderSubtle; border.width: Theme.borderWidth1
-                                Text {
-                                    id: sshSample
-                                    anchors.fill: parent; anchors.margins: Theme.spaceS
-                                    text: "Host mypc\n    HostName 192.168.1.20\n    User you"
-                                    color: Theme.textSecondary
-                                    font.family: Theme.type.mono.family
-                                    font.pixelSize: Theme.type.mono.size
-                                }
-                            }
-                        }
-                        ListWell {
-                            flush: true
-                            visible: root.sshList.length > 0
-                            Repeater {
-                                model: root.sshList
-                                delegate: Column {
-                                    id: sshRow
-                                    required property var modelData
-                                    width: parent.width
-                                    spacing: Theme.spaceXs
-                                    ListRow {
-                                        glyph: Theme.icSsh
-                                        glyphColor: sshRow.modelData.tunnel ? Theme.accentText : Theme.textSecondary
-                                        label: sshRow.modelData.host
-                                        desc: sshRow.modelData.tunnel ? "Tunnel on" : ""
-                                        active: sshRow.modelData.tunnel
-                                        // the whole row (under the buttons) → a terminal
-                                        onClicked: root.sshTerm(sshRow.modelData.host)
-                                        QsIconButton {
-                                            visible: sshRow.modelData.tunnel
-                                            anchors.verticalCenter: parent.verticalCenter
-                                            square: true; danger: true
-                                            onGo: root.sshStopTunnel(sshRow.modelData.host)
-                                        }
-                                        QsIconButton {
-                                            visible: sshRow.modelData.script
-                                            anchors.verticalCenter: parent.verticalCenter
-                                            ic: Theme.icPencil
-                                            selected: root.scriptTarget === sshRow.modelData.host
-                                            onGo: root.sshEditScript(sshRow.modelData.host)
-                                        }
-                                        // globe: run the host's browse script (or open the
-                                        // editor if none is saved yet)
-                                        QsIconButton {
-                                            anchors.verticalCenter: parent.verticalCenter
-                                            ic: Theme.icWeb
-                                            onGo: root.sshBrowse(sshRow.modelData.host, sshRow.modelData.script)
-                                        }
-                                    }
-                                    // the browse-script editor — paste once, kept in
-                                    // ~/.config/quickshell/ssh-browse/<host>.sh
-                                    Column {
-                                        width: parent.width; spacing: Theme.spaceS
-                                        bottomPadding: Theme.spaceS
-                                        visible: root.scriptTarget === sshRow.modelData.host
-                                        onVisibleChanged: if (visible) { seEdit.text = root.scriptText; seEdit.forceActiveFocus() }
-                                        Rectangle {
-                                            width: parent.width; height: 3 * Theme.control2xl
-                                            radius: Theme.radiusPrimary
-                                            color: Theme.surfaceSunken
-                                            border.color: seEdit.activeFocus ? Theme.focusRing : Theme.borderStrong
-                                            border.width: Theme.fieldBorderWidth
-                                            Flickable {
-                                                id: seFlick
-                                                anchors.fill: parent; anchors.margins: Theme.spaceS; clip: true
-                                                contentWidth: width; contentHeight: seEdit.implicitHeight
-                                                TextEdit {
-                                                    id: seEdit
-                                                    width: seFlick.width
-                                                    textFormat: TextEdit.PlainText; wrapMode: TextEdit.WrapAnywhere
-                                                    selectByMouse: true
-                                                    color: Theme.textPrimary
-                                                    selectionColor: Theme.accentSubtle
-                                                    selectedTextColor: Theme.textPrimary
-                                                    font.family: Theme.type.mono.family
-                                                    font.pixelSize: Theme.type.mono.size
-                                                    Keys.onEscapePressed: root.scriptTarget = ""
-                                                    // keep the cursor in view while typing or pasting
-                                                    onCursorRectangleChanged: {
-                                                        if (cursorRectangle.y < seFlick.contentY) seFlick.contentY = cursorRectangle.y
-                                                        else if (cursorRectangle.y + cursorRectangle.height > seFlick.contentY + seFlick.height)
-                                                            seFlick.contentY = cursorRectangle.y + cursorRectangle.height - seFlick.height
-                                                    }
-                                                }
-                                            }
-                                            QsNote {
-                                                visible: seEdit.text.length === 0
-                                                anchors.fill: parent; anchors.margins: Theme.spaceS
-                                                text: "Paste the shell script to run for “" + sshRow.modelData.host + "”, such as a browser that goes through the tunnel.\n\nIt runs with SSH_HOST and SOCKS_PORT set, once a SOCKS5 tunnel to the host is up on 127.0.0.1:$SOCKS_PORT (1080 by default; needs key or agent sign-in). Saved to ~/.config/quickshell/ssh-browse/."
-                                            }
-                                        }
-                                        Row {
-                                            anchors.right: parent.right
-                                            spacing: Theme.spaceS
-                                            QsButton {
-                                                visible: sshRow.modelData.script
-                                                variant: "danger"; label: "Delete script"
-                                                onGo: root.sshDeleteScript(sshRow.modelData.host)
-                                            }
-                                            QsButton { variant: "ghost"; label: "Cancel"; onGo: root.scriptTarget = "" }
-                                            QsButton {
-                                                variant: "primary"; label: "Save and run"
-                                                disabled: seEdit.text.trim().length === 0
-                                                onGo: root.sshSaveScript(sshRow.modelData.host, seEdit.text)
                                             }
                                         }
                                     }
