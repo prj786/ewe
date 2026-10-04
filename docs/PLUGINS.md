@@ -185,7 +185,7 @@ A plugin is a git repository with `manifest.json` at its root:
 | `apiVersion` | `2` or `3` — the shell loads both; a manifest with any other value is refused at install, not at login. The `quick-tile`, `quick-page`, `bar-status` and `dock-item` kinds, `ipcAliases` and the keybind target rule need `3` |
 | `kinds` | one or more of `service`, `panel`, `overlay`, `menu`, `bar-widget`, `desktop-widget`, `quick-tile`, `quick-page`, `bar-status`, `dock-item` |
 | `entryPoints` | one `.qml` file per kind (none for `dock-item`), relative, inside the plugin (symlinks that resolve outside it are rejected) |
-| `quickTile` | optional: `{ "span": 1 \| 2, "order": int }` — half a row or the whole row of the home grid |
+| `quickTile` | optional: `{ "span": 1 \| 2, "order": int }` — half a row or the whole row of the home grid; whole-row cards (span 2) always come after every half-row tile, then by `order` |
 | `quickPage` | required with `quick-page`: `{ "key", "label", "icon", "order" }`. `key` is lowercase `[a-z0-9_-]`, unique, and not one the shell keeps (`home wifi bt audio cal notifs`); it is what `quicksettings tab <key>` and `Shell.openQuickSettings(key)` route to |
 | `barStatus` | optional: `{ "order": int }` |
 | `dockItem` | required with `dock-item`: `{ "icon", "label", "action", "order" }` — static; the dock draws the button and runs `action` (see `Shell.registerAction`), or `qs ipc call <id> toggle` when no action is registered. Hide it at runtime with `Shell.setDockItemShown(id, false)` |

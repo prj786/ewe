@@ -278,7 +278,10 @@ QtObject {
         host.dirs = dirs
         host.barWidgets = widgets
         host.desktopWidgets = desk
-        tiles.sort(host._byOrder); pages.sort(host._byOrder); status.sort(host._byOrder); dock.sort(host._byOrder)
+        // whole-row cards (span 2, e.g. the CPU/memory meters) sit after every
+        // half-row tile, so a card never splits the rows of tiles above it
+        tiles.sort(function (a, b) { return (a.span - b.span) || host._byOrder(a, b) })
+        pages.sort(host._byOrder); status.sort(host._byOrder); dock.sort(host._byOrder)
         host.quickTiles = tiles
         host.quickPages = pages
         host.barStatus = status
