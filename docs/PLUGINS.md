@@ -273,6 +273,8 @@ features, the `_private` plumbing) is internal and may move without notice.
 | read | `bottomInset` | px a dock takes from the bottom of the screen (its strip + `windowGap`); `0` without a dock. Panels that open above the dock keep this clear — so nothing leaves a gap when no dock is installed |
 | read | `bottomReserved` | the dock reserves that strip as an exclusive zone (always-visible dock) — a bottom-anchored surface is already pushed up and adds only its own gap |
 | read | `dockPresent` | `bottomInset > 0` |
+| read | `dockPrefs` | `{ enabled, autohide, iconSize }` — the user's `[desktop.dock]` prefs (`iconSize` is `"small"`, `"normal"` or `"large"`); what a dock plugin obeys. Read-only: Settings and ewe-settings write them |
+| read | `pinnedApps` | the pinned desktop ids (`ewe-conf` `apps.pinned`), bindable |
 | read | `activeCount` | how many actions report themselves open (an autohide dock stays out while > 0) |
 | call | `toast(text, kind)` | a bottom-centre Toast; `kind` is `""`/`"info"`, `"warning"` or `"danger"`, or a Toast options object (`{ actionLabel, action, icon, timeout }`) |
 | call | `openQuickSettings(tab)`, `closeQuickSettings()` | a built-in key or a plugin page's `quickPage.key`; same route as `qs ipc call quicksettings tab <key>` |
@@ -282,6 +284,7 @@ features, the `_private` plumbing) is internal and may move without notice.
 | call | `registerAction(name, fn)`, `runAction(name, anchor)` | a named function (`dockItem.action` names one) and how the dock — or another plugin — runs it; `runAction` returns `false` when none is registered |
 | call | `setActive(name, on)`, `isActive(name)` | an action's open state (its dock item lights); `AnchoredPopup` reports it through `action` |
 | call | `setBottomInset(pluginId, px, reserved)` | what a dock plugin publishes; `0` withdraws it |
+| call | `setPinned(desktopId, on)` | pin or unpin an app; the shell persists it through `ewe-conf` and `pinnedApps` follows |
 | call | `anchorFor(item, window)` | `{ screen, x, y, edge, item }` for a popup: the item's centre in its window (screen-local for a full-width bar or dock), `edge` `"top"` or `"bottom"`. Pass the window when you have it (`barWindow`, your own `PanelWindow`); without it the focused monitor is assumed and the edge is bottom |
 | signal | `aboutToSleep()`, `resumed()` | the system is about to suspend; the wake sequence reached its network step (about three seconds after wake — refresh what you cache then) |
 

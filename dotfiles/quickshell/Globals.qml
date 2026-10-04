@@ -426,10 +426,14 @@ QtObject {
     // Read by the Launcher and, through Shell.pinnedApps / setPinned, the dock add-on.
     property var pinnedApps: []
     function isPinned(id) { return (g.pinnedApps || []).indexOf(id) >= 0 }
-    function togglePin(id) {
+    function togglePin(id) { g.setPinned(id, !g.isPinned(id)) }
+    // the ONE writer of the pinned list (Shell.setPinned lands here too)
+    function setPinned(id, on) {
         var a = (g.pinnedApps || []).slice()
         var i = a.indexOf(id)
-        if (i >= 0) a.splice(i, 1); else a.push(id)
+        if (on && i < 0) a.push(id)
+        else if (!on && i >= 0) a.splice(i, 1)
+        else return
         g.pinnedApps = a
         g._pinWriter.command = [g.eweConf, "set", "--no-hooks", "apps.pinned", JSON.stringify(a)]
         g._pinWriter.running = false; g._pinWriter.running = true
