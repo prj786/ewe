@@ -586,7 +586,7 @@ Scope {
 
                             // ORDER is the Bar card's, each shown only while it
                             // applies: network busy → sync → notifications ·
-                            // mail · calendar · phone → wired/Wi-Fi · sound · mic ·
+                            // mail · calendar → wired/Wi-Fi · sound · mic ·
                             // Bluetooth → power profile · battery.
                             // Metrics are uniform on purpose: every glyph is
                             // Theme.barIcon, every count a Badge, every figure
@@ -664,31 +664,6 @@ Scope {
                                 text: Theme.icCalendar
                                 font.family: Theme.fontIcons; font.pixelSize: Theme.barIcon
                                 color: ctlGroup.ink
-                            }
-                            // Phone (KDE Connect) — only when paired + reachable;
-                            // battery % and an accent dot for unread phone notifications
-                            Row {
-                                visible: KdeConnect.connected
-                                anchors.verticalCenter: parent.verticalCenter
-                                spacing: Theme.spaceXs
-                                BarIcon {
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    glyph: Theme.icPhone
-                                    color: ctlGroup.ink
-                                    // the phone's own count is already on the
-                                    // phone — here it only has to say "unread"
-                                    count: KdeConnect.unreadCount
-                                    dotOnly: true
-                                }
-                                Text {
-                                    visible: KdeConnect.connected && KdeConnect.device.batteryCharge >= 0
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    text: KdeConnect.connected ? KdeConnect.device.batteryCharge + "%" : ""
-                                    font.family: Theme.type.label.family
-                                    font.pixelSize: Theme.barLarge ? Theme.fontSizeMd : Theme.fontSizeS
-                                    font.features: ({ "tnum": 1 })
-                                    color: ctlGroup.ink
-                                }
                             }
                             // Wired / ethernet (shown when a wired link is up and
                             // Wi-Fi isn't — the common case in VMs and on docks)

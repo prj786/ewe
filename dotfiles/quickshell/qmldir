@@ -12,7 +12,6 @@ singleton Cloud 1.0 Cloud.qml
 singleton Google 1.0 Google.qml
 singleton Agenda 1.0 Agenda.qml
 singleton Mail 1.0 Mail.qml
-singleton KdeConnect 1.0 KdeConnect.qml
 singleton BtAgent 1.0 BtAgent.qml
 singleton PluginHost 1.0 PluginHost.qml
 singleton Shell 1.0 Shell.qml

@@ -3,7 +3,7 @@
 
 Quickshell has no generic QML D-Bus client, so this long-lived helper owns ALL
 org.freedesktop.login1 traffic (dbus-python + GLib main loop — the same deps
-kdeconnect-bridge.py already needs). Logind.qml runs it as a Process and speaks
+bt-agent.py already needs). Logind.qml runs it as a Process and speaks
 newline-delimited JSON:
 
   stdout → events   {"event": "...", ...}   (signal relays, state pushes)

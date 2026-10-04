@@ -94,9 +94,10 @@ QtObject {
         HyprMon.reassert(false)
 
         // 4. bridges — a helper whose bus connection died does not necessarily
-        //    exit; it can sit there looking alive and reporting nothing.
+        //    exit; it can sit there looking alive and reporting nothing. The
+        //    shell's own bridges (logind, bluez) re-arm themselves; the add-ons
+        //    that run one (the phone) probe theirs on Shell.resumed() below.
         Log.info("resume", "4/6 bridge liveness")
-        KdeConnect.probeLiveness()
 
         // 5+6 need the network, which is very unlikely to be up yet.
         rs._netStep.restart()
@@ -118,9 +119,7 @@ QtObject {
             Google.refreshAfterResume()
             Mail.refreshAfterResume()
             // Shell.resumed (API 3): the plugins' turn — the phone and mail
-            // add-ons refresh here once those features leave the shell, so
-            // the two direct calls above (KdeConnect in step 4, Mail here)
-            // are simply deleted at extraction time.
+            // add-ons refresh their bridges and inboxes here.
             Shell.resumed()
 
             rs.busy = false
