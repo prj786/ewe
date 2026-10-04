@@ -20,18 +20,65 @@ _ewe_ikev1_accept() {
     echo ":: ewe: enabled IKEv1 in /etc/ipsec.conf (L2TP/IPsec VPNs)"
 }
 
+# The greeter stack belongs to install.sh phase 30 (root-owned files under
+# /etc/xdg/quickshell and /usr/local/bin — the package must not OWN them: that
+# would make the optional greeter a hard dependency and fight any other display
+# manager the user keeps). But a machine that ran phase 30 once kept THAT DAY's
+# files forever: pacman upgraded the payload and nothing re-copied the wrapper,
+# the greeter QML or its theme tokens. The 2026-09-20 fix for the blue wlroots
+# text on tty1 shipped in three releases and reached no upgraded machine; the
+# greeter QML was the pre-v3 file with no tokens beside it (2026-10-04).
+#
+# So: refresh them here — as root, non-interactively — ONLY where they already
+# exist (= phase 30 installed them on this machine), from the payload. Same
+# three files, same sources as phase 30: keep the two in step. Fonts, greetd's
+# config.toml and PAM are deliberately NOT touched: those are the user's to
+# re-run install.sh for (they change rarely and config.toml may carry edits).
+_ewe_refresh_greeter() {
+    _p=/usr/share/ewe
+    _g=/etc/xdg/quickshell/ewe-greeter
+    _n=0
+    if [ -f /usr/local/bin/ewe-greeter ] && [ -r "$_p/system/greeter/ewe-greeter" ]; then
+        install -m 755 "$_p/system/greeter/ewe-greeter" /usr/local/bin/ewe-greeter && _n=$((_n + 1))
+    fi
+    if [ -d "$_g" ]; then
+        if [ -r "$_p/system/greeter/shell.qml" ]; then
+            install -m 644 "$_p/system/greeter/shell.qml" "$_g/shell.qml" && _n=$((_n + 1))
+        fi
+        # Ewe Dark's roles for the greeter, derived by the payload's own
+        # ewe-theme (the greeter user reads no ewe.conf: --conf /dev/null is
+        # the defaults), written beside the QML atomically so a half-written
+        # file never reaches a login screen.
+        if [ -x "$_p/bin/ewe-theme" ] && command -v python3 >/dev/null 2>&1; then
+            if "$_p/bin/ewe-theme" --conf /dev/null build --scheme ewe-dark \
+                    --json "$_g/theme-tokens.json.tmp" --css /dev/null >/dev/null 2>&1 \
+               && [ -s "$_g/theme-tokens.json.tmp" ]; then
+                chmod 644 "$_g/theme-tokens.json.tmp" \
+                    && mv -f "$_g/theme-tokens.json.tmp" "$_g/theme-tokens.json" && _n=$((_n + 1))
+            else
+                rm -f "$_g/theme-tokens.json.tmp"
+                echo ":: ewe: could not rebuild the greeter's theme tokens — run: bash /usr/share/ewe/install.sh --no-packages"
+            fi
+        fi
+    fi
+    [ "$_n" -gt 0 ] && echo ":: ewe: refreshed the greeter from the payload ($_n file(s): wrapper, QML, Ewe Dark tokens)"
+    return 0
+}
+
 post_install() {
     _ewe_ikev1_accept
     cat <<'EOF'
 :: ewe is installed. Two steps remain:
 ::   1. per user:  ewe-setup            (deploys the dotfiles into your home)
-::   2. system:    /usr/share/ewe/install.sh   (greeter, services, plymouth —
-::      skips anything already configured; safe to re-run)
+::   2. system:    bash /usr/share/ewe/install.sh --no-packages
+::      (as your user, NOT sudo — it escalates where needed: greeter, services,
+::      plymouth; skips anything already configured; safe to re-run)
 EOF
 }
 
 post_upgrade() {
     _ewe_ikev1_accept
+    _ewe_refresh_greeter
     cat <<'EOF'
 :: ewe payload updated. Each user's desktop refreshes itself at next login
 :: (or run `ewe-setup` now and restart the shell).
