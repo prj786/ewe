@@ -347,7 +347,10 @@ Scope {
               + "general {\n"
               + "    lock_cmd         = " + lockCmd + "\n"
               + "    before_sleep_cmd = " + lockCmd + "\n"
-              + "    after_sleep_cmd  = hyprctl dispatch 'hl.dsp.dpms(\"on\")'\n"
+              // guarded (dpms-on only for an output reporting dpms-off) — the
+              // same one-liner as HyprMon._dpmsGuard and dotfiles/hypr/hypridle.conf;
+              // an unconditional dpms-on blinks the already-lit xe panel on every wake
+              + "    after_sleep_cmd  = hyprctl monitors all -j | grep -q '\"dpmsStatus\": *false' && hyprctl dispatch 'hl.dsp.dpms(\"on\")' || true\n"
               + "    ignore_dbus_inhibit = false\n"
               + "}\n"
         var saverSec = root.idleAt(Math.max(60, Math.round(Globals.saverMin * 60)))
