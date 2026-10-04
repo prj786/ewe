@@ -585,9 +585,8 @@ Scope {
                             spacing: Theme.spaceS
 
                             // ORDER is the Bar card's, each shown only while it
-                            // applies: network busy → casting ·
-                            // sync → notifications · mail ·
-                            // calendar · phone → wired/Wi-Fi · sound · mic ·
+                            // applies: network busy → sync → notifications ·
+                            // mail · calendar · phone → wired/Wi-Fi · sound · mic ·
                             // Bluetooth → power profile · battery.
                             // Metrics are uniform on purpose: every glyph is
                             // Theme.barIcon, every count a Badge, every figure
@@ -602,18 +601,8 @@ Scope {
                                 size: Theme.barIcon
                             }
 
-                            // ── toggler states ──
-                            // (Insomnia's eye is the ewe.insomnia add-on's bar-status glyph)
-                            // Cast to TV — screencast glyph while a cast session exists;
-                            // accent = picture on glass, dim = still handshaking
-                            Text {
-                                visible: Globals.casting
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: Theme.icCast
-                                font.family: Theme.fontIcons; font.pixelSize: Theme.barIcon
-                                color: Globals.castState === "streaming" || Globals.castLegacy
-                                       ? Theme.barAccentText : ctlGroup.ink
-                            }
+                            // (the add-ons' glyphs — Insomnia's eye, Cast, SSH, VPN,
+                            // phone, mail — are bar-status slots, after the built-ins)
 
                             // ewe-sync — the account app's state, so "is my
                             // stuff safe" is answerable from the bar. Hidden

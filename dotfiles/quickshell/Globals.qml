@@ -45,23 +45,13 @@ QtObject {
     property bool barVisible: true          // the top bar (Super+Shift+B toggles)
     property bool quickSettingsOpen: false  // the Quick Settings panel
     // "open Quick settings ON this tab" for components outside the panel
-    // (Cast's IPC toggle lands on the sink list); QuickSettings.qml listens
+    // (Shell.openQuickSettings, add-on pages); QuickSettings.qml listens
     signal quickSettingsTabRequested(string name)
     function openQuickSettingsTab(name) { g.quickSettingsOpen = true; g.quickSettingsTabRequested(name) }
     property bool dnd: false               // Do Not Disturb (suppresses toasts)
     property var server: null              // set by Notifications.qml (the live NotificationServer)
     property string netBusy: ""            // "wifi" (or "vpn", set by the VPN add-on) while a connection attempt runs (bar spinner)
     property int netEpoch: 0               // bumped by the bar on every NetworkManager event (nmcli monitor) — panels re-read on change
-    // ── Cast to TV (RFC-004: ewe-castd owns the protocols, Cast.qml owns the
-    //    socket, this is the shared truth the tile/bar/card all render) ──
-    property string castState: "idle"      // idle·picking·connecting·waiting·negotiating·starting·streaming·error
-    property string castDetail: ""         // one narrated line for the current state
-    property string castSinkName: ""       // who we're casting to, while active
-    property var castSinks: []             // [{id, name, kind}] — displays in range
-    property bool castLegacy: false        // the gnome-network-displays fallback is up
-    signal castCommand(string cmd, string arg)   // QS card → Cast.qml → daemon socket
-    // derived: anything that makes the bar glyph and the tile light up
-    readonly property bool casting: castLegacy || (castState !== "idle" && castState !== "error")
     property bool overviewOpen: false      // GNOME-style window overview (Super tapped alone)
     property bool overviewCover: false     // the Overview owns the screen: backdrop up, bar and dock out of view (Overview.qml sequences it)
     property bool widgetsArrange: false    // desktop widgets in arrange mode (Super+Shift+W): drag to move, frames with sticky/hide

@@ -23,7 +23,7 @@ import Quickshell.Bluetooth
 //            OutCubic, and nothing moves under Reduce motion
 //   rail     the collapsed Side navigation: the sheep mark, then one
 //            controlLg × controlMd item per page (home, Wi-Fi, Bluetooth,
-//            sound, Cast, Mobile, Mail, Calendar, Notifications) on
+//            sound, Mobile, Mail, Calendar, Notifications) on
 //            surfaceBase; the selected page is accentSubtle with an
 //            accentText glyph; Settings and Power sit at its foot
 //   home     the tile grid (Tile.qml), spaceS apart
@@ -209,7 +209,6 @@ Scope {
         if (t === "bt" && Bluetooth.defaultAdapter) Bluetooth.defaultAdapter.discovering = true
         if (t === "mobile") { root.mobileView = "notifs"; KdeConnect.refresh() }
         if (t === "mail" && Mail.available) Mail.fetch()
-        if (t === "cast") Globals.castCommand("scan", "")
     }
 
     // mobile (KDE Connect) sub-state
@@ -667,7 +666,6 @@ Scope {
                             { key: "wifi",   icon: Theme.icWifi },
                             { key: "bt",     icon: Theme.icBluetooth },
                             { key: "audio",  icon: Theme.icVolHigh },
-                            { key: "cast",   icon: Theme.icCast },
                             { key: "mobile", icon: Theme.icPhone },
                             { key: "mail",   icon: Theme.icMail },
                             { key: "cal",    icon: Theme.icCalendar },
@@ -829,18 +827,6 @@ Scope {
                             onClicked: Globals.dnd = !Globals.dnd
                         }
                         // (Insomnia — keep awake — is the ewe.insomnia add-on's quick-tile)
-                    }
-                    // an active cast earns a home tile; clicking it hangs up and
-                    // the tile leaves with the session
-                    Row {
-                        visible: root.tab === "home" && Globals.casting
-                        width: parent.width; spacing: Theme.spaceS
-                        Tile {
-                            ic: Theme.icCast; label: "Cast"; active: true
-                            busy: Globals.castState !== "streaming"
-                            sub: Globals.castState === "streaming" ? Globals.castSinkName : "Connecting…"
-                            onClicked: Globals.castCommand("stop", "")
-                        }
                     }
                     // (the CPU / memory meters are the ewe.sysmon add-on's span-2 quick-tile)
                     // ═══ plugin tiles (API 3 quick-tile): after the built-ins,
@@ -1507,54 +1493,6 @@ Scope {
                                     time: root.fmtMsgTime(modelData.date)
                                     unread: modelData.unread
                                     onClicked: Mail.open(modelData.id)
-                                }
-                            }
-                        }
-                    }
-
-                    // ═══ CAST to a TV — the whole flow lives here (RFC-004):
-                    //     the sink list from ewe-castd (Miracast + Chromecast),
-                    //     pick a TV → SharePicker → streaming. No foreign window. ═══
-                    Column {
-                        id: castCard
-                        visible: root.tab === "cast"
-                        width: parent.width; spacing: Theme.spaceS
-                        property bool castOpen: root.tab === "cast"
-                        // the switch is on while a session runs; turning it off hangs up
-                        QsPageHead {
-                            title: "Cast"
-                            busy: Globals.casting && Globals.castState !== "streaming"
-                            note: Globals.castState === "streaming" ? "Casting to " + Globals.castSinkName
-                                : Globals.casting ? "Connecting…" : ""
-                            hasSwitch: Globals.casting
-                            on: Globals.casting
-                            onToggled: Globals.castCommand("stop", "")
-                        }
-                        // while a session is being built, narrate the daemon's state
-                        // where the person is looking — the same line the toasts carry
-                        QsNote { visible: Globals.casting && Globals.castState !== "streaming" && Globals.castDetail !== ""; text: Globals.castDetail }
-                        // nothing yet — an honest empty state instead of a broken-looking box
-                        Row {
-                            visible: castCard.castOpen && !Globals.casting && Globals.castSinks.length === 0
-                            spacing: Theme.spaceS
-                            leftPadding: Theme.spaceS
-                            Spinner { visible: Globals.castDetail.indexOf("not installed") === -1; anchors.verticalCenter: parent.verticalCenter; size: Theme.iconSm }
-                            TextCaption {
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: Globals.castDetail.indexOf("not installed") !== -1 ? Globals.castDetail : "Looking for displays…"
-                            }
-                        }
-                        ListWell {
-                            flush: true
-                            visible: castCard.castOpen && !Globals.casting && Globals.castSinks.length > 0
-                            Repeater {
-                                model: castCard.castOpen ? Globals.castSinks : []
-                                delegate: ListRow {
-                                    required property var modelData
-                                    glyph: Theme.icCast
-                                    label: modelData.name
-                                    kind: modelData.kind === "chromecast" ? "Chromecast" : modelData.kind === "miracast" ? "Miracast" : ""
-                                    onClicked: Globals.castCommand("start", modelData.id)
                                 }
                             }
                         }

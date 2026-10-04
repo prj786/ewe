@@ -83,7 +83,6 @@ ShellRoot {
     BtPairing {}
     DesktopWidgets {}
     Lock {}
-    Cast {}
     SharePicker {}
     Screensaver {}
     Osd {}

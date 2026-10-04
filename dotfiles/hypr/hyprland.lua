@@ -393,8 +393,8 @@ hl.bind(mainMod .. " + B",      hl.dsp.exec_cmd(browser))
 hl.bind(mainMod .. " + C",      hl.dsp.exec_cmd(scripts .. "/calendar.sh"))
 hl.bind(mainMod .. " + N",      hl.dsp.exec_cmd("qs ipc call quicksettings toggle"))  -- Quick Settings
 hl.bind(mainMod .. " + comma",  hl.dsp.exec_cmd("qs ipc call settings toggle")) -- Super+, Settings
-hl.bind(mainMod .. " + SHIFT + C", hl.dsp.exec_cmd("qs ipc call cast toggle"))  -- Cast to TV (same as the Quick Settings tile)
--- Super+P (fill a login) is the ewe.passwords plugin's keybind since 0.21.
+-- Super+P (fill a login) is the ewe.passwords plugin's keybind since 0.21;
+-- Super+Shift+C (Cast to TV) is the ewe.cast add-on's since 0.25.
 -- Desktop widgets (plugins of kind desktop-widget): arrange mode — drag them,
 -- make one sticky (above windows) or hide it; Esc or the same key ends it.
 hl.bind(mainMod .. " + SHIFT + W", hl.dsp.exec_cmd("qs ipc call widgets arrange"))
