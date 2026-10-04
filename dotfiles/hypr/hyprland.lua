@@ -683,7 +683,8 @@ hl.window_rule({
 -- snapshot of the already-faded frame, which reads as a blink: the panel fades
 -- out, flashes back, and fades again (worst on the Overview). Hyprland must
 -- not animate these at all; the QML owns their motion. Surfaces with no QML
--- animation of their own (bar, notifications, auth, screensaver, caffeine)
+-- animation of their own (bar, notifications, auth, screensaver, the Insomnia
+-- add-on's inhibitor surface)
 -- keep the compositor fade — the bar's one-shot QML slide-in at startup rides
 -- inside its surface, so the map fade composes with it rather than fighting
 -- it. The dock is listed because it animates its own Overview slide in QML and

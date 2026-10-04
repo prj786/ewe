@@ -2847,7 +2847,7 @@ Scope {
                         Pill { label: "Preview"; primary: true; onGo: Globals.saverActive = true }
                         TCaption { anchors.verticalCenter: parent.verticalCenter; text: "Shows the screensaver now. Press any key to close it." }
                     }
-                    Note { text: "Playing media, a full-screen window or Keep awake in Quick settings hold off the screensaver, the lock and suspend. hypridle keeps the time through generated/hypridle.conf; changes apply at once." }
+                    Note { text: "Playing media, a full-screen window or the Insomnia add-on hold off the screensaver, the lock and suspend. hypridle keeps the time through generated/hypridle.conf; changes apply at once." }
                 }
             }
 
@@ -2943,7 +2943,6 @@ Scope {
                         KV { k: "Apps that keep it awake"; v: Logind.screensaverOwner !== ""
                                 ? "Honored by " + Logind.screensaverOwner
                                 : "Nothing owns org.freedesktop.ScreenSaver" }
-                        KV { k: "Keep awake"; v: Globals.caffeine ? "On, idle is blocked" : "Off" }
                         Divider {}
                         Repeater {
                             model: Logind.blockingInhibitors()

@@ -1171,12 +1171,7 @@ Scope {
                             sub: Globals.dnd ? "On" : "Off"
                             onClicked: Globals.dnd = !Globals.dnd
                         }
-                        Tile {
-                            // eye open while awake, eye-off while the idle inhibitor is off
-                            ic: (Globals.caffeine ? Theme.icEye : Theme.icEyeOff); label: "Keep awake"; active: Globals.caffeine
-                            sub: Globals.caffeine ? "On" : "Off"
-                            onClicked: Globals.caffeine = !Globals.caffeine
-                        }
+                        // (Insomnia — keep awake — is the ewe.insomnia add-on's quick-tile)
                     }
                     // an active cast earns a home tile; clicking it hangs up and
                     // the tile leaves with the session

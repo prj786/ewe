@@ -25,7 +25,7 @@ Each shows only while it applies, always in this order:
 | Indicator | Glyph | Color |
 | --- | --- | --- |
 | Network busy | `loader-circle`, spinning | `accent-text` |
-| Keep awake | `eye` | `text-secondary` |
+| Insomnia (add-on) | `eye` | `text-secondary` |
 | Casting | `cast` | `accent-text` while streaming |
 | SSH tunnel · VPN | `square-terminal` · `shield-check` | `text-secondary` |
 | Sync | `refresh-cw` spinning · `cloud-alert` · `cloud-off` | `accent-text` · `danger` · `text-muted` |

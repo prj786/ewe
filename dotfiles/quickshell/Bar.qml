@@ -609,14 +609,7 @@ Scope {
                             }
 
                             // ── toggler states ──
-                            // Insomnia / keep-awake — eye glyph, matches the CC toggle
-                            Text {
-                                visible: Globals.caffeine
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: Theme.icEye
-                                font.family: Theme.fontIcons; font.pixelSize: Theme.barIcon
-                                color: ctlGroup.ink
-                            }
+                            // (Insomnia's eye is the ewe.insomnia add-on's bar-status glyph)
                             // Cast to TV — screencast glyph while a cast session exists;
                             // accent = picture on glass, dim = still handshaking
                             Text {

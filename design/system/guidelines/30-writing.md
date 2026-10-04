@@ -78,4 +78,4 @@ Ewe's words should feel like its design: calm, clear and short. People are in th
 | scheme | theme (for color schemes) |
 | accent color | primary color, brand color (in the interface) |
 | pin, unpin | favorite, bookmark |
-| keep awake | caffeine, inhibit |
+| Insomnia (the keep-awake add-on) | keep awake, caffeine, inhibit |

@@ -83,7 +83,6 @@ ShellRoot {
     BtPairing {}
     DesktopWidgets {}
     Lock {}
-    Caffeine {}
     Cast {}
     SharePicker {}
     Screensaver {}
