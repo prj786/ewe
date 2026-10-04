@@ -141,7 +141,7 @@ singletons tie everything together:
   generated `design/tokens.css` to `design/system/tokens.json` and
   `design/check-contrast.sh` holds the derivation to the contrast rules.
 - **`BtAgent.qml`** — the bluez pairing agent (`scripts/bt-agent.py`, default
-  `org.bluez.Agent1`, NDJSON over stdio like `KdeConnect.qml`); `BtPairing.qml`
+  `org.bluez.Agent1`, NDJSON over stdio like the phone add-on’s bridge); `BtPairing.qml`
   is its dialog. Device state still comes from `Quickshell.Bluetooth`; pairing
   and connecting go through `BtAgent.pair()/connectDevice()` so failures have a
   reason. `bin/ewe-bt` is the same for the Settings app (see

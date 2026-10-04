@@ -12,7 +12,7 @@ gnome-network-displays     # Cast to TV — Miracast (Samsung "Screen Mirroring"
                            # Chromecast built-in (Google TV) from one app; captures via the
                            # xdg-desktop-portal ScreenCast (the hyprland portal), so it works outside
                            # GNOME. Needs NetworkManager + wpa_supplicant for Wi-Fi P2P (not iwd) and
-                           # avahi-daemon for Chromecast discovery (phase 30). Driven by Cast.qml.
+                           # avahi-daemon for Chromecast discovery (phase 30). Driven by the ewe.cast add-on.
 helium-browser-bin      # THE browser: Chromium-based, private, vertical tabs — themed by helium-theme.sh
 mpv-uosc-git            # uosc controller for mpv — themed by colorscheme.sh (script-opts/uosc.conf)
 libreswan               # IPsec for networkmanager-l2tp (L2TP/IPsec VPNs). Replaces strongswan: strongSwan 6.1

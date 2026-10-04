@@ -101,7 +101,7 @@ Scope {
     }
 
     // Auto idle-inhibit: playing media or a fullscreen focused window holds a
-    // wayland idle inhibitor (same mechanism as Caffeine, own 1px surface), so
+    // wayland idle inhibitor (same mechanism as the Insomnia add-on, own 1px surface), so
     // NO idle stage fires — saver, lock or suspend. Most video players inhibit
     // on their own; this covers the ones that don't and audio-only playback.
     // Mpris publishes isPlaying as a change signal, so a plain binding re-evaluates

@@ -26,7 +26,7 @@ Places is a small file browser above the dock's folder button: pinned places fir
 - A dialog named “Places”; the list is a tree grid; rows say name, type and size.
 
 ## Where it lives
-`dotfiles/quickshell/Places.qml` (IPC `places`). Keyboard navigation and the size column are new.
+the ewe.places add-on’s `Places.qml` (repo `prj786/ewe-plugin-places`; IPC `places`, an `ipcAlias`). Keyboard navigation and the size column are new.
 
 ## What a build provides
 `path` · `pinned` · `entries` · `onOpen` · `onPin` · `onUnpin` · `onDrop`.
