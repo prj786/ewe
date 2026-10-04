@@ -50,8 +50,7 @@ QtObject {
     function openQuickSettingsTab(name) { g.quickSettingsOpen = true; g.quickSettingsTabRequested(name) }
     property bool dnd: false               // Do Not Disturb (suppresses toasts)
     property var server: null              // set by Notifications.qml (the live NotificationServer)
-    property bool vpnActive: false         // any VPN connection up (bar shows a VPN glyph)
-    property string netBusy: ""            // "wifi" | "vpn" while a connection attempt runs (bar spinner)
+    property string netBusy: ""            // "wifi" (or "vpn", set by the VPN add-on) while a connection attempt runs (bar spinner)
     property int netEpoch: 0               // bumped by the bar on every NetworkManager event (nmcli monitor) — panels re-read on change
     // ── Cast to TV (RFC-004: ewe-castd owns the protocols, Cast.qml owns the
     //    socket, this is the shared truth the tile/bar/card all render) ──

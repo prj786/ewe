@@ -23,7 +23,7 @@ import Quickshell.Bluetooth
 //            OutCubic, and nothing moves under Reduce motion
 //   rail     the collapsed Side navigation: the sheep mark, then one
 //            controlLg × controlMd item per page (home, Wi-Fi, Bluetooth,
-//            sound, VPN, Cast, Mobile, Mail, Calendar, Notifications) on
+//            sound, Cast, Mobile, Mail, Calendar, Notifications) on
 //            surfaceBase; the selected page is accentSubtle with an
 //            accentText glyph; Settings and Power sit at its foot
 //   home     the tile grid (Tile.qml), spaceS apart
@@ -195,7 +195,7 @@ Scope {
         return parts.join(" · ")
     }
 
-    // which section is expanded: "" | "audio" | "wifi" | "bt" | "vpn" | "mobile" | "mail"
+    // which section is expanded: "" | "audio" | "wifi" | "bt" | "mobile" | "mail"
     // ── tabs (the 2026-09 revamp): home is the toggle grid, every list
     //    lives on its own tab; `expanded` survives as a read-only alias so
     //    the section visibles below keep working unchanged ──
@@ -207,7 +207,6 @@ Scope {
         root.tab = t
         if (t === "wifi") { wifiScan.running = true; wifiSavedScan.running = true }
         if (t === "bt" && Bluetooth.defaultAdapter) Bluetooth.defaultAdapter.discovering = true
-        if (t === "vpn") vpnScan.running = true
         if (t === "mobile") { root.mobileView = "notifs"; KdeConnect.refresh() }
         if (t === "mail" && Mail.available) Mail.fetch()
         if (t === "cast") Globals.castCommand("scan", "")
@@ -232,9 +231,6 @@ Scope {
     property string pwText: ""
     function curSsid() { for (var i = 0; i < wifiList.length; i++) if (wifiList[i].active) return wifiList[i].ssid; return "" }
 
-    // vpn
-    property var vpnList: []
-
     // sliders (0..1), read on open, updated optimistically on drag
     property real brightnessVal: 0.5
     property real volumeVal: 0.5
@@ -249,9 +245,7 @@ Scope {
         Globals.openDd = ""   // never reopen with a stale dropdown expanded
         root.today = d; root.calYear = d.getFullYear(); root.calMonth = d.getMonth(); root.calDate = d.getDate()
         wifiState.running = true; wiredState.running = true; brightnessProc.running = true; volumeProc.running = true; wifiSavedScan.running = true
-        vpnScan.running = true   // always: the VPN card only exists when profiles do
         if (root.expanded === "wifi") wifiScan.running = true
-        if (root.expanded === "vpn") vpnScan.running = true
     }
     function clearAll() {
         if (!Globals.server) return
@@ -350,58 +344,6 @@ Scope {
         wifiConnProc.command = cmd
         wifiConnProc.running = true
         root.pwTarget = ""; root.pwText = ""
-    }
-    property string vpnPending: ""
-    property string vpnBusyName: ""   // connection being brought up/down — its row + the bar spin
-    function toggleVpn(name, up) {
-        root.vpnPending = (up ? "connect to " : "disconnect from ") + name
-        root.vpnBusyName = name
-        vpnUpProc.name = name
-        Globals.netBusy = "vpn"
-        vpnUpProc.command = ["nmcli", "connection", up ? "up" : "down", name]
-        vpnUpProc.running = true
-    }
-    // ── VPN credentials, inline ──
-    // Nothing in ewe is a NetworkManager secret agent, so a profile without
-    // stored secrets can only fail with "secrets were required … --ask". The
-    // row then opens a credentials form; the secrets are written INTO the
-    // profile (password-flags=0 — GNOME's "store for all users", root-only
-    // file under /etc/NetworkManager) and the toggle just works from then on.
-    // L2TP/IPsec (the corporate kind: server + user + password + PSK) is the
-    // case that surfaced this (metal, 2026-09-02); OpenVPN gets the same form.
-    property string vpnCredTarget: ""    // profile whose form is open
-    property string vpnCredService: ""   // …l2tp | …openvpn | …
-    property bool vpnCredNeedsPsk: false
-    property string vpnCredUser: ""
-    property string vpnCredPass: ""
-    property string vpnCredPsk: ""
-    property string vpnCredError: ""
-    property bool vpnCredShow: false
-    function vpnAskCredentials(name) {
-        root.vpnCredTarget = name; root.vpnCredError = ""; root.vpnCredPass = ""; root.vpnCredPsk = ""
-        root.vpnCredService = ""; root.vpnCredNeedsPsk = false
-        vpnInfoProc.command = ["nmcli", "-t", "-g", "vpn.service-type,vpn.data", "connection", "show", name]
-        vpnInfoProc.running = true
-    }
-    function vpnCloseCredentials() { root.vpnCredTarget = ""; root.vpnCredPass = ""; root.vpnCredPsk = ""; root.vpnCredError = "" }
-    function nmEsc(v) { return String(v).replace(/,/g, "\\,") }   // nmcli splits dict values on ','
-    function vpnSaveCredentials() {
-        var name = root.vpnCredTarget
-        if (name === "" || root.vpnCredUser === "" || root.vpnCredPass === "") { root.vpnCredError = "Enter a username and a password."; return }
-        var l2tp = /l2tp$/.test(root.vpnCredService), ovpn = /openvpn$/.test(root.vpnCredService)
-        var args = ["nmcli", "connection", "modify", name, "vpn.user-name", root.vpnCredUser, "+vpn.data", "password-flags=0"]
-        if (l2tp) args.push("+vpn.data", "user=" + root.nmEsc(root.vpnCredUser))
-        if (ovpn) args.push("+vpn.data", "username=" + root.nmEsc(root.vpnCredUser))
-        args.push("+vpn.secrets", "password=" + root.nmEsc(root.vpnCredPass))
-        if (l2tp && root.vpnCredPsk !== "") {
-            args.push("+vpn.data", "ipsec-enabled=yes", "+vpn.data", "ipsec-psk-flags=0")
-            args.push("+vpn.secrets", "ipsec-psk=" + root.nmEsc(root.vpnCredPsk))
-        }
-        root.vpnCredError = ""
-        root.vpnBusyName = name; Globals.netBusy = "vpn"
-        vpnCredProc.name = name
-        vpnCredProc.command = args
-        vpnCredProc.running = true
     }
     // logind writes the backlight for us (no udev rule, no setuid helper); fall
     // back to brightnessctl when the bridge is down or the machine has no
@@ -521,24 +463,6 @@ Scope {
         wiredSetProc.command = ["nmcli", "device", on ? "connect" : "disconnect", root.wiredDev]
         wiredSetProc.running = true
     }
-    Process {
-        id: vpnScan
-        command: ["sh", "-c", "nmcli -t -f NAME,TYPE,ACTIVE connection show 2>/dev/null"]
-        stdout: StdioCollector {
-            onStreamFinished: {
-                var lines = this.text.split("\n"), arr = []
-                for (var i = 0; i < lines.length; i++) {
-                    if (!lines[i]) continue
-                    var p = lines[i].split(":")
-                    var type = p[p.length - 2], active = p[p.length - 1] === "yes"
-                    var name = p.slice(0, p.length - 2).join(":")
-                    if (type && (type.indexOf("vpn") >= 0 || type.indexOf("wireguard") >= 0 || type.indexOf("tun") >= 0))
-                        arr.push({ name: name, active: active })
-                }
-                root.vpnList = arr
-            }
-        }
-    }
     Process { id: brightnessProc; command: ["sh", "-c", "brightnessctl -m 2>/dev/null | cut -d, -f4 | tr -d '%'"]; stdout: StdioCollector { onStreamFinished: { var n = parseInt(this.text.trim()); if (!isNaN(n)) root.brightnessVal = n / 100 } } }
     Process { id: volumeProc; command: ["sh", "-c", "wpctl get-volume @DEFAULT_AUDIO_SINK@ 2>/dev/null | grep -oE '[0-9]+\\.[0-9]+'"]; stdout: StdioCollector { onStreamFinished: { var f = parseFloat(this.text.trim()); if (!isNaN(f)) root.volumeVal = Math.min(1, f) } } }
     Timer { id: rescanTimer; interval: 2500; onTriggered: { wifiState.running = true; wifiScan.running = true } }
@@ -547,7 +471,7 @@ Scope {
     Timer { id: wifiConfirmTimer; interval: 4000; onTriggered: { root.wifiConfirm = ""; root.wifiPending = "" } }
     // NetworkManager events (the bar's `nmcli monitor`) — re-read while the
     // panel is open instead of waiting for the 6 s poll; this is what makes a
-    // cable plug, a Wi-Fi join or a VPN coming up show at once
+    // cable plug or a Wi-Fi join show at once
     Connections {
         target: Globals
         function onNetEpochChanged() {
@@ -556,94 +480,7 @@ Scope {
             if (root.expanded === "wifi") wifiScan.running = true
         }
     }
-    Timer { id: vpnRescan; interval: 2000; onTriggered: vpnScan.running = true }
 
-    // brings a VPN up/down; on failure raises a system notification with the error
-    Process {
-        id: vpnUpProc
-        property string name: ""
-        stderr: StdioCollector { id: vpnErr }
-        onExited: function (exitCode, exitStatus) {
-            root.vpnBusyName = ""
-            Globals.netBusy = ""
-            vpnRescan.restart()
-            if (exitCode !== 0) {
-                var msg = (vpnErr.text || "").trim()
-                // no stored secrets (and no secret agent to ask): open the
-                // credentials form on that row instead of only shouting
-                if (/secrets|--ask|no agents|agent/i.test(msg)) { root.setTab("vpn"); root.vpnAskCredentials(vpnUpProc.name); return }
-                if (root.vpnCredTarget === vpnUpProc.name) { root.vpnCredError = msg !== "" ? msg.split("\n")[0] : ("nmcli exited with code " + exitCode); return }
-                var title = "Couldn’t " + root.vpnPending, body = msg !== "" ? msg : ("nmcli exited with code " + exitCode)
-                // "The VPN service failed to start" says nothing — the reason
-                // is a journal line back; fetch it before shouting
-                if (/VPN service failed to start|activation failed/i.test(msg)) {
-                    vpnWhyProc.name = vpnUpProc.name; vpnWhyProc.title = title; vpnWhyProc.fallback = body
-                    vpnWhyProc.running = false; vpnWhyProc.running = true
-                    return
-                }
-                Quickshell.execDetached(["notify-send", "-u", "critical", "-a", "VPN", title, body])
-            }
-        }
-    }
-    // NetworkManager reports a VPN plugin failure as "The VPN service failed
-    // to start" and keeps the actual reason for the journal:
-    //   vpn[…,"work-vpn"]: failed to connect: 'Could not establish IPsec connection.'
-    // (that one is the strongSwan-6.1-has-no-IKEv1 case, 2026-09-10). Read the
-    // last such line for this profile and put IT in the notification. The
-    // journal is readable for wheel/systemd-journal members (the installing
-    // user); anyone else just gets nmcli's line.
-    Process {
-        id: vpnWhyProc
-        property string name: ""
-        property string title: ""
-        property string fallback: ""
-        command: ["journalctl", "-u", "NetworkManager", "-n", "150", "-o", "cat", "--since", "-3min", "--no-pager"]
-        stdout: StdioCollector {
-            onStreamFinished: {
-                var why = "", lines = (this.text || "").split("\n")
-                for (var i = lines.length - 1; i >= 0; i--) {
-                    if (lines[i].indexOf('"' + vpnWhyProc.name + '"') < 0) continue
-                    var m = /failed to connect: '([^']+)'/.exec(lines[i])
-                    if (m) { why = m[1]; break }
-                }
-                var body = vpnWhyProc.fallback
-                if (why !== "") body = why + (/ipsec/i.test(why) ? " — L2TP/IPsec needs IKEv1: libreswan with ikev1-policy=accept (install.sh sets it up; see the manual's VPN section)" : "")
-                Quickshell.execDetached(["notify-send", "-u", "critical", "-a", "VPN", vpnWhyProc.title, body])
-            }
-        }
-    }
-    // what kind of profile is asking: service type decides the fields (L2TP
-    // gets a pre-shared key), vpn.data prefills the username
-    Process {
-        id: vpnInfoProc
-        stdout: StdioCollector {
-            onStreamFinished: {
-                var rows = this.text.split("\n")
-                root.vpnCredService = (rows[0] || "").trim()
-                var data = rows[1] || "", user = ""
-                var m = /(?:^|,)\s*user(?:name)?\s*=\s*([^,]*)/.exec(data)
-                if (m) user = m[1].trim()
-                root.vpnCredUser = user
-                root.vpnCredNeedsPsk = /l2tp$/.test(root.vpnCredService)
-            }
-        }
-    }
-    // writes the credentials into the profile, then brings it up
-    Process {
-        id: vpnCredProc
-        property string name: ""
-        stderr: StdioCollector { id: vpnCredErr }
-        onExited: function (exitCode, exitStatus) {
-            if (exitCode !== 0) {
-                root.vpnBusyName = ""; Globals.netBusy = ""
-                var msg = (vpnCredErr.text || "").trim()
-                root.vpnCredError = msg !== "" ? msg.split("\n")[0] : ("nmcli exited with code " + exitCode)
-                return
-            }
-            root.vpnCloseCredentials()
-            root.toggleVpn(vpnCredProc.name, true)
-        }
-    }
     // joins a Wi-Fi network; same deal — spinner while running, notify on failure
     Process {
         id: wifiConnProc
@@ -785,7 +622,7 @@ Scope {
             }
 
             // ══ the icon rail: pages down the left edge, Settings and Power
-            //    pinned at its foot. VPN and Mail obey the same "only what
+            //    pinned at its foot. Mail obeys the same "only what
             //    exists" rule as their home tiles. ══
             Rectangle {
                 id: rail
@@ -830,7 +667,6 @@ Scope {
                             { key: "wifi",   icon: Theme.icWifi },
                             { key: "bt",     icon: Theme.icBluetooth },
                             { key: "audio",  icon: Theme.icVolHigh },
-                            { key: "vpn",    icon: Theme.icVpn },
                             { key: "cast",   icon: Theme.icCast },
                             { key: "mobile", icon: Theme.icPhone },
                             { key: "mail",   icon: Theme.icMail },
@@ -840,7 +676,6 @@ Scope {
                         delegate: RailBtn {
                             required property var modelData
                             visible: modelData.key === "mail" ? Mail.available
-                                   : modelData.key === "vpn"  ? (root.vpnList.length > 0 || Globals.vpnActive)
                                    : true
                             ic: modelData.icon
                             current: root.tab === modelData.key
@@ -984,36 +819,7 @@ Scope {
                             onMenu: root.setTab("bt")
                         }
                     }
-                    Row {
-                        // (the tiles' own conditions — a child's `visible` reads false while
-                        // this row is hidden, so it cannot decide the row)
-                        visible: root.tab === "home" && (root.vpnList.length > 0 || Globals.vpnActive)
-                        width: parent.width; spacing: Theme.spaceS
-                        Tile {
-                            id: vpnTile
-                            // home shows only what exists: no VPN profiles and
-                            // nothing active → no tile
-                            visible: root.vpnList.length > 0 || Globals.vpnActive
-                            ic: Theme.icVpn; label: "VPN"
-                            active: Globals.vpnActive
-                            opened: root.expanded === "vpn"
-                            hasMenu: true
-                            busy: root.vpnBusyName !== ""
-                            sub: root.vpnBusyName !== "" ? "Connecting…" : (Globals.vpnActive ? "On" : "Off")
-                            function openList() { root.setTab("vpn") }
-                            // body: GNOME semantics — disconnect the active VPN /
-                            // reconnect the single configured one; only when the
-                            // choice is ambiguous does the body open the list
-                            onClicked: {
-                                var act = null
-                                for (var i = 0; i < root.vpnList.length; i++) if (root.vpnList[i].active) { act = root.vpnList[i]; break }
-                                if (act) root.toggleVpn(act.name, false)
-                                else if (root.vpnList.length === 1) root.toggleVpn(root.vpnList[0].name, true)
-                                else vpnTile.openList()
-                            }
-                            onMenu: vpnTile.openList()
-                        }
-                    }
+                    // (VPN and SSH are the ewe.vpn / ewe.ssh add-ons' quick-tiles and pages)
                     Row {
                         visible: root.tab === "home"
                         width: parent.width; spacing: Theme.spaceS
@@ -1281,116 +1087,6 @@ Scope {
                             visible: Bluetooth.defaultAdapter && Bluetooth.defaultAdapter.enabled && !BtAgent.registered
                             tone: "warning"
                             text: BtAgent.bridgeError !== "" ? BtAgent.bridgeError : "The pairing agent isn’t running yet. Devices that ask for a code can’t pair."
-                        }
-                    }
-
-                    // ═══ VPN ═══
-                    Column {
-                        visible: root.expanded === "vpn"
-                        width: parent.width; spacing: Theme.spaceS
-                        QsPageHead { title: "VPN"; busy: root.vpnBusyName !== "" }
-                        QsEmpty {
-                            visible: root.vpnList.length === 0
-                            ic: Theme.icVpn; title: "No VPN connections"
-                            desc: "Add a VPN connection, and it shows up here."
-                        }
-                        ListWell {
-                            flush: true
-                            visible: root.vpnList.length > 0
-                            Repeater {
-                                model: root.vpnList
-                                delegate: Column {
-                                    id: vRow
-                                    required property var modelData
-                                    width: parent.width
-                                    spacing: Theme.spaceS
-                                    ListRow {
-                                        glyph: Theme.icVpn
-                                        glyphColor: vRow.modelData.active ? Theme.accentText : Theme.textSecondary
-                                        label: vRow.modelData.name
-                                        desc: root.vpnBusyName === vRow.modelData.name ? "Connecting…" : vRow.modelData.active ? "Connected" : ""
-                                        active: vRow.modelData.active
-                                        check: vRow.modelData.active && root.vpnBusyName !== vRow.modelData.name
-                                        busy: root.vpnBusyName === vRow.modelData.name
-                                        onClicked: (root.vpnCredTarget === vRow.modelData.name) ? root.vpnCloseCredentials() : root.toggleVpn(vRow.modelData.name, !vRow.modelData.active)
-                                    }
-                                    // the sign-in form: username · password · (L2TP) pre-shared
-                                    // key, stored in the profile on Connect, so the toggle works
-                                    // from then on
-                                    Column {
-                                        visible: root.vpnCredTarget === vRow.modelData.name
-                                        width: parent.width
-                                        spacing: Theme.spaceS
-                                        leftPadding: Theme.spaceS; rightPadding: Theme.spaceS; bottomPadding: Theme.spaceS
-                                        readonly property real w: width - leftPadding - rightPadding
-                                        QsNote { width: parent.w; text: "Enter your sign-in details once. They’re kept in the connection." }
-                                        QsField {
-                                            width: parent.w
-                                            focused: vUser.activeFocus
-                                            QsFieldInput {
-                                                id: vUser
-                                                anchors.fill: parent; anchors.leftMargin: Theme.spaceS; anchors.rightMargin: Theme.spaceS
-                                                placeholder: "Username"
-                                                text: root.vpnCredUser
-                                                onTextChanged: root.vpnCredUser = text
-                                                Component.onCompleted: if (root.vpnCredTarget === vRow.modelData.name && text === "") forceActiveFocus()
-                                                Keys.onEscapePressed: root.vpnCloseCredentials()
-                                            }
-                                        }
-                                        QsField {
-                                            width: parent.w
-                                            focused: vPass.activeFocus
-                                            error: root.vpnCredError !== ""
-                                            QsFieldInput {
-                                                id: vPass
-                                                anchors.fill: parent; anchors.leftMargin: Theme.spaceS; anchors.rightMargin: Theme.controlSm + Theme.spaceXs
-                                                placeholder: "Password"
-                                                echoMode: root.vpnCredShow ? TextInput.Normal : TextInput.Password
-                                                text: root.vpnCredPass
-                                                onTextChanged: root.vpnCredPass = text
-                                                Component.onCompleted: if (root.vpnCredTarget === vRow.modelData.name && root.vpnCredUser !== "") forceActiveFocus()
-                                                onAccepted: root.vpnCredNeedsPsk ? vPsk.forceActiveFocus() : root.vpnSaveCredentials()
-                                                Keys.onEscapePressed: root.vpnCloseCredentials()
-                                            }
-                                            QsIconButton {
-                                                anchors.right: parent.right; anchors.rightMargin: Theme.spaceXxs
-                                                anchors.verticalCenter: parent.verticalCenter
-                                                ic: root.vpnCredShow ? Theme.icEyeOff : Theme.icEye
-                                                selected: root.vpnCredShow
-                                                onGo: root.vpnCredShow = !root.vpnCredShow
-                                            }
-                                        }
-                                        QsField {
-                                            visible: root.vpnCredNeedsPsk
-                                            width: parent.w
-                                            focused: vPsk.activeFocus
-                                            QsFieldInput {
-                                                id: vPsk
-                                                anchors.fill: parent; anchors.leftMargin: Theme.spaceS; anchors.rightMargin: Theme.spaceS
-                                                placeholder: "Pre-shared key (IPsec), if there is one"
-                                                echoMode: root.vpnCredShow ? TextInput.Normal : TextInput.Password
-                                                text: root.vpnCredPsk
-                                                onTextChanged: root.vpnCredPsk = text
-                                                onAccepted: root.vpnSaveCredentials()
-                                                Keys.onEscapePressed: root.vpnCloseCredentials()
-                                            }
-                                        }
-                                        QsNote { visible: root.vpnCredError !== ""; width: parent.w; tone: "danger"; text: root.vpnCredError }
-                                        Row {
-                                            anchors.right: parent.right; anchors.rightMargin: parent.rightPadding
-                                            spacing: Theme.spaceS
-                                            QsButton { size: "md"; variant: "ghost"; label: "Cancel"; onGo: root.vpnCloseCredentials() }
-                                            QsButton {
-                                                size: "md"; variant: "primary"
-                                                busy: root.vpnBusyName === vRow.modelData.name
-                                                disabled: root.vpnBusyName !== "" && root.vpnBusyName !== vRow.modelData.name
-                                                label: root.vpnBusyName === vRow.modelData.name ? "Connecting…" : "Connect"
-                                                onGo: root.vpnSaveCredentials()
-                                            }
-                                        }
-                                    }
-                                }
-                            }
                         }
                     }
 

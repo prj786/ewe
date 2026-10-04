@@ -1789,7 +1789,6 @@ Scope {
                     SectionTitle { text: "System" }
                     Card {
                         KV { k: "Graphics driver"; v: root.diag.gpu || "?"; dot: "info" }
-                        KV { k: "VPN"; v: Globals.vpnActive ? "Connected" : "Off"; dot: Globals.vpnActive ? "ok" : "info" }
                         KV { k: "When idle"; v: root.idlePolicyText(); dot: "info" }
                         KV { k: "Memory"; v: root.diag.mem || "?"; dot: "info" }
                         KV { k: "Disk /"; v: root.diag.disk || "?"; dot: "info" }

@@ -119,22 +119,17 @@ Scope {
         }
     }
 
-    // ── network state: VPN active → Globals.vpnActive, Wi-Fi connected → wifiUp,
-    //    wired (ethernet) connected → wiredUp (shown when no Wi-Fi, e.g. VMs) ──
+    // ── network state: Wi-Fi connected → wifiUp, wired (ethernet) connected →
+    //    wiredUp (shown when no Wi-Fi, e.g. VMs) ──
     //
     // This was a 5 s timer firing FOUR processes — ~170k spawns a day, of which
     // the wifi and wired ones ran the identical nmcli query and the keyboard one
     // duplicated an event we already receive. `nmcli monitor` is a single
     // long-lived process that prints a line whenever NetworkManager changes
-    // anything, so we now re-query only when the world actually moves.
+    // anything, so we now re-query only when the world actually moves. The
+    // VPN add-on (ewe.vpn) listens to Globals.netEpoch for its own state.
     property bool wifiUp: false
     property bool wiredUp: false
-    Process {
-        id: vpnProc
-        running: true                     // one read at startup; nmcli monitor drives the rest
-        command: ["sh", "-c", "nmcli -t -f TYPE,STATE connection show --active 2>/dev/null | awk -F: '($1 ~ /vpn|wireguard|tun/) && $2==\"activated\"{print \"yes\"; exit}'"]
-        stdout: StdioCollector { onStreamFinished: Globals.vpnActive = (this.text.trim() === "yes") }
-    }
     // one query answers both wifi and wired — they used to be two identical calls
     Process {
         id: devProc
@@ -149,7 +144,6 @@ Scope {
         }
     }
     function netRefresh() {
-        vpnProc.running = false; vpnProc.running = true
         devProc.running = false; devProc.running = true
         Globals.netEpoch++                  // Quick Settings re-reads its lists on this
     }
@@ -592,7 +586,7 @@ Scope {
 
                             // ORDER is the Bar card's, each shown only while it
                             // applies: network busy → casting ·
-                            // VPN → sync → notifications · mail ·
+                            // sync → notifications · mail ·
                             // calendar · phone → wired/Wi-Fi · sound · mic ·
                             // Bluetooth → power profile · battery.
                             // Metrics are uniform on purpose: every glyph is
@@ -619,14 +613,6 @@ Scope {
                                 font.family: Theme.fontIcons; font.pixelSize: Theme.barIcon
                                 color: Globals.castState === "streaming" || Globals.castLegacy
                                        ? Theme.barAccentText : ctlGroup.ink
-                            }
-                            // VPN (only when active)
-                            Text {
-                                visible: Globals.vpnActive
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: Theme.icVpn
-                                font.family: Theme.fontIcons; font.pixelSize: Theme.barIcon
-                                color: ctlGroup.ink
                             }
 
                             // ewe-sync — the account app's state, so "is my
