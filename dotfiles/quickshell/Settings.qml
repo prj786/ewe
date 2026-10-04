@@ -61,7 +61,7 @@ Scope {
         else if (k === "saver") { saverToolProbe.running = false; saverToolProbe.running = true }
         else if (k === "power") { Power.refresh(); Logind.refreshBrightness(); Logind.refreshInhibitors() }
         else if (k === "startup") { saLoad.running = false; saLoad.running = true }
-        else if (k === "user") { Globals.recheckFace(); userInfoProbe.running = false; userInfoProbe.running = true; Cloud.refresh(); Google.refresh(); Mail.probe(); Accounts.refresh() }
+        else if (k === "user") { Globals.recheckFace(); userInfoProbe.running = false; userInfoProbe.running = true; Cloud.refresh(); Google.refresh(); Accounts.refresh() }
     }
     onPaneChanged: root.paneProbes()
 
@@ -3266,7 +3266,6 @@ Scope {
                         KV { k: "Storage"; v: Cloud.quota && Cloud.quota.total > 0 ? (root.fmtBytes(Cloud.quota.used) + " of " + root.fmtBytes(Cloud.quota.total) + " · " + Math.round(Cloud.quota.relative || 0) + "%") : (Cloud.quota ? root.fmtBytes(Cloud.quota.used) + " used" : "—") }
                         KV { k: "Files"; v: Cloud.filesMounted ? "In " + Cloud.filesPath : "Not connected"; dot: Cloud.filesMounted ? "ok" : "info"; action: !Cloud.filesMounted; actionLabel: "Connect files"; onAct: Cloud.mountFiles() }
                         KV { k: "Calendar"; v: Cloud.calState === "offline" ? "Offline, showing events from the last sync" : (Cloud.events.length + " upcoming in Quick settings"); dot: Cloud.calState === "offline" ? "info" : "ok" }
-                        KV { k: "Mail"; v: Mail.source === "imap" ? Mail.imapUser : (Mail.source === "gmail" ? "Gmail (Google)" : "None. Add an IMAP account in the Settings app"); dot: Mail.available ? "ok" : "info" }
                         // the account app (RFC-006) — the in-shell cards stay as the fallback
                         KV { visible: Globals.syncAppInstalled; k: "Your machines, folders and conflicts"; dot: "ok"; action: true; actionLabel: "Open ewe-sync"; onAct: Globals.openSync() }
                     }
@@ -3327,7 +3326,7 @@ Scope {
                     Card {
                         visible: !Google.personalClient
                         TBody { width: parent.width; color: Theme.textSecondary; wrapMode: Text.WordWrap
-                            text: "For Gmail in Quick settings and Google Drive as a folder. ewe ships no Google client: create your own OAuth client of type “Desktop app” (docs/GOOGLE-CLIENT.md) and save it as the file below; then this turns into Connect." }
+                            text: "For Google Calendar, Google Drive as a folder and the Mail add-on’s Gmail inbox. ewe ships no Google client: create your own OAuth client of type “Desktop app” (docs/GOOGLE-CLIENT.md) and save it as the file below; then this turns into Connect." }
                         TMono { width: parent.width; text: Google.clientPath; elide: Text.ElideMiddle }
                     }
                     Alert {
@@ -3337,7 +3336,7 @@ Scope {
                     Card {
                         visible: Google.probed && Google.configured && !Google.signedIn
                         TBody { width: parent.width; color: Theme.textSecondary; wrapMode: Text.WordWrap
-                            text: "Your client file is in place. Connect for Gmail in Quick settings and ~/Google Drive in Files. Settings sync never goes through Google." }
+                            text: "Your client file is in place. Connect for Google Calendar, ~/Google Drive in Files and Gmail in the Mail add-on. Settings sync never goes through Google." }
                         Row {
                             spacing: Theme.spaceS
                             Pill { visible: Google.busy !== "signin"; label: "Connect Google"; primary: true; onGo: Google.signIn() }
@@ -3365,7 +3364,6 @@ Scope {
                             Pill { id: gOut; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; label: "Disconnect"; onGo: Google.signOut() }
                         }
                         Divider {}
-                        KV { k: "Gmail"; v: Mail.source === "gmail" ? "In Quick settings" : "Your IMAP account is used instead"; dot: Mail.source === "gmail" ? "ok" : "info" }
                         KV { k: "Google Drive"; v: "~/Google Drive in Files"; dot: "ok" }
                         KV { visible: Google.profile && Google.profile.picture; k: "Google profile photo"; action: true; actionLabel: "Use as picture"; onAct: root.useGooglePhoto() }
                     }

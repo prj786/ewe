@@ -586,7 +586,7 @@ Scope {
 
                             // ORDER is the Bar card's, each shown only while it
                             // applies: network busy → sync → notifications ·
-                            // mail · calendar → wired/Wi-Fi · sound · mic ·
+                            // calendar → wired/Wi-Fi · sound · mic ·
                             // Bluetooth → power profile · battery.
                             // Metrics are uniform on purpose: every glyph is
                             // Theme.barIcon, every count a Badge, every figure
@@ -648,14 +648,6 @@ Scope {
                                 glyph: Theme.icBell
                                 color: Theme.barAccentText
                                 count: Globals.server ? Globals.server.trackedNotifications.values.length : 0
-                            }
-                            // Mail (IMAP or Gmail) — envelope + count, only when there is unread mail
-                            BarIcon {
-                                visible: Mail.available && Mail.unread > 0
-                                anchors.verticalCenter: parent.verticalCenter
-                                glyph: Theme.icMail
-                                color: ctlGroup.ink
-                                count: Mail.unread
                             }
                             // Calendar — an event is running or starts within the hour
                             Text {

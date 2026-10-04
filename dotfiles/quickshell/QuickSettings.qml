@@ -23,7 +23,7 @@ import Quickshell.Bluetooth
 //            OutCubic, and nothing moves under Reduce motion
 //   rail     the collapsed Side navigation: the sheep mark, then one
 //            controlLg × controlMd item per page (home, Wi-Fi, Bluetooth,
-//            sound, Mail, Calendar, Notifications) on
+//            sound, Calendar, Notifications; the add-ons' pages follow) on
 //            surfaceBase; the selected page is accentSubtle with an
 //            accentText glyph; Settings and Power sit at its foot
 //   home     the tile grid (Tile.qml), spaceS apart
@@ -195,7 +195,7 @@ Scope {
         return parts.join(" · ")
     }
 
-    // which section is expanded: "" | "audio" | "wifi" | "bt" | "mail"
+    // which section is expanded: "" | "audio" | "wifi" | "bt" | an add-on page key
     // ── tabs (the 2026-09 revamp): home is the toggle grid, every list
     //    lives on its own tab; `expanded` survives as a read-only alias so
     //    the section visibles below keep working unchanged ──
@@ -207,14 +207,6 @@ Scope {
         root.tab = t
         if (t === "wifi") { wifiScan.running = true; wifiSavedScan.running = true }
         if (t === "bt" && Bluetooth.defaultAdapter) Bluetooth.defaultAdapter.discovering = true
-        if (t === "mail" && Mail.available) Mail.fetch()
-    }
-
-    function fmtMsgTime(ms) {
-        var d = new Date(ms), now = new Date()
-        if (d.toDateString() === now.toDateString()) return Qt.formatTime(d, "h:mm AP")
-        if (now.getTime() - ms < 6 * 86400000) return Qt.formatDateTime(d, "ddd")
-        return Qt.formatDateTime(d, "d MMM")
     }
 
     // wifi
@@ -617,8 +609,7 @@ Scope {
             }
 
             // ══ the icon rail: pages down the left edge, Settings and Power
-            //    pinned at its foot. Mail obeys the same "only what
-            //    exists" rule as their home tiles. ══
+            //    pinned at its foot. The add-ons' pages follow the built-ins. ══
             Rectangle {
                 id: rail
                 // inset by the panel's own outline, so the rail never paints
@@ -662,14 +653,11 @@ Scope {
                             { key: "wifi",   icon: Theme.icWifi },
                             { key: "bt",     icon: Theme.icBluetooth },
                             { key: "audio",  icon: Theme.icVolHigh },
-                            { key: "mail",   icon: Theme.icMail },
                             { key: "cal",    icon: Theme.icCalendar },
                             { key: "notifs", icon: Theme.icBell }
                         ]
                         delegate: RailBtn {
                             required property var modelData
-                            visible: modelData.key === "mail" ? Mail.available
-                                   : true
                             ic: modelData.icon
                             current: root.tab === modelData.key
                             dot: modelData.key === "notifs" && Globals.server && Globals.server.trackedNotifications.values.length > 0
@@ -1068,44 +1056,6 @@ Scope {
                             visible: Bluetooth.defaultAdapter && Bluetooth.defaultAdapter.enabled && !BtAgent.registered
                             tone: "warning"
                             text: BtAgent.bridgeError !== "" ? BtAgent.bridgeError : "The pairing agent isn’t running yet. Devices that ask for a code can’t pair."
-                        }
-                    }
-
-                    // ═══ MAIL (Gmail) ═══
-                    Column {
-                        visible: root.expanded === "mail"
-                        width: parent.width; spacing: Theme.spaceS
-                        QsPageHead {
-                            title: Mail.available ? "Inbox" : "Mail"
-                            note: Mail.available && Mail.unread > 0 ? Mail.unread + " unread" : ""
-                            // new-mail notifications on or off
-                            QsIconButton { visible: Mail.available; anchors.verticalCenter: parent.verticalCenter; ic: Theme.icBellRing; selected: Mail.notify; onGo: Mail.setNotify(!Mail.notify) }
-                            QsIconButton { visible: Mail.available; anchors.verticalCenter: parent.verticalCenter; ic: Theme.icRefresh; onGo: Mail.fetch() }
-                            QsButton { anchors.verticalCenter: parent.verticalCenter; label: Mail.inboxLabel; onGo: Mail.openInbox() }
-                        }
-                        QsNote { visible: !Mail.available; text: Mail.hint }
-                        QsNote { visible: Mail.available && Mail.error !== ""; tone: "warning"; text: Mail.error }
-                        QsButton { visible: Mail.needsReconnect; variant: "primary"; label: "Reconnect Google"; onGo: Mail.reconnect() }
-                        QsNote { visible: Mail.available && Mail.state === "offline"; text: "Offline. Showing the last check." }
-                        QsEmpty {
-                            visible: Mail.available && Mail.state === "" && Mail.list.length === 0
-                            ic: Theme.icMail; title: "No mail"; desc: "Your inbox is empty."
-                        }
-                        // the latest 10, compact two-line rows — no inner scrolling
-                        ListWell {
-                            flush: true
-                            visible: Mail.available && Mail.list.length > 0
-                            Repeater {
-                                model: Mail.list.slice(0, 10)
-                                delegate: QsMsgRow {
-                                    required property var modelData
-                                    title: modelData.from
-                                    line: modelData.subject
-                                    time: root.fmtMsgTime(modelData.date)
-                                    unread: modelData.unread
-                                    onClicked: Mail.open(modelData.id)
-                                }
-                            }
                         }
                     }
 

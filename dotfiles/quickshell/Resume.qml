@@ -117,7 +117,6 @@ QtObject {
             Log.info("resume", "6/6 accounts")
             Cloud.refreshAfterResume()
             Google.refreshAfterResume()
-            Mail.refreshAfterResume()
             // Shell.resumed (API 3): the plugins' turn — the phone and mail
             // add-ons refresh their bridges and inboxes here.
             Shell.resumed()
