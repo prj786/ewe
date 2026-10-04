@@ -175,10 +175,10 @@ Scope {
         property bool revealed: !Globals.dockAutohide || !win.wsClaimed || edgeHov.hovered
                                  || dockHov.hovered
                                  || closeHold.running || Globals.launcherOpen || Globals.storeOpen
-                                 || Globals.placesOpen || Globals.overviewOpen
+                                 || Globals.overviewOpen
                                  || Shell.activeCount > 0
         Timer { id: closeHold; interval: 280 }
-        function maybeHide() { if (!edgeHov.hovered && !dockHov.hovered && !Globals.launcherOpen && !Globals.storeOpen && !Globals.placesOpen && Shell.activeCount === 0) closeHold.restart() }
+        function maybeHide() { if (!edgeHov.hovered && !dockHov.hovered && !Globals.launcherOpen && !Globals.storeOpen && Shell.activeCount === 0) closeHold.restart() }
         Connections { target: edgeHov; function onHoveredChanged() { win.maybeHide() } }
         Connections { target: dockHov; function onHoveredChanged() { win.maybeHide() } }
 
@@ -295,13 +295,12 @@ Scope {
                 anchors.centerIn: parent
                 spacing: Theme.spaceS
 
-                DockBtn { id: launchBtn; a11yName: "Apps"; image: Qt.resolvedUrl("assets/ewe-mark.svg"); activeState: Globals.launcherOpen; anchors.verticalCenter: parent.verticalCenter; onGo: { Globals.launcherAnchorX = launchBtn.mapToItem(null, launchBtn.width / 2, 0).x; Globals.storeOpen = false; Globals.placesOpen = false; Globals.launcherOpen = !Globals.launcherOpen } }
+                DockBtn { id: launchBtn; a11yName: "Apps"; image: Qt.resolvedUrl("assets/ewe-mark.svg"); activeState: Globals.launcherOpen; anchors.verticalCenter: parent.verticalCenter; onGo: { Globals.launcherAnchorX = launchBtn.mapToItem(null, launchBtn.width / 2, 0).x; Globals.storeOpen = false; Globals.launcherOpen = !Globals.launcherOpen } }
                 // in-shell: flip the flag (a `qs ipc call` spawn cost 50-70 ms per click)
                 DockBtn { a11yName: "Overview"; glyph: Theme.icStack; activeState: Globals.overviewOpen; anchors.verticalCenter: parent.verticalCenter; onGo: Globals.overviewOpen = !Globals.overviewOpen }
                 // store button → Komble (the software manager) when installed;
                 // the in-shell quick-installer panel is only the fallback.
-                DockBtn { id: storeBtn; a11yName: "Komble"; glyph: Theme.icStore; activeState: Globals.storeOpen; anchors.verticalCenter: parent.verticalCenter; onGo: { if (Globals.kombleInstalled) { if (!Globals.focusAppWindow(["komble"])) Quickshell.execDetached(["komble"]) } else { Globals.storeAnchorX = storeBtn.mapToItem(null, storeBtn.width / 2, 0).x; Globals.launcherOpen = false; Globals.placesOpen = false; Globals.storeOpen = !Globals.storeOpen } } }
-                DockBtn { id: placesBtn; a11yName: "Places"; glyph: Theme.icFolder; activeState: Globals.placesOpen; anchors.verticalCenter: parent.verticalCenter; onGo: { Globals.placesAnchorX = placesBtn.mapToItem(null, placesBtn.width / 2, 0).x; Globals.launcherOpen = false; Globals.storeOpen = false; Globals.placesOpen = !Globals.placesOpen } }
+                DockBtn { id: storeBtn; a11yName: "Komble"; glyph: Theme.icStore; activeState: Globals.storeOpen; anchors.verticalCenter: parent.verticalCenter; onGo: { if (Globals.kombleInstalled) { if (!Globals.focusAppWindow(["komble"])) Quickshell.execDetached(["komble"]) } else { Globals.storeAnchorX = storeBtn.mapToItem(null, storeBtn.width / 2, 0).x; Globals.launcherOpen = false; Globals.storeOpen = !Globals.storeOpen } } }
                 // ── plugin dock items (API 3 dock-item): after the built-in
                 //    buttons, in manifest order. A click runs the manifest's
                 //    action with this button as the anchor (an AnchoredPopup
@@ -318,7 +317,7 @@ Scope {
                         activeState: modelData.action !== "" && Shell.isActive(modelData.action)
                         anchors.verticalCenter: parent.verticalCenter
                         onGo: {
-                            Globals.launcherOpen = false; Globals.storeOpen = false; Globals.placesOpen = false
+                            Globals.launcherOpen = false; Globals.storeOpen = false
                             var a = Shell.anchorFor(pluginBtn, win)
                             if (modelData.action === "" || !Shell.runAction(modelData.action, a))
                                 Quickshell.execDetached(["qs", "ipc", "call", modelData.id, "toggle"])

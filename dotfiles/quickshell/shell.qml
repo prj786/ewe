@@ -74,7 +74,6 @@ ShellRoot {
     Bar {}
     Dock {}
     LauncherPanel {}
-    Places {}
     TrayMenu {}
     Launcher {}
     QuickSettings {}

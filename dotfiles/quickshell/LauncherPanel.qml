@@ -52,7 +52,7 @@ Scope {
 
     IpcHandler {
         target: "launcher"
-        function toggle(): void { Globals.storeOpen = false; Globals.placesOpen = false; Globals.launcherOpen = !Globals.launcherOpen }
+        function toggle(): void { Globals.storeOpen = false; Globals.launcherOpen = !Globals.launcherOpen }
         function show(): void { Globals.launcherOpen = true }
         function hide(): void { Globals.launcherOpen = false }
     }

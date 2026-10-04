@@ -68,7 +68,6 @@ Settings 1.0 Settings.qml
 Dock 1.0 Dock.qml
 LauncherPanel 1.0 LauncherPanel.qml
 AppStore 1.0 AppStore.qml
-Places 1.0 Places.qml
 TrayIcon 1.0 TrayIcon.qml
 TrayMenu 1.0 TrayMenu.qml
 Battery 1.0 Battery.qml

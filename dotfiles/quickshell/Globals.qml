@@ -407,10 +407,8 @@ QtObject {
     // ── Dock popups ────────────────────────────────────────────────────────────
     property bool launcherOpen: false       // pinned-apps / launcher panel
     property bool storeOpen: false           // app-store panel
-    property bool placesOpen: false          // places / directories panel (Home, Desktop, … + pinned folders)
     property real launcherAnchorX: 200       // screen-local x of the launcher dock button (popup centers on it)
     property real storeAnchorX: 200          // screen-local x of the store dock button
-    property real placesAnchorX: 200         // screen-local x of the places dock button
 
     // ── System-tray context menu (themed, rendered by TrayMenu.qml) ─────────────
     property bool trayMenuOpen: false
@@ -436,20 +434,9 @@ QtObject {
         g._pinWriter.command = [g.eweConf, "set", "--no-hooks", "apps.pinned", JSON.stringify(a)]
         g._pinWriter.running = false; g._pinWriter.running = true
     }
-    // ── Pinned places (folder paths; persisted in places.json) ────────────────
-    // The Places panel always shows the standard XDG dirs; these are the EXTRA
-    // folders the user pinned. Same pattern as pinnedApps.
-    property var pinnedPlaces: []
-    function isPinnedPlace(p) { return (g.pinnedPlaces || []).indexOf(p) >= 0 }
-    function togglePinPlace(p) {
-        if (!p) return
-        var a = (g.pinnedPlaces || []).slice()
-        var i = a.indexOf(p)
-        if (i >= 0) a.splice(i, 1); else a.push(p)
-        g.pinnedPlaces = a
-        g._placesWriter.command = [g.eweConf, "set", "--no-hooks", "apps.places", JSON.stringify(a)]
-        g._placesWriter.running = false; g._placesWriter.running = true
-    }
+    // (Pinned places — places.json / ewe-conf apps.places — belong to the
+    // ewe.places add-on since 0.25; lib/deploy.sh still seeds places.json.default
+    // and ewe-conf still owns the key, so the file is where the add-on reads it.)
     // Re-read every JSON state file this singleton owns — used after a settings
     // restore rewrites them on disk (Google.applyRestore), and by the `settings
     // reload` IPC verb after the out-of-process Settings app has written one.
@@ -463,7 +450,6 @@ QtObject {
         g._reloadPending = true
         g._themeLoad.running = false; g._themeLoad.running = true
         g._pinLoad.running = false; g._pinLoad.running = true
-        g._placesLoad.running = false; g._placesLoad.running = true
         g._animLoad.running = false; g._animLoad.running = true
         // The accent lives in ewe.conf, so picking one re-runs `ewe-theme
         // build` and REWRITES theme-tokens.json. Without this line the shell
@@ -490,13 +476,6 @@ QtObject {
                 } catch (e) { g.animPrefs = null }
             }
         }
-    }
-
-    property Process _placesWriter: Process {}
-    property Process _placesLoad: Process {
-        running: true
-        command: ["sh", "-c", "cat \"$HOME/.config/quickshell/places.json\" 2>/dev/null"]
-        stdout: StdioCollector { onStreamFinished: { try { var j = JSON.parse(this.text); if (Array.isArray(j)) g.pinnedPlaces = j } catch (e) {} } }
     }
 
     // ── Avatar (~/.face) — shared by Settings (account card) and the lock screen.
