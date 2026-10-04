@@ -30,13 +30,25 @@ import Quickshell.Widgets
 // Animation: GNOME-like zoom — the stage zooms out into view on open and back
 // in on close (scale + fade, Theme.dur*).
 //
-// Trigger: `qs ipc call overview toggle` (Super tap / 3-finger swipe up).
+// Triggers: the `ewe:overview` global shortcut (Super tapped alone — the
+// Hyprland bind delivers it straight to this process, no `qs ipc` spawn),
+// `qs ipc call overview toggle` (scripts, the 3-finger swipe) and the in-shell
+// buttons, which flip Globals.overviewOpen directly.
 Scope {
     id: root
 
     property string query: ""
     property int sel: 0
     property bool dragActive: false      // a card is mid-drag (dots inflate)
+    // the output whose Overview carries the search field and the keyboard:
+    // the focused monitor, latched when the Overview OPENS (binding it live
+    // would move the field under focus-follows-mouse)
+    property string openScreen: ""
+    function focusedScreenName() {
+        var fm = Hyprland.focusedMonitor, ss = Quickshell.screens
+        if (fm) for (var i = 0; i < ss.length; i++) if (ss[i].name === fm.name) return fm.name
+        return ss.length > 0 ? ss[0].name : ""
+    }
 
     // one shared launcher-row look: icon square, title(+sub), right type tag
     component ResultRow: Item {
@@ -207,7 +219,8 @@ Scope {
             }
         }
     }
-    property Timer _fileDebounce: Timer { interval: 220; onTriggered: root.runFileSearch() }
+    // "files are searched after a short pause" (Overview card) — one durBase
+    property Timer _fileDebounce: Timer { interval: Math.max(1, Theme.durBase); onTriggered: root.runFileSearch() }
     function runFileSearch() {
         var q = root.query.trim()
         if (q === "") return
@@ -259,6 +272,23 @@ Scope {
     }
     function gotoWs(ws) { if (ws !== root.focusedWs) Hyprland.dispatch("hl.dsp.focus({workspace=" + ws + "})") }
     function close() { Globals.overviewOpen = false }
+    function toggle() { Globals.overviewOpen = !Globals.overviewOpen }
+
+    // ── keys ──
+    // The navigation keys mean the same wherever they land in the window.
+    // Returns true when the key was one of ours.
+    function navKey(ev) {
+        if (ev.key === Qt.Key_Escape) { root.close(); return true }
+        if (ev.key === Qt.Key_Return || ev.key === Qt.Key_Enter) { root.activateSel(); return true }
+        if (ev.key === Qt.Key_Left || ev.key === Qt.Key_Up) { root.sel = Math.max(0, root.sel - 1); return true }
+        if (ev.key === Qt.Key_Right || ev.key === Qt.Key_Down) { root.sel = Math.min(root.navCount - 1, root.sel + 1); return true }
+        return false
+    }
+    // printable, no Ctrl/Alt/Super: a character the user meant to type
+    function typedText(ev) {
+        if (ev.modifiers & (Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier)) return ""
+        return /^[^\x00-\x1f\x7f]+$/.test(ev.text) ? ev.text : ""
+    }
 
     // ── window-group map: address → member count ──
     // Queried straight from `hyprctl -j clients` (its `grouped` field lists the
@@ -299,12 +329,30 @@ Scope {
 
     IpcHandler {
         target: "overview"
-        function toggle(): void { Globals.overviewOpen = !Globals.overviewOpen }
+        function toggle(): void { root.toggle() }
         function show(): void { Globals.overviewOpen = true }
         function hide(): void { Globals.overviewOpen = false }
-        // open pre-filled (scripting / keybinds like "Super+F → find") — sets
-        // root.query; each window's search box mirrors it (Connections below)
+        // open pre-filled (scripting / keybinds like "Super+F → find"): opening
+        // resets the query (the handler below runs synchronously), then the
+        // given one lands; each window's search box mirrors it (Connections)
         function find(q: string): void { Globals.overviewOpen = true; root.query = q }
+    }
+
+    // Super tapped alone. hyprland.lua binds the key (on release) to
+    // `hl.dsp.global("ewe:overview")`, which Hyprland delivers to this
+    // process over the global-shortcuts protocol — the old `exec qs ipc call`
+    // bind forked a shell and a qs client on every tap (50-70 ms before the
+    // shell even heard about it, and keys typed meanwhile went to the app
+    // below). Measured on Hyprland 0.56: a release bind sends `released`
+    // only; a press bind sends `pressed` on key-down AND `released` on
+    // key-up; a dispatch from Lua or hyprctl sends `pressed` only. Acting on
+    // `released` alone is the one rule that toggles exactly once for either
+    // kind of bind — which is why the 3-finger swipe (a dispatch) keeps its
+    // `qs ipc call overview toggle`.
+    GlobalShortcut {
+        appid: "ewe"; name: "overview"
+        description: "Toggle the Overview"
+        onReleased: root.toggle()
     }
 
     // The window stays mapped through the QML close animation via `held`, which
@@ -315,25 +363,40 @@ Scope {
     // Connections handler started the timer, remapping it mid-fade, and the
     // timer expiring unmapped it again. Gone, back, gone: the blink.
     property bool held: false
-    Timer { id: closeTimer; interval: Math.max(1, Theme.durFast + Theme.durSlow + 60); onTriggered: root.held = false }
-    // Two beats, sequenced HERE and not by pauses inside the Behaviors: a
-    // Behavior fires before a `duration: open ? a : b` binding in it has
-    // re-evaluated, so a state-dependent pause plays the OTHER direction's
-    // value. Open: the cover (backdrop up, bar and dock away) goes first, the
-    // stage (cards, search, pager) a durFast beat later. Close: the stage goes
-    // first, the cover a beat later.
+    // the close: the stage's fade (durBase, from t = 0) and the cover's
+    // (durFast, from t = durFast) are both over by durFast + durBase; one
+    // more durFast of slack for a late frame
+    Timer { id: closeTimer; interval: Math.max(1, Theme.durFast + Theme.durBase + Theme.durFast); onTriggered: root.held = false }
+    // Sequenced HERE and not by pauses inside the Behaviors: a Behavior fires
+    // before a `duration: open ? a : b` binding in it has re-evaluated, so a
+    // state-dependent pause plays the OTHER direction's value.
+    // Open is ONE step (owner decision D8, 2026-10-04 — "snappier"): the cover
+    // (backdrop up, bar and dock away) and the stage (cards, search, pager)
+    // start on the same frame; the backdrop still reads first because its
+    // durFast fade finishes under the stage's durBase one. Close keeps the
+    // two beats: the stage goes first, the cover a durFast beat later.
     property bool stageShown: false
     Timer {
         id: beat
         interval: Math.max(1, Theme.durFast)
-        onTriggered: { if (Globals.overviewOpen) root.stageShown = true; else Globals.overviewCover = false }
+        onTriggered: if (!Globals.overviewOpen) Globals.overviewCover = false
     }
     Connections {
         target: Globals
         function onOverviewOpenChanged() {
-            if (Globals.overviewOpen) { closeTimer.stop(); root.held = true; root.refreshGroups(); Globals.overviewCover = true }
-            else { closeTimer.restart(); root.stageShown = false }
-            beat.restart()
+            if (Globals.overviewOpen) {
+                closeTimer.stop(); beat.stop()
+                root.held = true
+                root.openScreen = root.focusedScreenName()
+                root.query = ""                 // a fresh field every time (find() sets its own after this)
+                Globals.overviewCover = true
+                root.stageShown = true
+                // the hyprctl spawn for the group badges is off the open frame
+                Qt.callLater(root.refreshGroups)
+            } else {
+                closeTimer.restart(); beat.restart()
+                root.stageShown = false
+            }
         }
     }
 
@@ -353,14 +416,25 @@ Scope {
         // simply translate out of view while this is open.
         exclusionMode: ExclusionMode.Ignore
         WlrLayershell.layer: WlrLayer.Overlay
-        WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
+        // ONE window takes the keyboard — the focused output's, and only while
+        // open. With OnDemand on every screen the window that mapped last won
+        // the keyboard, and on a second monitor there is no search field, so
+        // typed keys went nowhere; and the keyboard stayed held through the
+        // close fade, eating the first keys meant for the app underneath.
+        WlrLayershell.keyboardFocus: (Globals.overviewOpen && win.isFocused) ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
         WlrLayershell.namespace: "quickshell:overview"
         anchors { top: true; bottom: true; left: true; right: true }
+        // while the close fade plays the window is still mapped but no longer
+        // the Overview: clicks fall through to the desktop
+        mask: Globals.overviewOpen ? null : noInput
+        Region { id: noInput }
 
         // this screen's Hyprland monitor + its active workspace and windows
         readonly property var hyMon: Hyprland.monitorFor(win.screen)
         readonly property int winWs: hyMon && hyMon.activeWorkspace ? hyMon.activeWorkspace.id : root.focusedWs
-        readonly property bool isFocused: win.winWs === root.focusedWs
+        // the search field and the keyboard live on the output that was
+        // focused when the Overview opened (root.openScreen)
+        readonly property bool isFocused: win.screen ? win.screen.name === root.openScreen : false
         readonly property var winWins: {
             var out = []
             for (var i = 0; i < root.allWins.length; i++)
@@ -368,15 +442,37 @@ Scope {
             return out
         }
 
-        onVisibleChanged: if (visible) Qt.callLater(function () { search.text = ""; root.query = ""; if (win.isFocused) search.forceActiveFocus() })
-        Connections {
-            target: Globals
-            function onOverviewOpenChanged() { if (Globals.overviewOpen && win.isFocused) search.forceActiveFocus() }
-        }
         // mirror an externally-set query (IPC find) into this window's box
         Connections {
             target: root
             function onQueryChanged() { if (search.text !== root.query) search.text = root.query }
+        }
+
+        // Everything sits in one FocusScope so a key always has somewhere to
+        // go: the field holds focus while it exists, and a key that reaches
+        // the scope instead (the field lost focus, or has not taken it yet
+        // the instant the window became active) is still answered — the
+        // navigation keys act, printable text and Backspace re-focus the
+        // field and edit it. A composing input method keeps its keys.
+        FocusScope {
+        id: scope
+        anchors.fill: parent
+        focus: true
+        // the field takes focus when THIS window becomes the active one, not
+        // only on the open signal (the compositor hands the keyboard over a
+        // frame or two after the surface maps)
+        Window.onActiveChanged: if (Window.active && win.isFocused) search.forceActiveFocus()
+        Keys.onPressed: function (ev) {
+            if (root.navKey(ev)) { ev.accepted = true; return }
+            if (!win.isFocused || search.activeFocus || search.inputMethodComposing) return
+            if (ev.key === Qt.Key_Backspace) {
+                search.forceActiveFocus()
+                if (search.length > 0) search.remove(search.length - 1, search.length)
+                ev.accepted = true
+                return
+            }
+            var t = root.typedText(ev)
+            if (t !== "") { search.forceActiveFocus(); search.insert(search.length, t); ev.accepted = true }
         }
 
         // ── the backdrop: the WALLPAPER, opaque, not a see-through scrim ──
@@ -443,15 +539,19 @@ Scope {
         Item {
             id: stage
             anchors.fill: parent
-            // The cards come SECOND: the backdrop owns the first beat, then the
-            // stage zooms in. Closing is the reverse — the cards go first.
-            // root.stageShown carries the beat (see the Timer above). Reduce
-            // motion drops the zoom to a durFast fade.
+            // Open: the stage starts WITH the backdrop and lands at durBase
+            // with the base easing (fast start) — the backdrop's durFast fade
+            // finishes first, so it still reads as wallpaper-then-cards.
+            // Close: the stage goes first, the cover a beat later
+            // (root.stageShown / the beat Timer above). Reduce motion drops
+            // the zoom and cross-fades at durFast; the duration only follows
+            // that setting, never the open/close direction (the Behavior
+            // gotcha).
             opacity: root.stageShown ? 1 : 0
             scale: (root.stageShown || Theme.reduceMotion) ? 1 : 1.10
             transformOrigin: Item.Center
-            Behavior on opacity { NumberAnimation { duration: Theme.reduceMotion ? Theme.durFast : Theme.durSlow; easing.type: Theme.easeSlow } }
-            Behavior on scale { NumberAnimation { duration: Theme.durSlow; easing.type: Theme.easeSlow } }
+            Behavior on opacity { NumberAnimation { duration: Theme.reduceMotion ? Theme.durFast : Theme.durBase; easing.type: Theme.ease } }
+            Behavior on scale { NumberAnimation { duration: Theme.durBase; easing.type: Theme.ease } }
 
             readonly property real monAR: (win.screen && win.screen.height > 0) ? (win.screen.width / win.screen.height) : 1.6
 
@@ -792,6 +892,7 @@ Scope {
                     Text { anchors.verticalCenter: parent.verticalCenter; text: Theme.icSearch; font.family: Theme.fontIcons; font.pixelSize: Theme.iconMd; color: Theme.textSecondary }
                     TextInput {
                         id: search
+                        focus: true      // the scope's focus lands here whenever the field exists
                         width: parent.width - Theme.iconMd - 2 * Theme.spaceS
                         anchors.verticalCenter: parent.verticalCenter
                         color: Theme.textPrimary
@@ -818,12 +919,7 @@ Scope {
                         }
                         onTextChanged: root.query = text
                         Text { visible: search.text.length === 0; anchors.verticalCenter: parent.verticalCenter; text: "Search apps, windows and files"; color: Theme.textSecondary; font: search.font }
-                        Keys.onPressed: function (ev) {
-                            if (ev.key === Qt.Key_Escape) { root.close(); ev.accepted = true }
-                            else if (ev.key === Qt.Key_Return || ev.key === Qt.Key_Enter) { root.activateSel(); ev.accepted = true }
-                            else if (ev.key === Qt.Key_Left || ev.key === Qt.Key_Up) { root.sel = Math.max(0, root.sel - 1); ev.accepted = true }
-                            else if (ev.key === Qt.Key_Right || ev.key === Qt.Key_Down) { root.sel = Math.min(root.navCount - 1, root.sel + 1); ev.accepted = true }
-                        }
+                        Keys.onPressed: function (ev) { if (root.navKey(ev)) ev.accepted = true }
                     }
                 }
             }
@@ -1023,6 +1119,7 @@ Scope {
             // floating layer the dragged card reparents into (so it isn't clipped)
             Item { id: dragLayer; anchors.fill: parent; z: 2000 }
         }
+        }   // FocusScope
     }
     }
 }

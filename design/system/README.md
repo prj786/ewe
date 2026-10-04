@@ -86,8 +86,8 @@ Motion confirms, it never decorates. Nothing bounces or overshoots.
 | Name | Duration | Easing | Used for |
 | --- | --- | --- | --- |
 | fast | 150ms | ease-out (OutCubic) | hover, pressed, focus and other color changes; menus and toasts closing |
-| base | 200ms | ease-out (OutCubic) | panels and toasts opening: a fade plus a 4px slide from their edge — dock panels and the launcher fade only, with no slide; the dock hiding |
-| slow | 250ms | ease-in-out (InOutCubic) | workspace switches (a full-width slide), the Overview zoom, Welcome |
+| base | 200ms | ease-out (OutCubic) | panels and toasts opening: a fade plus a 4px slide from their edge — dock panels and the launcher fade only, with no slide; the dock hiding; the Overview's cards (fade plus zoom, starting with its backdrop) |
+| slow | 250ms | ease-in-out (InOutCubic) | workspace switches (a full-width slide), Welcome |
 | dim | 1500ms | linear | the screen dimming before it locks |
 
 - These are the Normal speed. The animation speed setting divides them (Fast halves them, Slow makes them about 1.7× longer); Off makes them 0.

@@ -281,7 +281,8 @@ Scope {
                 spacing: Theme.spaceS
 
                 DockBtn { id: launchBtn; a11yName: "Apps"; image: Qt.resolvedUrl("assets/ewe-mark.svg"); activeState: Globals.launcherOpen; anchors.verticalCenter: parent.verticalCenter; onGo: { Globals.launcherAnchorX = launchBtn.mapToItem(null, launchBtn.width / 2, 0).x; Globals.storeOpen = false; Globals.placesOpen = false; Globals.mediaOpen = false; Globals.launcherOpen = !Globals.launcherOpen } }
-                DockBtn { a11yName: "Overview"; glyph: Theme.icStack; anchors.verticalCenter: parent.verticalCenter; onGo: Quickshell.execDetached(["qs", "ipc", "call", "overview", "toggle"]) }
+                // in-shell: flip the flag (a `qs ipc call` spawn cost 50-70 ms per click)
+                DockBtn { a11yName: "Overview"; glyph: Theme.icStack; activeState: Globals.overviewOpen; anchors.verticalCenter: parent.verticalCenter; onGo: Globals.overviewOpen = !Globals.overviewOpen }
                 // store button → Komble (the software manager) when installed;
                 // the in-shell quick-installer panel is only the fallback.
                 DockBtn { id: storeBtn; a11yName: "Komble"; glyph: Theme.icStore; activeState: Globals.storeOpen; anchors.verticalCenter: parent.verticalCenter; onGo: { if (Globals.kombleInstalled) { if (!Globals.focusAppWindow(["komble"])) Quickshell.execDetached(["komble"]) } else { Globals.storeAnchorX = storeBtn.mapToItem(null, storeBtn.width / 2, 0).x; Globals.launcherOpen = false; Globals.placesOpen = false; Globals.mediaOpen = false; Globals.storeOpen = !Globals.storeOpen } } }
