@@ -31,7 +31,8 @@
 #   HS_CONF=<file>               # use this ewe.conf instead (HS_SCHEME ignored)
 #   HS_WALLPAPER=<file>          # seed generated/wallpapers.conf (Overview/lock backdrop)
 #   HS_WELCOME=1                 # let the first-run Welcome screen appear
-#   HS_PLUGINS=1                 # seed the bundled plugins (plugins/) into the sandbox
+#   HS_PLUGINS=1                 # install every bundled add-on (plugins/) into the sandbox
+#   HS_PLUGIN_DIRS=a:b           # add + enable these plugin directories too (fixtures)
 #   HS_NO_APPS=1                 # hide Komble/ewe-settings/ewe-sync: the in-shell fallbacks open
 #   HS_SANDBOX=0                 # old behaviour: the live HOME and config
 #
@@ -103,15 +104,34 @@ sandbox_prepare() {
   ( sandbox_env
     "$REPO/bin/ewe-theme" build --json "$XDG_CONFIG_HOME/quickshell/theme-tokens.json" --css /dev/null >"$WORK/theme.log" 2>&1
   ) || die "ewe-theme build failed — see $WORK/theme.log"
-  # HS_PLUGINS=1: seed this checkout's bundled plugins (plugins/) into the
-  # sandbox, as ewe-setup does on a real machine, so their widgets and
-  # panels load. ewe-plugin writes only the sandbox ewe.conf (--no-hooks),
-  # and --no-restart keeps it off the HOST's ewe.service (systemctl --user
-  # is not sandboxed: without it, seeding restarts the live shell).
+  # HS_PLUGINS=1: install every add-on this checkout's payload carries
+  # (plugins/ + bundle.json) into the sandbox — `seed` alone puts in only
+  # the bundle's defaults (none since 0.25), so each id is `install`ed, which
+  # is what an upgrader's `migrate` or a Komble click does. ewe-plugin
+  # writes only the sandbox ewe.conf (--no-hooks), and --no-restart keeps it
+  # off the HOST's ewe.service (systemctl --user is not sandboxed: without
+  # it, seeding restarts the live shell). EWE_PAYLOAD_PLUGINS points the
+  # tool at this checkout's plugins/ for every later verb too.
+  export EWE_PAYLOAD_PLUGINS="$REPO/plugins"
   if [ "${HS_PLUGINS:-0}" = "1" ]; then
     ( sandbox_env
-      "$REPO/bin/ewe-plugin" seed "$REPO/plugins" --no-restart >"$WORK/plugins.log" 2>&1
-    ) || die "ewe-plugin seed failed — see $WORK/plugins.log"
+      "$REPO/bin/ewe-plugin" seed "$REPO/plugins" --no-restart >"$WORK/plugins.log" 2>&1 || exit 1
+      for d in "$REPO"/plugins/*/; do
+        [ -f "$d/manifest.json" ] || continue
+        "$REPO/bin/ewe-plugin" install "$(basename "$d")" --no-restart >>"$WORK/plugins.log" 2>&1 || exit 1
+      done
+    ) || die "ewe-plugin seed/install failed — see $WORK/plugins.log"
+  fi
+  # HS_PLUGIN_DIRS=dir1:dir2: extra plugin directories (test fixtures such as
+  # tests/fixtures/plugins/acme.v3demo) copied in as hand-made plugins and
+  # enabled — the API 3 slots can then be screenshotted.
+  if [ -n "${HS_PLUGIN_DIRS:-}" ]; then
+    ( sandbox_env
+      IFS=: ; for d in $HS_PLUGIN_DIRS; do
+        [ -f "$d/manifest.json" ] || { echo "HS_PLUGIN_DIRS: no manifest in $d" >&2; exit 1; }
+        "$REPO/bin/ewe-plugin" add "$d" --yes --enable --no-restart >>"$WORK/plugins.log" 2>&1 || exit 1
+      done
+    ) || die "ewe-plugin add (HS_PLUGIN_DIRS) failed — see $WORK/plugins.log"
   fi
   echo "sandbox: $SBHOME ($(python3 -c "import json,sys;j=json.load(open(sys.argv[1]));print(j['input']['scheme'])" "$SBHOME/.config/quickshell/theme-tokens.json"))"
 }
