@@ -15,7 +15,8 @@ import Quickshell.Hyprland
 //   call     toast() · openQuickSettings() · closeQuickSettings() ·
 //            openSettings() · openStore() · launch() · focusApp() ·
 //            registerAction() · runAction() · setBottomInset() · anchorFor() ·
-//            setActive() · isActive() · setPinned()
+//            setActive() · isActive() · setPinned() · setDockItemShown() ·
+//            dockItemShown()
 //   signals  aboutToSleep() · resumed()   (Resume.qml emits them)
 QtObject {
     id: sh
@@ -139,6 +140,17 @@ QtObject {
         sh._active = m
     }
     function isActive(name) { return !!sh._active[String(name)] }
+    // A plugin's dock item is shown by default; the plugin hides its own at
+    // runtime (the music player has no button while no player exists, or
+    // when its setting says bar-only). The dock add-on filters on this;
+    // `_dockHidden` is bindable so the dock follows live.
+    property var _dockHidden: ({})
+    function setDockItemShown(pluginId, on) {
+        var m = Object.assign({}, sh._dockHidden)
+        if (on === false) m[String(pluginId)] = true; else delete m[String(pluginId)]
+        sh._dockHidden = m
+    }
+    function dockItemShown(pluginId) { return !sh._dockHidden[String(pluginId)] }
 
     // anchorFor(item, window) → { screen, x, y, edge, item } for a popup: x/y
     // are the item's centre in its window (screen-local for a full-width

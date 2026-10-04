@@ -185,7 +185,7 @@ A plugin is a git repository with `manifest.json` at its root:
 | `quickTile` | optional: `{ "span": 1 \| 2, "order": int }` — half a row or the whole row of the home grid |
 | `quickPage` | required with `quick-page`: `{ "key", "label", "icon", "order" }`. `key` is lowercase `[a-z0-9_-]`, unique, and not one the shell keeps (`home wifi bt audio cal notifs`); it is what `quicksettings tab <key>` and `Shell.openQuickSettings(key)` route to |
 | `barStatus` | optional: `{ "order": int }` |
-| `dockItem` | required with `dock-item`: `{ "icon", "label", "action", "order" }` — static; the dock draws the button and runs `action` (see `Shell.registerAction`), or `qs ipc call <id> toggle` when no action is registered |
+| `dockItem` | required with `dock-item`: `{ "icon", "label", "action", "order" }` — static; the dock draws the button and runs `action` (see `Shell.registerAction`), or `qs ipc call <id> toggle` when no action is registered. Hide it at runtime with `Shell.setDockItemShown(id, false)` |
 | `requires` | optional: `{ "packages": [...], "commands": [...] }` — reported by `list --json` (`missing`) and `install`; never installed by the shell |
 | `ipcAliases` | optional, **`ewe.` plugins only**: legacy IPC targets this plugin's QML registers (`["player"]`), so old keybinds and scripts keep working after a feature moved out of the shell |
 | `icon`, `category` | the catalogue card (Komble → Add-ons, Welcome). Icons are Theme glyph **names** (`"icMusic"`), resolved by the host as `Theme[icon]` |
@@ -207,7 +207,7 @@ A plugin is a git repository with `manifest.json` at its root:
 | `quick-tile` | a `Tile` in the Quick settings home grid after the built-ins; the host sizes it (`span`) | + `panelOpen` |
 | `quick-page` | a `Column` the width of the panel, one rail entry (`quickPage.icon`), shown while its `key` is the tab; start it with a `QsPageHead` | + `panelOpen` |
 | `desktop-widget` | a sized `Item` on the desktop or the sticky layer, on one output, moved in arrange mode | the common set |
-| `dock-item` | **no QML**: a dock button from `dockItem` (icon, label); a click runs `Shell.runAction(action, anchor)` with the button's anchor, lit while `Shell.isActive(action)` | — |
+| `dock-item` | **no QML**: a dock button from `dockItem` (icon, label); a click runs `Shell.runAction(action, anchor)` with the button's anchor, lit while `Shell.isActive(action)`, hidden while `Shell.dockItemShown(id)` is false. Without a dock installed the item simply has no host | — |
 
 **Injected properties** — set on the entry point's root, only when the root
 declares them:
@@ -283,6 +283,7 @@ features, the `_private` plumbing) is internal and may move without notice.
 | call | `focusApp([classes])` | bring the window of one of these app classes forward; `false` when none |
 | call | `registerAction(name, fn)`, `runAction(name, anchor)` | a named function (`dockItem.action` names one) and how the dock — or another plugin — runs it; `runAction` returns `false` when none is registered |
 | call | `setActive(name, on)`, `isActive(name)` | an action's open state (its dock item lights); `AnchoredPopup` reports it through `action` |
+| call | `setDockItemShown(pluginId, on)`, `dockItemShown(pluginId)` | hide or show your own dock item at runtime (default shown) — a player with nothing playing, a "bar only" setting; the dock filters on it live |
 | call | `setBottomInset(pluginId, px, reserved)` | what a dock plugin publishes; `0` withdraws it |
 | call | `setPinned(desktopId, on)` | pin or unpin an app; the shell persists it through `ewe-conf` and `pinnedApps` follows |
 | call | `anchorFor(item, window)` | `{ screen, x, y, edge, item }` for a popup: the item's centre in its window (screen-local for a full-width bar or dock), `edge` `"top"` or `"bottom"`. Pass the window when you have it (`barWindow`, your own `PanelWindow`); without it the focused monitor is assumed and the edge is bottom |
