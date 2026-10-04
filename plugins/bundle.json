@@ -10,8 +10,8 @@
     },
     "ewe.clipboard": {
       "repo": "https://github.com/prj786/ewe-plugin-clipboard",
-      "commit": "861d2b352eaba2cb26e5c13ebd2a66fee49041c2",
-      "version": "1.1.1",
+      "commit": "42becd9b82114887007010cff5eeb190be68d2d1",
+      "version": "1.1.2",
       "default": false,
       "migrate": true
     },
@@ -45,8 +45,8 @@
     },
     "ewe.passwords": {
       "repo": "https://github.com/prj786/ewe-plugin-passwords",
-      "commit": "b7b441e1b468738a8ad60df5203d5a341a2ef6cc",
-      "version": "1.1.0",
+      "commit": "39d4b446c6def8b7d69bc67bf4b3da17ca4d6987",
+      "version": "1.1.1",
       "default": false,
       "migrate": true
     },
@@ -66,8 +66,8 @@
     },
     "ewe.screenshot": {
       "repo": "https://github.com/prj786/ewe-plugin-screenshot",
-      "commit": "4d476ca8693a8505f5700d21ddf44bebd4680e59",
-      "version": "1.1.0",
+      "commit": "ad0d8e692f4d50ee91aafe4fc05a6a5ef28837c2",
+      "version": "1.1.1",
       "default": false,
       "migrate": true
     },
