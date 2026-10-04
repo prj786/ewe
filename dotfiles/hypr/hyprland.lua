@@ -45,7 +45,7 @@ hl.monitor({ output = "", mode = "preferred", position = "auto", scale = "auto" 
 
 -- XWayland at a fractional scale: Hyprland upscales X11 windows (Steam,
 -- JetBrains Toolbox) and they come out blurry. start-hyprland.sh exports
--- EWE_X11_SCALE when the primary display runs at ≥ 1.5 (plus GDK_SCALE and
+-- EWE_X11_SCALE when every lit display runs at ≥ 1.5 (plus GDK_SCALE and
 -- Steam's own variable, so those apps scale themselves); this then tells
 -- Hyprland to leave their pixels alone. See the comment there for the
 -- mixed-monitor trade-off.

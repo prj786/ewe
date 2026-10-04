@@ -60,17 +60,47 @@ export QT_QPA_PLATFORM="wayland;xcb"
 #    in hyprland.lua when EWE_X11_SCALE is present) makes them draw at native
 #    pixels, and each toolkit scales itself from its own variable — GDK_SCALE
 #    for GTK/X11 and the JetBrains runtime (a Wayland GTK app ignores it),
-#    Steam's own STEAM_FORCE_DESKTOPUI_SCALING. Decided from the PRIMARY
-#    display's saved scale (Settings → Displays) at login; below 1.5 nothing
-#    is set. Trade-off Hyprland cannot avoid (#6281, not planned): with a 1x
-#    external monitor beside a 2x laptop, X11 apps are one size everywhere.
+#    Steam's own STEAM_FORCE_DESKTOPUI_SCALING. Below 1.5 nothing is set.
+#    X11 has ONE scale for every screen (Hyprland #6281, not planned), so with
+#    a 1x external monitor beside a 1.8x laptop the SMALLEST lit scale wins:
+#    X11 apps are the right size everywhere — sharp on the external, softly
+#    upscaled on the laptop. Following the laptop instead made them nearly
+#    twice too big on the external (0.24.1: Steam, ProjectLibre). The monitor
+#    set is read from DRM, not `lastKey` — that only changes when Settings →
+#    Displays saves, so a docked login used the undocked profile. Decided at
+#    login; docking later needs a re-login for X11 apps to follow.
 _x11scale="$(python3 - "$HOME/.config/quickshell/display-profiles.json" 2>/dev/null <<'PY'
-import json, sys
+import glob, json, os, re, sys
 try:
     d = json.load(open(sys.argv[1]))
-    mons = d.get("profiles", {}).get(d.get("lastKey", ""), []) or []
-    prim = [m for m in mons if m.get("primary") and not m.get("disabled")] or [m for m in mons if not m.get("disabled")]
-    s = float(prim[0].get("scale", 1)) if prim else 1.0
+    profs = d.get("profiles", {}) or {}
+    # connected outputs, from DRM (Hyprland is not running yet)
+    conn = set()
+    for st in glob.glob("/sys/class/drm/card*-*/status"):
+        try:
+            if open(st).read().strip() == "connected":
+                conn.add(os.path.basename(os.path.dirname(st)).split("-", 1)[1])
+        except OSError:
+            pass
+    # the profile saved for exactly this set (lastKey breaks a tie between two
+    # externals on the same port); no profile for it → the last one committed
+    last = profs.get(d.get("lastKey", ""), []) or []
+    match = [v for v in profs.values() if v and {m.get("name") for m in v} == conn]
+    specs = last if last in match else (match[0] if match else last)
+    by_name = {m.get("name"): m for m in specs}
+    lid_shut = any("closed" in open(f).read() for f in glob.glob("/proc/acpi/button/lid/*/state"))
+    scales = []
+    for n in (conn or set(by_name)):
+        m = by_name.get(n)
+        if m is None:
+            scales.append(1.0)      # never configured: Hyprland picks; assume 1x
+        elif m.get("disabled") or m.get("mirror"):
+            continue
+        elif lid_shut and re.match(r"(eDP|LVDS|DSI)", n or "") and len(conn) > 1:
+            continue                # docked, lid shut: the panel is dark
+        else:
+            scales.append(float(m.get("scale", 1)))
+    s = min(scales) if scales else 1.0
     print("%.2f" % s if s >= 1.5 else "")
 except Exception:
     print("")
