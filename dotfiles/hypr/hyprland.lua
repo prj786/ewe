@@ -407,7 +407,11 @@ hl.bind(mainMod .. " + SHIFT + R", hl.dsp.exec_cmd("qs ipc call display reset"))
 -- Super tapped ALONE → Overview (GNOME-style window switcher). `release` fires on key-up;
 -- with the modifier as its own key Hyprland only triggers it on a clean tap (no other key
 -- pressed during the hold), so Super+<x> combos don't pop the overview.
-hl.bind(mainMod .. " + Super_L", hl.dsp.exec_cmd("qs ipc call overview toggle"), { release = true })
+-- `global` hands the tap to the shell's own `ewe:overview` shortcut (Overview.qml) over
+-- the global-shortcuts protocol — no `sh -c qs ipc call …` fork per tap (that cost
+-- 50-70 ms and swallowed the first keys typed). `qs ipc call overview toggle` stays
+-- for scripts.
+hl.bind(mainMod .. " + Super_L", hl.dsp.global("ewe:overview"), { release = true })
 
 -- Window focus (vim hjkl + arrow keys — arrows are aliases for hjkl) ----------
 hl.bind(mainMod .. " + H", hl.dsp.focus({ direction = "left" }))

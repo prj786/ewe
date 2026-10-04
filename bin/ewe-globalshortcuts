@@ -169,6 +169,10 @@ def collect():
     bound, skipped, seen_combo = [], [], {}
     for sc in shortcuts:
         name = sc.get("name", "")
+        # the shell's own shortcuts (`ewe:overview` …) are bound by hyprland.lua
+        # itself — not an app's, nothing to bind, nothing to report
+        if name.startswith("ewe:"):
+            continue
         m = NAME_RE.match(name)
         if not m:
             why = ("no key assigned in the app's own shortcut settings" if name.endswith("-")

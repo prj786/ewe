@@ -36,7 +36,8 @@ The Overview shows every window on the screen, a search for apps, windows and fi
 ## Behavior
 - Typing starts a search immediately; files are searched after a short pause (about 200ms).
 - Arrow keys move the selection (cards without a query, results with one); Enter opens or focuses it; Esc closes.
-- Opening an app, a window or a file closes the Overview. It opens wallpaper first: the bar and dock slide away and the backdrop fades in (`durFast`), then the cards zoom in and fade (`durSlow`). Closing is the reverse — the cards go, then the backdrop, then the bar and dock come back. Reduce motion: everything cross-fades at `fast`, nothing slides.
+- Opening an app, a window or a file closes the Overview. It opens in one step: the bar and dock slide away, the backdrop fades in (`durFast`) and the cards, search and pager fade and zoom in (`durBase`, ease-out) from the same frame — the backdrop lands first because its fade is the shorter one. Closing keeps two beats: the cards go (`durBase`), then after `durFast` the backdrop fades out and the bar and dock come back. Reduce motion: everything cross-fades at `fast`, nothing slides or zooms.
+- A tap of Super reaches the Overview as the `ewe:overview` global shortcut (no process is spawned); typing starts the moment it is open, on the output that was focused when it opened — the other outputs show their windows without a search field and take no keys.
 
 ## Accessibility
 - The search field is labelled; results are a list box; each card is a button named by app and title (“Zen, Ewe design system, workspace 1”).
