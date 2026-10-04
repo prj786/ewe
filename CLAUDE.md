@@ -159,8 +159,12 @@ registered in `qmldir`. Two singletons tie everything together:
   `Globals.dockEnabled` for layout reads it), `AnchoredPopup`, and the
   promoted components (`Qs*`, `Text*`, `Glyph`, `BarModule`, `BarSep`,
   `BarStatusGlyph`); the host loads apiVersion 2 and 3. The harness:
-  `HS_PLUGINS=1` installs every payload add-on, `HS_PLUGIN_DIRS=a:b` adds
-  fixtures (`tests/fixtures/plugins/acme.v3demo` exercises every kind).
+  `HS_PLUGINS=1` installs every payload add-on (`HS_PAYLOAD=<dir>` picks
+  the payload), `HS_PLUGIN_DIRS=a:b` adds fixtures
+  (`tests/fixtures/plugins/acme.v3demo` exercises every kind). The driver
+  runs every `ewe-plugin` call with `HYPRLAND_INSTANCE_SIGNATURE` and
+  `WAYLAND_DISPLAY` unset — the tool's `hyprctl reload` / `qs ipc` pokes
+  would otherwise hit the LIVE session; do the same by hand.
   `ewe-plugin remove` puts
   the id in `[plugins].removed` so a later seed leaves it alone
   (`install <id>` or `seed --restore <id>` undoes that). Manifest `keybinds` become
