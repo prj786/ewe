@@ -45,11 +45,18 @@ Item {
                 spacing: Theme.spaceXxs
                 QsIconButton { ic: Theme.icRefresh; onGo: SlackInbox.fetch() }
                 QsIconButton { ic: Theme.icWeb; onGo: SlackInbox.openSlack() }
+                QsIconButton { ic: Theme.icCog; onGo: SlackInbox.openSetup() }
             }
         }
 
-        QsNote { visible: SlackInbox.state === "no-token" || SlackInbox.state === "auth"; text: SlackInbox.hint }
-        QsNote { visible: SlackInbox.error !== ""; tone: SlackInbox.state === "auth" ? "danger" : "warning"; text: SlackInbox.error }
+        Column {
+            visible: SlackInbox.state === "no-token" || SlackInbox.state === "auth"
+            width: parent.width
+            spacing: Theme.spaceS
+            QsNote { text: SlackInbox.state === "auth" ? "Slack no longer accepts the saved token." : "Connect your Slack workspace to see unread messages here." }
+            QsButton { label: "Connect Slack"; variant: "primary"; onGo: SlackInbox.openSetup() }
+        }
+        QsNote { visible: SlackInbox.error !== "" && SlackInbox.state !== "auth"; tone: "warning"; text: SlackInbox.error }
         QsNote { visible: SlackInbox.state === "offline"; text: "Offline. Showing the last check." }
         QsNote { visible: !SlackInbox.probed; text: "Checking Slack…" }
         TextCaption {

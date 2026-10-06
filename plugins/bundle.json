@@ -75,8 +75,8 @@
       "repo": "https://github.com/prj786/ewe-plugin-slack",
       "default": false,
       "migrate": false,
-      "commit": "9ba5693bdce10fb066a0821abc321a1c033bf0a3",
-      "version": "0.2.0"
+      "commit": "d4eda9d74a0e166ce31d21432a5fc0cc4706cc85",
+      "version": "0.3.0"
     },
     "ewe.ssh": {
       "repo": "https://github.com/prj786/ewe-plugin-ssh",

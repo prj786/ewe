@@ -9,6 +9,9 @@ the token never reaches QML, argv or a file. Prints exactly one line:
    "list": [{"channel", "kind", "user", "name", "avatar", "text", "ts", "count"}]}
   {"ok": false, "error": "no-token" | "auth" | "offline" | "<slack error>"}
 
+`--connect` reads a token from stdin, checks it with auth.test and only then
+stores it in the keyring; `--disconnect` clears it. Both print one line too.
+
 Slack has no public "unread count" for a user token, so a DM is unread when
 its newest message from someone else is newer than its `last_read`. Slack allows
 about 50 conversations.info calls a minute, so one run checks at most
@@ -43,15 +46,53 @@ class SlackError(Exception):
     pass
 
 
+KEY = ["service", "ewe-slack", "account", "user-token"]
+
+
 def token():
     try:
-        out = subprocess.run(
-            ["secret-tool", "lookup", "service", "ewe-slack", "account", "user-token"],
-            capture_output=True, text=True, timeout=10,
-        )
+        out = subprocess.run(["secret-tool", "lookup", *KEY], capture_output=True, text=True, timeout=10)
     except (OSError, subprocess.TimeoutExpired):
         return ""
     return out.stdout.strip()
+
+
+def connect(state_dir):
+    tok = sys.stdin.readline().strip()
+    if tok.startswith("xoxb-"):
+        return {"ok": False, "error": "That is a bot token (xoxb-). Copy the User OAuth Token (xoxp-) instead."}
+    if not tok.startswith("xoxp-"):
+        return {"ok": False, "error": "A Slack user token starts with xoxp-."}
+    try:
+        auth = call(tok, "auth.test")
+    except SlackError as e:
+        return {"ok": False, "error": "Slack refused the token (%s)." % e}
+    except (urllib.error.URLError, OSError):
+        return {"ok": False, "error": "Can't reach Slack. Check the connection."}
+    try:
+        r = subprocess.run(["secret-tool", "store", "--label=Slack (ewe)", *KEY], input=tok, text=True,
+                           capture_output=True, timeout=30)
+    except (OSError, subprocess.TimeoutExpired):
+        r = None
+    if not r or r.returncode != 0:
+        return {"ok": False, "error": "Couldn't save the token in the keyring. Is it unlocked?"}
+    try:
+        os.remove(os.path.join(state_dir, "cache.json"))
+    except OSError:
+        pass
+    return {"ok": True, "user": auth.get("user", ""), "teamName": auth.get("team", "")}
+
+
+def disconnect(state_dir):
+    try:
+        subprocess.run(["secret-tool", "clear", *KEY], capture_output=True, timeout=10)
+    except (OSError, subprocess.TimeoutExpired):
+        return {"ok": False, "error": "Couldn't reach the keyring."}
+    try:
+        os.remove(os.path.join(state_dir, "cache.json"))
+    except OSError:
+        pass
+    return {"ok": True}
 
 
 def call(tok, method, **params):
@@ -258,16 +299,24 @@ def run(state_dir, include_bots):
 
     save_cache(cache_path, cache)
     out.sort(key=lambda r: float(r["ts"]), reverse=True)
-    return {"ok": True, "team": team, "self": me, "total": sum(r["count"] for r in out), "list": out}
+    return {"ok": True, "team": team, "teamName": auth.get("team", ""), "self": me, "user": auth.get("user", ""), "total": sum(r["count"] for r in out), "list": out}
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--state-dir", required=True)
     ap.add_argument("--include-bots", action="store_true")
+    ap.add_argument("--connect", action="store_true", help="read a token from stdin, check it, store it")
+    ap.add_argument("--disconnect", action="store_true", help="forget the stored token")
     a = ap.parse_args()
+    os.makedirs(a.state_dir, exist_ok=True)
     try:
-        res = run(a.state_dir, a.include_bots)
+        if a.connect:
+            res = connect(a.state_dir)
+        elif a.disconnect:
+            res = disconnect(a.state_dir)
+        else:
+            res = run(a.state_dir, a.include_bots)
     except (urllib.error.URLError, OSError):
         res = {"ok": False, "error": "offline"}
     except SlackError as e:

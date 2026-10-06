@@ -2,20 +2,22 @@
   "schemaVersion": 1,
   "id": "ewe.slack",
   "name": "Slack",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "apiVersion": 3,
-  "description": "Unread Slack direct messages on your desktop: a card with who wrote and what, newest first; one click opens the conversation in Slack.",
+  "description": "Unread Slack direct messages on your desktop: a card with who wrote and what, newest first; one click opens the conversation in Slack. Asks for your Slack token on first start and keeps it in the keyring.",
   "homepage": "https://github.com/prj786/ewe-plugin-slack",
   "author": "prj786",
   "icon": "icMessage",
   "category": "Communication",
   "kinds": [
     "service",
-    "desktop-widget"
+    "desktop-widget",
+    "panel"
   ],
   "entryPoints": {
     "service": "Service.qml",
-    "desktop-widget": "Widget.qml"
+    "desktop-widget": "Widget.qml",
+    "panel": "Setup.qml"
   },
   "desktopWidget": {
     "x": 48,

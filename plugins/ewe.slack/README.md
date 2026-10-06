@@ -11,6 +11,7 @@ left out on purpose.
 | the model, singleton `SlackInbox` | `SlackInbox.qml` |
 | `service`: starts the model, IPC, refetch after suspend | `Service.qml` |
 | `desktop-widget`: the card | `Widget.qml` (+ `SlackRow.qml`, `SlackAvatar.qml`) |
+| `panel`: the Connect window (token in, keyring) | `Setup.qml` |
 | the Slack Web API pass (one JSON line per run) | `slack-unread.py` |
 
 Move it with arrange mode (`Super+Shift+W`), where it can also be made
@@ -18,24 +19,30 @@ sticky (above windows) or hidden.
 
 ## Setup
 
-1. **Create a Slack app** for your workspace: <https://api.slack.com/apps> →
-   *Create New App* → *From a manifest* → pick the workspace → paste
-   [`slack-app-manifest.yaml`](slack-app-manifest.yaml). Some workspaces need an
-   admin to approve it.
-2. *Install to Workspace*, then copy the **User OAuth Token** (`xoxp-…`) from
-   *OAuth & Permissions*.
-3. Put it in the keyring (it is read from there on every run, never written
-   anywhere else):
-   ```sh
-   secret-tool store --label='Slack (ewe)' service ewe-slack account user-token
-   ```
-4. Try it:
-   ```sh
-   python3 slack-unread.py --state-dir /tmp/slack-test | python3 -m json.tool
-   ewe-plugin install ewe.slack         # once it ships in the payload (Komble → Add-ons)
-   ewe-plugin dev . --first-party       # or: link this working copy, restart the shell
-   qs ipc call ewe.slack status
-   ```
+Install it (Komble → Add-ons → Slack, or `ewe-plugin install ewe.slack`). On
+the first start the **Connect Slack** window opens (later: the cog on the
+card, or `qs ipc call ewe.slack connect`):
+
+1. **Create the Slack app** opens Slack's "new app" page with the manifest
+   ([`slack-app-manifest.yaml`](slack-app-manifest.yaml): read-only user
+   scopes, no bot) already filled in. Pick the workspace, *Create*, then
+   *Install to Workspace*. Some workspaces need an admin to approve it.
+2. Copy the **User OAuth Token** (`xoxp-…`) from *OAuth & Permissions*, paste
+   it into the window, **Connect**.
+
+The token goes from the field to `slack-unread.py --connect` on stdin, is
+checked with Slack (`auth.test`) and only then stored in the keyring
+(`service ewe-slack account user-token`). It never touches `ewe.conf`, argv or
+a file. The same window shows whom you are connected as, and **Disconnect**
+clears it from the keyring.
+
+By hand, the same thing:
+
+```sh
+secret-tool store --label='Slack (ewe)' service ewe-slack account user-token
+python3 slack-unread.py --state-dir /tmp/slack-test | python3 -m json.tool
+qs ipc call ewe.slack status
+```
 
 ## Settings
 

@@ -5,7 +5,7 @@ import qs
 
 // ewe.slack — the service: hands the SlackInbox model its helper path,
 // state dir and settings, answers IPC, and refetches after a suspend.
-//   qs ipc call ewe.slack refresh | status | open
+//   qs ipc call ewe.slack refresh | status | open | connect
 Scope {
     id: svc
     property string pluginId: ""
@@ -24,6 +24,7 @@ Scope {
         function refresh(): void { SlackInbox.fetch() }
         function status(): string { return SlackInbox.statusJson() }
         function open(): void { SlackInbox.openSlack() }
+        function connect(): void { SlackInbox.openSetup() }
     }
 
     Connections {

@@ -6,8 +6,10 @@ import qs
 
 // SlackInbox — the unread-DM model of the slack add-on, read by the bar glyph
 // and the desktop widget. Polls slack-unread.py (which reads the token from the
-// keyring itself — nothing secret ever passes through QML) and keeps the last
-// good list while offline. Clicking a row opens that DM in Slack.
+// keyring itself) and keeps the last good list while offline. Clicking a row
+// opens that DM in Slack. The one moment a token is in QML is the Connect
+// window: it goes straight to `slack-unread.py --connect` on stdin, which
+// checks it with Slack before storing it in the keyring.
 QtObject {
     id: si
 
@@ -23,11 +25,76 @@ QtObject {
     property string state: ""            // "" | "no-token" | "auth" | "offline" | "error"
     property string error: ""
     property string team: ""
+    property string teamName: ""
+    property string userName: ""
     property var list: []
     property int unread: 0
     readonly property bool available: state !== "no-token" && state !== "auth"
 
-    readonly property string hint: "Store a Slack user token (xoxp-…) in the keyring:\nsecret-tool store --label='Slack (ewe)' service ewe-slack account user-token\nthen refresh. See the README for the Slack app setup."
+    readonly property bool connected: probed && available
+
+    // the Connect window (Setup.qml)
+    property bool setupOpen: false
+    property bool connecting: false
+    property string connectError: ""
+    readonly property string appManifest: JSON.stringify({
+        display_information: { name: "ewe Slack unread", description: "Shows your unread Slack DMs on the ewe desktop." },
+        oauth_config: { scopes: { user: ["im:read", "im:history", "mpim:read", "mpim:history", "users:read"] } },
+        settings: { org_deploy_enabled: false, socket_mode_enabled: false, token_rotation_enabled: false }
+    })
+    function createApp() {
+        Quickshell.execDetached(["xdg-open", "https://api.slack.com/apps?new_app=1&manifest_json=" + encodeURIComponent(si.appManifest)])
+    }
+    function openSetup() { si.connectError = ""; si.setupOpen = true }
+
+    function connect(tok) {
+        if (si.helper === "" || si.connecting) return
+        si.connecting = true; si.connectError = ""
+        si._pendingToken = String(tok).trim()
+        _connect.command = ["python3", si.helper, "--state-dir", si.stateDir, "--connect"]
+        _connect.running = true
+    }
+    property string _pendingToken: ""
+    property Process _connect: Process {
+        stdinEnabled: true
+        onStarted: { _connect.write(si._pendingToken + "\n"); si._pendingToken = "" }
+        stdout: StdioCollector {
+            onStreamFinished: {
+                si.connecting = false
+                try {
+                    var j = JSON.parse(this.text)
+                    if (j.ok) {
+                        si.setupOpen = false
+                        si.state = ""; si.error = ""; si.list = []; si.unread = 0
+                        si.fetch()
+                    } else si.connectError = j.error || "Couldn't connect."
+                } catch (e) { si.connectError = "The Slack helper gave no answer." }
+            }
+        }
+    }
+    function disconnect() {
+        if (si.helper === "") return
+        _disconnect.command = ["python3", si.helper, "--state-dir", si.stateDir, "--disconnect"]
+        _disconnect.running = true
+    }
+    property Process _disconnect: Process {
+        stdout: StdioCollector {
+            onStreamFinished: {
+                si.list = []; si.unread = 0; si.team = ""; si.teamName = ""; si.userName = ""
+                si.state = "no-token"; si.error = ""
+            }
+        }
+    }
+
+    // first start without a token: offer the Connect window once (the marker
+    // in the state dir remembers that it was offered)
+    property Process _offer: Process {
+        stdout: StdioCollector { onStreamFinished: if (this.text.trim() === "first") si.openSetup() }
+    }
+    onStateChanged: if (si.state === "no-token" && si.stateDir !== "") {
+        _offer.command = ["sh", "-c", 'test -e "$1" || { touch "$1" && echo first; }', "ewe-slack", si.stateDir + "/setup-offered"]
+        _offer.running = true
+    }
 
     function start(pluginDir, stateDir) {
         si.helper = String(pluginDir).replace(/^file:\/\//, "").replace(/\/$/, "") + "/slack-unread.py"
@@ -74,6 +141,8 @@ QtObject {
                     if (j.ok) {
                         si.state = ""; si.error = ""
                         si.team = j.team
+                        si.teamName = j.teamName || ""
+                        si.userName = j.user || ""
                         si.list = j.list || []
                         si.unread = j.total || 0
                     } else if (j.error === "no-token" || j.error === "auth") {
