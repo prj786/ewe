@@ -1,0 +1,18 @@
+# Paste into https://api.slack.com/apps → Create New App → From a manifest.
+# Read-only user scopes: list your DMs and group DMs, read their history,
+# look up names and avatars. No bot, no events, nothing that can post.
+display_information:
+  name: ewe Slack unread
+  description: Shows your unread Slack DMs in the ewe desktop.
+oauth_config:
+  scopes:
+    user:
+      - im:read
+      - im:history
+      - mpim:read
+      - mpim:history
+      - users:read
+settings:
+  org_deploy_enabled: false
+  socket_mode_enabled: false
+  token_rotation_enabled: false

@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 1,
+  "id": "ewe.slack",
+  "name": "Slack",
+  "version": "0.3.0",
+  "apiVersion": 3,
+  "description": "Unread Slack direct messages on your desktop: a card with who wrote and what, newest first; one click opens the conversation in Slack. Asks for your Slack token on first start and keeps it in the keyring.",
+  "homepage": "https://github.com/prj786/ewe-plugin-slack",
+  "author": "prj786",
+  "icon": "icMessage",
+  "category": "Communication",
+  "kinds": [
+    "service",
+    "desktop-widget",
+    "panel"
+  ],
+  "entryPoints": {
+    "service": "Service.qml",
+    "desktop-widget": "Widget.qml",
+    "panel": "Setup.qml"
+  },
+  "desktopWidget": {
+    "x": 48,
+    "y": 96,
+    "layer": "desktop"
+  },
+  "requires": {
+    "packages": [
+      "python",
+      "libsecret"
+    ],
+    "commands": [
+      "python3",
+      "secret-tool",
+      "xdg-open"
+    ]
+  },
+  "settings": [
+    {
+      "key": "poll_seconds",
+      "type": "int",
+      "default": 60,
+      "min": 30,
+      "max": 600,
+      "label": "Check every (seconds)"
+    },
+    {
+      "key": "max_rows",
+      "type": "int",
+      "default": 6,
+      "min": 1,
+      "max": 12,
+      "label": "Conversations shown"
+    },
+    {
+      "key": "background",
+      "type": "choice",
+      "default": "solid",
+      "choices": [
+        "solid",
+        "glass"
+      ],
+      "label": "Card"
+    },
+    {
+      "key": "open_with",
+      "type": "choice",
+      "default": "app",
+      "choices": [
+        "app",
+        "browser"
+      ],
+      "label": "Open conversations in"
+    },
+    {
+      "key": "include_bots",
+      "type": "bool",
+      "default": false,
+      "label": "Include bots and Slackbot"
+    }
+  ]
+}
