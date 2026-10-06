@@ -103,12 +103,19 @@ Scope {
                     readonly property var mine: PluginHost.desktopWidgets.filter(function (w) {
                         var p = root._place(w.id)
                         return root._onScreen(w, perScreen.modelData, perScreen.index)
-                            && (p.layer || "desktop") === win.layerName && p.visible !== false
+                            && (p.layer || "desktop") === win.layerName
+                            // a hidden widget stays out — except while arranging, the one
+                            // place its Show chip can bring it back
+                            && (p.visible !== false || Globals.widgetsArrange)
                     })
                     visible: mine.length > 0
-                    // input only where widgets are — everywhere else clicks fall through
+                    // input only where widgets are — everywhere else clicks fall through;
+                    // while arranging, the whole window (null). An EMPTY Region is the
+                    // opposite — fully click-through (Osd.qml) — and left arrange mode
+                    // with no drag, no chips and no keyboard focus
                     property list<Region> regions
-                    mask: Region { regions: Globals.widgetsArrange ? [] : win.regions }
+                    Region { id: widgetRects; regions: win.regions }
+                    mask: Globals.widgetsArrange ? null : widgetRects
                     function rebuildMask() {
                         var rs = []
                         for (var i = 0; i < rep.count; i++) {
@@ -266,9 +273,13 @@ Scope {
                                         on: win.layerName === "top"
                                         onAct: PluginHost.setWidgetLayer(slot.modelData.id, win.layerName === "top" ? "desktop" : "top")
                                     }
+                                    // Hide, or Show (on) for a widget hidden earlier
                                     Chip {
-                                        glyph: Theme.icEyeOff; label: "Hide"
-                                        onAct: PluginHost.setWidgetVisible(slot.modelData.id, false)
+                                        readonly property bool hidden: slot.place.visible === false
+                                        glyph: hidden ? Theme.icEye : Theme.icEyeOff
+                                        label: hidden ? "Show" : "Hide"
+                                        on: hidden
+                                        onAct: PluginHost.setWidgetVisible(slot.modelData.id, hidden)
                                     }
                                 }
                             }
