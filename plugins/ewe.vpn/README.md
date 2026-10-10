@@ -1,4 +1,4 @@
-# VPN — an ewe add-on
+# VPN — an ewe plugin
 
 `ewe.vpn` — first-party, shipped inside the ewe payload, installed on request.
 
@@ -17,14 +17,14 @@ pre-shared key. Connect stores them in the profile (`password-flags=0`, the
 `/etc/NetworkManager`) and the toggle works from then on.
 
 **When it fails.** The notification carries the real reason: when
-NetworkManager only says "The VPN service failed to start", the add-on
-reads the plugin's line from the NetworkManager journal (readable for the
-installing user) and shows that instead — for an IPsec failure with the
+NetworkManager only says "The VPN service failed to start", this plugin
+reads the NetworkManager VPN plugin's own line from the journal (readable
+for the installing user) and shows that instead — for an IPsec failure with the
 hint that L2TP/IPsec needs IKEv1 (libreswan, set up by ewe's installer).
 
 ## Install
 
-Komble → Add-ons, or:
+Komble → Plugins, or:
 
     ewe-plugin install ewe.vpn
     ewe-plugin remove ewe.vpn          # gone until you add it back
@@ -33,7 +33,7 @@ Needs `nmcli` (networkmanager, an ewe dependency). The VPN types come from
 their NetworkManager plugins — `networkmanager-openvpn`,
 `networkmanager-l2tp` (+ `libreswan` for IPsec) — which ewe installs;
 profiles are created in Settings → Network → VPN (`ewe-conf`'s
-`[network.vpn]`), by import, or with `nmcli`. This add-on lists and toggles
+`[network.vpn]`), by import, or with `nmcli`. This plugin lists and toggles
 them; it never creates one.
 
 ## How it stays fresh

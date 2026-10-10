@@ -212,7 +212,8 @@ Scope {
                     // glass keeps its edge so the card reads over any wallpaper
                     border.color: Theme.glassBorder
                     border.width: Theme.glass ? Theme.borderWidth1 : 0
-                    layer.enabled: true
+                    // no shadow under a translucent card: it shows through
+                    layer.enabled: !Theme.glass
                     layer.effect: Elevation {}
                 }
                 Column {

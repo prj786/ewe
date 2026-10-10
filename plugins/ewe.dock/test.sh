@@ -29,8 +29,15 @@ m = json.load(open("manifest.json"))
 assert m["id"] == "ewe.dock" and m["apiVersion"] == 3 and m["kinds"] == ["panel"], m
 assert m["ipcAliases"] == ["launcher"], m["ipcAliases"]
 assert m["entryPoints"]["panel"] == "Dock.qml"
-print("ok   manifest fields")
+# the settings live here since 1.1.0, carried over from [desktop.dock]
+s = {o["key"]: o for o in m["settings"]}
+assert set(s) == {"autohide", "icon_size"}, set(s)
+assert s["autohide"]["legacy"] == "desktop.dock.autohide" and s["icon_size"]["legacy"] == "desktop.dock.icon_size"
+assert s["icon_size"]["choices"] == ["small", "normal", "large"]
+print("ok   manifest fields + settings")
 PY
+grep -q 'property var settings' Dock.qml && grep -q 'root.settings.autohide' Dock.qml && grep -q 'root.settings.icon_size' Dock.qml \
+  && ok "Dock.qml reads its own settings" || bad "Dock.qml does not read its settings"
 
 # 2 — Rule 8 -------------------------------------------------------------------
 # a hex colour, a named colour other than "transparent", a duration or a pixel

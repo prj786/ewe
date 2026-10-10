@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "ewe.places",
   "name": "Places",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "apiVersion": 3,
   "description": "A compact file browser above the dock or under the bar: your home, pinned folders, drag any file out into another app.",
   "homepage": "https://github.com/prj786/ewe-plugin-places",
@@ -25,7 +25,8 @@
     "order": 10
   },
   "barWidget": {
-    "defaultSection": "right"
+    "defaultSection": "right",
+    "toggle": false
   },
   "ipcAliases": [
     "places"
@@ -51,7 +52,8 @@
         "bar",
         "dock",
         "both"
-      ]
+      ],
+      "description": "Auto puts it in the dock when there is one, in the bar otherwise. This decides where it shows, so it has no Show in bar switch."
     }
   ]
 }

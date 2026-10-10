@@ -10,7 +10,7 @@ import qs
 // consumers (the qmldir beside this file makes it a singleton of this
 // plugin's own directory). Everything goes through nmcli exactly as the
 // shell did; the NetworkManager secret prompt itself stays in the shell
-// (Auth.qml) — this add-on only writes secrets INTO a profile on request.
+// (Auth.qml) — this plugin only writes secrets INTO a profile on request.
 //
 // Freshness: one `nmcli monitor` (a single long-lived process that prints a
 // line whenever NetworkManager changes anything) drives the re-reads, so a

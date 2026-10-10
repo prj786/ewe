@@ -425,8 +425,10 @@ QtObject {
     // text deepens to glassAccent and muted text rises to textSecondary.
     // The remap is made ONCE here; the bar, the dock and whatever sits in
     // them (plugin widgets included) read these instead of the plain roles.
-    readonly property color barGround:      glass ? glassBase : surfaceBase
-    readonly property color dockGround:     glass ? glassRaised : surfaceRaised
+    // The fill takes the bar opacity (barAlpha); glassBase/glassRaised stay
+    // the Glass material at opacityGlass for the Overview and the widgets.
+    readonly property color barGround:      glass ? withAlpha(surfaceBase, barAlpha) : surfaceBase
+    readonly property color dockGround:     glass ? withAlpha(surfaceRaised, barAlpha) : surfaceRaised
     readonly property color barOutline:     glass ? glassBorder : borderSubtle
     readonly property color dockOutline:    barOutline
     readonly property color barHoverFill:   glass ? glassHover : surfaceHover
@@ -447,8 +449,13 @@ QtObject {
     // from the bottom of the screen, what the panels that open above it and
     // the Overview pager keep clear of.
     readonly property var _dockCells: (Globals.tokDock && Globals.tokDock.cell) || ({ small: 40, medium: 48, large: 64 })
-    readonly property int dockCell: Globals.dockIconSize === "small" ? _dockCells.small
-                                  : Globals.dockIconSize === "large" ? _dockCells.large : _dockCells.medium
+    // The cell for a size name ("small" · "normal"/"medium" · "large"): the
+    // Dock plugin sizes itself from its OWN icon_size setting through this.
+    function dockCellFor(size) {
+        return size === "small" ? _dockCells.small : size === "large" ? _dockCells.large : _dockCells.medium
+    }
+    // the pre-plugin-settings value ([desktop.dock] icon_size), kept for API 3
+    readonly property int dockCell: dockCellFor(Globals.dockIconSize)
     readonly property int dockHeight: dockCell + 2 * spaceS
     readonly property int dockClearance: dockHeight + windowGap
 
@@ -579,7 +586,10 @@ QtObject {
     readonly property string icFile:         ic(0xE0C0)  // file — overview file results
     readonly property string icFolder:       ic(0xE0D7)  // folder — places / dock
     readonly property string icHome:         ic(0xE0F5)  // house — places home
-    readonly property string icPin:          ic(0xE259)  // pin — launcher pin
+    readonly property string icPin:          ic(0xE259)  // pin — launcher pin, desktop widget pinned
+    readonly property string icPinOff:       ic(0xE2B6)  // pin-off — desktop widget: unpin
+    readonly property string icGrip:         ic(0xE0EB)  // grip-vertical — desktop widget drag handle
+    readonly property string icLockOpen:     ic(0xE10C)  // lock-open — desktop widget: unlock
     readonly property string icUser:         ic(0xE19F)  // user — avatar fallback
     readonly property string icStar:         ic(0xE176)  // star — primary display
     readonly property string icCpu:          ic(0xE0A9)  // cpu — meter

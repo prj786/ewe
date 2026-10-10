@@ -82,14 +82,14 @@ if [ -x "$DEST/bin/ewe-conf" ]; then
     [ -x "$DEST/bin/ewe-plugin" ] && ln -sf "$DEST/bin/ewe-plugin" "$HOME/.local/bin/ewe-plugin"
     rm -f "$HOME/.local/bin/ewe-pass" 2>/dev/null || true   # 0.21: ewe-pass lives inside the ewe.passwords plugin
     [ -x "$DEST/bin/ewe-globalshortcuts" ] && ln -sf "$DEST/bin/ewe-globalshortcuts" "$HOME/.local/bin/ewe-globalshortcuts"
-    # Add-ons (0.25, plan D1–D3): every first-party plugin ships in the
+    # First-party plugins (0.25, plan D1–D3): every one ships in the
     # payload (plugins/ + bundle.json). `seed` installs the ids bundle.json
     # marks default (none today) and refreshes the bundled copies this
-    # machine already has; `migrate` runs ONCE per add-on: an UPGRADE (a
-    # previous payload VERSION was deployed here) installs the add-ons that
+    # machine already has; `migrate` runs ONCE per plugin: an UPGRADE (a
+    # previous payload VERSION was deployed here) installs the plugins that
     # replace features the user had built in (clipboard, screenshots,
     # passwords…), a FIRST deploy records them as considered and installs
-    # nothing — add-ons are opt-in from Komble → Add-ons and the Welcome
+    # nothing — they are opt-in from Komble → Plugins and the Welcome
     # screen. Marker: ~/.local/state/ewe/addons-migrated (local, not synced).
     if [ -d "$DEST/plugins" ]; then
         "$DEST/bin/ewe-plugin" seed "$DEST/plugins" --no-restart >/dev/null 2>&1 || true

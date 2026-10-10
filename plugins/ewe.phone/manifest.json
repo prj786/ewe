@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "ewe.phone",
   "name": "Phone",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "apiVersion": 3,
   "description": "Your phone through KDE Connect: pairing, battery, its notifications and your SMS conversations on the Mobile page, a phone glyph in the bar while it is connected.",
   "homepage": "https://github.com/prj786/ewe-plugin-phone",

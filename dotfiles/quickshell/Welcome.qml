@@ -681,14 +681,14 @@ Scope {
                     visible: root.step === root.stepAddons
                     width: parent.width; spacing: Theme.spaceMd
                     Glyph { anchors.horizontalCenter: parent.horizontalCenter; ic: Theme.icApps }
-                    Title { text: root.addonsState === "done" ? (root.addonsOkCount > 0 ? "Add-ons installed" : "Add-ons") : "Add-ons" }
+                    Title { text: root.addonsState === "done" ? (root.addonsOkCount > 0 ? "Plugins installed" : "Plugins") : "Plugins" }
                     Body {
-                        text: root.addonsState === "loading" ? "Looking for add-ons…"
-                            : root.addonsState === "unavailable" ? "The add-on list is not available right now. Komble → Add-ons has it whenever you are ready."
+                        text: root.addonsState === "loading" ? "Looking for plugins…"
+                            : root.addonsState === "unavailable" ? "The plugin list is not available right now. Komble → Plugins has it whenever you are ready."
                             : root.addonsState === "done" ? (root.addonsOkCount > 0
-                                ? root.addonsOkCount + (root.addonsOkCount === 1 ? " add-on is" : " add-ons are") + " installed. They appear when you finish — the desktop restarts for a second."
-                                : "Nothing was installed. Komble → Add-ons has every add-on whenever you want one.")
-                            : "A few extras ship with ewe — the dock, music, Places, your phone, mail, Cast to TV and more. None is installed until you pick it. Choose what you want now; the rest is one click away in Komble → Add-ons."
+                                ? root.addonsOkCount + (root.addonsOkCount === 1 ? " plugin is" : " plugins are") + " installed. They appear when you finish — the desktop restarts for a second."
+                                : "Nothing was installed. Komble → Plugins has every one whenever you want it.")
+                            : "A few extras ship with ewe — the dock, music, Places, your phone, mail, Cast to TV and more. None is installed until you pick it. Choose what you want now; the rest is one click away in Komble → Plugins."
                     }
                     Row {
                         visible: root.addonsState === "loading"
@@ -887,7 +887,7 @@ Scope {
                     Column {
                         width: parent.width; spacing: Theme.spaceS + Theme.spaceXs
                         TourRow { ic: Theme.icKeyboard; head: "The Super key"; text: "Tap Super for the Overview of your windows and workspaces. Super+D searches apps and files; Super+Return opens a terminal." }
-                        TourRow { ic: Theme.icApps; head: "Add-ons"; text: "The dock, music, Places, your phone, mail, Cast to TV and more are add-ons: install the ones you want with one click in Komble → Add-ons." }
+                        TourRow { ic: Theme.icApps; head: "Plugins"; text: "The dock, music, Places, your phone, mail, Cast to TV and more are plugins: install the ones you want with one click in Komble → Plugins, where each one's settings are too (Options)." }
                         TourRow { ic: Theme.icCog; head: "Quick settings and Settings"; text: "Super+N (or the clock) opens Quick settings — Wi-Fi, sound, calendar, notifications. Super+, opens Settings." }
                         TourRow { ic: Theme.icDownload; head: "Komble"; text: "One store for everything: the Arch repositories, the AUR and AppImages, with updates in one place — the download glyph in the bar tells you when." }
                     }

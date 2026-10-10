@@ -393,12 +393,7 @@ QtObject {
                     // the server (If-Match) refused: another machine saved a newer
                     // file, or this never-synced machine found a backup it has not
                     // restored — never clobber either silently
-                    var who = j.remote_machine || (j.remote && j.remote.appProperties && j.remote.appProperties.machine) || (cl.cloudInfo && cl.cloudInfo.device) || "another machine"
-                    cl.syncState = "error"
-                    cl.syncConflict = true
-                    cl.syncError = j.error === "remote-exists"
-                        ? "A backup from “" + who + "” already exists in your account — restore it first, or push anyway to overwrite it."
-                        : "Another machine (“" + who + "”) saved newer settings — restore them, or push anyway to overwrite."
+                    cl._setConflict(j.error, j.remote, j.remote_is_this_machine)
                     cl.checkCloud()
                 } else if (j && (j.error === "unauthorized" || j.error === "not-signed-in")) {
                     cl.syncState = "error"; cl.syncError = "The account no longer accepts this machine — sign in again (the app password may have been revoked on the server)."
@@ -430,6 +425,21 @@ QtObject {
         }
     }
     function _syncFail(msg) { cl.syncState = "error"; cl.syncError = "Sync failed: " + msg }
+    // One wording for a refused push and for a conflict sync-status reports.
+    // `mine` is ewe-conf's machine-id verdict (true/false, or null for a stamp
+    // older than machine ids): a hostname alone cannot tell two machines that
+    // share one apart, and "another machine (“emoh”)" on emoh reads as a bug.
+    function _setConflict(kind, remote, mine) {
+        var who = (remote && remote.appProperties && remote.appProperties.machine) || (cl.cloudInfo && cl.cloudInfo.device) || ""
+        cl.syncState = "error"
+        cl.syncConflict = true
+        if (kind === "remote-exists")
+            cl.syncError = "A backup" + (who ? " from “" + who + "”" : "") + " already exists in your account — restore it first, or push anyway to overwrite it."
+        else if (mine === true)
+            cl.syncError = "The copy in your account was saved by this computer but is not the one it last synced — push anyway to replace it, or restore it. Open ewe-sync to decide."
+        else
+            cl.syncError = (who ? "Another machine (“" + who + "”)" : "Another machine") + " saved newer settings — restore them, or push anyway to overwrite. Open ewe-sync to decide."
+    }
 
     property var _statusCb: null
     function checkCloud(cb) {
@@ -449,6 +459,18 @@ QtObject {
                 } : null
                 if (j && j.local_synced_at) cl.localSyncedAt = String(j.local_synced_at)
                 if (j && j.in_sync !== undefined) cl.inSync = !!j.in_sync
+                // `conflict`: what a push would answer now. A
+                // newer save elsewhere shows without waiting for a refused
+                // push; one ewe-conf has since recognised as this machine's
+                // own (a lost upload reply) clears. "remote-exists" on a
+                // never-synced machine stays the restore offer's business.
+                if (j && j.ok && j.conflict !== undefined && cl.syncState !== "syncing") {
+                    if (j.conflict === "remote-newer" && cl.lastSync !== "")
+                        cl._setConflict(j.conflict, j.remote, j.remote_is_this_machine)
+                    else if (!j.conflict && cl.syncConflict) {
+                        cl.syncConflict = false; cl.syncState = "idle"; cl.syncError = ""
+                    }
+                }
                 var cb = cl._statusCb; cl._statusCb = null
                 if (cb) cb(ok)
                 if (ok) cl._maybeOfferRestore()

@@ -32,7 +32,7 @@ enabled, so read it first. Enabling and disabling restart the shell
     add <git-url> [--enable] [--yes]   clone, validate, record the source (a first-party
                                        URL or id that ships in the payload installs from it)
     list [--json]                      every plugin: enabled, version, kinds; --json also
-                                       lists the payload's add-ons (`available`) and `removed`
+                                       lists the payload's plugins (`available`) and `removed`
     info <id> [--json]                 one plugin's manifest + state
     enable <id> [--no-restart]         add to [plugins].enabled, restart the shell
     disable <id> [--no-restart]
@@ -43,16 +43,27 @@ enabled, so read it first. Enabling and disabling restart the shell
                                        moved to <id>.bak.<stamp> instead
     validate <path>                    check a manifest + its entry points (exit 1 on problems)
     restore [--yes]                    clone every plugin ewe.conf knows that is not here
-    install <id> [--no-restart]        an ADD-ON from the payload: copy, source bundled, enable (JSON)
-    migrate [--no-restart] [--fresh]   one-time: install the add-ons that replace features an
+    install <id> [--no-restart]        a first-party plugin from the payload: copy, source
+                                       bundled, enable (JSON)
+    migrate [--no-restart] [--fresh]   one-time: install the plugins that replace features an
                                        upgrader had built in (ewe-setup/install.sh run it; JSON)
     seed [dir] [--restore <id>]        the payload's default plugins + refresh installed copies
+    create <id> [--kinds a,b] [--dir PATH]   scaffold a new plugin repository (alias: new)
+    dev [dir]                          link a plugin you are writing, enable it, follow the log
+    set <id> <key> <value>             one of the plugin's declared settings (JSON; live)
+    get <id> [key]                     the plugin's effective settings (JSON)
+    bar <id> [on|off]                  Show in bar: its bar widget / Quick settings glyph (JSON; live)
+    place <id> [--x N] [--y N] [--output NAME] [--pinned on|off] [--pin-level top|overlay]
+          [--locked on|off] [--layer desktop|top|overlay] [--visible on|off] [--reset]
+                                       a desktop widget: where it sits, whether it is pinned
+                                       above the windows (top) or above everything (overlay),
+                                       and whether it can be dragged (JSON; live)
     path                               print the plugins directory
     boot-ok                            (the shell calls this) a start survived a minute
 
-Add-ons (0.25): every first-party plugin ships INSIDE the ewe payload
+First-party plugins (0.25): every one ships INSIDE the ewe payload
 (plugins/<id>/ + plugins/bundle.json) but is NOT installed on a fresh
-machine — Komble's Add-ons page, the Welcome screen and `install` put one in
+machine — Komble → Plugins, the Welcome screen and `install` put one in
 with one click. `bundle.json` says which ids are `default` (seeded on every
 machine) and which `migrate` (installed once for upgraders who had the
 feature built in). The migration marker is ~/.local/state/ewe/addons-migrated
@@ -79,8 +90,11 @@ tool's own enable/disable/remove) do not count.
 Kinds: service (headless), panel, overlay, menu — the host instantiates all of
 them the same way and the plugin owns its windows and IPC. bar-widget is an
 Item the bar packs like a built-in indicator; "barWidget": {"defaultSection":
-"left" | "center" | "right"} picks the section (right when absent), and the
-Settings → Top bar map hides it under the key plugin:<id>. API 3 adds
+"left" | "center" | "right", "defaultShown": true, "toggle": true} picks the
+section (right when absent); Show in bar (`bar`, Komble's Options) hides it
+under desktop.bar.show."plugin:<id>" — toggle false when the plugin's own
+settings place its button. desktop-widget is a card the host draws on the
+desktop; every one can be dragged and pinned (`place`). API 3 adds
 quick-tile (a Quick settings home tile, "quickTile": {span, order}),
 quick-page (a Quick settings page + rail entry, "quickPage": {key, label,
 icon, order}), bar-status (a glyph inside the bar's Quick settings pill,
@@ -122,7 +136,15 @@ CMD_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]*$")
 # hands the plugin as `settings`; values live in ewe.conf plugins.settings.<id>
 SETTING_TYPES = ("bool", "int", "string", "choice", "color")
 SETTING_KEY_RE = re.compile(r"^[a-z][a-z0-9_]{0,31}$")
-WIDGET_LAYERS = ("desktop", "top")
+# a first-party setting may name the ewe.conf key it replaces ("legacy"): until
+# the user sets the plugin's own value, the old key's value stands — so moving
+# a feature's settings into its plugin changes nobody's desktop
+CONF_KEY_RE = re.compile(r"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$")
+# a desktop widget's layer: desktop = under the windows (unpinned), top = above
+# the windows (pinned), overlay = above everything, fullscreen too (pinned at
+# the "everything" level). Pinning moves a widget to its pin_level.
+WIDGET_LAYERS = ("desktop", "top", "overlay")
+PIN_LEVELS = ("top", "overlay")
 # a manifest keybind: {"combo": "SUPER + P", "ipc": "passwords toggle"} —
 # generated into hypr/generated/plugin-keybinds.lua as `qs ipc call <ipc>`
 IPC_RE = re.compile(r"^[a-z0-9][a-z0-9._-]*( [A-Za-z0-9_.:/-]+)*$")
@@ -225,6 +247,13 @@ def poke_shell_reload():
     on this poke (PluginHost.reload) -- no shell restart."""
     if shutil.which("qs"):
         subprocess.run(["qs", "ipc", "call", "plugins", "reload"], capture_output=True, timeout=10)
+
+
+def poke_settings_reload():
+    """desktop.bar.show lives in user-theme.json too (ewe-conf regenerated
+    it); the shell re-reads that on `settings reload`."""
+    if shutil.which("qs"):
+        subprocess.run(["qs", "ipc", "call", "settings", "reload"], capture_output=True, timeout=10)
 
 
 def conf_set(key, value):
@@ -371,6 +400,15 @@ def validate_manifest(d, m, expect_dirname=None, allow_reserved=False):
         p.append("barWidget must be an object")
     elif isinstance(bw, dict) and "defaultSection" in bw and bw["defaultSection"] not in ("left", "center", "right"):
         p.append("barWidget.defaultSection must be left, center or right")
+    # Show in bar (the host's switch, `ewe-plugin bar`): defaultShown is the
+    # state before the user picks; toggle false = the plugin's own settings
+    # say where it shows (a "button: bar/dock" choice), so no host switch
+    for where in ("barWidget", "barStatus"):
+        o = m.get(where)
+        if isinstance(o, dict):
+            for k in ("defaultShown", "toggle"):
+                if k in o and not isinstance(o[k], bool):
+                    p.append("%s.%s must be true or false" % (where, k))
     dw = m.get("desktopWidget")
     if dw is not None and not isinstance(dw, dict):
         p.append("desktopWidget must be an object")
@@ -379,7 +417,11 @@ def validate_manifest(d, m, expect_dirname=None, allow_reserved=False):
             if k in dw and (not isinstance(dw[k], (int, float)) or isinstance(dw[k], bool)):
                 p.append("desktopWidget.%s must be a number" % k)
         if "layer" in dw and dw["layer"] not in WIDGET_LAYERS:
-            p.append("desktopWidget.layer must be desktop or top")
+            p.append("desktopWidget.layer must be one of %s" % ", ".join(WIDGET_LAYERS))
+        if "pinLevel" in dw and dw["pinLevel"] not in PIN_LEVELS:
+            p.append("desktopWidget.pinLevel must be one of %s" % ", ".join(PIN_LEVELS))
+        if "locked" in dw and not isinstance(dw["locked"], bool):
+            p.append("desktopWidget.locked must be true or false")
     # ── API 3 fields ──────────────────────────────────────────────────────
     def _int(obj, key, where):
         if key in obj and (not isinstance(obj[key], int) or isinstance(obj[key], bool)):
@@ -488,6 +530,11 @@ def validate_manifest(d, m, expect_dirname=None, allow_reserved=False):
                 p.append("settings.%s.default: %s" % (key, setting_check(o, o["default"])))
             if typ == "choice" and not (isinstance(o.get("choices"), list) and o["choices"]):
                 p.append("settings.%s (choice) needs a non-empty choices list" % key)
+            if "legacy" in o:
+                if not isinstance(o["legacy"], str) or not CONF_KEY_RE.match(o["legacy"]):
+                    p.append("settings.%s.legacy must be a dotted ewe.conf key like \"desktop.dock.autohide\"" % key)
+                elif isinstance(pid, str) and not pid.startswith(RESERVED_PREFIX):
+                    p.append("settings.%s.legacy: only first-party (\"%s\") plugins carry an ewe.conf key over" % (key, RESERVED_PREFIX))
     return p
 
 
@@ -539,26 +586,55 @@ def setting_coerce(spec, raw):
     return raw
 
 
+_MISSING = object()
+
+
+def conf_value(dotted):
+    """Any value out of ewe.conf, _MISSING when absent."""
+    try:
+        with open(CONF, "rb") as f:
+            node = tomllib.load(f)
+    except (FileNotFoundError, tomllib.TOMLDecodeError):
+        return _MISSING
+    for part in dotted.split("."):
+        if not isinstance(node, dict) or part not in node:
+            return _MISSING
+        node = node[part]
+    return node
+
+
 def effective_settings(m, pid):
     """{key: value} -- the manifest's defaults under the user's values (only
-    values that still fit the schema count; a stale one falls back)."""
+    values that still fit the schema count; a stale one falls back). A
+    first-party setting with "legacy" takes the old ewe.conf key's value
+    while the user has not set the plugin's own."""
     out = {}
     vals = conf_table("plugins.settings").get(pid) or {}
     for o in (m.get("settings") or []) if isinstance(m.get("settings"), list) else []:
         if not isinstance(o, dict) or not isinstance(o.get("key"), str):
             continue
-        v = vals.get(o["key"], o.get("default"))
-        out[o["key"]] = v if setting_check(o, v) is None else o.get("default")
+        dflt = o.get("default")
+        if isinstance(o.get("legacy"), str) and str(pid).startswith(RESERVED_PREFIX):
+            old = conf_value(o["legacy"])
+            if old is not _MISSING and setting_check(o, old) is None:
+                dflt = old
+        v = vals.get(o["key"], dflt)
+        out[o["key"]] = v if setting_check(o, v) is None else dflt
     return out
 
 
 def effective_widget(m, pid):
-    """Where a desktop widget sits: the user's placement over the manifest's
-    defaults. {x, y, output, layer, visible}"""
+    """Where a desktop widget sits and how it behaves: the user's placement
+    over the manifest's defaults.
+      {x, y, output, layer, visible, pinned, pin_level, locked}
+    `layer` is the truth (desktop | top | overlay); `pinned` says it is above
+    the desktop (layer != desktop); `pin_level` is where pinning puts it, and
+    is remembered while unpinned; `locked` stops dragging."""
     dw = m.get("desktopWidget") if isinstance(m.get("desktopWidget"), dict) else {}
     user = conf_table("plugins.widgets").get(pid) or {}
     w = {"x": dw.get("x", 48), "y": dw.get("y", 64), "output": dw.get("output", ""),
-         "layer": dw.get("layer", "desktop"), "visible": True}
+         "layer": dw.get("layer", "desktop"), "visible": True,
+         "pin_level": dw.get("pinLevel", "top"), "locked": bool(dw.get("locked", False))}
     for k in ("x", "y"):
         if isinstance(user.get(k), (int, float)) and not isinstance(user.get(k), bool):
             w[k] = user[k]
@@ -568,7 +644,47 @@ def effective_widget(m, pid):
         w["layer"] = user["layer"]
     if isinstance(user.get("visible"), bool):
         w["visible"] = user["visible"]
+    if user.get("pin_level") in PIN_LEVELS:
+        w["pin_level"] = user["pin_level"]
+    if isinstance(user.get("locked"), bool):
+        w["locked"] = user["locked"]
+    if w["layer"] not in WIDGET_LAYERS:
+        w["layer"] = "desktop"
+    if w["pin_level"] not in PIN_LEVELS:
+        w["pin_level"] = "top"
+    w["pinned"] = w["layer"] != "desktop"
     return w
+
+
+BAR_KINDS = ("bar-widget", "bar-status")
+
+
+def effective_bar(m, pid):
+    """Show in bar, for a plugin with a bar widget or a bar-status glyph:
+    {shown, toggle}. The user's choice is desktop.bar.show."plugin:<id>"
+    (the key the bar has always hidden plugins under); before they pick, the
+    manifest's defaultShown — and a `show_in_bar` value the plugin's own
+    settings stored before this switch existed (System monitor 1.0) still
+    counts. toggle false: the plugin's own settings place it (no switch)."""
+    kinds = m.get("kinds") if isinstance(m.get("kinds"), list) else []
+    if not any(k in kinds for k in BAR_KINDS):
+        return None
+    spec = {}
+    for where in ("barWidget", "barStatus"):
+        if isinstance(m.get(where), dict):
+            spec.update(m[where])
+    toggle = spec.get("toggle", True) is not False
+    if not toggle:
+        return {"shown": True, "toggle": False}
+    show = conf_table("desktop.bar").get("show")
+    show = show if isinstance(show, dict) else {}
+    v = show.get("plugin:" + pid)
+    if isinstance(v, bool):
+        return {"shown": v, "toggle": True}
+    old = (conf_table("plugins.settings").get(pid) or {}).get("show_in_bar")
+    if isinstance(old, bool):
+        return {"shown": old, "toggle": True}
+    return {"shown": spec.get("defaultShown", True) is not False, "toggle": True}
 
 
 def describe(d, dirname=None, enabled=(), sources=None):
@@ -601,6 +717,8 @@ def describe(d, dirname=None, enabled=(), sources=None):
         # desktop widgets: where it sits (user placement over the manifest's
         # defaults); settings: the declared schema and the effective values
         "widget": effective_widget(m, pid) if "desktop-widget" in (m.get("kinds") or []) else None,
+        # Show in bar: {shown, toggle}, or null for a plugin with nothing in the bar
+        "bar": effective_bar(m, pid),
         "settingsSchema": m.get("settings") if isinstance(m.get("settings"), list) else [],
         "settings": effective_settings(m, pid),
         "linked": os.path.islink(d.rstrip("/")),
@@ -1382,9 +1500,11 @@ Item {{
 import qs
 
 // {name} -- desktop widget. A sized Item ewe places on the desktop (or above
-// windows when the user makes it sticky). ewe draws the card under it (the
-// Glass card: its fill, outline, corner and padding) and handles arrange
-// mode (Super+Shift+W); you draw only the content, with no background of
+// the windows when the user pins it). ewe draws the card under it (the
+// Glass card: its fill, outline, corner and padding), its hover toolbar (a
+// grip to drag by, the pin) and arrange mode (Super+Shift+W); a press on
+// your content that no control of yours takes drags the card too. You draw
+// only the content, with no background of
 // your own, in Theme roles and type styles. `settings` carries your
 // declared options. This one is a clock: replace the body, keep the shape.
 Item {{
@@ -1532,8 +1652,9 @@ it lives and what the user can change about it:
 - **bar-widget**: ewe puts it in the top bar (left / centre / right; the
   user can hide it in Settings -> Top bar). It must be an `Item` with an
   implicit size.
-- **desktop-widget**: ewe places it on the desktop; the user moves it
-  (Super+Shift+W, then drag), makes it sticky (above windows) or hides it.
+- **desktop-widget**: ewe places it on the desktop; the user drags it
+  any time, pins it (above windows, or above everything) from its hover
+  toolbar, locks it in place or hides it (Komble -> Options, Super+Shift+W).
 - **panel / overlay / menu**: your own window, opened over IPC
   (`qs ipc call {id} toggle`), bindable to a key.
 - **settings** in `manifest.json` become a form in Komble and arrive in
@@ -1714,18 +1835,34 @@ def cmd_dev(args):
 
 # ── place / set / get: what ewe decides for a plugin ──────────────────────────
 
+PLACE_USAGE = ("usage: ewe-plugin place <id> [--x N] [--y N] [--output NAME] [--pinned on|off] "
+               "[--pin-level top|overlay] [--locked on|off] [--layer desktop|top|overlay] "
+               "[--visible on|off] [--reset]")
+
+
+def _onoff(flag, v):
+    s = v.lower()
+    if s in ("1", "true", "yes", "on"):
+        return True
+    if s in ("0", "false", "no", "off"):
+        return False
+    die("%s must be on or off" % flag, 2)
+
+
 def cmd_place(args):
+    flags = ("--x", "--y", "--output", "--layer", "--visible", "--pinned", "--pin-level", "--locked")
     rest = [a for a in args if not a.startswith("--")]
-    for flag in ("--x", "--y", "--output", "--layer", "--visible"):
+    for flag in flags:
         v = _opt(args, flag)
         if v is not None and v in rest:
             rest.remove(v)
     if len(rest) != 1:
-        die("usage: ewe-plugin place <id> [--x N] [--y N] [--output NAME] [--layer desktop|top] [--visible on|off] [--reset]", 2)
+        die(PLACE_USAGE, 2)
     e = find(rest[0])
     pid = e["id"]
     if "desktop-widget" not in (e.get("kinds") or []):
         die("%s has no desktop-widget entry point -- only desktop widgets are placed" % pid)
+    m = read_manifest(e["dir"])[0] or {}
     table = conf_table("plugins.widgets")
     cur = dict(table.get(pid) or {})
     if "--reset" in args:
@@ -1740,20 +1877,65 @@ def cmd_place(args):
     v = _opt(args, "--output")
     if v is not None:
         cur["output"] = v
+    v = _opt(args, "--pin-level")
+    if v is not None:
+        if v not in PIN_LEVELS:
+            die("--pin-level must be one of %s" % ", ".join(PIN_LEVELS), 2)
+        cur["pin_level"] = v
+        # a pinned widget moves to the new level at once
+        if effective_widget(m, pid)["pinned"] and _opt(args, "--pinned") is None and _opt(args, "--layer") is None:
+            cur["layer"] = v
+    v = _opt(args, "--pinned")
+    if v is not None:
+        level = cur.get("pin_level") if cur.get("pin_level") in PIN_LEVELS else effective_widget(m, pid)["pin_level"]
+        cur["layer"] = level if _onoff("--pinned", v) else "desktop"
     v = _opt(args, "--layer")
     if v is not None:
         if v not in WIDGET_LAYERS:
-            die("--layer must be desktop or top")
+            die("--layer must be one of %s" % ", ".join(WIDGET_LAYERS), 2)
         cur["layer"] = v
+        if v in PIN_LEVELS:
+            cur["pin_level"] = v
+    v = _opt(args, "--locked")
+    if v is not None:
+        cur["locked"] = _onoff("--locked", v)
     v = _opt(args, "--visible")
     if v is not None:
-        cur["visible"] = v.lower() in ("1", "true", "yes", "on")
+        cur["visible"] = _onoff("--visible", v)
     # the whole table, not a dotted per-id key: an id has a dot in it, and
     # ewe-conf would split "plugins.widgets.acme.clock" into nested tables
     table[pid] = cur
     conf_set("plugins.widgets", table)
     poke_shell_reload()
-    print(json.dumps({"ok": True, "id": pid, "widget": effective_widget(read_manifest(e["dir"])[0] or {}, pid)}))
+    print(json.dumps({"ok": True, "id": pid, "widget": effective_widget(m, pid)}))
+
+
+def cmd_bar(args):
+    """Show in bar: `bar <id> on|off` — the plugin's bar widget and its glyph
+    in the bar's Quick settings pill, under desktop.bar.show."plugin:<id>"
+    (the key the bar has always read). `bar <id>` alone prints the state."""
+    rest = [a for a in args if not a.startswith("--")]
+    if len(rest) not in (1, 2):
+        die("usage: ewe-plugin bar <id> [on|off]", 2)
+    e = find(rest[0])
+    pid = e["id"]
+    m = read_manifest(e["dir"])[0] or {}
+    state = effective_bar(m, pid)
+    if state is None:
+        die("%s puts nothing in the bar (no bar-widget or bar-status kind)" % pid)
+    if len(rest) == 1:
+        print(json.dumps({"ok": True, "id": pid, "bar": state}))
+        return
+    if not state["toggle"]:
+        die("%s places its own button (see its settings) -- there is no Show in bar switch" % pid)
+    on = _onoff("on|off", rest[1])
+    show = conf_table("desktop.bar").get("show")
+    show = dict(show) if isinstance(show, dict) else {}
+    show["plugin:" + pid] = on
+    conf_set("desktop.bar.show", show)       # whole table: the key carries a dot and a colon
+    poke_settings_reload()
+    poke_shell_reload()
+    print(json.dumps({"ok": True, "id": pid, "bar": effective_bar(m, pid)}))
 
 
 def cmd_set(args):
@@ -1834,7 +2016,7 @@ def cmd_seed(args):
             continue
         if not os.path.exists(dest):
             if not (meta.get(pid, {}).get("default") is True or pid == restore_id):
-                skipped.append({"id": pid, "why": "an add-on — ewe-plugin install %s" % pid})
+                skipped.append({"id": pid, "why": "a first-party plugin — ewe-plugin install %s" % pid})
                 continue
             shutil.copytree(d, dest, symlinks=False)
             sources[pid] = "bundled"
@@ -1948,7 +2130,7 @@ def cmd_migrate(args):
     if fresh:
         _migrated_write(considered | set(pending))
         print(json.dumps({"ok": True, "migrated": [], "fresh": True,
-                          "skipped": [{"id": pid, "why": "fresh install — add-ons are opt-in"} for pid in pending]}))
+                          "skipped": [{"id": pid, "why": "fresh install — plugins are opt-in"} for pid in pending]}))
         return
     removed = set(conf_removed())
     enabled, sources = conf_state()
@@ -1984,7 +2166,7 @@ def main(argv):
              "disable": cmd_disable, "update": cmd_update, "remove": cmd_remove,
              "validate": cmd_validate, "restore": cmd_restore,
              "create": cmd_create, "new": cmd_create, "dev": cmd_dev,
-             "place": cmd_place, "set": cmd_set, "get": cmd_get, "seed": cmd_seed,
+             "place": cmd_place, "bar": cmd_bar, "set": cmd_set, "get": cmd_get, "seed": cmd_seed,
              "install": cmd_install, "migrate": cmd_migrate}
     if verb == "path":
         print(PLUGINS_DIR)

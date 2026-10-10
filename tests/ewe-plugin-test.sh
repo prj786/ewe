@@ -82,16 +82,48 @@ cat > "$SB/payload/plugins/ewe.alias/manifest.json" <<'J'
 J
 check "v3: ipcAliases accepted for ewe.* and a keybind may target the alias" "$P validate '$SB/payload/plugins/ewe.alias' --first-party >/dev/null"
 
+# settings carried over from an old ewe.conf key ("legacy", first-party only),
+# Show in bar's manifest switches, the new widget fields -------------------------
+mkdir -p "$SB/legacy/ewe.legacy"; cp "$SB/acme.clock/Widget.qml" "$SB/legacy/ewe.legacy/"
+cat > "$SB/legacy/ewe.legacy/manifest.json" <<'J'
+{"schemaVersion":1,"id":"ewe.legacy","name":"Legacy","version":"1.0.0","apiVersion":3,"kinds":["bar-widget"],"entryPoints":{"bar-widget":"Widget.qml"},
+ "barWidget":{"defaultShown":false},
+ "settings":[{"key":"autohide","type":"bool","default":false,"label":"Hide","legacy":"desktop.dock.autohide"},
+             {"key":"size","type":"choice","default":"normal","choices":["small","normal","large"],"label":"Size","legacy":"desktop.dock.icon_size"}]}
+J
+check "legacy: a first-party setting may name the ewe.conf key it replaces" "$P validate '$SB/legacy/ewe.legacy' --first-party >/dev/null"
+sed 's/ewe.legacy/acme.legacy/' "$SB/legacy/ewe.legacy/manifest.json" > "$SB/legacy/m.json"; mkdir -p "$SB/legacy/acme.legacy"; cp "$SB/acme.clock/Widget.qml" "$SB/legacy/acme.legacy/"; mv "$SB/legacy/m.json" "$SB/legacy/acme.legacy/manifest.json"
+out="$($P validate "$SB/legacy/acme.legacy" 2>&1 || true)"
+check "legacy: refused for a third-party plugin" "echo '$out' | grep -q 'settings.autohide.legacy: only first-party'"
+mkdir -p "$SB/bad.w"; cp "$SB/acme.clock/Widget.qml" "$SB/bad.w/"
+cat > "$SB/bad.w/manifest.json" <<'J'
+{"schemaVersion":1,"id":"bad.w","name":"W","version":"0.1.0","apiVersion":3,"kinds":["bar-widget"],"entryPoints":{"bar-widget":"Widget.qml"},
+ "barWidget":{"defaultShown":"no","toggle":1},"desktopWidget":{"pinLevel":"middle","locked":"yes"}}
+J
+out="$($P validate "$SB/bad.w" 2>&1 || true)"
+check "schema: defaultShown/toggle booleans, pinLevel, locked checked" "echo '$out' | grep -q 'barWidget.defaultShown' && echo '$out' | grep -q 'barWidget.toggle' && echo '$out' | grep -q 'desktopWidget.pinLevel' && echo '$out' | grep -q 'desktopWidget.locked'"
+cp -r "$SB/legacy/ewe.legacy" "$SB/cfg/ewe/plugins/ewe.legacy"
+"$C" set --no-hooks plugins.sources '{"ewe.legacy":"bundled"}' >/dev/null
+"$C" set --no-hooks desktop.dock.autohide true >/dev/null
+"$C" set --no-hooks desktop.dock.icon_size '"medium"' >/dev/null
+check "legacy: the old key's value stands until the plugin's own is set; a value that does not fit falls back" "$P get ewe.legacy | jq 'assert j[\"settings\"]==dict(autohide=True,size=\"normal\"), j'"
+$P set ewe.legacy autohide false >/dev/null
+check "legacy: the plugin's own value wins once set" "$P get ewe.legacy autohide | grep -q false"
+check "bar: defaultShown false is the state before the user picks" "$P bar ewe.legacy | jq 'assert j[\"bar\"]==dict(shown=False,toggle=True), j'"
+sed -i 's/"defaultShown":false/"toggle":false/' "$SB/cfg/ewe/plugins/ewe.legacy/manifest.json"
+check "bar: toggle false = the plugin places itself, no switch" "$P bar ewe.legacy | jq 'assert j[\"bar\"]==dict(shown=True,toggle=False), j' && ! $P bar ewe.legacy off 2>/dev/null"
+rm -rf "$SB/cfg/ewe/plugins/ewe.legacy"; "$C" set --no-hooks plugins.sources '{}' >/dev/null
+
 # link it like `dev` does (without the shell restart), then place / set / get --
 ln -s "$SB/acme.clock" "$SB/cfg/ewe/plugins/acme.clock"
 "$C" set --no-hooks plugins.enabled '["acme.clock"]' >/dev/null
 "$C" set --no-hooks plugins.sources '{"acme.clock":"local"}' >/dev/null
 j="$($P list --json)"
-check "list --json: widget defaults, settings defaults, linked flag" "echo '$j' | python3 -c 'import json,sys; p=json.load(sys.stdin)[\"plugins\"][0]; assert p[\"widget\"]==dict(x=48,y=64,output=\"\",layer=\"desktop\",visible=True), p[\"widget\"]; assert p[\"settings\"]=={\"seconds\": False}; assert p[\"linked\"]'"
+check "list --json: widget defaults, settings defaults, linked flag" "echo '$j' | python3 -c 'import json,sys; p=json.load(sys.stdin)[\"plugins\"][0]; assert p[\"widget\"]==dict(x=48,y=64,output=\"\",layer=\"desktop\",visible=True,pinned=False,pin_level=\"top\",locked=False), p[\"widget\"]; assert p[\"bar\"]==dict(shown=True,toggle=True), p[\"bar\"]; assert p[\"settings\"]=={\"seconds\": False}; assert p[\"linked\"]'"
 check "list --json: apiVersions + the v3 fields are present (null/empty for a v2 plugin)" "echo '$j' | jq 'p=j[\"plugins\"][0]; assert j[\"apiVersion\"]==3 and j[\"apiVersions\"]==[2,3]; assert p[\"quickTile\"] is None and p[\"dockItem\"] is None and p[\"ipcAliases\"]==[] and p[\"requires\"]=={\"packages\":[],\"commands\":[]}'"
 $P place acme.clock --x 420 --y 300 --layer top >/dev/null
 $P set acme.clock seconds true >/dev/null
-check "place/set: whole tables keyed by the quoted dotted id" "grep -q '^\[plugins.widgets\]' '$SB/cfg/ewe/ewe.conf' && grep -q '\"acme.clock\" = {x = 420, y = 300, layer = \"top\"}' '$SB/cfg/ewe/ewe.conf' && grep -q '\"acme.clock\" = {seconds = true}' '$SB/cfg/ewe/ewe.conf'"
+check "place/set: whole tables keyed by the quoted dotted id" "grep -q '^\[plugins.widgets\]' '$SB/cfg/ewe/ewe.conf' && grep -q '\"acme.clock\" = {x = 420, y = 300, layer = \"top\", pin_level = \"top\"}' '$SB/cfg/ewe/ewe.conf' && grep -q '\"acme.clock\" = {seconds = true}' '$SB/cfg/ewe/ewe.conf'"
 check "get: the effective values + placement" "$P get acme.clock | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d[\"settings\"][\"seconds\"] is True and d[\"widget\"][\"layer\"]==\"top\" and d[\"widget\"][\"x\"]==420, d'"
 check "get one key" "[ \"$($P get acme.clock seconds)\" = true ]"
 check "set: a wrong type is refused" "! $P set acme.clock seconds maybe 2>/dev/null && ! $P set acme.clock nosuch 1 2>/dev/null"
@@ -99,6 +131,25 @@ $P place acme.clock --visible off >/dev/null
 check "place --visible off keeps x/y" "$P get acme.clock | python3 -c 'import json,sys; w=json.load(sys.stdin)[\"widget\"]; assert w[\"visible\"] is False and w[\"x\"]==420, w'"
 $P place acme.clock --reset >/dev/null
 check "place --reset returns to the manifest defaults" "$P get acme.clock | python3 -c 'import json,sys; w=json.load(sys.stdin)[\"widget\"]; assert w[\"x\"]==48 and w[\"layer\"]==\"desktop\", w'"
+# pin + lock: every desktop widget can be pinned (to its level) and locked
+$P place acme.clock --pin-level overlay >/dev/null
+check "place --pin-level on an unpinned widget only remembers the level" "$P get acme.clock | jq 'w=j[\"widget\"]; assert w[\"layer\"]==\"desktop\" and w[\"pin_level\"]==\"overlay\" and not w[\"pinned\"], w'"
+$P place acme.clock --pinned on >/dev/null
+check "place --pinned on moves it to its pin level (overlay = above everything)" "$P get acme.clock | jq 'w=j[\"widget\"]; assert w[\"layer\"]==\"overlay\" and w[\"pinned\"], w'"
+$P place acme.clock --pin-level top >/dev/null
+check "place --pin-level on a pinned widget moves it at once" "$P get acme.clock | jq 'w=j[\"widget\"]; assert w[\"layer\"]==\"top\" and w[\"pin_level\"]==\"top\", w'"
+$P place acme.clock --pinned off --locked on >/dev/null
+check "place --pinned off returns it under the windows; --locked on sticks" "$P get acme.clock | jq 'w=j[\"widget\"]; assert w[\"layer\"]==\"desktop\" and not w[\"pinned\"] and w[\"locked\"] and w[\"pin_level\"]==\"top\", w'"
+check "place refuses a bad pin level / on-off word" "! $P place acme.clock --pin-level middle 2>/dev/null && ! $P place acme.clock --locked maybe 2>/dev/null"
+$P place acme.clock --reset >/dev/null
+
+# Show in bar: `bar` writes desktop.bar.show."plugin:<id>" (the key the bar reads)
+check "bar <id>: the state, shown by default" "$P bar acme.clock | jq 'assert j[\"bar\"]==dict(shown=True,toggle=True), j'"
+$P bar acme.clock off >/dev/null
+check "bar <id> off: written under desktop.bar.show, list follows" "grep -q '\"plugin:acme.clock\" = false' '$SB/cfg/ewe/ewe.conf' && $P list --json | jq 'p=[x for x in j[\"plugins\"] if x[\"id\"]==\"acme.clock\"][0]; assert p[\"bar\"][\"shown\"] is False'"
+$P bar acme.clock on >/dev/null
+check "bar <id> on: back" "$P bar acme.clock | jq 'assert j[\"bar\"][\"shown\"] is True'"
+
 check "place refuses a plugin without a desktop widget" "mkdir -p '$SB/cfg/ewe/plugins/bad.plugin' && cp '$SB/bad.plugin/'* '$SB/cfg/ewe/plugins/bad.plugin/' && ! $P place bad.plugin --x 1 2>/dev/null"
 
 # the payload: a default plugin, two add-ons (one migrating), bundle.json ------
@@ -142,7 +193,7 @@ check "removed: empty to start" "echo '$j' | jq 'assert j[\"removed\"]==[]'"
 
 # seed: only defaults are installed, add-ons are listed, keybinds follow -------
 r="$($P seed "$SB/payload/plugins" --no-restart)"
-check "seed: the default copied, enabled, source bundled; add-ons skipped" "echo '$r' | grep -q '\"seeded\": \[\"ewe.demo\"\]' && echo '$r' | grep -q 'an add-on' && [ -d '$SB/cfg/ewe/plugins/ewe.demo' ] && [ ! -e '$SB/cfg/ewe/plugins/ewe.alias' ] && grep -q '\"ewe.demo\" = \"bundled\"' '$SB/cfg/ewe/ewe.conf' && $P list --json | grep -q '\"bundled\": true'"
+check "seed: the default copied, enabled, source bundled; add-ons skipped" "echo '$r' | grep -q '\"seeded\": \[\"ewe.demo\"\]' && echo '$r' | grep -q 'a first-party plugin' && [ -d '$SB/cfg/ewe/plugins/ewe.demo' ] && [ ! -e '$SB/cfg/ewe/plugins/ewe.alias' ] && grep -q '\"ewe.demo\" = \"bundled\"' '$SB/cfg/ewe/ewe.conf' && $P list --json | grep -q '\"bundled\": true'"
 check "keybinds file has the bind" "grep -q 'hl.bind(\"SUPER + SHIFT + D\", hl.dsp.exec_cmd(\"qs ipc call ewe.demo toggle\"))' '$SB/cfg/hypr/generated/plugin-keybinds.lua'"
 $P disable ewe.demo --no-restart >/dev/null
 check "disabled: the bind is gone" "! grep -q 'ewe.demo' '$SB/cfg/hypr/generated/plugin-keybinds.lua'"

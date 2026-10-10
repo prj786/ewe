@@ -1,7 +1,7 @@
-# Dock — an ewe add-on
+# Dock — an ewe plugin
 
 `ewe.dock` — first-party, shipped inside the ewe payload, not installed on a
-fresh machine (ewe 0.25 add-ons). Upgraders who had the dock keep it:
+fresh machine (ewe 0.25: plugins are opt-in). Upgraders who had the dock keep it:
 `ewe-plugin migrate` installs it unless `[desktop.dock] enabled = false`.
 
 A small, centred dock at the bottom of the main screen:
@@ -13,7 +13,7 @@ A small, centred dock at the bottom of the main screen:
   the pin badge pins and unpins (`ewe-conf apps.pinned`, synced).
 - **layers** — the window Overview.
 - **store** — Komble (the shell's quick installer when Komble is missing).
-- **dock items** other add-ons declare (`dock-item` in their manifest: Music,
+- **dock items** other plugins declare (`dock-item` in their manifest: Music,
   Places, …), in their manifest order; a click opens their popup above the
   button, and the button lights while it is open.
 - **the Pen** — ewe's stashed windows (`special:pen`, Super+Z): shown only
@@ -29,24 +29,30 @@ edge, while any dock popup is open, and for a moment after the pointer leaves.
 
 ## Install
 
-Komble → Add-ons → Dock, or
+Komble → Plugins → Dock, or
 
     ewe-plugin install ewe.dock
     ewe-plugin remove ewe.dock          # gone until you install it again
 
 ## Settings
 
-Settings → Layout → Dock (ewe.conf `[desktop.dock]`): `enabled`, `autohide`,
-`icon_size` (`small` · `normal` · `large`). The plugin reads the shell's
-`Shell.dockPrefs`; nothing of its own.
+Its own, since 1.1.0 — Komble → Plugins → Dock → Options, or
+
+    ewe-plugin set ewe.dock autohide true
+    ewe-plugin set ewe.dock icon_size small      # small · normal · large
+
+stored in ewe.conf `[plugins.settings]."ewe.dock"`. Until one is set, the old
+`[desktop.dock]` value stands (the settings' `legacy` keys), so an upgrade
+changes nobody's dock. Turning the dock off is the plugin's own switch in
+Komble (`ewe-plugin disable ewe.dock`); Settings no longer has a Dock section.
 
 ## What it tells the shell
 
 `Shell.setBottomInset("ewe.dock", px, reserved)` — the strip the dock takes
 from the bottom of the screen (dock + `windowGap`), reserved as an exclusive
 zone when auto-hide is off. Toasts, the OSD and every popup that opens above
-the dock read `Shell.bottomInset`; it is 0 while the dock is off and 0 again
-the moment this add-on is removed, so nothing leaves a gap without a dock.
+the dock read `Shell.bottomInset`; it is 0 again the moment this plugin is
+removed, so nothing leaves a gap without a dock.
 
 ## IPC
 

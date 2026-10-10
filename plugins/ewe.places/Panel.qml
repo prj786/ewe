@@ -70,20 +70,20 @@ Scope {
     function openAt(a) {
         if (a) root.anchor = a
         root.openScreen = (root.anchor && root.anchor.screen) ? root.anchor.screen : root.focusedScreen()
-        Shell.closePopups("ewe.places")    // one add-on popup at a time
+        Shell.closePopups("ewe.places")    // one plugin popup at a time
         root.open = true
     }
     function toggleAt(a) { if (root.open) root.close(); else root.openAt(a) }
     function close() { root.open = false }
     onOpenChanged: Shell.setActive("ewe.places.toggle", root.open)
-    // another add-on's popup is opening (Shell.closePopups): this is not an
+    // another plugin's popup is opening (Shell.closePopups): this is not an
     // AnchoredPopup, so it joins the one-popup rule by hand
     Connections {
         target: Shell
         function onPopupsClosing(exceptId) { if (root.open && exceptId !== "ewe.places") root.close() }
     }
 
-    // The dock item (manifest dockItem, drawn by the dock add-on) is hidden
+    // The dock item (manifest dockItem, drawn by the dock plugin) is hidden
     // when the `button` setting says bar-only; the dock filters on it live.
     readonly property string mode: (root.settings && root.settings.button) ? String(root.settings.button) : "auto"
     readonly property bool dockItemWanted: root.mode !== "bar"

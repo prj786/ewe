@@ -37,7 +37,7 @@ Scope {
     // the popup closes with the player
     onPlayerChanged: if (!root.player) pop.close()
 
-    // The dock item (manifest dockItem, drawn by the dock add-on) follows the
+    // The dock item (manifest dockItem, drawn by the dock plugin) follows the
     // same rules the bar button does: never when the `button` setting says
     // bar-only, and — like the built-in dock's music button always did —
     // only while an MPRIS player exists, unless `always_show`. The dock
@@ -49,7 +49,7 @@ Scope {
     function toggle(anchor) {
         if (pop.open) { pop.close(); return }
         if (!root.player) { Shell.toast("Nothing is playing", "info"); return }
-        Shell.closePopups("ewe.media")  // one add-on popup at a time
+        Shell.closePopups("ewe.media")  // one plugin popup at a time
         pop.openAt(anchor || null)      // null keeps the popup's last anchor
     }
     function show(anchor) { if (!pop.open) root.toggle(anchor) }

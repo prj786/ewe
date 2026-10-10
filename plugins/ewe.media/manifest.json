@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "ewe.media",
   "name": "Music",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "apiVersion": 3,
   "description": "Now playing: artwork, controls and a seek bar for any MPRIS player, above the dock or under the bar.",
   "homepage": "https://github.com/prj786/ewe-plugin-media",
@@ -25,7 +25,8 @@
     "order": 20
   },
   "barWidget": {
-    "defaultSection": "right"
+    "defaultSection": "right",
+    "toggle": false
   },
   "ipcAliases": [
     "player"
@@ -47,7 +48,8 @@
         "bar",
         "dock",
         "both"
-      ]
+      ],
+      "description": "Auto puts it in the dock when there is one, in the bar otherwise. This decides where it shows, so it has no Show in bar switch."
     },
     {
       "key": "always_show",

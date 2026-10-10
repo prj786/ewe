@@ -97,9 +97,9 @@ Then reboot, pick **Ewe** at the greeter, and you're in —
 - **Curated GTK app set** — Nemo, Engrampa, imv, Zathura, mpv, kitty, Zed:
   borderless under Hyprland, defaults managed in one `mimeapps.list`.
 - **Komble + ewe-settings** — first-party software manager and settings app.
-- **Plugins and add-ons** — `ewe-plugin add <git-url>` drops third-party bar
-  widgets, panels and services into the shell; ewe's own extras ship as
-  **add-ons** in the payload, installed in one click from Komble → Add-ons
+- **Plugins** — `ewe-plugin add <git-url>` drops third-party bar
+  widgets, panels and services into the shell; ewe's own extras are
+  **plugins that ship with ewe**, installed in one click from Komble → Plugins
   ([docs/PLUGINS.md](docs/PLUGINS.md)): the **dock**, the clipboard history,
   screenshots, the password picker, **Insomnia** (keep awake), the system
   monitor, **SSH** and **VPN** tiles, the **music** player, **Places**, the
@@ -109,7 +109,7 @@ Then reboot, pick **Ewe** at the greeter, and you're in —
   served by ewe's own headless daemon [ewe-cast](https://github.com/prj786/ewe-cast)).
   Nothing of this is installed on a fresh machine; an upgrade keeps what you had.
 - **Optional Google account** — calendar, Google Drive as a folder, and Gmail
-  for the mail add-on. One consent screen for every ewe app, native OAuth, no
+  for the Mail plugin. One consent screen for every ewe app, native OAuth, no
   GNOME Online Accounts ([RFC-002](docs/RFC-002-broker-and-sync.md)).
 - **Share picker** — ewe's own portal picker (live previews, real display
   names) for every screen-share: browser calls, OBS, recorders, casting.

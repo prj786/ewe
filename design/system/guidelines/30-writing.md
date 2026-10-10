@@ -78,4 +78,5 @@ Ewe's words should feel like its design: calm, clear and short. People are in th
 | scheme | theme (for color schemes) |
 | accent color | primary color, brand color (in the interface) |
 | pin, unpin | favorite, bookmark |
-| Insomnia (the keep-awake add-on) | keep awake, caffeine, inhibit |
+| plugin (ewe's own and from a git URL alike; "first-party plugin" or "plugin that ships with ewe" when the difference matters) | add-on, extension, extra |
+| Insomnia (the keep-awake plugin) | keep awake, caffeine, inhibit |

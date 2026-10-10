@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "ewe.sysmon",
   "name": "System monitor",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "apiVersion": 3,
   "description": "CPU and memory meters in Quick settings, and a compact readout in the top bar if you want one.",
   "homepage": "https://github.com/prj786/ewe-plugin-sysmon",
@@ -22,20 +22,13 @@
     "order": 20
   },
   "barWidget": {
-    "defaultSection": "right"
+    "defaultSection": "right",
+    "defaultShown": false
   },
   "requires": {
     "packages": [],
     "commands": [
       "sh"
     ]
-  },
-  "settings": [
-    {
-      "key": "show_in_bar",
-      "type": "bool",
-      "default": false,
-      "label": "Show in the top bar"
-    }
-  ]
+  }
 }

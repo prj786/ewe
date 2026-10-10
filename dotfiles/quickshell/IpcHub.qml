@@ -70,7 +70,7 @@ Scope {
     }
 
     // desktop widgets (DesktopWidgets.qml): Super+Shift+W toggles arrange
-    // mode — drag to move, a frame with sticky/hide on each widget, Esc done
+    // mode — drag to move, a frame with pinned/lock/hide on each widget, Esc done
     IpcHandler {
         target: "widgets"
         function arrange(): void { Globals.widgetsArrange = !Globals.widgetsArrange }

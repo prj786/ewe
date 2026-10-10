@@ -7,7 +7,7 @@ import qs
 // `ewe-mail`, Gmail through `ewe-auth token`, the new-mail notifications),
 // answers the IPC the Settings app speaks, and refetches after a suspend.
 //
-// Two IPC targets, one set of verbs: `ewe.mail` (the add-on's own) and
+// Two IPC targets, one set of verbs: `ewe.mail` (the plugin's own) and
 // `mail` — the target the shell always had (ewe-settings calls
 // `qs ipc call mail status` and `mail setNotify`; Rule 4: IPC verbs are
 // public API). The `status` reply is byte-compatible with the shell's.
@@ -15,6 +15,8 @@ Scope {
     id: svc
     property string pluginId: ""
     property var settings: ({})
+    // the `notify` setting (Komble's Options, the Inbox page's bell)
+    onSettingsChanged: if (svc.settings && typeof svc.settings.notify === "boolean") Inbox.applyNotify(svc.settings.notify)
 
     IpcHandler {
         target: "ewe.mail"
