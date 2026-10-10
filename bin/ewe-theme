@@ -579,7 +579,8 @@ def _truthy(v, default=True):
         return v
     if v is None:
         return default
-    return str(v).strip().lower() not in ("0", "false", "no", "off", "")
+    # the same list as ewe-conf's _on (user.lua must agree with the tokens)
+    return str(v).strip().lower() not in ("0", "0.0", "false", "no", "off", "")
 
 
 def norm_scheme(rec, builtin=False):
@@ -962,9 +963,16 @@ def tokens(cfg):
                       "glass-border": color["border-subtle"], "glass-hover": color["surface-hover"],
                       "glass-pressed": color["surface-pressed"]})
     else:
+        # glass-base / glass-raised are the Glass MATERIAL, at the design's
+        # opacity-glass — the Overview's chips, the desktop widgets' cards.
+        # The bar opacity slider moves only the bar, the dock and the lock
+        # card (surface.bar_alpha, below; Theme.barGround/dockGround apply it).
+        # Carrying the slider here made those other surfaces jump from 80 %
+        # at "Glass off" to 99 % at 99 and all but vanish at 25.
+        mat = OPACITY["opacity-glass"]
         color.update({"glass-base": color["surface-base"], "glass-raised": color["surface-raised"],
                       "glass-border": tint, "glass-hover": tint, "glass-pressed": tint})
-        alpha.update({"glass-base": glass_alpha, "glass-raised": glass_alpha,
+        alpha.update({"glass-base": mat, "glass-raised": mat,
                       "glass-border": ga["border"], "glass-hover": ga["hover"],
                       "glass-pressed": ga["pressed"]})
     # glass-accent (scheme_colors): accent-text in the dark; ewellow-900 in

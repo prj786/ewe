@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "ewe.insomnia",
   "name": "Insomnia",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "apiVersion": 3,
   "description": "Keeps the screen awake and stops sleep until you turn it off.",
   "homepage": "https://github.com/prj786/ewe-plugin-insomnia",

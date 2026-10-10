@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "ewe.cast",
   "name": "Cast to TV",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "apiVersion": 3,
   "description": "Mirror the screen to a Miracast or Chromecast TV from Quick settings, through the ewe-castd engine.",
   "homepage": "https://github.com/prj786/ewe-plugin-cast",

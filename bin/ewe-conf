@@ -837,14 +837,15 @@ def _hex6(c):
 # desktop.theme.bar_opacity < 100: the top bar and dock are translucent and the
 # compositor blurs what is behind them. Skipped where blur is a known cost or
 # glitch — start-hyprland.sh exports EWE_NO_BLUR=1 in VMs and on NVIDIA — and
-# under BAR_BLUR_MIN, where the bar is nearly see-through anyway. xray: blur
-# the wallpaper, not the windows the bar covers — cheaper and steadier.
-# ignore_alpha: the bar's transparent margins (shadow strip) stay unblurred.
+# under BAR_BLUR_MIN, where the bar is nearly see-through anyway. No xray: the
+# blur shows what is really behind the surface — the window under an
+# auto-hidden dock, the tiled window under a floating one — not the wallpaper
+# through everything. ignore_alpha: transparent margins stay unblurred.
 BAR_BLUR_MIN = 10
 APP_OPACITY = 0.85
 BLUR_ON_LUA = """\
 if os.getenv("EWE_NO_BLUR") ~= "1" then
-    hl.config({ decoration = { blur = { enabled = true, size = 6, passes = 3, xray = true, ignore_opacity = true, new_optimizations = true, noise = 0.012 } } })
+    hl.config({ decoration = { blur = { enabled = true, size = 6, passes = 3, xray = false, ignore_opacity = true, new_optimizations = true, noise = 0.012 } } })
 end
 """
 BAR_BLUR_RULE_LUA = """\
@@ -852,6 +853,22 @@ if os.getenv("EWE_NO_BLUR") ~= "1" then
     hl.layer_rule({ name = "ewe-bar-blur", match = { namespace = "^quickshell:(bar|dock)$" }, blur = true, ignore_alpha = 0.05 })
 end
 """
+# decoration.blur is global: switching it on for the bar would also blur
+# behind every window that has any alpha (kitty's background_opacity, a
+# browser's translucent popup). Without App blur, windows stay unblurred.
+APP_NO_BLUR_LUA = """\
+hl.window_rule({ name = "ewe-no-app-blur", match = { class = ".*" }, no_blur = true })
+"""
+
+
+def _on(v, default=False):
+    """the one truthiness rule — the same as ewe-theme's _truthy, so a value
+    Settings shows as on is on in user.lua too (1.0, "yes", true …)"""
+    if isinstance(v, bool):
+        return v
+    if v is None:
+        return default
+    return str(v).strip().lower() not in ("0", "0.0", "false", "no", "off", "")
 
 
 def gen_user_lua(doc):
@@ -879,20 +896,27 @@ def gen_user_lua(doc):
     # app_blur (desktop.theme): every window at APP_OPACITY with blur behind
     # it, fullscreen opaque — one material for terminal, browser and the ewe
     # apps alike. Otherwise the old hair of unfocused translucency, if asked.
-    app_blur = str(gv("desktop.theme.app_blur", False)).lower() in ("1", "true", "yes", "on")
+    app_blur = _on(gv("desktop.theme.app_blur", False))
     # Reduce transparency: no blur, every window solid, the bar solid.
     # Increase contrast makes Glass solid too (its blur is pointless then).
     a11y = gv("desktop.accessibility", {}) or {}
-    reduce_t = str(a11y.get("reduce_transparency", False)).lower() in ("1", "true", "yes", "on")
-    inc_c = str(a11y.get("increase_contrast", False)).lower() in ("1", "true", "yes", "on")
+    reduce_t = _on(a11y.get("reduce_transparency", False))
+    inc_c = _on(a11y.get("increase_contrast", False))
     if reduce_t:
         app_blur = False
+    win_t = _on(gv("desktop.theme.window_transparency", False)) and not reduce_t
+    solid_lua = ("hl.config({ decoration = { active_opacity = 1.0, inactive_opacity = %s } })\n"
+                 % ("0.97" if win_t else "1.0"))
     if app_blur:
-        s += ("hl.config({ decoration = { active_opacity = %s, inactive_opacity = %s, fullscreen_opacity = 1.0 } })\n"
-              % (APP_OPACITY, APP_OPACITY))
+        # see-through windows only WITH the blur behind them: on the
+        # EWE_NO_BLUR machines (VMs, NVIDIA) App blur is off by policy, and
+        # 85 % windows with nothing blurred behind them are just hard to read
+        s += ('if os.getenv("EWE_NO_BLUR") ~= "1" then\n'
+              "    hl.config({ decoration = { active_opacity = %s, inactive_opacity = %s, fullscreen_opacity = 1.0 } })\n"
+              "else\n    %s"
+              "end\n") % (APP_OPACITY, APP_OPACITY, solid_lua)
     else:
-        s += ("hl.config({ decoration = { active_opacity = 1.0, inactive_opacity = %s } })\n"
-              % ("0.97" if gv("desktop.theme.window_transparency", False) and not reduce_t else "1.0"))
+        s += solid_lua
     try:
         op = max(0, min(100, int(gv("desktop.theme.bar_opacity", 100))))
     except (TypeError, ValueError):
@@ -904,6 +928,8 @@ def gen_user_lua(doc):
         s += BLUR_ON_LUA
     if bar_blur:
         s += BAR_BLUR_RULE_LUA
+        if not app_blur:
+            s += APP_NO_BLUR_LUA
     speed = gv("desktop.animations.speed", 1)
     if abs(speed - 1) >= 0.001:
         s += "\n".join(_anim_lua_lines(speed)) + "\n"
@@ -1303,6 +1329,29 @@ def _machine():
     return socket.gethostname() or "unknown"
 
 
+def _machine_id():
+    """A stable id for THIS machine that survives a rename and tells two
+    machines with the same hostname apart (two "emoh"s each read the other's
+    backup as their own). Salted hash of /etc/machine-id — the raw id is
+    never published (machine-id(5)). "" when there is none."""
+    import hashlib
+    for p in (os.environ.get("EWE_CONF_MACHINE_ID_FILE") or "/etc/machine-id",
+              "/var/lib/dbus/machine-id"):
+        try:
+            with open(p) as f:
+                raw = f.read().strip()
+        except OSError:
+            continue
+        if raw:
+            return hashlib.sha256(("ewe-conf:" + raw).encode()).hexdigest()[:16]
+    return ""
+
+
+def _sha(data):
+    import hashlib
+    return hashlib.sha256(data).hexdigest()
+
+
 def _sync_state():
     try:
         with open(SYNC_STATE) as f:
@@ -1312,20 +1361,36 @@ def _sync_state():
         return {}
 
 
-def _sync_record(remote_id, remote_modified, remote_machine, provider="google", **extra):
-    """what this machine last saw on the remote — the whole conflict guard
-    (Drive: file id + modifiedTime; Nextcloud: the WebDAV ETag)"""
-    import time as _t
+def _sync_write(st):
     os.makedirs(STATE_DIR, exist_ok=True)
-    st = {"provider": provider, "id": remote_id, "remote_modified": remote_modified,
-          "remote_machine": remote_machine,
-          "local_synced_at": _t.strftime("%Y-%m-%dT%H:%M:%SZ", _t.gmtime()), **extra}
     fd, tmp = tempfile.mkstemp(dir=STATE_DIR, prefix=".sync.json.")
     with os.fdopen(fd, "w") as f:
         json.dump(st, f, indent=2)
         f.write("\n")
     os.replace(tmp, SYNC_STATE)
+
+
+def _sync_record(remote_id, remote_modified, remote_machine, provider="google", **extra):
+    """what this machine last saw on the remote — the whole conflict guard
+    (Drive: file id + modifiedTime; Nextcloud: the WebDAV ETag), plus the
+    sha256 of the bytes it saw, which lets a moved ETag over the SAME bytes
+    be told apart from another machine's save (see _resolve)"""
+    import time as _t
+    st = {"provider": provider, "id": remote_id, "remote_modified": remote_modified,
+          "remote_machine": remote_machine, "machine_id": _machine_id(),
+          "local_synced_at": _t.strftime("%Y-%m-%dT%H:%M:%SZ", _t.gmtime()), **extra}
+    _sync_write(st)
     return st
+
+
+def _sync_pending(sha):
+    """Note the bytes a push is ABOUT to send. A push whose upload landed on
+    the server but whose reply never came back (a laptop lid closing mid-
+    request) leaves the record pointing at the old ETag; the next push finds
+    these bytes on the server and knows they were its own."""
+    st = _sync_state()
+    st["pending"] = [h for h in (st.get("pending") or []) if h != sha][-4:] + [sha]
+    _sync_write(st)
 
 
 def _multipart(meta, content):
@@ -1529,6 +1594,7 @@ def _nc_find(nc):
     return {"id": props["etag"], "etag": props["etag"],
             "modifiedTime": meta.get("saved_at") or props["modified"],
             "appProperties": {"machine": str(meta.get("machine", "")),
+                              "machine_id": str(meta.get("machine_id", "")),
                               "schema": str(meta.get("schema", ""))},
             "provider": "nextcloud"}, None
 
@@ -1572,8 +1638,42 @@ def _guard(rec, remote, cfg, force):
     return None
 
 
+def _resolve(rec, remote, cfg, force, be):
+    """_guard, then the one exception it cannot see: the remote MOVED but
+    holds bytes this machine itself last synced or tried to push. That is
+    not another machine's save, so nothing can be lost by pushing over it:
+      - an upload whose reply was lost (lid closed mid-push) — the record
+        kept the old ETag and every later push was refused, forever
+      - the Nextcloud desktop client re-uploading an identical ewe.conf
+        from its own ~/Nextcloud/<folder> copy (new ETag, same bytes)
+    The remote's ETag is adopted into the record and the verdict clears.
+    → (verdict-or-None, rec)"""
+    verdict = _guard(rec, remote, cfg, force)
+    if not verdict or not remote:
+        return verdict, rec
+    known = set(rec.get("pending") or [])
+    if verdict == "remote-newer" and rec.get("sha256"):
+        known.add(rec["sha256"])
+    seen = "%s|%s" % (remote.get("id", ""), remote.get("modifiedTime", ""))
+    if not known or rec.get("checked") == seen:
+        return verdict, rec                # nothing to compare, or this remote already differed
+    raw, err = be["pull"](remote)          # nextcloud: refreshes remote["id"] from the GET
+    if err or raw is None:
+        return verdict, rec
+    if _sha(raw) not in known:
+        rec["checked"] = seen              # a real save elsewhere — don't re-download it per status
+        _sync_write(rec)
+        return verdict, rec
+    rec = _sync_record(remote.get("id", ""), remote.get("modifiedTime", ""),
+                       (remote.get("appProperties") or {}).get("machine", ""),
+                       provider=cfg["provider"], sha256=_sha(raw), adopted=True)
+    return _guard(rec, remote, cfg, force), rec
+
+
 def _push_google(content, force, rec, remote, token):
     props = {"machine": _machine(), "schema": "1"}
+    if _machine_id():
+        props["machine_id"] = _machine_id()
     fields = "fields=id,modifiedTime,appProperties"
     if remote:
         # ONE multipart PATCH: content + manifest together. The old media
@@ -1627,11 +1727,19 @@ def _push_nextcloud(content, force, rec, remote, nc):
         props, perr = _nc_props(nc, "ewe.conf")
         etag = (props or {}).get("etag", "")
     saved_at = _t.strftime("%Y-%m-%dT%H:%M:%SZ", _t.gmtime())
-    meta = json.dumps({"machine": _machine(), "saved_at": saved_at, "schema": "1"}).encode()
-    code, _, raw = nc.req("PUT", "ewe.conf.meta.json", meta, {"Content-Type": "application/json"})
+    stamp = {"machine": _machine(), "saved_at": saved_at, "schema": "1"}
+    if _machine_id():
+        stamp["machine_id"] = _machine_id()
+    code, _, raw = nc.req("PUT", "ewe.conf.meta.json", json.dumps(stamp).encode(),
+                          {"Content-Type": "application/json"})
+    res = {"id": etag, "modified": saved_at, "machine": _machine(), "etag": etag}
     if code is None or code not in (200, 201, 204):
-        return None, "stamp-missing"
-    return {"id": etag, "modified": saved_at, "machine": _machine(), "etag": etag}, None
+        # The file IS on the server under `etag`. Failing here used to leave
+        # the record on the old ETag, so every later push read this
+        # machine's own upload as "another machine saved newer settings".
+        # Record it; the stamp is rewritten by the next push.
+        res["warning"] = "stamp-missing"
+    return res, None
 
 
 def _backend(cfg):
@@ -1691,21 +1799,37 @@ def do_push(quiet=False, force=False):
     if err:
         return {"ok": False, "error": err, "provider": cfg["provider"]}
     rec = _sync_state()
-    verdict = _guard(rec, remote, cfg, force)
+    verdict, rec = _resolve(rec, remote, cfg, force, be)
     if verdict:
         return {"ok": False, "error": verdict, "remote": remote, "provider": cfg["provider"],
                 "local_mtime": local_mtime,
+                "remote_is_this_machine": _is_this_machine(remote),
                 "recorded_remote_modified": rec.get("remote_modified", "")}
+    _sync_pending(_sha(content))
     res, err = be["push"](content, force, rec, remote)
     if err:
         return {"ok": False, "error": err, "remote": remote, "provider": cfg["provider"]}
-    st = _sync_record(res["id"], res["modified"], res["machine"], provider=cfg["provider"])
+    st = _sync_record(res["id"], res["modified"], res["machine"], provider=cfg["provider"],
+                      sha256=_sha(content))
     _adopt_sync_identity(cfg)
     with open(PUSH_STAMP, "w") as f:
         f.write(str(int(__import__("time").time())))
-    return {"ok": True, "id": res["id"], "bytes": len(content), "provider": cfg["provider"],
-            "machine": res["machine"], "modified": res["modified"],
-            "local_synced_at": st["local_synced_at"]}
+    out = {"ok": True, "id": res["id"], "bytes": len(content), "provider": cfg["provider"],
+           "machine": res["machine"], "modified": res["modified"],
+           "local_synced_at": st["local_synced_at"]}
+    if res.get("warning"):
+        out["warning"] = res["warning"]
+    return out
+
+
+def _is_this_machine(remote):
+    """True / False when the remote's stamp carries a machine id, None when it
+    predates them (then only the hostname is known, and two machines may
+    share one)"""
+    rid = ((remote or {}).get("appProperties") or {}).get("machine_id") or ""
+    if not rid or not _machine_id():
+        return None
+    return rid == _machine_id()
 
 
 def do_pull(out_path=None):
@@ -1742,7 +1866,7 @@ def do_pull(out_path=None):
         _wbytes(CONF, raw)
         st = _sync_record(remote.get("id", ""), remote.get("modifiedTime", ""),
                           (remote.get("appProperties") or {}).get("machine", ""),
-                          provider=cfg["provider"])
+                          provider=cfg["provider"], sha256=_sha(raw))
     return {"ok": True, "bytes": len(raw), "modified": remote.get("modifiedTime", ""),
             "provider": cfg["provider"], "machine": st["remote_machine"],
             "backup": backed_up, "written": target, "local_synced_at": st["local_synced_at"]}
@@ -1760,6 +1884,9 @@ def sync_status():
     except OSError:
         pass
     rec = _sync_state()
+    conflict = None
+    if remote and not err:
+        conflict, rec = _resolve(rec, remote, cfg, False, be)
     rprops = (remote or {}).get("appProperties") or {}
     return {"ok": err is None, "error": err, "provider": cfg["provider"],
             "server": cfg["server"], "folder": cfg["folder"], "enabled": cfg["enabled"],
@@ -1767,10 +1894,18 @@ def sync_status():
             # who saved the backup that is on the remote right now
             "remote_machine": rprops.get("machine", ""),
             "remote_modified": (remote or {}).get("modifiedTime", ""),
+            # None when the stamp predates machine ids (the hostname alone
+            # cannot tell two same-named machines apart)
+            "remote_is_this_machine": _is_this_machine(remote),
             # when THIS machine last pushed or pulled
             "local_synced_at": rec.get("local_synced_at", ""),
             "recorded_remote_modified": rec.get("remote_modified", ""),
-            "in_sync": bool(remote and _guard(rec, remote, cfg, False) is None)}
+            # what a push would answer right now: "remote-newer" (another
+            # machine saved since this one last synced), "remote-exists"
+            # (this machine never synced and a backup is there), or None.
+            # `error` stays the transport error only, as before.
+            "conflict": conflict,
+            "in_sync": bool(remote and not err and conflict is None)}
 
 
 def _wbytes(path, data):

@@ -1,4 +1,4 @@
-# Cast to TV — an ewe add-on
+# Cast to TV — an ewe plugin
 
 `ewe.cast` — first-party, ships inside the ewe payload, not installed until
 you ask for it.
@@ -6,13 +6,13 @@ you ask for it.
 Mirror the screen to a TV from Quick settings: Miracast (Samsung "Screen
 Mirroring", Android TV — over Wi-Fi Direct) and Chromecast / Google TV. The
 protocols live in ewe's headless casting engine
-[`ewe-castd`](https://github.com/prj786/ewe-cast) (RFC-004); this add-on is
+[`ewe-castd`](https://github.com/prj786/ewe-cast) (RFC-004); this plugin is
 the shell's end of it — the sink list, the tile, the bar glyph, the
 Super+Shift+C bind, and the narrated handshake.
 
 ## Install
 
-Komble → Add-ons → **Cast to TV**, or:
+Komble → Plugins → **Cast to TV**, or:
 
     ewe-plugin install ewe.cast
     ewe-plugin remove ewe.cast            # gone until you install it again
@@ -26,7 +26,7 @@ Komble → Add-ons → **Cast to TV**, or:
 | `bar-status` | `Status.qml` | the screencast glyph in the bar's Quick settings pill while a session exists — accent once streaming |
 | `service` | `Service.qml` | the headless client: starts and talks to `ewe-castd`, narrates Wi-Fi Direct from the system journal, owns the legacy path |
 
-**Super+Shift+C** (a manifest keybind, active while the add-on is enabled):
+**Super+Shift+C** (a manifest keybind, active while the plugin is enabled):
 hang up when a cast is live, otherwise open the sink list.
 
 ## IPC
@@ -61,7 +61,7 @@ by Komble when missing): `ewe-cast` (the engine), `gnome-network-displays`
 `gst-plugin-va` (hardware H.264), `gst-plugins-bad`. The system side —
 avahi-daemon, the regulatory domain, the Wi-Fi power-save dispatcher, the
 patched `xdg-desktop-portal-hyprland` — is ewe's installer (phase 30), not
-this add-on.
+this plugin.
 
 ## Troubleshooting
 

@@ -8,7 +8,7 @@ import qs
 // (registered by the qmldir beside it, so every entry point sees one
 // instance). It samples ONLY while something shows the numbers: each
 // consumer `hold()`s while it is on screen (the tile while Quick settings
-// is open on home, a bar widget while `show_in_bar` is on) and the timer runs
+// is open on home, a bar widget while Show in bar is on) and the timer runs
 // while anyone holds. Nothing is spawned for meters nobody can see — the
 // shell's sampler used to cost ~170k fork/exec a day behind a closed panel.
 //

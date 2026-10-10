@@ -348,9 +348,9 @@ This guide is for whoever updates the Ewe repositories to match this design syst
 | Shell file (`dotfiles/quickshell/`) | Follow these cards |
 | --- | --- |
 | Bar.qml, BarIcon.qml, BarPluginSlots.qml, TrayIcon.qml | Bar, Workspace indicator, Badge, Glass |
-| the ewe.dock add-on (Dock.qml, LauncherPanel.qml) | Dock, Launcher panel, Glass |
+| the ewe.dock plugin (Dock.qml, LauncherPanel.qml) | Dock, Launcher panel, Glass |
 | Launcher.qml | Launcher |
-| the ewe.places add-on (Places.qml) | Places |
+| the ewe.places plugin (Places.qml) | Places |
 | Overview.qml | Overview |
 | QuickSettings.qml, Tile.qml, Toggle.qml, Slider.qml, ListRow.qml, ListWell.qml, SectionTitle.qml | Quick settings, Quick settings tile, Switch, Slider, List row, Section header, Agenda |
 | Agenda.qml | Agenda |
@@ -358,7 +358,7 @@ This guide is for whoever updates the Ewe repositories to match this design syst
 | Notifications.qml | Notification, Notification center |
 | (new) Toast.qml | Toast |
 | Osd.qml | On-screen display |
-| the ewe.media add-on (MediaPlayer.qml) | Media player |
+| the ewe.media plugin (MediaPlayer.qml) | Media player |
 | Power.qml | Power menu |
 | Lock.qml | Lock screen, Glass |
 | Auth.qml | Authentication prompt |

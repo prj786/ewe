@@ -1,4 +1,4 @@
-# Music — an ewe add-on
+# Music — an ewe plugin
 
 `ewe.media` — first-party, ships inside the ewe payload, not installed until
 you ask.
@@ -11,18 +11,20 @@ playing wins, else the first controllable player with a track.
 
 Two ways in, one card:
 
-- **dock item** — with the Dock add-on installed, a music note in the dock;
+- **dock item** — with the Dock plugin installed, a music note in the dock;
   the card opens above it.
 - **bar widget** — a music note in the top bar's right section; the card
   opens under the bar. Shown only while a player exists (like the dock
   button always was), and per the `button` setting.
 
-    ewe-plugin install ewe.media          # or Komble → Add-ons → Music
+    ewe-plugin install ewe.media          # or Komble → Plugins → Music
     ewe-plugin remove ewe.media
 
 ## Settings
 
-Komble → Add-ons → Music, or `ewe-plugin set ewe.media <key> <value>`:
+Komble → Plugins → Music → Options, or `ewe-plugin set ewe.media <key> <value>`.
+`button` decides where it shows, so there is no Show in bar switch for it
+(the manifest's `barWidget.toggle: false`):
 
 | key | values | default | meaning |
 |---|---|---|---|

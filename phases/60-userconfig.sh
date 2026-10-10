@@ -278,23 +278,23 @@ phase_userconfig() {
         warn "shell-setup.sh not found — shell config not wired into the rc files."
     fi
 
-    # ── Add-ons (0.25, plan D1–D3) — the same two steps packaging/ewe-setup
-    # runs, for the git/tarball path that never seeded anything before:
-    # `seed` puts in the bundle's default plugins (none today) and refreshes
-    # bundled copies; `migrate` installs, ONCE, the add-ons that replace
-    # features an upgrader had built in. EWE_PREVIOUS (install.sh, decided
-    # before phase 50 could create ewe.conf) says a previous ewe lived on
-    # this account; a fresh machine records the add-ons as considered and
-    # installs none. --no-restart: the shell is not running under the
+    # ── First-party plugins (0.25, plan D1–D3) — the same two steps
+    # packaging/ewe-setup runs, for the git/tarball path that never seeded
+    # anything before: `seed` puts in the bundle's default plugins (none
+    # today) and refreshes bundled copies; `migrate` installs, ONCE, the
+    # plugins that replace features an upgrader had built in. EWE_PREVIOUS
+    # (install.sh, decided before phase 50 could create ewe.conf) says a
+    # previous ewe lived on this account; a fresh machine records them as
+    # considered and installs none. --no-restart: the shell is not running under the
     # installer, and systemctl --user is not what this phase is for.
     if [ -x "$DOTREPO/bin/ewe-plugin" ] && [ -d "$DOTREPO/plugins" ]; then
         run "$DOTREPO/bin/ewe-plugin" seed "$DOTREPO/plugins" --no-restart || warn "ewe-plugin seed reported errors"
         if [ "${EWE_PREVIOUS:-0}" = "1" ]; then
             run "$DOTREPO/bin/ewe-plugin" migrate --no-restart || warn "ewe-plugin migrate reported errors"
-            ok "add-ons: previous ewe install detected — the ones that replace built-in features were kept"
+            ok "plugins: previous ewe install detected — the ones that replace built-in features were kept"
         else
             run "$DOTREPO/bin/ewe-plugin" migrate --fresh --no-restart || true
-            info "add-ons: fresh install — none installed (opt in from Komble → Add-ons or the Welcome screen)"
+            info "plugins: fresh install — none installed (opt in from Komble → Plugins or the Welcome screen)"
         fi
     fi
 

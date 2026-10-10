@@ -76,7 +76,7 @@ providers speak the same contract ([RFC-005](RFC-005-nextcloud-account.md)):
 
 | `[sync].provider` | where the file lives | the guard |
 |---|---|---|
-| `nextcloud` | WebDAV: `<server>/remote.php/dav/files/<user>/<folder>/ewe.conf` + `ewe.conf.meta.json` `{machine, saved_at, schema}` | the server's own `If-Match` on the ETag recorded at the last sync (412 ⇒ refused) — no race window |
+| `nextcloud` | WebDAV: `<server>/remote.php/dav/files/<user>/<folder>/ewe.conf` + `ewe.conf.meta.json` `{machine, machine_id, saved_at, schema}` | the server's own `If-Match` on the ETag recorded at the last sync (412 ⇒ refused) — no race window |
 | `google` | Drive app data (RFC-002; only with a personal OAuth client) | the file id + `modifiedTime` recorded at the last sync |
 
 Both record what they saw — in `~/.local/state/ewe/sync.json` — and that
@@ -90,11 +90,27 @@ record is the whole conflict rule:
   Welcome flow offers exactly that), or `--force`. This is what keeps a
   fresh install from erasing the backup it was about to restore.
 
+The record also keeps the `sha256` of the bytes last pushed or pulled, and
+`pending` — the hashes of uploads in flight. A remote that moved but holds
+bytes this machine itself sent is **adopted** (its ETag recorded, the
+verdict cleared) instead of reported as *"another machine saved newer
+settings"*: an upload whose reply was lost (a lid closed mid-push), or the
+Nextcloud desktop client re-uploading the same bytes under a new ETag.
+Since 0.25.1 a push whose file landed but whose meta stamp was refused is a
+success with `"warning": "stamp-missing"` (the next push rewrites the stamp)
+— before, that left the record on the old ETag for good.
+
 No clocks and no hostnames take part — two machines both called `ewe`, or
 a fresh install with a wrong clock, sync fine. The machine name is still
 stamped next to the file, purely so the UI can say *"backup saved by
-<name>"*; `sync-status` reports that (`remote_machine`, `remote_modified`)
+<name>"*, and beside it `machine_id`: the first 16 hex digits of a salted
+sha256 of `/etc/machine-id` (never the raw id), which tells two machines
+that share a hostname apart. `sync-status` reports who saved the remote copy
+(`remote_machine`, `remote_modified`, and `remote_is_this_machine` — true or
+false from the machine id, `null` for a stamp older than machine ids)
 separately from *when this machine last synced* (`local_synced_at`), plus
+`conflict` — what a push would answer right now (`"remote-newer"`,
+`"remote-exists"` or `null`; `error` stays the transport error only) —
 `provider`, `server`, `folder`, `enabled` and `in_sync`. Credentials come
 from the brokers — `ewe-cloud token` / `ewe-auth token` — never from this
 file. `[sync].enabled` is THE auto-sync switch: every `set` schedules a
@@ -183,17 +199,27 @@ honoured: the surfaces run the other way, GTK switches to `adw-gtk3` and
 never change — the shell, both apps, Hyprland's borders, GTK, Qt, kitty (its
 sixteen colours come from the palette), Zathura and mpv all follow.
 
-### `[desktop.dock]`
+### `[desktop.dock]` — legacy
 
 `enabled` (bool) · `autohide` (bool — "intelligent hide") ·
-`icon_size` (`"small"`/`"medium"`/`"large"`).
+`icon_size` (`"small"`/`"medium"`/`"large"`). Since Dock 1.1.0 the dock's
+settings are its own — `[plugins.settings]."ewe.dock"` `autohide` and
+`icon_size` (`small`/`normal`/`large`), set in Komble → Plugins → Dock →
+Options or with `ewe-plugin set ewe.dock autohide true`. Until the user sets
+one there, the old key here stands (the manifest's `legacy`, resolved by
+`ewe-plugin`; `"medium"` reads as `normal`), and `Shell.dockPrefs` still
+hands these to the Dock as its fallback — the Dock is their only reader.
+`enabled = false` only keeps an upgrader's one-time migration from
+installing the Dock.
 
 ### `[desktop.bar]`
 
 `enabled` (bool) · `icon_size` (`"small"`/`"normal"`/`"large"`, relative to
 the theme's icon size) · `show` (table of indicator → bool: `sound mic wifi
 bluetooth battery power keyboard tray tiling`; a missing key means shown;
-the camera and scissors are plugins — hide them with `ewe-plugin disable`). `[desktop.theme].bar_opacity` (0–100) sets how solid the
+`"plugin:<id>"` is a plugin's **Show in bar** — its bar widget and its Quick
+settings glyph — written by `ewe-plugin bar <id> on|off` and Komble's
+Options dialog, missing = the plugin's own default). `[desktop.theme].bar_opacity` (0–100) sets how solid the
 bar and dock are; below 100 the compositor blurs behind them.
 `[desktop.theme].app_blur` (bool) draws every window at 85 % with blur
 behind it (fullscreen stays opaque) — one material for terminal, browser,
@@ -279,7 +305,7 @@ and AppImage Komble manages on this machine. This is the restore loop: a
 fresh install that pulls your synced `ewe.conf` can offer to reinstall all
 of it. Komble maintains this section; nothing else touches it.
 
-### `[plugins]` — third-party shell plugins
+### `[plugins]` — shell plugins, first-party and from a git URL
 
 ```toml
 [plugins]
@@ -300,19 +326,25 @@ they are code, not configuration, and never sync. Toggling a plugin restarts
 the shell and rewrites `generated/plugin-keybinds.lua` from the enabled
 plugins' manifest keybinds; nothing else is regenerated.
 
-`"bundled"` marks a first-party plugin the ewe package seeded (`ewe.clipboard`,
-`ewe.screenshot`, `ewe.passwords`). `removed = ["ewe.clipboard"]` lists the
-bundled ones you took away with `ewe-plugin remove`, so the next ewe update
-does not seed them again (`ewe-plugin seed --restore <id>` clears the entry).
+`"bundled"` marks a first-party plugin copied out of the ewe payload
+(`ewe-plugin install`, Komble → Plugins, Welcome, or an upgrader's one-time
+migration). `removed = ["ewe.clipboard"]` lists the bundled ones you took
+away with `ewe-plugin remove`, so a later ewe update does not bring them
+back (`ewe-plugin install <id>` or `seed --restore <id>` clears the entry).
 
 ### `[plugins.widgets]` and `[plugins.settings]`
 
 Per plugin, keyed by id (quoted — ids carry a dot). `widgets."acme.clock" =
-{x, y, layer = "desktop" | "top", visible, output}` is where a desktop
-widget sits; `settings."acme.clock" = {key = value}` are the values of the
-options the plugin declared. `ewe-plugin place` / `set` write them and the
-shell re-reads live (`qs ipc call plugins reload`); arrange mode writes the
-same keys when you drag.
+{x, y, output, layer, visible, pin_level, locked}` is where a desktop
+widget sits and how it behaves: `layer` is `"desktop"` (under the windows),
+`"top"` (pinned above them) or `"overlay"` (pinned above everything,
+fullscreen too); `pin_level` (`"top"` | `"overlay"`) is where pinning puts
+it, remembered while unpinned; `locked` (bool) stops dragging.
+`settings."acme.clock" = {key = value}` are the values of the options the
+plugin declared — e.g. the Mail plugin's new-mail notifications are its
+`notify` (`ewe-plugin set ewe.mail notify false`). `ewe-plugin place` / `set`
+write them and the shell re-reads live (`qs ipc call plugins reload`);
+dragging a widget, its pin and arrange mode write the same keys.
 
 ### `[system]` — what this machine is
 

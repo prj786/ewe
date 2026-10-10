@@ -6,48 +6,56 @@ import Quickshell.Wayland
 import Quickshell.Hyprland
 import qs
 
-// ewe.dock — the dock, as an add-on (ewe 0.25, plugin API 3). A small,
+// ewe.dock — the dock, as a plugin (ewe 0.25, plugin API 3). A small,
 // centred bottom dock on the main screen:
 //   [ apps ] [ overview ] [ komble ] [ plugin dock items … ] | [ the Pen ] [ workspace boxes … ]
 // The sheep opens the pinned-apps popup (PinnedApps.qml, IPC `launcher`),
 // the layers glyph opens the window Overview, the store glyph brings Komble
-// forward; every other add-on with a `dock-item` (Music, Places, …) gets a
+// forward; every other plugin with a `dock-item` (Music, Places, …) gets a
 // button here that runs its action with this button as the anchor. Each
 // workspace box shows its windows as little app tiles (click a tile to
 // focus that window, click the box to switch to that workspace); the Pen is
 // ewe's hidden workspace (special:pen, Super+Z).
 //
-// What the shell gives it: Shell.dockPrefs (enabled · autohide · iconSize —
-// Settings → Layout → Dock, ewe.conf [desktop.dock]; this file falls back to
-// the same prefs on Globals while the shell is older), Shell.pinnedApps /
-// Shell.setPinned, Shell.overviewOpen, Shell.activeCount, the dock-item
-// registry (Shell.dockItems) and Theme's dock roles and sizes.
+// Its settings are its own (manifest `settings`, Komble → Plugins → Dock →
+// Options; ewe.conf [plugins.settings]."ewe.dock"): `autohide` and
+// `icon_size`. Until they are set, ewe-plugin hands over the old
+// [desktop.dock] values (the settings' `legacy` keys), so nobody's dock
+// changed when Settings → Layout → Dock went away. On/off is the plugin's
+// own switch in Komble. Shell.dockPrefs is only the fallback for a shell
+// that hands no settings.
+//
+// What the shell gives it: its settings, Shell.pinnedApps / Shell.setPinned,
+// Shell.overviewOpen, Shell.activeCount, the dock-item registry
+// (Shell.dockItems) and Theme's dock roles and sizes (Theme.dockCellFor).
 //
 // What it gives the shell: Shell.setBottomInset("ewe.dock", px, reserved) —
-// the strip it takes from the bottom of every screen (dock + windowGap), 0
-// while the dock is off in prefs and 0 again when this plugin is removed;
-// Toast, OSD, AnchoredPopup and the other bottom panels read it.
+// the strip it takes from the bottom of every screen (dock + windowGap), and
+// 0 again when this plugin is removed; Toast, OSD, AnchoredPopup and the
+// other bottom panels read it.
 // Rule 8: every colour, size and duration is a Theme token.
 Scope {
     id: root
     property string pluginId: "ewe.dock"
+    // injected by the host (PluginHost.inject / reload): {autohide, icon_size}
+    property var settings: ({})
 
-    // ── prefs: Shell.dockPrefs (API 3.1), else Globals' dock prefs ─────────
+    // ── prefs: the plugin's settings; Shell.dockPrefs / Globals before them ─
     readonly property var prefs: ("dockPrefs" in Shell && Shell.dockPrefs)
                                  ? Shell.dockPrefs
-                                 : ({ enabled: Globals.dockEnabled !== false,
-                                      autohide: Globals.dockAutohide === true,
+                                 : ({ autohide: Globals.dockAutohide === true,
                                       iconSize: Globals.dockIconSize || "normal" })
-    readonly property bool enabled: root.prefs.enabled !== false
-    readonly property bool autohide: root.prefs.autohide === true
-    readonly property string iconSize: String(root.prefs.iconSize || "normal")
+    readonly property bool enabled: true      // off = the plugin switched off in Komble
+    readonly property bool autohide: (root.settings && typeof root.settings.autohide === "boolean")
+                                     ? root.settings.autohide : root.prefs.autohide === true
+    readonly property string iconSize: String((root.settings && root.settings.icon_size) || root.prefs.iconSize || "normal")
 
-    // Settings → Layout → Dock → Icon size (Dock card, "Sizes"): the cell is
-    // the button/box edge — small 40 · normal 48 · large 64 — Theme's dockCell
-    // (the generator's `dock` block, which Text size leaves alone).
+    // Icon size (Dock card, "Sizes"): the cell is the button/box edge —
+    // small 40 · normal 48 · large 64 — the generator's `dock` block, which
+    // Text size leaves alone.
     readonly property bool small: root.iconSize === "small"
     readonly property bool large: root.iconSize === "large"
-    readonly property int cell: (Theme.dockCell !== undefined) ? Theme.dockCell
+    readonly property int cell: (typeof Theme.dockCellFor === "function") ? Theme.dockCellFor(root.iconSize)
                               : root.small ? Theme.controlXl : root.large ? Theme.icon4xl : Theme.control2xl
     // the container: spaceS of padding above and below the cells, windowGap
     // above the screen edge — the clearance is everything it takes
@@ -72,12 +80,12 @@ Scope {
     function toggleLauncher(btn) {
         if (btn) root.launcherAnchorX = btn.mapToItem(null, btn.width / 2, 0).x
         root.closeStoreFallback()
-        if (!root.launcherOpen) Shell.closePopups(root.pluginId)   // one add-on popup at a time
+        if (!root.launcherOpen) Shell.closePopups(root.pluginId)   // one plugin popup at a time
         root.launcherOpen = !root.launcherOpen
     }
     // opening one dock panel closes the others: Shell.closePopups (every
     // AnchoredPopup and Places call it when they open) — and, belt and
-    // braces, another add-on's popup reporting itself open through
+    // braces, another plugin's popup reporting itself open through
     // Shell.setActive; the in-shell store fallback through its flag
     Connections {
         target: Shell
@@ -299,7 +307,7 @@ Scope {
 
         // Revealed when: autohide off · nothing on the workspace claims the screen ·
         // hovering the fixed bottom edge · hovering the dock itself · a popup is open
-        // (ours, the store fallback, or any add-on's — Shell.activeCount) · within
+        // (ours, the store fallback, or any plugin's — Shell.activeCount) · within
         // the close grace period · the Overview is open. The bottom edge trigger
         // is FIXED (never moves), so revealing can't slide the dock out from under
         // the cursor → no flicker.
@@ -363,12 +371,16 @@ Scope {
             height: win.dockH
             width: row.implicitWidth + 2 * Theme.spaceS
             radius: win.dockR
-            // surfaceRaised, or glassRaised once bar opacity drops below 100
+            // surfaceRaised, at the bar opacity once it drops below 100
             color: Theme.dockGround
             border.color: Theme.dockOutline
             border.width: Theme.borderWidth1
             HoverHandler { id: dockHov }
-            layer.enabled: true
+            // The float shadow only on a solid dock: under a translucent pill
+            // it shows THROUGH the fill (a glass dock looked darker than the
+            // glass bar at the same opacity) and its halo, above the blur
+            // rule's ignore_alpha, came out as a frosted rim.
+            layer.enabled: !Theme.glass
             layer.effect: Elevation {}
 
             // a square dock launcher (Dock card, "States"): radiusPrimary, no

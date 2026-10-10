@@ -311,7 +311,7 @@ Scope {
                     y: (Globals.overviewCover && !Theme.reduceMotion) ? -win.implicitHeight : 0
                     Behavior on y { NumberAnimation { duration: Theme.durBase; easing.type: Theme.ease } }
                 }
-                // surfaceBase, or glassBase once bar opacity drops below 100
+                // surfaceBase, or surfaceBase at the bar opacity once it drops below 100
                 color: Theme.barGround
                 // the bar's edge: a borderWidth1 rule below it (Bar card #1),
                 // glassBorder inside Glass so it reads over any wallpaper
@@ -765,7 +765,7 @@ Scope {
                                     id: statusSlot
                                     required property var modelData
                                     anchors.verticalCenter: parent.verticalCenter
-                                    active: Globals.barShows("plugin:" + modelData.id)
+                                    active: PluginHost.barShown(modelData.id)
                                     // `shown` (a plain property), never item.visible — that reads back
                                     // the EFFECTIVE visibility and would lock the slot hidden
                                     visible: active && status === Loader.Ready && item && (item.shown === undefined || item.shown)

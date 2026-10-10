@@ -4,7 +4,7 @@ import Quickshell
 import Quickshell.Io
 import qs
 
-// Phone — THE phone model of the ewe.phone add-on (was the shell's
+// Phone — THE phone model of the ewe.phone plugin (was the shell's
 // KdeConnect.qml). Owns the D-Bus bridge process (kdeconnect-bridge.py in
 // this directory, NDJSON over stdio) and every model the UI binds to:
 // devices/pairing, battery, phone notifications (with a persisted seen-set
@@ -74,8 +74,8 @@ QtObject {
     // takes the injected pluginDir; without one the singleton's own location
     // is the same directory.
     property string bridgePath: Qt.resolvedUrl("kdeconnect-bridge.py").toString().replace(/^file:\/\//, "")
-    // the persisted UI state keeps its pre-add-on path: a machine upgrading
-    // to the add-on keeps its seen-set and chosen device
+    // the persisted UI state keeps its pre-plugin path: a machine upgrading
+    // to the plugin keeps its seen-set and chosen device
     readonly property string statePath: Quickshell.env("HOME") + "/.config/quickshell/kdeconnect-state.json"
     property bool started: false
 

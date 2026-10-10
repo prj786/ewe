@@ -3,7 +3,7 @@ import Quickshell
 import Quickshell.Io
 import qs
 
-// ewe.cast — "Cast to TV", the ewe-castd client (RFC-004), as an add-on.
+// ewe.cast — "Cast to TV", the ewe-castd client (RFC-004), as a plugin.
 //
 // The protocols live in the ewe-castd daemon (Miracast/WFD as a real-time
 // RTSP source, Chromecast via cast-channel; discovery over avahi + NM Wi-Fi

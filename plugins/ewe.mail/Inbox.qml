@@ -4,7 +4,7 @@ import Quickshell
 import Quickshell.Io
 import qs
 
-// Inbox — THE inbox model of the ewe.mail add-on, read by the bar envelope,
+// Inbox — THE inbox model of the ewe.mail plugin, read by the bar envelope,
 // the Inbox page and the `mail` IPC target. Two sources, one shape:
 //   · any IMAP account — the core `ewe-mail` CLI (account in ewe.conf
 //     [accounts.mail], password in the keyring). Was the shell's Mail.qml.
@@ -52,8 +52,25 @@ QtObject {
     readonly property string state: source === "imap" ? imapState : source === "gmail" ? mailState : ""
     readonly property string error: source === "imap" ? imapError : source === "gmail" ? mailError : ""
     readonly property bool needsReconnect: source === "gmail" && mailState === "scope"
+    // Notifications for new mail: the plugin's `notify` setting (manifest;
+    // Komble → Plugins → Mail → Options), also flipped by the bell on the
+    // Inbox page and `mail setNotify` — those write the setting through
+    // Shell.setSetting, so there is one value, not a second copy in a state
+    // file. applyNotify is what the setting arriving (Service.qml) calls.
     property bool notify: true
-    function setNotify(v) { ml.notify = v; ml._saveState(); if (ml.gmailConfigured) ml.setMailNotify(v) }
+    function applyNotify(v) {
+        v = !!v
+        if (ml.notify === v) return
+        ml.notify = v; ml._saveState()
+        if (ml.gmailConfigured) ml.setMailNotify(v)
+    }
+    function setNotify(v) {
+        ml.applyNotify(v)
+        if (typeof Shell.setSetting === "function") Shell.setSetting("ewe.mail", "notify", !!v)
+    }
+    // 1.0 kept the toggle in mail-state.json: an "off" there is carried into
+    // the setting once (notifyCarried), then the setting is the only truth
+    property bool _notifyCarried: false
     // a Gmail re-consent happens in the account app (ewe-sync owns Google
     // sign-in since RFC-005/006; the shell's `google signIn` is not ours to call)
     function reconnect() {
@@ -154,7 +171,7 @@ QtObject {
     readonly property int notifyBurst: 5
     property var _notified: ({})
     property bool _stateLoaded: false
-    // the pre-add-on path, so an upgrade keeps the notified-set (no re-notify storm)
+    // the pre-plugin path, so an upgrade keeps the notified-set (no re-notify storm)
     readonly property string statePath: Quickshell.env("HOME") + "/.config/quickshell/mail-state.json"
     property Process _stateLoad: Process {
         running: true
@@ -164,7 +181,9 @@ QtObject {
                 try {
                     var j = JSON.parse(this.text)
                     if (j.notified && typeof j.notified === "object") ml._notified = j.notified
-                    if (j.notify !== undefined) ml.notify = !!j.notify
+                    ml._notifyCarried = !!j.notifyCarried
+                    if (j.notify === false && !ml._notifyCarried) ml.setNotify(false)
+                    ml._notifyCarried = true
                     if (ml.imapLastFetch === 0) {
                         if (j.unread !== undefined) ml.imapUnread = j.unread
                         if (Array.isArray(j.list)) ml.imapList = j.list
@@ -186,7 +205,8 @@ QtObject {
     property Timer _saveT: Timer {
         interval: 200
         onTriggered: ml._atomicWrite(ml._stateWriter, ml.statePath, JSON.stringify({
-            notified: ml._notified, notify: ml.notify, unread: ml.imapUnread, list: ml.imapList.slice(0, 15)
+            notified: ml._notified, notify: ml.notify, notifyCarried: ml._notifyCarried,
+            unread: ml.imapUnread, list: ml.imapList.slice(0, 15)
         }))
     }
     function _saveState() {
@@ -332,7 +352,7 @@ QtObject {
     property string _mailHistoryId: ""
     property var _mailNotified: ({})     // messageId -> epoch-ms (bounded, persisted)
     property var _mailIds: []            // current unread id set (change detector)
-    // the pre-add-on path: the History cursor and the notified-set survive the upgrade
+    // the pre-plugin path: the History cursor and the notified-set survive the upgrade
     readonly property string mailStatePath: Quickshell.env("HOME") + "/.config/quickshell/google-mail.json"
 
     property Process _mailWriter: Process {}

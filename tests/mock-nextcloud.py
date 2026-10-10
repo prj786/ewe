@@ -209,9 +209,24 @@ class H(BaseHTTPRequestHandler):
             return self._send(412, b"exists", "text/plain")
         if ifm and (not cur or cur["etag"] != ifm.strip()):
             return self._send(412, b"etag mismatch", "text/plain")
+        # fault switches a test sets in the state file (each fires once):
+        #   refuse_put  <name>  answer 507 to a PUT of that file (the meta stamp)
+        #   drop_reply  <name>  STORE the file, then hang up without a reply —
+        #                       the laptop that suspended mid-upload
+        name = rel.rsplit("/", 1)[-1]
+        if s.get("refuse_put") == name:
+            s.pop("refuse_put")
+            save(s)
+            return self._send(507, b"insufficient storage", "text/plain")
         etag = self._etag_for(s)
         s["files"][rel] = {"dir": False, "etag": etag, "mtime": time.time(),
                            "content": body.decode("latin-1")}
+        if s.get("drop_reply") == name:
+            s.pop("drop_reply")
+            save(s)
+            self.close_connection = True
+            self.connection.shutdown(2)
+            return
         save(s)
         self._send(201 if not cur else 204, extra={"ETag": etag, "OC-ETag": etag})
 

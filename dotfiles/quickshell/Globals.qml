@@ -30,7 +30,7 @@ QtObject {
     // Project version — the shell's runtime copy. Keep in sync with the repo-root
     // VERSION file (the canonical source used for git tags / releases). Semver, with
     // an -alpha/-beta pre-release suffix until the first stable cut.
-    readonly property string version: "0.25.0-beta"
+    readonly property string version: "0.25.1-beta"
 
     // ── event sounds (GNOME-style; the freedesktop sound theme, one toggle) ──
     // playSound("message-new-instant") etc — names are theme event ids from
@@ -54,7 +54,7 @@ QtObject {
     property int netEpoch: 0               // bumped by the bar on every NetworkManager event (nmcli monitor) — panels re-read on change
     property bool overviewOpen: false      // GNOME-style window overview (Super tapped alone)
     property bool overviewCover: false     // the Overview owns the screen: backdrop up, bar (and a dock add-on) out of view (Overview.qml sequences it)
-    property bool widgetsArrange: false    // desktop widgets in arrange mode (Super+Shift+W): drag to move, frames with sticky/hide
+    property bool widgetsArrange: false    // desktop widgets in arrange mode (Super+Shift+W): frames with pinned/lock/hide chips
     property bool settingsOpen: false      // the Quickshell Settings window (Super+, or the CC gear)
     // the first-run Welcome overlay is up — Google.qml holds every auto-push
     // while it is (a fresh machine must never upload over the backup it is

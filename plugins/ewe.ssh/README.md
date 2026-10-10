@@ -1,4 +1,4 @@
-# SSH — an ewe add-on
+# SSH — an ewe plugin
 
 `ewe.ssh` — first-party, shipped inside the ewe payload, installed on request.
 
@@ -20,19 +20,19 @@ is up.
 
 ## Install
 
-Komble → Add-ons, or:
+Komble → Plugins, or:
 
     ewe-plugin install ewe.ssh
     ewe-plugin remove ewe.ssh          # gone until you add it back
 
 Needs `ssh` (openssh) and `kitty` — both ewe dependencies. Hosts are added
 to `~/.ssh/config` by hand or from Settings → Network → SSH (`ewe-conf`'s
-`[network.ssh]` managed block); this add-on only reads them.
+`[network.ssh]` managed block); this plugin only reads them.
 
 ## Files
 
 Browse scripts live in `~/.config/quickshell/ssh-browse/<host>.sh` — the
-same place the shell kept them before this feature became an add-on, so
+same place the shell kept them before this feature became a plugin, so
 nothing you saved is lost. They are not synced and not part of `ewe.conf`.
 
 ## Settings, IPC

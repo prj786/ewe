@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 redirect) is an installable, **Arch-Linux-only**, clean dark desktop
 environment: **Hyprland** (Wayland compositor, configured in Lua) + **Quickshell**
 (a QML shell — bar, launcher, notifications, quick settings, settings,
-app store, lock, OSD; the dock and the other extras are add-ons). `install.sh` turns a minimal Arch install into the full DE.
+app store, lock, OSD; the dock and the other extras are first-party plugins). `install.sh` turns a minimal Arch install into the full DE.
 Read `README.md` for the user-facing rationale (it is the source of truth). The
 project is **Arch-only** end to end — no Fedora/COPR/`dnf`/GDM paths remain.
 
@@ -123,13 +123,15 @@ Cross-cutting mechanisms — understand these before touching any phase:
 fallbacks, …). Components are registered in `qmldir`. **Since 0.25 the
 dock (+ launcher panel), Places, the music player, Insomnia (keep awake),
 the CPU/memory meters, SSH, VPN, the phone (KDE Connect), mail (+ the Gmail
-half of Google.qml) and Cast are NOT shell components — they are add-ons
-(`ewe.dock ewe.places ewe.media ewe.insomnia ewe.sysmon ewe.ssh ewe.vpn
-ewe.phone ewe.mail ewe.cast`, repos `prj786/ewe-plugin-<name>`), carved out
-on 2026-10-04; their prefs (`desktop.dock.*`, `apps.pinned`, `apps.places`,
-`network.*`, the mail account) stay in ewe.conf and the shell exposes what
-they need through `Shell` (dockPrefs, pinnedApps, bottomInset…).** Two
-singletons tie everything together:
+half of Google.qml) and Cast are NOT shell components — they are
+first-party plugins (`ewe.dock ewe.places ewe.media ewe.insomnia ewe.sysmon
+ewe.ssh ewe.vpn ewe.phone ewe.mail ewe.cast`, repos
+`prj786/ewe-plugin-<name>`), carved out on 2026-10-04; their prefs
+(`apps.pinned`, `apps.places`, `network.*`, the mail account) stay in
+ewe.conf and the shell exposes what they need through `Shell` (pinnedApps,
+bottomInset…). The dock's auto-hide / icon size are its own plugin settings
+since Dock 1.1.0 (`desktop.dock.*` is only their `legacy` fallback,
+`Shell.dockPrefs`).** Two singletons tie everything together:
 
 - **`Globals.qml`** — shared mutable shell state (`quickSettingsOpen`, `settingsOpen`,
   `accentColor`, `version`, pinned lists, the live `NotificationServer`, …).
@@ -141,7 +143,7 @@ singletons tie everything together:
   generated `design/tokens.css` to `design/system/tokens.json` and
   `design/check-contrast.sh` holds the derivation to the contrast rules.
 - **`BtAgent.qml`** — the bluez pairing agent (`scripts/bt-agent.py`, default
-  `org.bluez.Agent1`, NDJSON over stdio like the phone add-on’s bridge); `BtPairing.qml`
+  `org.bluez.Agent1`, NDJSON over stdio like the Phone plugin’s bridge); `BtPairing.qml`
   is its dialog. Device state still comes from `Quickshell.Bluetooth`; pairing
   and connecting go through `BtAgent.pair()/connectDevice()` so failures have a
   reason. `bin/ewe-bt` is the same for the Settings app (see
@@ -156,12 +158,14 @@ singletons tie everything together:
   passwords}`; `scripts/vendor-plugins.sh` copies them into `plugins/<id>/`
   (vendored copies — `git archive` ships them; a submodule would arrive
   empty) and records repo + commit + version in `plugins/bundle.json`.
-  **Add-ons (0.25, plugin API 3 — `docs/PLUGINS.md`):** nothing in the
+  **First-party plugins in the payload (0.25, plugin API 3 —
+  `docs/PLUGINS.md`; the UI called them "add-ons" until 0.25.1, now
+  "Plugins" everywhere):** nothing in the
   payload is installed on a FRESH machine; `ewe-setup` and phase 60 run
   `ewe-plugin seed` (bundle `default` ids only, none today, plus a refresh
-  of installed bundled copies) then `ewe-plugin migrate` (once per add-on,
+  of installed bundled copies) then `ewe-plugin migrate` (once per plugin,
   upgraders only — marker `~/.local/state/ewe/addons-migrated`, local). A
-  user installs one with `ewe-plugin install <id>` (Komble → Add-ons, the
+  user installs one with `ewe-plugin install <id>` (Komble → Plugins, the
   Welcome screen); `list --json` lists them under `available`. API 3 adds
   the kinds `quick-tile`, `quick-page`, `bar-status`, `dock-item`, the
   public `Shell` singleton (`Shell.qml`: toast, openQuickSettings, actions,
@@ -169,11 +173,11 @@ singletons tie everything together:
   `Globals.dockEnabled` for layout reads it), `AnchoredPopup`, and the
   promoted components (`Qs*`, `Text*`, `Glyph`, `BarModule`, `BarSep`,
   `BarStatusGlyph`); the host loads apiVersion 2 and 3. The harness:
-  `HS_PLUGINS=1` installs every payload add-on (`HS_PAYLOAD=<dir>` picks
+  `HS_PLUGINS=1` installs every payload plugin (`HS_PAYLOAD=<dir>` picks
   the payload), `HS_PLUGIN_DIRS=a:b` adds fixtures
   (`tests/fixtures/plugins/acme.v3demo` exercises every kind),
   `HS_NO_SYSTEMCTL=1` puts a logging no-op `systemctl` on the nested
-  shell's PATH (Welcome's add-ons step ends in `ewe-plugin install <last>`
+  shell's PATH (Welcome's plugins step ends in `ewe-plugin install <last>`
   WITHOUT --no-restart = the tool's restart — the shim keeps it off the
   host's ewe.service; `welcome pick|install|finish` drive it). The driver
   runs every `ewe-plugin` call with `HYPRLAND_INSTANCE_SIGNATURE` and
@@ -189,13 +193,16 @@ singletons tie everything together:
   global shortcuts, 1Password Quick Access…) stay in the shell. Tests:
   `tests/ewe-plugin-test.sh` (seed/remove/keybinds), the passwords plugin's
   own `test.sh`, `tests/ewe-globalshortcuts-test.sh`.
-- **Plugin kit (2026-09-16):** `ewe-plugin create|dev|place|set|get`;
+- **Plugin kit (2026-09-16):** `ewe-plugin create|dev|place|set|get` (+ `bar`,
+  Show in bar, 0.25.1);
   manifest v1 gains kind `desktop-widget`, `desktopWidget` defaults and a
   typed `settings` schema (5 types, validated). User side in ewe.conf
   `[plugins.widgets]` / `[plugins.settings]` keyed by quoted id (dots!) —
-  always written as whole tables. `DesktopWidgets.qml` = two full-output
-  layer windows per screen (Bottom = desktop, Top = sticky), input mask =
-  union of widget rects, arrange mode via `Globals.widgetsArrange`
+  always written as whole tables. `DesktopWidgets.qml` = three full-output
+  layer windows per screen (Bottom = desktop, Top = pinned above the
+  windows, Overlay = pinned above everything), input mask = union of widget
+  rects; every widget drags and pins from its hover toolbar any time (lock
+  stops dragging), arrange mode via `Globals.widgetsArrange`
   (Super+Shift+W, IPC `widgets`). `PluginHost.reload()` (IPC
   `plugins reload`) re-reads placement + settings without a restart and
   pushes `settings` into every instance that declares the property. Inside
@@ -229,12 +236,12 @@ External control (keybinds, scripts) uses **`qs ipc call <target> <fn>`** agains
 `IpcHandler { target: "<name>" }` in a component — core targets: `bar picker quicksettings
 lock osd overview settings applauncher store updates plugins widgets sync cloud google
 display power saver welcome toast` (plus each plugin's own, `ewe.clipboard ewe.screenshot
-ewe.passwords`…; the legacy targets `cast launcher places player mail` are the add-ons'
-`ipcAliases` now — present only while that add-on is installed). Most expose
+ewe.passwords`…; the legacy targets `cast launcher places player mail` are the first-party
+plugins' `ipcAliases` now — present only while that plugin is installed). Most expose
 `toggle`/`show`/`hide`. Gotcha: `qs ipc call <t> show` collides with the `qs ipc
 show` subcommand and no-ops — bind to **`toggle`**.
 
-Drag-out idiom (used by the Places add-on and the screenshot plugin's preview): an invisible proxy `Item` with
+Drag-out idiom (used by the Places plugin and the screenshot plugin's preview): an invisible proxy `Item` with
 `Drag.active` + `Drag.mimeData: ({"text/uri-list": "file://"+path+"\r\n"})`, plus a
 box-only `mask: Region { item: box }` so clicks/drags outside the panel pass
 through to apps behind it.

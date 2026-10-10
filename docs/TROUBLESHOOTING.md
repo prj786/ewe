@@ -2,7 +2,7 @@
 
 ## Cast to TV: frozen picture, lag, or the TV drops after ~10 s
 
-(Cast is the `ewe.cast` add-on since 0.25 — Komble → Add-ons; the system
+(Cast is the `ewe.cast` plugin since 0.25 — Komble → Plugins; the system
 side below is installed for everyone.) What the 2026-08-21 investigation
 found, in the order it bit:
 
@@ -41,7 +41,7 @@ found, in the order it bit:
    `iw dev wlan0 get power_save` should read `off` while casting.
 4. **No sound on the TV (audio stays on the laptop).** gnome-network-displays
    makes a null sink (`gnome_network_displays_*`) and streams *its* monitor, but
-   never moves your audio into it. The add-on's `cast-audio.sh` (started
+   never moves your audio into it. The plugin's `cast-audio.sh` (started
    while casting) makes that sink the default and moves live streams
    onto it, restoring your speakers when casting stops. If sound doesn't follow,
    check `pactl get-default-sink` names the `gnome_network_displays` sink while
@@ -54,8 +54,50 @@ found, in the order it bit:
    `supplicant-timeout` with no GO-negotiation lines = the TV wasn't listening
    (open Source → Screen Mirroring on it first).
 
-Run the add-on's `cast-check.sh` (`~/.config/ewe/plugins/ewe.cast/`) any
+Run the plugin's `cast-check.sh` (`~/.config/ewe/plugins/ewe.cast/`) any
 time — it checks all of the above and prints the fix for each.
+
+## Sync says another machine (named like this one) saved newer settings, and Push does nothing
+
+**Symptom.** The desktop says *"Another machine (“laptop”) saved newer
+settings"* — often naming **this** computer — every automatic push is
+refused, and ewe-sync shows no **Push anyway** or **Restore** to get out of
+it.
+
+**Cause (before ewe 0.25.1).** An upload that the server stored but whose
+reply never came back (a lid closed mid-push, a dropped Wi-Fi), or a push
+whose meta stamp (`ewe.conf.meta.json`) the server refused, left
+`~/.local/state/ewe/sync.json` on the old ETag for good: every later push
+read this machine's own upload as somebody else's. ewe-sync's Push anyway /
+Restore banner never appeared because it keyed on `sync-status`'s `error`,
+which only carries transport errors. And the stamp names a machine by
+hostname alone, so when two computers share one the message names this one.
+
+**Fix.** Update (0.25.1 records the `sha256` of what it pushed and adopts its
+own upload; `sync-status` reports `conflict` and `remote_is_this_machine`;
+a refused stamp is a warning, not a failure — see
+[EWE-CONF](EWE-CONF.md#sync)). Then once: **ewe-sync → This machine → Push
+anyway** (keep this machine's settings) or **Restore** (take the account's).
+If two machines share a hostname, rename one (`hostnamectl hostname
+desk-laptop`) so backups say who saved them. Check with `ewe-conf
+sync-status`: `conflict` should be `null` and `in_sync` true.
+
+## Settings says the shell isn't running, but it is
+
+**Symptom.** ewe-settings says the shell isn't running (and greys out what
+only applies live) while the bar is plainly there.
+
+**Cause (before ewe 0.25.1).** Settings asked the shell once, when it
+opened. A shell restarting at that moment — login, an update, a plugin
+install — a `qs ipc --pid` call aimed at a pid the restart had just
+replaced, or a call that hung, left the note up for the life of the window.
+
+**Fix.** Update. Settings now asks again whenever its window gets focus and
+every 10 s while the shell is not answering, waits at most 3 s per call,
+retries a failed `--pid` call once without the pid, and only says "not
+running" after two misses in a row. Meanwhile, closing and reopening
+Settings clears it; `qs ipc call settings ping` from a terminal answers the
+same question.
 
 ## Sign-in: no keyring prompt, "keyring not showing up"
 

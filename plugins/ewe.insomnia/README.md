@@ -1,6 +1,7 @@
 # Insomnia — an ewe plugin
 
-`ewe.insomnia` — first-party, shipped inside ewe as an add-on.
+`ewe.insomnia` — first-party, ships inside the ewe payload, not installed
+until you ask for it.
 
 Keeps the screen awake and stops sleep until you turn it off. While it is
 on, the shell holds a Wayland idle inhibitor, so the idle timers never fire:
@@ -11,11 +12,12 @@ once.
 - A tile in Quick settings (eye open while on, eye-off while off).
 - An eye in the bar's Quick settings pill, only while on.
 
-Install: Komble → Add-ons, or
+Install: Komble → Plugins, or
 
     ewe-plugin install ewe.insomnia
 
-Settings (Komble → Add-ons, or `ewe-plugin set ewe.insomnia auto_off 30`):
+Settings (Komble → Plugins → Insomnia → Options, or `ewe-plugin set
+ewe.insomnia auto_off 30`):
 `auto_off` — turn off by itself after this many minutes; `0` (the default)
 means never. The tile's status counts down ("On · off in 25 min") and a
 toast says when it happened.

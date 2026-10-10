@@ -66,12 +66,19 @@ QtObject {
         sh._insets = m
     }
 
-    // The user's dock prefs (ewe.conf [desktop.dock] enabled / autohide /
-    // icon_size, loaded by Globals from user-theme.json, written by Settings
-    // and ewe-settings): the dock add-on reads them here, read-only — the
-    // dock is an add-on since 0.25, its settings are not. `iconSize` is
-    // "small" | "normal" | "large".
+    // The pre-plugin-settings dock prefs (ewe.conf [desktop.dock] enabled /
+    // autohide / icon_size, loaded by Globals from user-theme.json). Kept
+    // for API 3: since Dock 1.1.0 the dock's settings are its own (manifest
+    // `settings`, Komble's Options) and these are only its fallback.
+    // `iconSize` is "small" | "normal" | "large".
     readonly property var dockPrefs: ({ enabled: Globals.dockEnabled, autohide: Globals.dockAutohide, iconSize: Globals.dockIconSize })
+
+    // A plugin writes one of ITS OWN declared settings (manifest `settings`)
+    // — from its own UI, the same value Komble's Options dialog shows.
+    // Applied to the plugin's live instances at once, persisted through
+    // `ewe-plugin set` (which validates it against the manifest and keeps
+    // ewe-conf the one writer). Added in ewe 0.25.1 (additive, API 3).
+    function setSetting(pluginId, key, value) { PluginHost.setSetting(String(pluginId), String(key), value) }
 
     // Pinned apps (desktop ids, ewe-conf apps.pinned): read-only here; a
     // plugin pins or unpins through setPinned — Globals keeps the one

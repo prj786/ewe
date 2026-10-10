@@ -61,7 +61,8 @@ QtObject {
     // [{ id, name, entry (absolute path), barWidget: { defaultSection } }]
     property var barWidgets: []
     // desktop-widget entries, for DesktopWidgets: [{ id, name, entry }] —
-    // WHERE each sits is `placement[id]` ({x, y, output, layer, visible}),
+    // WHERE each sits is `placement[id]` ({x, y, output, layer, visible,
+    // pinned, pin_level, locked}),
     // kept apart so a drag or `ewe-plugin place` moves it without a reload
     property var desktopWidgets: []
     // API 3 registries, each sorted by manifest `order` then id:
@@ -80,6 +81,20 @@ QtObject {
     // user's values (ewe.conf plugins.settings.<id>). Handed to every entry
     // point that has a `settings` property, live on `reload`.
     property var settings: ({})
+    // id -> {shown, toggle}: Show in bar, as `ewe-plugin list --json` computed
+    // it (the user's desktop.bar.show."plugin:<id>", else the manifest's
+    // defaultShown). toggle false = the plugin's own settings place it.
+    property var barState: ({})
+    // The one question the bar asks before loading a plugin's widget or glyph.
+    // The live Globals.barShow (settings reload) wins when it holds the key;
+    // otherwise the list's verdict, which knows the manifest default.
+    function barShown(id) {
+        var b = host.barState[id]
+        if (b && b.toggle === false) return true
+        var k = "plugin:" + id
+        if (Globals.barShow && typeof Globals.barShow[k] === "boolean") return Globals.barShow[k]
+        return !(b && b.shown === false)
+    }
     property bool scanned: false
     // true when this start was the third inside a minute: nothing loaded
     property bool safeMode: false
@@ -110,14 +125,16 @@ QtObject {
                 var j = null
                 try { j = JSON.parse(this.text) } catch (e) {}
                 if (!j || !Array.isArray(j.plugins)) return
-                var pl = {}, st = {}
+                var pl = {}, st = {}, bs = {}
                 for (var i = 0; i < j.plugins.length; i++) {
                     var p = j.plugins[i]
                     if (p.widget) pl[p.id] = p.widget
+                    if (p.bar) bs[p.id] = p.bar
                     st[p.id] = p.settings || {}
                 }
                 host.placement = pl
                 host.settings = st
+                host.barState = bs
                 for (var id in host.instances)
                     for (var kind in host.instances[id]) host._giveSettings(host.instances[id][kind], id)
                 Log.debug("plugins", "reloaded placement + settings")
@@ -128,6 +145,18 @@ QtObject {
         if (obj && ("settings" in obj)) obj.settings = host.settings[id] || ({})
     }
     function settingsFor(id) { return host.settings[id] || ({}) }
+    // Shell.setSetting: optimistic in memory (every live instance sees it
+    // now), then `ewe-plugin set`, whose reload poke brings back the
+    // validated value — a refused one snaps back there. (Assigning
+    // `settings` emits settingsChanged, which the bar/QS slots listen to.)
+    function setSetting(id, key, value) {
+        var st = Object.assign({}, host.settings)
+        st[id] = Object.assign({}, st[id] || {})
+        st[id][key] = value
+        host.settings = st
+        for (var kind in (host.instances[id] || {})) host._giveSettings(host.instances[id][kind], id)
+        Quickshell.execDetached([host.tool, "set", id, key, typeof value === "boolean" ? (value ? "true" : "false") : String(value)])
+    }
 
     // ── API 3 injection ───────────────────────────────────────────────────
     // Set on an entry point's root ONLY the properties it declares: pluginId,
@@ -178,6 +207,24 @@ QtObject {
         host.placement = pl
         Quickshell.execDetached([host.tool, "place", id, "--visible", on ? "on" : "off"])
     }
+    // Pin: above the windows (pin_level "top") or above everything, fullscreen
+    // too ("overlay"); unpinned = on the desktop, under the windows. The
+    // level is the widget's own setting (Komble → Options → When pinned).
+    function setWidgetPinned(id, on) {
+        var cur = host.placement[id] || {}
+        var level = cur.pin_level === "overlay" ? "overlay" : "top"
+        var pl = Object.assign({}, host.placement)
+        pl[id] = Object.assign({}, cur, { layer: on ? level : "desktop", pinned: !!on })
+        host.placement = pl
+        Quickshell.execDetached([host.tool, "place", id, "--pinned", on ? "on" : "off"])
+    }
+    // Lock position: no dragging until unlocked (the toolbar, Komble)
+    function setWidgetLocked(id, on) {
+        var pl = Object.assign({}, host.placement)
+        pl[id] = Object.assign({}, pl[id] || {}, { locked: !!on })
+        host.placement = pl
+        Quickshell.execDetached([host.tool, "place", id, "--locked", on ? "on" : "off"])
+    }
 
     function _onList(text) {
         host.scanned = true
@@ -202,11 +249,12 @@ QtObject {
             host.loaded()
             return
         }
-        var inst = {}, widgets = [], desk = [], pl = {}, st = {}, dirs = {}, n = 0
+        var inst = {}, widgets = [], desk = [], pl = {}, st = {}, bs = {}, dirs = {}, n = 0
         var tiles = [], pages = [], status = [], dock = [], pageKeys = {}
         for (var i = 0; i < j.plugins.length; i++) {
             var p = j.plugins[i]
             if (p.widget) pl[p.id] = p.widget
+            if (p.bar) bs[p.id] = p.bar
             st[p.id] = p.settings || {}
             if (p.dir) dirs[p.id] = p.dir
             if (!p.enabled) continue
@@ -275,6 +323,7 @@ QtObject {
         host.instances = inst
         host.placement = pl
         host.settings = st
+        host.barState = bs
         host.dirs = dirs
         host.barWidgets = widgets
         host.desktopWidgets = desk

@@ -181,7 +181,7 @@ lights up around it:
 | **restore** | a machine that signs in and finds a backup is offered it, out loud; your apps line up in Komble → For you |
 | **files** | the account mounted at `~/Nextcloud` (Files → sidebar); full folder sync, your machines and a tray are the account app, ewe-sync (below) |
 | **calendar** | CalDAV — the Control Center's calendar and reminders |
-| **mail** | any IMAP account (ewe-sync → Mail adds it): the **Mail add-on** (`ewe.mail`, Komble → Add-ons) shows the unread badge, the latest mail and new-mail notifications |
+| **mail** | any IMAP account (ewe-sync → Mail adds it): the **Mail plugin** (`ewe.mail`, Komble → Plugins) shows the unread badge, the latest mail and new-mail notifications (its *Notifications for new mail* option) |
 
 Signing in is Nextcloud's own **Login Flow v2**: the browser opens your
 server's page, you sign in there (password, 2FA, SSO — whatever your server
@@ -211,14 +211,14 @@ and unlocks it with your login password — but a machine carrying an older
 
 Google is an extra, not the account: Google **Calendar** in the Control
 Center, **Google Drive** as `~/Google Drive`, and **Gmail** for the Mail
-add-on. ewe ships **no Google client** — to use
+plugin. ewe ships **no Google client** — to use
 it, create your own OAuth client of type *Desktop app* (Gmail + Drive APIs)
 and save it as `~/.config/ewe/oauth-client.json`
 ([GOOGLE-CLIENT.md](GOOGLE-CLIENT.md)); **ewe-sync → Google** says whether
 the file parses and connects the account. A personal client needs no Google verification — the
 consent screen shows a warning you click through once. Settings sync never
 uses Google; an IMAP mail account, when set up, takes precedence over Gmail
-in the Mail add-on.
+in the Mail plugin.
 
 ## VPN
 
@@ -234,14 +234,14 @@ look) swaps the backend and flips the policy. Add a VPN in **Settings → Networ
 L2TP one from its four facts, an OpenVPN or WireGuard one from its file —
 or import from a terminal (`nmcli connection import type openvpn file
 x.ovpn`). Then toggle it in the **Control Center → VPN** card — the **VPN
-add-on** (`ewe.vpn`, Komble → Add-ons; Settings → Network works without it).
+plugin** (`ewe.vpn`, Komble → Plugins; Settings → Network works without it).
 The first connect asks for the credentials once, inline, and keeps them in the
 profile (root-only, under `/etc/NetworkManager`); the one file records the
 definition, never the secrets, so a restored machine asks once again.
 
-## Phone (KDE Connect, optional) — an add-on
+## Phone (KDE Connect, optional) — a plugin
 
-The **Phone add-on** (`ewe.phone`, Komble → Add-ons) gives the control centre
+The **Phone plugin** (`ewe.phone`, Komble → Plugins) gives the control centre
 a **Mobile** card that pairs your Android phone through
 **KDE Connect's daemon** (only the daemon — the UI is all ewe): device
 discovery + pairing (both directions), phone battery in the bar, the phone's
@@ -252,15 +252,15 @@ Setup: `kdeconnect` is in the package set (phase 20); install the KDE Connect
 app on the phone ([F-Droid](https://f-droid.org/packages/org.kde.kdeconnect_tp/)
 / Play Store), put both devices on the same Wi-Fi, open the Mobile card and tap
 **Pair** — accept on the phone, then grant the app's notification/SMS
-permissions there. The add-on D-Bus-activates `kdeconnectd` on demand and
+permissions there. The plugin D-Bus-activates `kdeconnectd` on demand and
 talks to it through its own `kdeconnect-bridge.py`. Pairing keys stay in
-kdeconnectd; the add-on only persists which notifications you've seen and the
+kdeconnectd; the plugin only persists which notifications you've seen and the
 chosen device (`~/.config/quickshell/kdeconnect-state.json`). MMS bodies often aren't exposed over D-Bus — threads label them
 instead of showing garbage.
 
-## Cast to TV (screen mirroring) — an add-on
+## Cast to TV (screen mirroring) — a plugin
 
-The **Cast add-on** (`ewe.cast`, Komble → Add-ons; the system side — avahi,
+The **Cast plugin** (`ewe.cast`, Komble → Plugins; the system side — avahi,
 the Wi-Fi power-save hook, the packages — is installed for everyone) gives the
 control centre a **Cast** tile (also `Super+Shift+C`) that mirrors the
 desktop to a smart TV. It runs **`gnome-network-displays`** (AUR, phase 20),
@@ -279,7 +279,7 @@ Turning the tile on launches the app: its window lists the TVs it can see, you
 pick one, and the TV asks you to accept. Closing that window (or toggling the
 tile off, which SIGTERMs the app so the session ends cleanly) stops the
 mirror; the tile and the bar's screencast glyph follow the process, not the
-other way round. The first toggle of a session runs the add-on's
+other way round. The first toggle of a session runs the plugin's
 `cast-check.sh`, which toasts anything missing together with the
 fix (`paru -S gnome-network-displays`, `sudo pacman -S iw`,
 `sudo systemctl enable --now avahi-daemon`); a missing app is the only fatal
@@ -471,15 +471,27 @@ Slack and OBS hotkeys fall out of the same mechanism.
 ## Desktop widgets
 
 A plugin of kind `desktop-widget` (a clock, a note, a reminder — whatever
-its author drew) sits on the desktop. **Super+Shift+W** enters arrange mode:
-drag a widget where you want it, **Sticky** keeps it above windows, **Hide**
-takes it off the screen (Komble → Plugins brings it back), Esc when done.
-Its options — whatever the plugin declared — are a form on its card in
-Komble. To make one: `ewe-plugin create you.clock --kinds desktop-widget`.
+its author drew) sits on the desktop. Point at one and a small toolbar
+appears in its corner: **drag** the grip (or the card itself) to move it any
+time, and the **pin** keeps it above your windows — or above everything,
+fullscreen apps too, if its Options say so (Komble → Plugins → the plugin →
+Options → *When pinned*). **Lock position** there stops dragging.
+**Super+Shift+W** enters arrange mode: every widget gets its name and the
+Pinned, Lock and Hide chips, the arrow keys nudge, Esc ends it. Its options —
+whatever the plugin declared — are in the same Options dialog. To make one:
+`ewe-plugin create you.clock --kinds desktop-widget`.
 
 ## Plugins
 
-Third-party bar widgets, panels and services for the shell — the Omarchy
+**Komble → Plugins** is one page for both kinds. *From ewe* lists the
+plugins that ship with ewe — the dock, music, Places, phone, mail, Cast to
+TV, VPN, SSH and the rest — none installed until you pick one (`ewe-plugin
+install <id>` does the same). Every installed plugin has an **Options**
+dialog there: its own settings and, for one with something in the bar,
+**Show in bar** (`ewe-plugin bar <id> on|off`).
+
+Plugins from a git URL are third-party bar widgets, panels and services for
+the shell — the Omarchy
 model: `ewe-plugin add <git-url> --enable`, and the code runs inside the shell
 process, unsandboxed, the moment it is on. Installing never executes anything;
 `list` shows what is on; a shell that restarts three times in a minute boots
@@ -526,7 +538,7 @@ Set expectations before you daily-drive it:
 - **Low battery is handled automatically:** a warning at 20% and 10%, and a
   **suspend at 5%** to protect unsaved work.
 - **The shell auto-respawns.** Quickshell runs as a `Restart=on-failure`
-  systemd user service, so a crash brings the bar, lock and add-ons back on their own.
+  systemd user service, so a crash brings the bar, lock and plugins back on their own.
   The lock uses the Wayland session-lock protocol, so outputs stay locked even
   if the shell dies while locked.
 - **The session lock is a young component**, not battle-tested hyprlock. It

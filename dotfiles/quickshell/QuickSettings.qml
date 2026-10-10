@@ -215,7 +215,7 @@ Scope {
         // VPN add-on not installed must not open an empty panel — fall back
         // to home, and say which add-on would have answered.
         if (!root.hasTab(t)) {
-            Log.info("quicksettings", "tab", t, "— no such page (an add-on that is not installed?); showing home")
+            Log.info("quicksettings", "tab", t, "— no such page (a plugin that is not installed?); showing home")
             t = "home"
         }
         if (t !== "bt" && Bluetooth.defaultAdapter) Bluetooth.defaultAdapter.discovering = false

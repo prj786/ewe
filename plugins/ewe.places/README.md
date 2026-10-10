@@ -1,4 +1,4 @@
-# Places — an ewe add-on
+# Places — an ewe plugin
 
 `ewe.places` — first-party, ships inside the ewe payload, not installed until
 you ask.
@@ -13,17 +13,19 @@ it. Esc closes.
 
 Two ways in, one panel:
 
-- **dock item** — with the Dock add-on installed, a folder in the dock; the
+- **dock item** — with the Dock plugin installed, a folder in the dock; the
   panel opens above it.
 - **bar widget** — a folder in the top bar's right section; the panel opens
   under the bar. Shown per the `button` setting.
 
-    ewe-plugin install ewe.places         # or Komble → Add-ons → Places
+    ewe-plugin install ewe.places         # or Komble → Plugins → Places
     ewe-plugin remove ewe.places
 
 ## Settings
 
-Komble → Add-ons → Places, or `ewe-plugin set ewe.places button bar`:
+Komble → Plugins → Places → Options, or `ewe-plugin set ewe.places button bar`.
+`button` decides where it shows, so there is no Show in bar switch for it
+(the manifest's `barWidget.toggle: false`):
 
 | key | values | default | meaning |
 |---|---|---|---|

@@ -8,16 +8,19 @@ their own panels and headless services; they use the same `Theme` roles and
 the same public components the first-party surfaces use.
 
 Plugins are not apps. **Komble installs programs; `ewe-plugin` extends the
-desktop.** Since 0.25 ewe's own extras are plugins too — the **add-ons**.
+desktop.** Since 0.25 ewe's own extras are plugins too — **first-party
+plugins** that ship with ewe, on the same Komble → Plugins page (its first
+group, *From ewe*) as the plugins from a git URL. (0.25.0 called them
+"add-ons"; the code, the JSON keys and `komble --addons` keep that word.)
 
 ```sh
-ewe-plugin list                     # installed, and (--json) the add-ons available
-ewe-plugin install ewe.clipboard    # an add-on out of the ewe payload, on
+ewe-plugin list                     # installed, and (--json) the payload's plugins available
+ewe-plugin install ewe.clipboard    # a first-party plugin out of the ewe payload, on
 ewe-plugin add https://github.com/acme/ewe-weather.git --enable
 ewe-plugin disable acme.weather
 ```
 
-## Add-ons — what ewe ships, and why it is not pre-installed
+## First-party plugins — what ewe ships, and why it is not pre-installed
 
 Preinstalled is the shell core (bar, launcher, Overview, the Quick settings
 basics, notifications, lock, OSD, polkit, Welcome), ewe-settings, Komble and
@@ -25,24 +28,23 @@ ewe-sync. Everything else — the clipboard history, screenshots, the password
 picker, and from 0.25 the features that left the shell (Insomnia, the system
 monitor, SSH, VPN, music, Places, phone, mail, cast, the dock — none of them
 is in the core any more; their legacy IPC targets `cast launcher places
-player mail` and Quick settings keys `ssh vpn mobile mail cast` are the
-add-ons' `ipcAliases` / `quickPage.key`) — is an **add-on**: a first-party
-plugin that
+player mail` and Quick settings keys `ssh vpn mobile mail cast` are these
+plugins' `ipcAliases` / `quickPage.key`) — is a **first-party plugin** that
 
 - **ships inside the ewe payload** (`plugins/<id>/`, vendored from its own
   repository `prj786/ewe-plugin-<name>` by `scripts/vendor-plugins.sh`,
   which records repo, commit and version in `plugins/bundle.json`) — so it
   works offline and moves in lockstep with the shell's `apiVersion`;
-- is **not installed on a fresh machine**; Komble → Add-ons, the Welcome
+- is **not installed on a fresh machine**; Komble → Plugins, the Welcome
   screen and `ewe-plugin install <id>` put one in with one click;
 - is **kept for upgraders**: `ewe-plugin migrate` (run by `ewe-setup` and by
   `install.sh` phase 60 when a previous ewe lived on the account) installs
-  and enables, once, the add-ons that replace features the user had built
+  and enables, once, the plugins that replace features the user had built
   in — the dock only unless `[desktop.dock] enabled = false`, and never one
   the user had removed. A fresh install records them as considered and
   installs none (`migrate --fresh`). The marker is
   `~/.local/state/ewe/addons-migrated` — local, never synced — a JSON list
-  of the ids already considered, so an add-on that moves out of the shell in
+  of the ids already considered, so a feature that moves out of the shell in
   a later release is still migrated once for the people who had it.
 
 `plugins/bundle.json`:
@@ -56,11 +58,11 @@ plugin that
 
 `default: true` ids are seeded on every machine (none today); `migrate: true`
 ids are what `migrate` installs for upgraders; every id in the payload is
-offered by `list --json` under `available`. A package dependency an add-on
-needs is declared in its manifest (`requires`) and only **reported**
-(`missing`): Komble offers to install it; the shell never does.
+offered by `list --json` under `available`. A package dependency a
+first-party plugin needs is declared in its manifest (`requires`) and only
+**reported** (`missing`): Komble offers to install it; the shell never does.
 
-Once installed an add-on is an ordinary plugin with source `bundled`:
+Once installed a first-party plugin is an ordinary plugin with source `bundled`:
 `list` shows it, `set` changes its settings, `disable` hides it, `remove`
 deletes it and remembers that in `[plugins].removed` so a later upgrade
 leaves it out — `install <id>` (or `seed --restore <id>`) brings it back. A
@@ -78,11 +80,14 @@ That is a git repository with a working plugin in it. You own the QML — what
 it draws and does. ewe owns where it lives and what the user may change: a
 tile's place in the home grid, a page's rail entry, a bar widget's section
 and visibility, a desktop widget's place on the screen, whether it is
-**sticky** (above windows) or on the desktop (below them), whether it is
-shown, and the values of the `settings` you declared. None of that is in your
-code: the user moves widgets in **arrange mode** (`Super+Shift+W`), Komble
-shows your settings as a form, and every entry point that declares
+**pinned** (above the windows, or above everything) or on the desktop (below
+them), whether it is locked in place, whether it is shown, and the values of
+the `settings` you declared. None of that is in your code: the user drags
+widgets any time and pins them from their hover toolbar, Komble
+shows your settings as a form (its Options dialog, with **Show in bar** for
+a plugin that has a bar widget or glyph), and every entry point that declares
 `property var settings` receives the current values — live, on every change.
+Your own UI may change one of your settings too: `Shell.setSetting`.
 
 Ship it by pushing the repo; anyone installs with `ewe-plugin add <url>
 --enable` or from Komble → Plugins. `ewe-plugin remove` on a linked working
@@ -105,20 +110,21 @@ instead of pretending.
 | verb | what it does |
 |---|---|
 | `add <git-url \| dir \| id> [--enable] [--yes] [--no-restart]` | clone (or copy a plain directory), validate, remember the source. A first-party URL (`…/ewe-plugin-<name>`) or a reserved id that exists in the payload installs the payload's copy instead |
-| `list [--json]` | every plugin: on/off, version, kinds; flags one that is enabled but not installed. `--json` adds `available` (every payload add-on: id, name, description, icon, category, version, kinds, installed, enabled, default, migrate, repo, requires, missing) and `removed` |
+| `list [--json]` | every plugin: on/off, version, kinds; flags one that is enabled but not installed. `--json` gives each plugin `bar` (`{shown, toggle}`, or `null` with nothing in the bar), `widget` (desktop widgets: `x`, `y`, `output`, `layer`, `visible`, `pinned`, `pin_level`, `locked`), `settingsSchema` and `settings`, and adds `available` (every first-party plugin in the payload: id, name, description, icon, category, version, kinds, installed, enabled, default, migrate, repo, requires, missing) and `removed` |
 | `info <id> [--json]` | one plugin's manifest and state |
-| `install <id> [--no-restart]` | an **add-on** out of the payload: copied in with source `bundled`, any removal forgotten, enabled, keybinds regenerated. One JSON object (`ok`, `version`, `missing`, `restarted`); an unknown id is `ok: false`, exit 1 |
-| `migrate [--no-restart] [--fresh]` | the one-time add-on migration above. JSON: `migrated`, `skipped` (with `why`), `fresh` |
+| `install <id> [--no-restart]` | a **first-party plugin** out of the payload: copied in with source `bundled`, any removal forgotten, enabled, keybinds regenerated. One JSON object (`ok`, `version`, `missing`, `restarted`); an unknown id is `ok: false`, exit 1 |
+| `migrate [--no-restart] [--fresh]` | the one-time migration above. JSON: `migrated`, `skipped` (with `why`), `fresh` |
 | `enable <id>` / `disable <id>` | flip `[plugins].enabled` in `ewe.conf`, restart the shell (`--no-restart` to defer) |
 | `update [id] [--yes]` | fast-forward git-managed plugins; the diff is shown first, a manifest that stops validating is rolled back |
 | `remove <id> [--yes]` | delete a git clone or a bundled copy (remembered in `[plugins].removed`); a hand-made directory is moved to `<id>.bak.<stamp>`; forgets the plugin in `ewe.conf` |
-| `restore [--yes] [--no-restart]` | clone every plugin `ewe.conf` knows that is not installed here; bundled add-ons it lists come from the payload — the plugin half of Komble's "For you" and the Welcome flow |
+| `restore [--yes] [--no-restart]` | clone every plugin `ewe.conf` knows that is not installed here; bundled first-party plugins it lists come from the payload — the plugin half of Komble's "For you" and the Welcome flow |
 | `validate <dir> [--first-party] [--json]` | check a manifest and its entry points; exit 1 lists every problem (`--first-party` allows a reserved `ewe.` id) |
 | `seed [dir] [--restore <id>] [--no-restart]` | the payload's `default` plugins in, installed bundled copies refreshed (run by `ewe-setup`); `--restore <id>` forgets a removal and installs that id |
 | `path` | the plugins directory |
 | `create <ns.name> [--name T] [--kinds a,b] [--section right] [--dir P]` | **a new plugin repo**: manifest, one working QML per kind, README, MIT licence, `git init` + first commit |
 | `dev [dir] [--no-restart] [--no-follow]` | link a working copy into the plugins dir (edits are live after a restart), enable it, restart the shell, follow its log lines |
-| `place <id> [--x N --y N] [--layer desktop\|top] [--visible on\|off] [--output NAME] [--reset]` | where a **desktop widget** sits — live, no restart |
+| `place <id> [--x N --y N] [--output NAME] [--pinned on\|off] [--pin-level top\|overlay] [--locked on\|off] [--layer desktop\|top\|overlay] [--visible on\|off] [--reset]` | where a **desktop widget** sits and how it behaves — live, no restart. `--pinned on` moves it to its pin level (`top` above the windows, `overlay` above everything, fullscreen too), `off` back to `desktop`; `--pin-level` on a pinned widget moves it at once and is remembered while unpinned; `--layer` sets the layer directly; `--locked on` stops dragging. JSON: `ok`, `id`, `widget` |
+| `bar <id> [on\|off]` | **Show in bar**: the plugin's bar widget and its glyph in the Quick settings pill, as `desktop.bar.show."plugin:<id>"` in ewe.conf — live, no restart. Alone it prints `{shown, toggle}`; refused for a plugin with nothing in the bar or with `toggle: false` |
 | `set <id> <key> <value>` / `get <id> [key]` | a plugin's declared **settings** (typed by its manifest) — live |
 
 Enabling and disabling restart `ewe.service` — there is no QML hot reload,
@@ -135,10 +141,11 @@ tests and the nested harness.
 ~/.config/ewe/ewe.conf                 [plugins] enabled = [...]   removed = [...]
                                        [plugins.sources] id = url | "bundled" | "local"
                                        [plugins.settings] / [plugins.widgets] (quoted ids)
+                                       [desktop.bar.show] "plugin:<id>" = Show in bar
 ~/.local/state/ewe/plugins/<id>/       a plugin's own state (`stateDir`, created on demand)
 ~/.local/state/ewe/plugin-boots.json   the crash guard's counter
-~/.local/state/ewe/addons-migrated     the add-on migration marker (local)
-<payload>/plugins/<id>/ + bundle.json  the add-ons ewe ships (/usr/share/ewe, ~/.local/share/ewe)
+~/.local/state/ewe/addons-migrated     the first-party plugin migration marker (local)
+<payload>/plugins/<id>/ + bundle.json  the plugins ewe ships (/usr/share/ewe, ~/.local/share/ewe)
 ```
 
 `[plugins.sources]` **is the installed set**: `add`/`install` record a plugin
@@ -146,7 +153,7 @@ there whether or not it is enabled, `remove` forgets it, and the file syncs
 with the rest of the machine. So on a fresh machine `ewe-plugin list` shows
 every plugin your other machine had — on, off or not installed — and
 `ewe-plugin restore` fetches the missing ones (git URLs cloned, bundled
-add-ons copied from the payload; never automatic). A plugin added from a
+first-party plugins copied from the payload; never automatic). A plugin added from a
 plain directory is recorded as `"local"`: there is nothing another machine
 could fetch, and `restore` says so.
 
@@ -187,14 +194,16 @@ A plugin is a git repository with `manifest.json` at its root:
 | `entryPoints` | one `.qml` file per kind (none for `dock-item`), relative, inside the plugin (symlinks that resolve outside it are rejected) |
 | `quickTile` | optional: `{ "span": 1 \| 2, "order": int }` — half a row or the whole row of the home grid; whole-row cards (span 2) always come after every half-row tile, then by `order` |
 | `quickPage` | required with `quick-page`: `{ "key", "label", "icon", "order" }`. `key` is lowercase `[a-z0-9_-]`, unique, and not one the shell keeps (`home wifi bt audio cal notifs`); it is what `quicksettings tab <key>` and `Shell.openQuickSettings(key)` route to |
-| `barStatus` | optional: `{ "order": int }` |
+| `barStatus` | optional: `{ "order": int, "defaultShown": bool, "toggle": bool }` — `defaultShown` and `toggle` as for `barWidget` |
 | `dockItem` | required with `dock-item`: `{ "icon", "label", "action", "order" }` — static; the dock draws the button and runs `action` (see `Shell.registerAction`), or `qs ipc call <id> toggle` when no action is registered. Hide it at runtime with `Shell.setDockItemShown(id, false)` |
 | `requires` | optional: `{ "packages": [...], "commands": [...] }` — reported by `list --json` (`missing`) and `install`; never installed by the shell |
 | `ipcAliases` | optional, **`ewe.` plugins only**: legacy IPC targets this plugin's QML registers (`["player"]`), so old keybinds and scripts keep working after a feature moved out of the shell |
-| `icon`, `category` | the catalogue card (Komble → Add-ons, Welcome). Icons are Theme glyph **names** (`"icMusic"`), resolved by the host as `Theme[icon]` |
-| `desktopWidget` | optional, for `desktop-widget`: `{ "x": 48, "y": 64, "layer": "desktop" }` — the default place; the user's placement in ewe.conf wins |
+| `icon`, `category` | the catalogue card (Komble → Plugins, Welcome). Icons are Theme glyph **names** (`"icMusic"`), resolved by the host as `Theme[icon]` |
+| `desktopWidget` | optional, for `desktop-widget`: `{ "x": 48, "y": 64, "layer": "desktop", "pinLevel": "top", "locked": false }` — the defaults; the user's placement in ewe.conf wins. `layer` is `desktop` (under the windows), `top` (pinned above them) or `overlay` (pinned above everything, fullscreen too); `pinLevel` (`top` \| `overlay`, default `top`) is where pinning puts it; `locked` (default false) starts it undraggable |
 | `barWidget.defaultSection` | `left`, `center` or `right` (default `right`) — where a bar widget is packed |
-| `settings` | optional: `[{ "key", "type", "default", "label", "choices"?, "min"?, "max"? }]`, `type` one of `bool`, `int`, `string`, `choice`, `color`. The values reach every entry point as `settings` and render as a form in Komble |
+| `barWidget.defaultShown` | optional bool, default `true` — Show in bar before the user picks |
+| `barWidget.toggle` | optional bool, default `true`. `false` = the plugin's own settings place its button (a "bar / dock" choice — Music, Places), so the host offers no Show in bar switch and always loads the widget |
+| `settings` | optional: `[{ "key", "type", "default", "label", "description"?, "choices"?, "min"?, "max"?, "legacy"? }]`, `type` one of `bool`, `int`, `string`, `choice`, `color`. The values reach every entry point as `settings` and render as a form in Komble's Options dialog, `description` as the line under the label. `legacy` (**`ewe.` plugins only**) names a dotted ewe.conf key (`"desktop.dock.autohide"`) whose value stands until the user sets the plugin's own — how a feature's settings move into its plugin without changing anybody's desktop (the Dock's auto-hide and icon size left Settings that way) |
 | `keybinds` | optional: `[{ "combo": "SUPER + P", "ipc": "acme.weather toggle" }]` — Hyprland binds generated while the plugin is enabled (`generated/plugin-keybinds.lua`). With `apiVersion` 3 the target must be the plugin's own id or one of its `ipcAliases` |
 | `order` (in the four slot objects) | plugins sort by it, then by id; the shell's own come first |
 | `description`, `homepage`, `author` | optional, shown by `info` |
@@ -209,7 +218,7 @@ A plugin is a git repository with `manifest.json` at its root:
 | `bar-status` | a glyph **inside the Quick settings pill**, after the shell's own, once per monitor. Root it on `BarStatusGlyph`; set `shown` (not `visible`) to whether it has something to say | + `screen`, `barWindow`, `ink` |
 | `quick-tile` | a `Tile` in the Quick settings home grid after the built-ins; the host sizes it (`span`) | + `panelOpen` |
 | `quick-page` | a `Column` the width of the panel, one rail entry (`quickPage.icon`), shown while its `key` is the tab; start it with a `QsPageHead` | + `panelOpen` |
-| `desktop-widget` | a sized `Item` on the desktop or the sticky layer, on one output, moved in arrange mode | the common set |
+| `desktop-widget` | a sized `Item` on the desktop, or pinned above the windows / above everything, on one output; dragged any time | the common set |
 | `dock-item` | **no QML**: a dock button from `dockItem` (icon, label); a click runs `Shell.runAction(action, anchor)` with the button's anchor, lit while `Shell.isActive(action)`, hidden while `Shell.dockItemShown(id)` is false. Without a dock installed the item simply has no host | — |
 
 **Injected properties** — set on the entry point's root, only when the root
@@ -254,10 +263,14 @@ The `bar*` roles (`barGround`, `barOutline`, `barHoverFill`,
 `barPressedFill`, `barAccentText`, `barTextMuted`) already follow Glass, so
 a widget reads them instead of the plain surface roles and never asks
 whether Glass is on. Widgets append to their section in id order after the
-built-ins; the centre section yields on an output too narrow to hold it. The
-Top bar show/hide map hides a plugin's bar widget **and** its pill glyph
-under the key `plugin:<id>` (absent = shown); nothing in Settings writes
-that key yet — `ewe-conf` and user-theme.json do.
+built-ins; the centre section yields on an output too narrow to hold it.
+**Show in bar** hides a plugin's bar widget **and** its pill glyph under the
+key `desktop.bar.show."plugin:<id>"` (absent = the manifest's
+`defaultShown`, itself default true). Settings has no per-plugin bar rows:
+the switch is in Komble's Options dialog and `ewe-plugin bar <id> on|off`,
+live. A plugin whose own settings place its button (`toggle: false`) has no
+switch and is always loaded — its widget follows its own setting (Music's
+and Places' *Where the button lives*: auto, bar, dock or both).
 
 ## What a plugin may use
 
@@ -276,23 +289,24 @@ features, the `_private` plumbing) is internal and may move without notice.
 | read | `bottomInset` | px a dock takes from the bottom of the screen (its strip + `windowGap`); `0` without a dock. Panels that open above the dock keep this clear — so nothing leaves a gap when no dock is installed |
 | read | `bottomReserved` | the dock reserves that strip as an exclusive zone (always-visible dock) — a bottom-anchored surface is already pushed up and adds only its own gap |
 | read | `dockPresent` | `bottomInset > 0` |
-| read | `dockPrefs` | `{ enabled, autohide, iconSize }` — the user's `[desktop.dock]` prefs (`iconSize` is `"small"`, `"normal"` or `"large"`); what a dock plugin obeys. Read-only: Settings and ewe-settings write them |
+| read | `dockPrefs` | `{ enabled, autohide, iconSize }` — the pre-plugin `[desktop.dock]` prefs (`iconSize` is `"small"`, `"normal"` or `"large"`). Read-only and only the Dock's fallback: since Dock 1.1.0 its auto-hide and icon size are its own settings (`legacy` carries these over until the user sets them) |
 | read | `pinnedApps` | the pinned desktop ids (`ewe-conf` `apps.pinned`), bindable |
 | read | `activeCount` | how many actions report themselves open (an autohide dock stays out while > 0) |
 | read | `primaryScreenName` | the primary output's name — a shell concept (the display profile's primary, else the first output); what a dock pins itself to |
 | read | `dockItems` | the dock-item registry: `[{ id, name, icon, label, action, order }]` of every enabled plugin with a `dockItem`, in order — read-only, bindable; a dock plugin renders it, filtered by `dockItemShown(id)` |
 | call | `toast(text, kind)` | a bottom-centre Toast; `kind` is `""`/`"info"`, `"warning"` or `"danger"`, or a Toast options object (`{ actionLabel, action, icon, timeout }`) |
 | call | `openQuickSettings(tab)`, `closeQuickSettings()` | a built-in key or a plugin page's `quickPage.key`; same route as `qs ipc call quicksettings tab <key>` |
-| call | `openSettings(page)`, `openStore(page)` | ewe-settings / Komble, focused if already open; `page` is forwarded (`komble --<page>`, e.g. `"addons"`; `ewe-settings --page <name>`) |
+| call | `openSettings(page)`, `openStore(page)` | ewe-settings / Komble, focused if already open; `page` is forwarded (`komble --<page>`, e.g. `"addons"` — the Plugins page; `ewe-settings --page <name>`) |
 | call | `toggleOverview()` | open or close the Overview in-shell (what a dock's Overview button does — no `qs ipc` spawn) |
 | call | `launch(desktopId)` | run a `.desktop` id (focuses an existing window first); `false` when unknown |
 | call | `focusApp([classes])` | bring the window of one of these app classes forward; `false` when none |
 | call | `registerAction(name, fn)`, `runAction(name, anchor)` | a named function (`dockItem.action` names one) and how the dock — or another plugin — runs it; `runAction` returns `false` when none is registered |
 | call | `setActive(name, on)`, `isActive(name)` | an action's open state (its dock item lights); `AnchoredPopup` reports it through `action` |
 | call | `setDockItemShown(pluginId, on)`, `dockItemShown(pluginId)` | hide or show your own dock item at runtime (default shown) — a player with nothing playing, a "bar only" setting; the dock filters on it live |
-| call | `closePopups(exceptId)` | **one add-on popup at a time**: asks every popup but `exceptId`'s to close — emits `popupsClosing(exceptId)`. Every `AnchoredPopup` honours it (and calls it when it opens, with its `owner`); a plugin with its own `PanelWindow` listens to the signal and calls `closePopups(<its id>)` when it opens |
+| call | `closePopups(exceptId)` | **one plugin popup at a time**: asks every popup but `exceptId`'s to close — emits `popupsClosing(exceptId)`. Every `AnchoredPopup` honours it (and calls it when it opens, with its `owner`); a plugin with its own `PanelWindow` listens to the signal and calls `closePopups(<its id>)` when it opens |
 | call | `setBottomInset(pluginId, px, reserved)` | what a dock plugin publishes; `0` withdraws it |
 | call | `setPinned(desktopId, on)` | pin or unpin an app; the shell persists it through `ewe-conf` and `pinnedApps` follows |
+| call | `setSetting(pluginId, key, value)` | write one of **your own** declared settings from your own UI (a bell on your page, a choice in your popup) — the value Komble's Options dialog shows. Live in every instance at once, persisted through `ewe-plugin set` (validated against your manifest; a refused value snaps back). Added in ewe 0.25.1, additive — check `typeof Shell.setSetting === "function"` to run on 0.25.0 |
 | call | `anchorFor(item, window)` | `{ screen, x, y, edge, item }` for a popup: the item's centre in its window (screen-local for a full-width bar or dock), `edge` `"top"` or `"bottom"`. Pass the window when you have it (`barWindow`, your own `PanelWindow`); without it the focused monitor is assumed and the edge is bottom |
 | signal | `aboutToSleep()`, `resumed()` | the system is about to suspend; the wake sequence reached its network step (about three seconds after wake — refresh what you cache then) |
 | signal | `popupsClosing(exceptId)` | another popup is opening (or a plugin asked for the field): close yours unless `exceptId` is your plugin id |
@@ -314,7 +328,7 @@ features, the `_private` plumbing) is internal and may move without notice.
 | `TextBody`, `TextStrong`, `TextCaption`, `TextMono` | text in the system's styles |
 | `Glyph` | one icon-font glyph (`text: Theme.icStar`) |
 | `BarModule`, `BarSep`, `BarStatusGlyph` | the bar's module, divider and pill glyph (`ink`, `shown`) |
-| `AnchoredPopup` | a popup card for a plugin: `openAt(anchor)`, `toggleAt(anchor)`, `close()`, `open`, `name` (layer-shell namespace suffix), `owner` (your plugin id — what `Shell.closePopups(id)` spares), `action` (reports open state), `implicitWidth/Height`, content as children. One `PanelWindow` on the anchor's screen; click outside or Esc closes; keyboard OnDemand; above the dock (`Shell.bottomInset`) for a bottom anchor, under the bar for a top one; opening closes every other add-on popup (`Shell.closePopups`) and it closes when another opens |
+| `AnchoredPopup` | a popup card for a plugin: `openAt(anchor)`, `toggleAt(anchor)`, `close()`, `open`, `name` (layer-shell namespace suffix), `owner` (your plugin id — what `Shell.closePopups(id)` spares), `action` (reports open state), `implicitWidth/Height`, content as children. One `PanelWindow` on the anchor's screen; click outside or Esc closes; keyboard OnDemand; above the dock (`Shell.bottomInset`) for a bottom anchor, under the bar for a top one; opening closes every other plugin popup (`Shell.closePopups`) and it closes when another opens |
 | `Toggle`, `Slider`, `Meter`, `ListWell`, `ListRow`, `SectionTitle`, `Badge`, `Spinner`, `Avatar`, `Elevation` | the rest of the kit the first-party panels are built from |
 
 ### `Theme`, `Globals`, `Log`
@@ -354,12 +368,15 @@ qs ipc call acme.weather toggle       # bind it: a manifest keybind, or Settings
 
 Name IPC targets after your id so they cannot collide with the shell's own
 (`bar`, `quicksettings`, `settings`, `store`, `plugins`, …). Only a
-first-party add-on may keep a legacy target (`ipcAliases`).
+first-party plugin may keep a legacy target (`ipcAliases`).
 
 API history: **3** (0.25) adds the four Quick settings / bar / dock kinds,
 the injected properties, the `Shell` singleton, the public components,
-`requires`, `ipcAliases`, the add-ons model — a superset; every API 2 plugin
-still loads. **2** is the Ewe design system v3 (the Fluent-era `Theme` names
+`requires`, `ipcAliases`, the first-party plugins in the payload — a
+superset; every API 2 plugin still loads. 0.25.1 adds, within 3 and
+optional: `Shell.setSetting`, `barWidget`/`barStatus` `defaultShown` and
+`toggle`, `desktopWidget` `pinLevel`, `locked` and the `overlay` layer,
+and the settings' `description` and `legacy`. **2** is the Ewe design system v3 (the Fluent-era `Theme` names
 are gone; the website's plugin API page has the rename table). **1** was the
 Fluent-era surface and is refused at install.
 
@@ -386,7 +403,7 @@ and skipped.
 
 `ewe-plugin add ./my-plugin --enable` copies a plain directory in as a
 hand-made plugin; `ewe-plugin dev ./my-plugin` links it. The nested harness
-loads it beside the add-ons without touching your session:
+loads it beside the first-party plugins without touching your session:
 
 ```sh
 HS_WORK=/tmp/hs-me HS_PLUGINS=1 HS_PLUGIN_DIRS=$PWD/my-plugin .claude/skills/run-ewe/driver.sh up

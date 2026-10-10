@@ -602,6 +602,14 @@ check "ewe-conf: reduce transparency keeps the compositor blur out of user.lua" 
 bin/ewe-conf set --no-hooks desktop.accessibility.reduce_transparency false >/dev/null
 bin/ewe-conf set --no-hooks desktop.accessibility.increase_contrast false >/dev/null
 check "ewe-conf: bar_opacity 80 alone blurs the bar and dock" "grep -q 'ewe-bar-blur' '$SB/cfg/hypr/generated/user.lua'"
+check "ewe-conf: Glass without App blur keeps windows unblurred, and blur shows what is behind (no xray)" "grep -q 'ewe-no-app-blur' '$SB/cfg/hypr/generated/user.lua' && grep -q 'xray = false' '$SB/cfg/hypr/generated/user.lua' && ! grep -q 'xray = true' '$SB/cfg/hypr/generated/user.lua'"
+check "Glass at 80: the Glass material stays at opacity-glass, the bar alone takes the slider" "$T show | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d[\"surface\"][\"bar_alpha\"]==0.8 and d[\"alpha\"][\"glass-base\"]==0.8'"
+bin/ewe-conf set --no-hooks desktop.theme.bar_opacity 25 >/dev/null
+check "Glass at 25: the bar goes to 0.25, the Overview/widget material stays 0.8" "$T show | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d[\"surface\"][\"bar_alpha\"]==0.25 and d[\"alpha\"][\"glass-base\"]==0.8 and d[\"alpha\"][\"glass-raised\"]==0.8'"
+bin/ewe-conf set --no-hooks desktop.theme.app_blur true >/dev/null
+check "ewe-conf: App blur — windows see-through only where blur runs (EWE_NO_BLUR guard), no no-blur rule" "grep -B1 'active_opacity = 0.85' '$SB/cfg/hypr/generated/user.lua' | grep -q EWE_NO_BLUR && ! grep -q 'ewe-no-app-blur' '$SB/cfg/hypr/generated/user.lua'"
+bin/ewe-conf set --no-hooks desktop.theme.app_blur false >/dev/null
+bin/ewe-conf set --no-hooks desktop.theme.bar_opacity 80 >/dev/null
 bin/ewe-conf set --no-hooks desktop.theme.corner '"round"' >/dev/null
 check "ewe-conf: the pre-v3 corner value still passes and reads as large" "[ \"$($T show | inp corner)\" = large ]"
 

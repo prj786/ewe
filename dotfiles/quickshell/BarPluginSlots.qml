@@ -40,7 +40,8 @@ Row {
         delegate: Loader {
             required property var modelData
             anchors.verticalCenter: parent.verticalCenter
-            active: Globals.barShows("plugin:" + modelData.id)
+            // Show in bar (Komble → Plugins → Options; `ewe-plugin bar`)
+            active: PluginHost.barShown(modelData.id)
             // a widget with nothing to draw (implicitWidth 0, or `shown`
             // false like a bar-status glyph) must not cost the Row a spacing:
             // collapse the slot. Read the item's implicit size and `shown`,

@@ -41,7 +41,7 @@ Scope {
         { key: "wallpaper", ic: 0xE0F6, label: "Wallpaper",     desc: "Pictures and videos behind your windows." },
         { key: "saver",     ic: 0xE410, label: "Screensaver",   desc: "What happens when you step away." },
         { key: "power",     ic: 0xE140, label: "Power",         desc: "The lid, the battery and what keeps this machine awake." },
-        { key: "dock",      ic: 0xE4CF, label: "Dock",          desc: "An add-on: pinned apps and workspaces at the bottom." },
+        { key: "dock",      ic: 0xE4CF, label: "Dock",          desc: "A plugin: pinned apps and workspaces at the bottom." },
         { key: "startup",   ic: 0xE286, label: "Startup",       desc: "Apps that start when you sign in." },
         { key: "user",      ic: 0xE19F, label: "User",          desc: "Your name, your picture and your accounts." },
         { key: "accessibility", ic: 0xE297, label: "Accessibility", desc: "Motion, transparency, contrast and text size for the whole desktop." }
@@ -138,8 +138,8 @@ Scope {
 
     // RFC-001 Phase 4 (0.6): user.lua is an ewe-conf build artifact — the pane
     // sends only the four layout numbers; tint/accent/transparency/speed/
-    // tiling flow in from their own conf domains. transparencyLua/
-    // animLuaLines/tilingLua above remain for the live hyprctl eval only.
+    // tiling flow in from their own conf domains. animLuaLines/tilingLua
+    // above remain for the live hyprctl eval only.
     function writeOverrides(after) {
         if (HyprMon.virtualSession) return   // same guard as atomicWrite
         var payload = JSON.stringify({ gaps_in: root.gapsIn, gaps_out: root.gapsOut,
@@ -150,17 +150,13 @@ Scope {
             "qs-settings", payload]
         luaWriter.running = false; luaWriter.running = true
     }
-    // window transparency: hyprland.lua ships inactive_opacity 0.97; the toggle
-    // forces full opacity. Always emitted so flipping it back re-applies 0.97.
-    function transparencyLua() {
-        return "hl.config({ decoration = { active_opacity = 1.0, inactive_opacity = "
-             + (Globals.windowTransparency ? "0.97" : "1.0") + " } })"
-    }
+    // window transparency: one ewe.conf key, like Bar opacity and App blur —
+    // ewe-conf regenerates user.lua (which knows whether App blur owns the
+    // opacities) and reloads Hyprland. The old live `active_opacity = 1.0`
+    // eval turned every window solid while App blur was on.
     function setTransparency(on) {
         Globals.windowTransparency = on
-        root.writePrefs()
-        root.syncedWriteOverrides()   // same stale-layout hazard as setTiling
-        Quickshell.execDetached(["hyprctl", "eval", root.transparencyLua()])
+        root.confSet("desktop.theme.window_transparency", on ? "true" : "false")
     }
     Process { id: luaWriter }
     // absorb runs with --no-hooks (this shell IS the reload target) but it
@@ -2846,7 +2842,7 @@ Scope {
                         Pill { label: "Preview"; primary: true; onGo: Globals.saverActive = true }
                         TCaption { anchors.verticalCenter: parent.verticalCenter; text: "Shows the screensaver now. Press any key to close it." }
                     }
-                    Note { text: "Playing media, a full-screen window or the Insomnia add-on hold off the screensaver, the lock and suspend. hypridle keeps the time through generated/hypridle.conf; changes apply at once." }
+                    Note { text: "Playing media, a full-screen window or the Insomnia plugin hold off the screensaver, the lock and suspend. hypridle keeps the time through generated/hypridle.conf; changes apply at once." }
                 }
             }
 
@@ -2968,10 +2964,10 @@ Scope {
                     SectionTitle { text: "Dock" }
                     Card {
                         TBody { width: parent.width; color: Theme.textSecondary; wrapMode: Text.WordWrap
-                            text: "The dock is an add-on. Install it from Komble → Add-ons; its settings (show, hide automatically, icon size) are in the Settings app under Layout." }
+                            text: "The dock is a plugin. Install it from Komble → Plugins; its settings (auto-hide, icon size) are its own, in Komble → Plugins → Dock → Options." }
                         Row {
                             spacing: Theme.spaceS
-                            Pill { label: "Open Add-ons"; primary: true; onGo: Shell.openStore("addons") }
+                            Pill { label: "Open Plugins"; primary: true; onGo: Shell.openStore("addons") }
                         }
                     }
                 }
@@ -3312,7 +3308,7 @@ Scope {
                     Card {
                         visible: !Google.personalClient
                         TBody { width: parent.width; color: Theme.textSecondary; wrapMode: Text.WordWrap
-                            text: "For Google Calendar, Google Drive as a folder and the Mail add-on’s Gmail inbox. ewe ships no Google client: create your own OAuth client of type “Desktop app” (docs/GOOGLE-CLIENT.md) and save it as the file below; then this turns into Connect." }
+                            text: "For Google Calendar, Google Drive as a folder and the Mail plugin’s Gmail inbox. ewe ships no Google client: create your own OAuth client of type “Desktop app” (docs/GOOGLE-CLIENT.md) and save it as the file below; then this turns into Connect." }
                         TMono { width: parent.width; text: Google.clientPath; elide: Text.ElideMiddle }
                     }
                     Alert {
@@ -3322,7 +3318,7 @@ Scope {
                     Card {
                         visible: Google.probed && Google.configured && !Google.signedIn
                         TBody { width: parent.width; color: Theme.textSecondary; wrapMode: Text.WordWrap
-                            text: "Your client file is in place. Connect for Google Calendar, ~/Google Drive in Files and Gmail in the Mail add-on. Settings sync never goes through Google." }
+                            text: "Your client file is in place. Connect for Google Calendar, ~/Google Drive in Files and Gmail in the Mail plugin. Settings sync never goes through Google." }
                         Row {
                             spacing: Theme.spaceS
                             Pill { visible: Google.busy !== "signin"; label: "Connect Google"; primary: true; onGo: Google.signIn() }

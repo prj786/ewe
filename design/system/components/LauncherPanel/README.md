@@ -29,7 +29,7 @@ The launcher panel opens above the dock's sheep button with pinned apps and a qu
 - A dialog named “Apps”; tiles are buttons named by app; the pin badge says “Pin Zen” or “Unpin Zen”.
 
 ## Where it lives
-the ewe.dock add-on’s `LauncherPanel.qml` (repo `prj786/ewe-plugin-dock`; IPC `launcher`, an `ipcAlias`). Pinned apps come from `apps.pinned` in ewe.conf.
+the ewe.dock plugin’s `LauncherPanel.qml` (repo `prj786/ewe-plugin-dock`; IPC `launcher`, an `ipcAlias`). Pinned apps come from `apps.pinned` in ewe.conf.
 
 ## What a build provides
 `pinned` · `query` · `results` · `onLaunch` · `onTogglePin`.

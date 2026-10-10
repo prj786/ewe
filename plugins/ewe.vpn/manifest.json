@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "ewe.vpn",
   "name": "VPN",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "apiVersion": 3,
   "description": "Your NetworkManager VPN connections in Quick settings: a toggle tile, a list with a one-time sign-in form, and a shield in the bar while one is up.",
   "homepage": "https://github.com/prj786/ewe-plugin-vpn",

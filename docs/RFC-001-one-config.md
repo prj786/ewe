@@ -50,7 +50,7 @@ color_scheme = "dark"          # dark (light parked, same as today)
 accent = "#0a84ff"
 theme_name = "flock"           # flock | blacksheep
 tint_borders = true
-window_transparency = 1.0
+window_transparency = false   # bool: unfocused windows slightly see-through
 avatar_shape = "circle"
 
 [desktop.dock]

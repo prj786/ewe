@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "id": "ewe.dock",
   "name": "Dock",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "apiVersion": 3,
-  "description": "A centred bottom dock on the main screen: app launcher, Overview, Komble, the Pen, one box per workspace with its windows, and the dock items other add-ons provide.",
+  "description": "A centred bottom dock on the main screen: app launcher, Overview, Komble, the Pen, one box per workspace with its windows, and the dock items other plugins provide.",
   "homepage": "https://github.com/prj786/ewe-plugin-dock",
   "author": "prj786",
   "icon": "icApps",
@@ -15,6 +15,29 @@
   "entryPoints": {
     "panel": "Dock.qml"
   },
+  "settings": [
+    {
+      "key": "autohide",
+      "type": "bool",
+      "default": false,
+      "label": "Intelligent auto-hide",
+      "description": "Slides away when a window needs the space; comes back when you point at the bottom edge.",
+      "legacy": "desktop.dock.autohide"
+    },
+    {
+      "key": "icon_size",
+      "type": "choice",
+      "default": "normal",
+      "choices": [
+        "small",
+        "normal",
+        "large"
+      ],
+      "label": "Icon size",
+      "description": "How big the dock buttons and workspace groups are: 40, 48 or 64 px.",
+      "legacy": "desktop.dock.icon_size"
+    }
+  ],
   "requires": {
     "packages": [],
     "commands": []

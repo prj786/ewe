@@ -75,7 +75,9 @@ end
 --                        generated/user.lua; the shell paints its own alpha
 --                        ground).
 --   app_blur          -> every window sits at a fixed 85 % with blur behind it;
---                        fullscreen stays solid (window rules below).
+--                        fullscreen stays solid (fullscreen_opacity, in
+--                        user.lua). Without it, Glass adds a no_blur window
+--                        rule so the bar's blur never reaches the windows.
 -- Neither asks -> decoration.blur stays off: it is a constant multi-pass GPU
 -- cost on the whole desktop. And on VMs / NVIDIA it is off by policy whatever
 -- the knobs say — start-hyprland.sh exports EWE_NO_BLUR=1 there (virtio /
@@ -137,7 +139,8 @@ hl.config({
         -- solid, and blur is a constant multi-pass GPU cost on the whole
         -- desktop. Glass turns it on — size 6, 3 passes, slight noise, which
         -- is blur-glass (about 24px), applied to the bar and dock LAYERS
-        -- only, through generated/user.lua (ewe-conf), so it follows ewe.conf
+        -- only (a layer rule plus a no_blur window rule unless App blur is
+        -- on), through generated/user.lua (ewe-conf), so it follows ewe.conf
         -- like the rest of the theme. Where blur is unavailable
         -- (EWE_NO_BLUR=1 on VMs and NVIDIA; start-hyprland.sh) Glass still
         -- applies: the fill stays translucent, just sharp.
@@ -394,9 +397,10 @@ hl.bind(mainMod .. " + C",      hl.dsp.exec_cmd(scripts .. "/calendar.sh"))
 hl.bind(mainMod .. " + N",      hl.dsp.exec_cmd("qs ipc call quicksettings toggle"))  -- Quick Settings
 hl.bind(mainMod .. " + comma",  hl.dsp.exec_cmd("qs ipc call settings toggle")) -- Super+, Settings
 -- Super+P (fill a login) is the ewe.passwords plugin's keybind since 0.21;
--- Super+Shift+C (Cast to TV) is the ewe.cast add-on's since 0.25.
+-- Super+Shift+C (Cast to TV) is the ewe.cast plugin's since 0.25.
 -- Desktop widgets (plugins of kind desktop-widget): arrange mode — drag them,
--- make one sticky (above windows) or hide it; Esc or the same key ends it.
+-- pin, lock or hide each; Esc or the same key ends it. (Dragging and the
+-- pin also work outside it, from each widget's hover toolbar.)
 hl.bind(mainMod .. " + SHIFT + W", hl.dsp.exec_cmd("qs ipc call widgets arrange"))
 -- Blind display recovery: works with a BLACK screen — forces every output's
 -- dpms on and re-asserts the saved display profile. If a plug/unplug or the

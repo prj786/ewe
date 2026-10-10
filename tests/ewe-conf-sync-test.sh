@@ -135,16 +135,34 @@ write_conf() {   # write_conf <accent>
         printf 'schema = 1\n\n[desktop.theme]\naccent = "%s"\n\n[sync]\nprovider = "nextcloud"\nserver = "%s"\nuser = "tester"\nfolder = "ewe"\n' "$1" "$NC" > "$CONF"
     fi
 }
-foreign_stamp() {   # another machine re-saved (same content) — remote moved
+foreign_stamp() {   # another machine saved (a small edit) with an OLDER clock — remote moved
     if [ "$PROVIDER" = google ]; then
+        body="$(curl -sf "$DRIVE/drive/v3/files/mock1?alt=media")"$'\n# edited elsewhere\n'
+        curl -sf -X PATCH "$DRIVE/upload/drive/v3/files/mock1?uploadType=media" --data-binary "$body" >/dev/null
         curl -sf -X PATCH -H 'Content-Type: application/json' \
-            -d '{"appProperties": {"machine": "other-machine"}, "modifiedTime": "2020-01-01T00:00:00.000Z"}' \
+            -d '{"appProperties": {"machine": "other-machine", "machine_id": "0000000000000000"}, "modifiedTime": "2020-01-01T00:00:00.000Z"}' \
             "$DRIVE/drive/v3/files/mock1" >/dev/null
     else
-        cur=$(curl -sf -u "$NC_AUTH" "$NC_DAV/ewe.conf")
+        cur="$(curl -sf -u "$NC_AUTH" "$NC_DAV/ewe.conf")"$'\n# edited elsewhere\n'
         curl -sf -u "$NC_AUTH" -X PUT --data-binary "$cur" "$NC_DAV/ewe.conf" >/dev/null
-        curl -sf -u "$NC_AUTH" -X PUT -d '{"machine":"other-machine","saved_at":"2020-01-01T00:00:00Z","schema":"1"}' "$NC_DAV/ewe.conf.meta.json" >/dev/null
+        curl -sf -u "$NC_AUTH" -X PUT -d '{"machine":"other-machine","machine_id":"0000000000000000","saved_at":"2020-01-01T00:00:00Z","schema":"1"}' "$NC_DAV/ewe.conf.meta.json" >/dev/null
     fi
+}
+same_bytes_reupload() {   # the Nextcloud desktop client re-uploads ~/Nextcloud/ewe/ewe.conf unchanged
+    if [ "$PROVIDER" = google ]; then
+        curl -sf -X PATCH -H 'Content-Type: application/json' \
+            -d '{"modifiedTime": "2030-01-01T00:00:00.000Z"}' "$DRIVE/drive/v3/files/mock1" >/dev/null
+    else
+        curl -sf -u "$NC_AUTH" -o "$WORK/reupload" "$NC_DAV/ewe.conf"          # byte-exact ($(…) drops the newline)
+        curl -sf -u "$NC_AUTH" -X PUT --data-binary @"$WORK/reupload" "$NC_DAV/ewe.conf" >/dev/null   # etag moves, meta unchanged
+    fi
+}
+nc_fault() {   # nc_fault <switch> <file> — arm one of mock-nextcloud.py's fault switches
+    python3 - "$WORK/nc.json" "$1" "$2" <<'PY'
+import json, sys
+p, k, v = sys.argv[1:]
+s = json.load(open(p)); s[k] = v; json.dump(s, open(p, "w"))
+PY
 }
 foreign_content() {   # another machine saved DIFFERENT content
     body=$'schema = 1\n\n[desktop.theme]\naccent = "#ff0000"\n'
@@ -193,8 +211,10 @@ run_suite() {
     [ "$(jget "$r" "['remote_machine']")" = "$(uname -n)" ] || fail "status remote_machine: $r"
     [ -n "$(jget "$r" "['local_synced_at']")" ] || fail "status local_synced_at: $r"
     [ "$(jget "$r" "['in_sync']")" = "True" ] || fail "status in_sync: $r"
+    [ "$(jget "$r" "['conflict']")" = "None" ] || fail "status conflict: $r"
+    [ "$(jget "$r" "['remote_is_this_machine']")" = "True" ] || fail "status remote_is_this_machine: $r"
     [ "$(jget "$r" "['provider']")" = "$PROVIDER" ] || fail "status provider: $r"
-    ok "sync-status returns the stamp, who saved it, and when we last synced"
+    ok "sync-status returns the stamp, who saved it (by machine id), and when we last synced"
 
     # 3 · re-push from the machine that last synced: allowed (in sync), re-stamped
     touch -d '2001-01-01' "$CONF"                        # local mtime is irrelevant
@@ -210,6 +230,9 @@ run_suite() {
     r=$("$EC" sync-status)
     [ "$(jget "$r" "['in_sync']")" = "False" ] || fail "status should say out of sync: $r"
     [ "$(jget "$r" "['remote_machine']")" = "other-machine" ] || fail "status remote_machine after foreign push: $r"
+    [ "$(jget "$r" "['conflict']")" = "remote-newer" ] || fail "status conflict after foreign push: $r"
+    [ "$(jget "$r" "['remote_is_this_machine']")" = "False" ] || fail "foreign stamp read as this machine: $r"
+    [ "$(jget "$r" "['error']")" = "None" ] || fail "a conflict is not a transport error: $r"
     ok "push refuses when the remote changed since we last synced (even with an OLDER remote clock)"
 
     # 5 · --force overrides and re-stamps
@@ -246,6 +269,8 @@ run_suite() {
     [ "$(jget "$r" "['ok']")" = "False" ] || fail "fresh machine push should refuse: $r"
     [ "$(jget "$r" "['error']")" = "remote-exists" ] || fail "expected remote-exists: $r"
     [ "$(jget "$r" "['remote']['appProperties']['machine']")" = "$(uname -n)" ] || fail "remote-exists carries the remote: $r"
+    r=$("$EC" sync-status)
+    [ "$(jget "$r" "['conflict']")" = "remote-exists" ] || fail "status conflict on a fresh machine: $r"
     ok "a fresh machine never clobbers an existing backup (remote-exists)"
 
     # 9 · …unless told to; and a fresh machine may push when the remote is EMPTY
@@ -264,15 +289,61 @@ run_suite() {
     [ "$before" = "$(cat "$SYNC")" ] || fail "pull --out must not touch the sync record"
     ok "pull --out previews without recording"
 
-    # 11 · a race the find/guard cannot see is caught by the server (nextcloud: 412)
+    # 11 · the remote moved but holds the SAME bytes this machine last synced
+    #      (the Nextcloud desktop client re-uploading its ~/Nextcloud copy):
+    #      not a conflict — the new ETag is adopted
+    r=$("$EC" push --force)   # bring the record to the current remote
+    [ "$(jget "$r" "['ok']")" = "True" ] || fail "resync: $r"
+    same_bytes_reupload
+    r=$("$EC" sync-status)
+    [ "$(jget "$r" "['conflict']")" = "None" ] || fail "same-bytes re-upload read as a conflict: $r"
+    [ "$(jget "$r" "['in_sync']")" = "True" ] || fail "same-bytes re-upload not in sync: $r"
+    write_conf "#00ff00"
+    r=$("$EC" push)
+    [ "$(jget "$r" "['ok']")" = "True" ] || fail "push after a same-bytes re-upload: $r"
+    ok "a moved remote with the bytes we last synced is adopted, not a conflict"
+
+    # …while DIFFERENT bytes under a stale stamp still are one
+    foreign_stamp
+    r=$("$EC" push)
+    [ "$(jget "$r" "['error']")" = "remote-newer" ] || fail "an edit elsewhere must still block: $r"
+    r=$("$EC" sync-status)
+    [ "$(jget "$r" "['conflict']")" = "remote-newer" ] || fail "status after the edit elsewhere: $r"
+    "$EC" push --force >/dev/null
+    ok "an edit elsewhere is still a conflict"
+
     if [ "$PROVIDER" = nextcloud ]; then
-        r=$("$EC" push --force)   # bring the record to the current etag
-        [ "$(jget "$r" "['ok']")" = "True" ] || fail "resync: $r"
-        cur=$(curl -sf -u "$NC_AUTH" "$NC_DAV/ewe.conf")
-        curl -sf -u "$NC_AUTH" -X PUT --data-binary "$cur" "$NC_DAV/ewe.conf" >/dev/null   # etag moves, meta unchanged
+        # 12 · the upload landed but its reply never came back (lid closed
+        #      mid-push): the next push recognises its own bytes
+        write_conf "#123456"
+        nc_fault drop_reply ewe.conf
         r=$("$EC" push)
-        [ "$(jget "$r" "['error']")" = "remote-newer" ] || fail "server-side 412 not honoured: $r"
-        ok "the server's own If-Match guard is honoured (412 → remote-newer)"
+        [ "$(jget "$r" "['ok']")" = "False" ] || fail "a dropped reply must fail this push: $r"
+        curl -sf -u "$NC_AUTH" "$NC_DAV/ewe.conf" | grep -q '123456' || fail "the mock did not store the upload"
+        r=$("$EC" sync-status)
+        [ "$(jget "$r" "['conflict']")" = "None" ] || fail "own interrupted upload read as a conflict: $r"
+        write_conf "#654321"
+        r=$("$EC" push)
+        [ "$(jget "$r" "['ok']")" = "True" ] || fail "push after an interrupted upload: $r"
+        ok "an upload whose reply was lost is recognised as our own (no endless remote-newer)"
+
+        # 13 · the file landed but the meta stamp was refused: recorded anyway
+        write_conf "#abcdef"
+        nc_fault refuse_put ewe.conf.meta.json
+        r=$("$EC" push)
+        [ "$(jget "$r" "['ok']")" = "True" ] || fail "a refused stamp must not fail the push: $r"
+        [ "$(jget "$r" "['warning']")" = "stamp-missing" ] || fail "stamp-missing not reported: $r"
+        write_conf "#fedcba"
+        r=$("$EC" push)
+        [ "$(jget "$r" "['ok']")" = "True" ] || fail "push after a refused stamp: $r"
+        ok "a refused meta stamp is a warning; the upload is recorded"
+
+        # 14 · same hostname, different machine: the machine id tells them apart
+        echo "another-machine-id" > "$WORK/other-machine-id"
+        r=$(EWE_CONF_MACHINE_ID_FILE="$WORK/other-machine-id" "$EC" sync-status)
+        [ "$(jget "$r" "['remote_machine']")" = "$(uname -n)" ] || fail "hostname stamp: $r"
+        [ "$(jget "$r" "['remote_is_this_machine']")" = "False" ] || fail "a same-named machine read as this one: $r"
+        ok "two machines with one hostname are told apart by machine id"
     fi
 }
 
