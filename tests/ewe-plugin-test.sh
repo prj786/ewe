@@ -231,6 +231,26 @@ r="$($P add ewe.dock --yes --enable --no-restart)"
 check "add: a reserved id present in the payload installs + enables it" "echo '$r' | grep -q 'ships inside ewe' && grep -q 'ewe.dock' '$SB/cfg/ewe/ewe.conf' && $P list --json | jq 'p={x[\"id\"]:x for x in j[\"plugins\"]}[\"ewe.dock\"]; assert p[\"enabled\"] and p[\"source\"]==\"bundled\"'"
 $P remove ewe.dock --yes >/dev/null; "$C" set --no-hooks plugins.removed '[]' >/dev/null
 
+# an ewe.conf that forgot the copies (2026-10-11: a Restore from the account
+# replaced [plugins] — every installed ewe.* plugin went INVALID, unswitchable)
+$P install ewe.alias --no-restart >/dev/null; $P install ewe.dock --no-restart >/dev/null
+"$C" set --no-hooks plugins.enabled '["example.hello"]' >/dev/null
+"$C" set --no-hooks plugins.sources '{"example.hello":"https://github.com/prj786/ewe-plugin-example.git"}' >/dev/null
+check "forgotten: an installed copy of a payload plugin stays valid, bundled, off" "$P list --json | jq 'p={x[\"id\"]:x for x in j[\"plugins\"]}; a=p[\"ewe.alias\"]; assert a[\"valid\"] and a[\"bundled\"] and a[\"source\"]==\"bundled\" and not a[\"enabled\"], a[\"problems\"]'"
+check "forgotten: list (text) shows no ewe.* plugin as INVALID" "! $P list | grep -E '^ewe\\.' | grep -q INVALID"
+$P enable ewe.alias --no-restart >/dev/null
+check "forgotten: enable works and writes source bundled back for every forgotten copy" "grep -q '\"ewe.alias\" = \"bundled\"' '$SB/cfg/ewe/ewe.conf' && grep -q '\"ewe.dock\" = \"bundled\"' '$SB/cfg/ewe/ewe.conf' && $P list --json | jq 'assert {x[\"id\"]:x for x in j[\"plugins\"]}[\"ewe.alias\"][\"enabled\"]'"
+"$C" set --no-hooks plugins.sources '{}' >/dev/null
+r="$($P seed "$SB/payload/plugins" --no-restart)"
+check "forgotten: seed adopts them (source bundled) instead of skipping them" "echo '$r' | jq 'assert sorted(j[\"adopted\"])==[\"ewe.alias\",\"ewe.dock\"] and \"ewe.alias\" not in j[\"seeded\"], j' && grep -q '\"ewe.dock\" = \"bundled\"' '$SB/cfg/ewe/ewe.conf'"
+$P remove ewe.alias --yes >/dev/null; $P remove ewe.dock --yes >/dev/null; $P remove ewe.demo --yes >/dev/null
+"$C" set --no-hooks plugins.removed '[]' >/dev/null; "$C" set --no-hooks plugins.enabled '[]' >/dev/null
+mkdir -p "$SB/fake.dock"; cp "$SB/payload/plugins/ewe.dock/"* "$SB/fake.dock/"
+check "forgotten: a plain directory claiming a shipped ewe.* id is still refused by add" "! $P add '$SB/fake.dock' --yes --no-restart >/dev/null 2>&1 && [ ! -e '$SB/cfg/ewe/plugins/ewe.dock' ]"
+mkdir -p "$SB/cfg/ewe/plugins/ewe.notours"; cp "$SB/payload/plugins/ewe.dock/"* "$SB/cfg/ewe/plugins/ewe.notours/"; sed -i 's/"ewe.dock"/"ewe.notours"/' "$SB/cfg/ewe/plugins/ewe.notours/manifest.json"
+check "forgotten: an installed ewe.* id the payload does NOT ship stays invalid" "$P list --json | jq 'a={x[\"id\"]:x for x in j[\"plugins\"]}[\"ewe.notours\"]; assert not a[\"valid\"] and not a[\"bundled\"] and \"reserved\" in a[\"problems\"][0], a'"
+rm -rf "$SB/cfg/ewe/plugins/ewe.notours"
+
 # restore: payload add-ons listed as enabled come from the payload -------------
 "$C" set --no-hooks plugins.enabled '["ewe.alias"]' >/dev/null
 "$C" set --no-hooks plugins.sources '{"ewe.alias":"bundled"}' >/dev/null

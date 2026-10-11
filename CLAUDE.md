@@ -188,8 +188,11 @@ since Dock 1.1.0 (`desktop.dock.*` is only their `legacy` fallback,
   (`install <id>` or `seed --restore <id>` undoes that). Manifest `keybinds` become
   `generated/plugin-keybinds.lua` (written by every state-changing verb,
   sourced by hyprland.lua) — the Print keys and Super+P are no longer in
-  hyprland.lua. Reserved `ewe.` ids validate only in the payload or with
-  `--first-party`. `GlobalShortcuts.qml` + `bin/ewe-globalshortcuts` (portal
+  hyprland.lua. Reserved `ewe.` ids validate only in the payload, with
+  `--first-party`, or INSTALLED as a copy of an id the payload ships
+  (`payload_ships` — NOT only `[plugins.sources]` = bundled: ewe.conf syncs,
+  and a Restore from the account once left all 13 INVALID; `enable`/`seed`
+  write the record back). `GlobalShortcuts.qml` + `bin/ewe-globalshortcuts` (portal
   global shortcuts, 1Password Quick Access…) stay in the shell. Tests:
   `tests/ewe-plugin-test.sh` (seed/remove/keybinds), the passwords plugin's
   own `test.sh`, `tests/ewe-globalshortcuts-test.sh`.

@@ -114,12 +114,12 @@ instead of pretending.
 | `info <id> [--json]` | one plugin's manifest and state |
 | `install <id> [--no-restart]` | a **first-party plugin** out of the payload: copied in with source `bundled`, any removal forgotten, enabled, keybinds regenerated. One JSON object (`ok`, `version`, `missing`, `restarted`); an unknown id is `ok: false`, exit 1 |
 | `migrate [--no-restart] [--fresh]` | the one-time migration above. JSON: `migrated`, `skipped` (with `why`), `fresh` |
-| `enable <id>` / `disable <id>` | flip `[plugins].enabled` in `ewe.conf`, restart the shell (`--no-restart` to defer) |
+| `enable <id>` / `disable <id>` | flip `[plugins].enabled` in `ewe.conf`, restart the shell (`--no-restart` to defer); `enable` also writes back `bundled` for any installed first-party copy `ewe.conf` forgot |
 | `update [id] [--yes]` | fast-forward git-managed plugins; the diff is shown first, a manifest that stops validating is rolled back |
 | `remove <id> [--yes]` | delete a git clone or a bundled copy (remembered in `[plugins].removed`); a hand-made directory is moved to `<id>.bak.<stamp>`; forgets the plugin in `ewe.conf` |
 | `restore [--yes] [--no-restart]` | clone every plugin `ewe.conf` knows that is not installed here; bundled first-party plugins it lists come from the payload — the plugin half of Komble's "For you" and the Welcome flow |
 | `validate <dir> [--first-party] [--json]` | check a manifest and its entry points; exit 1 lists every problem (`--first-party` allows a reserved `ewe.` id) |
-| `seed [dir] [--restore <id>] [--no-restart]` | the payload's `default` plugins in, installed bundled copies refreshed (run by `ewe-setup`); `--restore <id>` forgets a removal and installs that id |
+| `seed [dir] [--restore <id>] [--no-restart]` | the payload's `default` plugins in, installed bundled copies refreshed (run by `ewe-setup`); an installed copy `ewe.conf` has no source for is adopted as `bundled` (JSON `adopted`); `--restore <id>` forgets a removal and installs that id |
 | `path` | the plugins directory |
 | `create <ns.name> [--name T] [--kinds a,b] [--section right] [--dir P]` | **a new plugin repo**: manifest, one working QML per kind, README, MIT licence, `git init` + first commit |
 | `dev [dir] [--no-restart] [--no-follow]` | link a working copy into the plugins dir (edits are live after a restart), enable it, restart the shell, follow its log lines |
@@ -187,7 +187,7 @@ A plugin is a git repository with `manifest.json` at its root:
 | field | rule |
 |---|---|
 | `schemaVersion` | `1` |
-| `id` | `<namespace>.<name>`, lowercase `[a-z0-9_-]`, at least one dot. `ewe.` is reserved for the plugins ewe ships. The install directory is named after it. |
+| `id` | `<namespace>.<name>`, lowercase `[a-z0-9_-]`, at least one dot. `ewe.` is reserved for the plugins ewe ships: an installed `ewe.` plugin is valid when `[plugins.sources]` says `bundled` **or** the installed payload ships that id — `ewe.conf` syncs, so a restored or another machine's copy may not list what this one has. A clone or directory claiming an `ewe.` id is still refused. The install directory is named after it. |
 | `name`, `version` | non-empty strings; `version` is what `list` shows and what a refresh compares |
 | `apiVersion` | `2` or `3` — the shell loads both; a manifest with any other value is refused at install, not at login. The `quick-tile`, `quick-page`, `bar-status` and `dock-item` kinds, `ipcAliases` and the keybind target rule need `3` |
 | `kinds` | one or more of `service`, `panel`, `overlay`, `menu`, `bar-widget`, `desktop-widget`, `quick-tile`, `quick-page`, `bar-status`, `dock-item` |
