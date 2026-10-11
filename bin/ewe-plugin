@@ -292,6 +292,33 @@ def _in_payload(d):
         return False
 
 
+def payload_ships(pid):
+    """True when the installed ewe ships `pid` (plugins/<pid>/ in the payload).
+    That, not ewe.conf, is what makes an INSTALLED "ewe." plugin first-party:
+    ewe.conf syncs, and a restored (or another machine's) copy need not say
+    "bundled" for what this machine has — 2026-10-11 a Restore from the
+    account left all 13 first-party plugins INVALID and impossible to turn
+    on. Never used for a fetch: a clone claiming an "ewe." id stays refused."""
+    if not isinstance(pid, str) or not ID_RE.match(pid):
+        return False
+    m, _ = read_manifest(os.path.join(PAYLOAD_PLUGINS, pid))
+    return isinstance(m, dict) and m.get("id") == pid
+
+
+def heal_sources():
+    """Record source "bundled" for every installed copy of a payload plugin
+    that ewe.conf has no source for (see payload_ships). Returns the ids.
+    Run by the verbs that change state, so the next sync carries it."""
+    _, sources = conf_state()
+    healed = [e["id"] for e in scan()
+              if e["installed"] and e["bundled"] and sources.get(e["id"]) is None]
+    if healed:
+        for pid in healed:
+            sources[pid] = "bundled"
+        set_sources(sources)
+    return healed
+
+
 def write_plugin_keybinds():
     """generated/plugin-keybinds.lua from every enabled, valid plugin's
     manifest `keybinds`; Hyprland is reloaded when the file changed. Called
@@ -692,9 +719,15 @@ def describe(d, dirname=None, enabled=(), sources=None):
     dirname = dirname or os.path.basename(d.rstrip("/"))
     m, problems = read_manifest(d)
     pid0 = m.get("id") if isinstance(m, dict) and isinstance(m.get("id"), str) else dirname
+    src0 = (sources or {}).get(pid0)
+    linked = os.path.islink(d.rstrip("/"))
+    # first-party: recorded as bundled, or a copy (or `dev --first-party`
+    # working copy) of what the payload ships — see payload_ships
+    ships = src0 in (None, "local") and payload_ships(pid0)
+    bundled = src0 == "bundled" or (ships and src0 is None and not linked)
     if m is not None:
         problems = validate_manifest(d, m, expect_dirname=dirname,
-                                     allow_reserved=((sources or {}).get(pid0) == "bundled"))
+                                     allow_reserved=(src0 == "bundled" or ships))
     else:
         m = {}
     pid = m.get("id") if isinstance(m.get("id"), str) else dirname
@@ -704,7 +737,7 @@ def describe(d, dirname=None, enabled=(), sources=None):
         "dirname": dirname,
         "installed": True,
         "git": os.path.isdir(os.path.join(d, ".git")),
-        "source": (sources or {}).get(pid),
+        "source": (sources or {}).get(pid) or ("bundled" if bundled else None),
         "name": m.get("name"),
         "version": m.get("version"),
         "description": m.get("description"),
@@ -721,8 +754,8 @@ def describe(d, dirname=None, enabled=(), sources=None):
         "bar": effective_bar(m, pid),
         "settingsSchema": m.get("settings") if isinstance(m.get("settings"), list) else [],
         "settings": effective_settings(m, pid),
-        "linked": os.path.islink(d.rstrip("/")),
-        "bundled": (sources or {}).get(pid) == "bundled",
+        "linked": linked,
+        "bundled": bundled,
         "keybinds": [kb for kb in (m.get("keybinds") or []) if isinstance(kb, dict)] if isinstance(m.get("keybinds"), list) else [],
         # API 3 (docs/PLUGINS.md "Kinds"): the host reads these to place the
         # tile, the page + rail entry, the pill glyph and the dock button
@@ -1324,6 +1357,7 @@ def cmd_enable(args):
         die("\"%s\" is not installed here%s" % (e["id"], (" — ewe-plugin add %s" % e["source"]) if e["source"] else ""))
     if not e["valid"]:
         die("\"%s\" does not validate:\n%s" % (e["id"], problems_block(e).rstrip()))
+    heal_sources()
     enabled, _ = conf_state()
     if e["id"] in enabled:
         say("%s is already enabled" % e["id"])
@@ -2001,7 +2035,7 @@ def cmd_seed(args):
     meta = bundle_meta(src_dir)
     removed = set(conf_removed())
     enabled, sources = conf_state()
-    seeded, refreshed, skipped = [], [], []
+    seeded, refreshed, skipped, adopted = [], [], [], []
     os.makedirs(PLUGINS_DIR, exist_ok=True)
     for pid, d, m, problems in payload_plugins(src_dir):
         if problems:
@@ -2023,7 +2057,12 @@ def cmd_seed(args):
             if pid not in enabled:
                 enabled.append(pid)
             seeded.append(pid)
-        elif sources.get(pid) == "bundled":
+        elif sources.get(pid) in ("bundled", None):
+            # no source = a copy ewe.conf forgot (a Restore from the account,
+            # a file synced from another machine): it is this payload's, adopt it
+            if sources.get(pid) is None:
+                sources[pid] = "bundled"
+                adopted.append(pid)
             cur, _ = read_manifest(dest)
             if (cur or {}).get("version") != m.get("version"):
                 bak = dest + ".tmp-seed"
@@ -2036,7 +2075,7 @@ def cmd_seed(args):
             skipped.append({"id": pid, "why": "installed from %s" % (sources.get(pid) or "elsewhere")})
     set_sources(sources)
     set_enabled(enabled)
-    print(json.dumps({"ok": True, "seeded": seeded, "refreshed": refreshed, "skipped": skipped}))
+    print(json.dumps({"ok": True, "seeded": seeded, "refreshed": refreshed, "skipped": skipped, "adopted": adopted}))
     if (seeded or refreshed) and "--no-restart" not in args:
         restart_shell()
     else:
