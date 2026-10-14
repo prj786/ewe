@@ -1,0 +1,156 @@
+#!/usr/bin/env python3
+"""A stand-in for `ewe-safe` (ewe-safe docs/PROTOCOL.md v1) for test.sh and
+the nested harness: no daemon, no safe. State lives in $FAKE_SAFE_DIR:
+  locked     present = the safe is locked
+  sync.json  the sync object `status` and `watch` report (edit it to test the dot)
+  calls.log  every call, one argv per line (proves what the plugin asked for)
+  gone       present = the daemon is unreachable (`watch` ends with daemon-gone)
+`watch` prints the status, then one event per change of `locked` / sync.json.
+"""
+import json
+import os
+import sys
+import time
+
+D = os.environ.get("FAKE_SAFE_DIR") or sys.exit("FAKE_SAFE_DIR is not set")
+os.makedirs(D, exist_ok=True)
+LOCKED = os.path.join(D, "locked")
+SYNC = os.path.join(D, "sync.json")
+# "two minutes ago", fixed for this process — a moving value would make
+# `watch` report a sync change on every poll
+LAST = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() - 120))
+
+ITEMS = [
+    {"id": "4f9c0d1e-0000-4000-8000-000000000001", "kind": "login", "title": "Discord", "username": "sam",
+     "urls": ["https://discord.com/login"], "apps": ["discord"], "tags": [], "folder": "",
+     "has_password": True, "has_otp": False, "modified": "2026-10-14T16:02:11Z"},
+    {"id": "4f9c0d1e-0000-4000-8000-000000000002", "kind": "login", "title": "Example Bank", "username": "sam.shepherd",
+     "urls": ["https://bank.example"], "apps": [], "tags": ["money"], "folder": "",
+     "has_password": True, "has_otp": True, "modified": "2026-10-12T09:00:00Z"},
+    {"id": "4f9c0d1e-0000-4000-8000-000000000003", "kind": "login", "title": "GitHub", "username": "sam-shepherd",
+     "urls": ["https://github.com/login"], "apps": ["github-desktop"], "tags": ["work"], "folder": "",
+     "has_password": True, "has_otp": True, "modified": "2026-09-12T08:00:00Z"},
+    {"id": "4f9c0d1e-0000-4000-8000-000000000004", "kind": "note", "title": "GitHub recovery codes", "username": "",
+     "urls": [], "apps": [], "tags": ["work"], "folder": "", "has_password": False, "has_otp": False,
+     "modified": "2026-09-12T08:00:00Z"},
+    {"id": "4f9c0d1e-0000-4000-8000-000000000005", "kind": "note", "title": "Home Wi-Fi", "username": "",
+     "urls": [], "apps": [], "tags": ["home"], "folder": "", "has_password": False, "has_otp": False,
+     "modified": "2026-08-01T10:00:00Z"},
+    {"id": "4f9c0d1e-0000-4000-8000-000000000006", "kind": "login", "title": "Nextcloud", "username": "sam",
+     "urls": ["https://cloud.example.org"], "apps": [], "tags": [], "folder": "",
+     "has_password": True, "has_otp": False, "modified": "2026-10-01T10:00:00Z"},
+    {"id": "4f9c0d1e-0000-4000-8000-000000000007", "kind": "login", "title": "Router", "username": "admin",
+     "urls": ["http://192.168.1.1"], "apps": [], "tags": ["home"], "folder": "From KeePass",
+     "has_password": True, "has_otp": False, "modified": "2026-07-01T10:00:00Z"},
+    {"id": "4f9c0d1e-0000-4000-8000-000000000008", "kind": "login", "title": "Work VPN", "username": "sam",
+     "urls": [], "apps": [], "tags": [], "folder": "Work", "has_password": True, "has_otp": False,
+     "modified": "2026-10-10T10:00:00Z"},
+]
+
+
+def out(o):
+    print(json.dumps(o), flush=True)
+
+
+def sync():
+    try:
+        with open(SYNC) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {"state": "in-sync", "last": LAST,
+                "by_machine": "laptop", "pending": False, "warning": None}
+
+
+def status():
+    locked = os.path.exists(LOCKED)
+    return {"ok": True, "set_up": True, "locked": locked, "read_only": False,
+            "place": {"kind": "nextcloud", "location": "ewe/safe/passwords.kdbx", "guarded": True},
+            "unlock_methods": ["password"], "items": None if locked else len(ITEMS),
+            "sync": sync(), "version": "0.1.0-fake"}
+
+
+def need_unlocked():
+    if os.path.exists(LOCKED):
+        out({"ok": False, "error": "locked", "message": "Safe is locked.", "hint": "ewe-safe unlock"})
+        sys.exit(0)
+
+
+def find(i):
+    for it in ITEMS:
+        if it["id"] == i:
+            return it
+    out({"ok": False, "error": "not-found", "message": "No item %s." % i})
+    sys.exit(0)
+
+
+def arg(name):
+    a = sys.argv
+    return a[a.index(name) + 1] if name in a and a.index(name) + 1 < len(a) else None
+
+
+def main():
+    argv = sys.argv[1:]
+    with open(os.path.join(D, "calls.log"), "a") as f:
+        f.write(json.dumps(argv) + "\n")
+    verb = argv[0] if argv else ""
+    if os.path.exists(os.path.join(D, "gone")):
+        # what the real CLI says when the socket isn't there
+        out({"ok": False, "error": "daemon-unavailable",
+             "message": "Safe's service isn't running.", "hint": "systemctl --user start ewe-safe.socket"})
+        return
+    if verb == "status":
+        out(status())
+    elif verb == "summary":
+        out({"ok": True, "locked": os.path.exists(LOCKED), "items": len(ITEMS), "sync_state": sync()["state"]})
+    elif verb in ("list", "search"):
+        need_unlocked()
+        q = argv[1].lower() if verb == "search" and len(argv) > 1 else ""
+        out({"ok": True, "items": [i for i in ITEMS if q in i["title"].lower()]})
+    elif verb == "copy":
+        need_unlocked()
+        find(argv[1])
+        out({"ok": True, "copied": arg("--field"), "cleared_after": 30})
+    elif verb == "reveal":
+        need_unlocked()
+        it = find(argv[1])
+        if arg("--field") != "otp" or not it["has_otp"]:
+            out({"ok": False, "error": "bad-request", "message": "the fake reveals one-time codes only"})
+            return
+        left = 30 - int(time.time()) % 30
+        out({"ok": True, "value": "481093" if it["title"] == "GitHub" else "220417", "expires_in": left})
+    elif verb == "unlock":
+        time.sleep(float(os.environ.get("FAKE_UNLOCK_DELAY", "0.5")))
+        if os.path.exists(os.path.join(D, "cancel")):
+            out({"ok": False, "error": "cancelled", "message": "The prompt was closed."})
+            return
+        if os.path.exists(LOCKED):
+            os.remove(LOCKED)
+        out({"ok": True, "items": len(ITEMS)})
+    elif verb == "lock":
+        open(LOCKED, "w").close()
+        out({"ok": True, "locked": True})
+    elif verb == "watch":
+        out(status())
+        last_locked, last_sync = os.path.exists(LOCKED), json.dumps(sync())
+        while True:
+            time.sleep(0.3)
+            if os.path.exists(os.path.join(D, "gone")):
+                out({"event": "daemon-gone"})
+                return
+            lk, sy = os.path.exists(LOCKED), json.dumps(sync())
+            if lk != last_locked:
+                out({"v": 1, "event": "locked", "reason": "user"} if lk else {"v": 1, "event": "unlocked"})
+                last_locked = lk
+            if sy != last_sync:
+                out({"v": 1, "event": "sync", "sync": json.loads(sy)})
+                last_sync = sy
+    elif verb == "version":
+        out({"ok": True, "version": "0.1.0-fake", "protocol": 1})
+    else:
+        out({"ok": False, "error": "bad-request", "message": "the fake has no verb %r" % verb})
+
+
+try:
+    main()
+except (BrokenPipeError, KeyboardInterrupt):
+    pass

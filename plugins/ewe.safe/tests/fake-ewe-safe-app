@@ -1,0 +1,4 @@
+#!/bin/sh
+# A stand-in for the Safe window (ewe-safe-app): records how it was asked
+# to open, so tests can see Quick Access's Ctrl+Enter / Ctrl+N / the tile.
+printf '%s\n' "$*" >> "${FAKE_SAFE_DIR:?}/app.log"
