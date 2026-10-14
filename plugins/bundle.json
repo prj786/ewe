@@ -45,8 +45,8 @@
     },
     "ewe.passwords": {
       "repo": "https://github.com/prj786/ewe-plugin-passwords",
-      "commit": "39d4b446c6def8b7d69bc67bf4b3da17ca4d6987",
-      "version": "1.1.1",
+      "commit": "527afa50be56c76be7b4b81572d6a6dbb707072f",
+      "version": "1.2.0",
       "default": false,
       "migrate": true
     },
@@ -63,6 +63,13 @@
       "migrate": true,
       "commit": "66a46c0be47d24c6ad95eaf0c6005f3fc166ce62",
       "version": "1.0.2"
+    },
+    "ewe.safe": {
+      "repo": "https://github.com/prj786/ewe-plugin-safe",
+      "default": false,
+      "migrate": false,
+      "commit": "f581335f9fe1405fe6b667a897d9b81b83aac373",
+      "version": "1.0.0"
     },
     "ewe.screenshot": {
       "repo": "https://github.com/prj786/ewe-plugin-screenshot",

@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "id": "ewe.safe",
+  "name": "Safe",
+  "version": "1.0.0",
+  "apiVersion": 3,
+  "description": "Safe on your desktop: a lock in the bar, Quick Access to every item (Super+Shift+P) and a Quick settings tile. Copy a password, a username or a one-time code; lock and unlock.",
+  "homepage": "https://github.com/prj786/ewe-plugin-safe",
+  "author": "prj786",
+  "icon": "icLock",
+  "category": "Security",
+  "kinds": [
+    "panel",
+    "bar-status",
+    "quick-tile"
+  ],
+  "entryPoints": {
+    "panel": "Panel.qml",
+    "bar-status": "Status.qml",
+    "quick-tile": "Tile.qml"
+  },
+  "quickTile": {
+    "span": 1,
+    "order": 20
+  },
+  "barStatus": {
+    "order": 20
+  },
+  "requires": {
+    "packages": [
+      "ewe-safe"
+    ],
+    "commands": [
+      "ewe-safe"
+    ]
+  },
+  "keybinds": [
+    {
+      "combo": "SUPER + SHIFT + P",
+      "ipc": "ewe.safe toggle"
+    }
+  ]
+}
