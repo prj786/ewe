@@ -657,6 +657,17 @@ for _, klass in ipairs({ "gcr-prompter", "Gcr-prompter", "org.gnome.keyring.Syst
     hl.window_rule({ name = "gcr-" .. klass, match = { class = klass }, float = true, center = true, size = { 400, 200 } })
 end
 
+-- Safe's unlock prompt (RFC-008, phase 1): `ewe-safe unlock --ask` opens a
+-- small kitty asking for the master password until the Safe window exists.
+-- A compact card on top of what asked for it, like the keyring prompt.
+hl.window_rule({
+    name   = "safe-unlock",
+    match  = { class = "ewe-safe-unlock" },
+    float  = true,
+    center = true,
+    size   = { 560, 200 },
+})
+
 -- Window card: only FLOATING windows carry shadow-float; tiled ones sit flat
 -- in their gaps, their border saying which is focused.
 hl.window_rule({
