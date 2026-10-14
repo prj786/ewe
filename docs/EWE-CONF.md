@@ -288,8 +288,9 @@ The fill picker (`Super+P`, the bundled `ewe.passwords` plugin — see the
 manual's **Passwords** section). Its `provider` and `press_enter` are plugin
 settings (`[plugins.settings]."ewe.passwords"`, `ewe-plugin set`); this
 table is the fallback the plugin's `ewe-pass` reads when they are unset:
-`provider` — `auto` (default: the first installed of 1Password's `op`,
-`rbw`, `pass`), `1password`, `bitwarden` or `pass`; `press_enter` (default
+`provider` — `auto` (default: ewe Safe once a safe is set up, else the
+first installed of 1Password's `op`, `rbw`, `pass`), `ewe`, `1password`,
+`bitwarden` or `pass`; `press_enter` (default
 `false`); `type_delay_ms` — pause between typed keys (default 8; raise it
 for an app that drops characters). Per-app pins live in
 `passwords-apps.json` next to `ewe.conf`, not in it.
