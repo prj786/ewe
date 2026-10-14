@@ -91,7 +91,7 @@ SECTION_NOTES = {
     "desktop.input": "keyboard layouts + mouse/touchpad; devices = per-device overrides",
     "desktop.layout": "gaps/border/corner radius — user.lua is generated from these + theme",
     "desktop.keybinds": "your own launch bindings: {combo, exec} records",
-    "passwords": "the fill picker (Super+P): provider = auto | 1password | bitwarden | pass; press_enter; type_delay_ms",
+    "passwords": "the fill picker (Super+P): provider = auto | ewe | 1password | bitwarden | pass; press_enter; type_delay_ms",
     "desktop.wallpapers": "per-output wallpaper map (image/GIF/video)",
     "desktop.power": "lid/idle/screensaver behaviour",
     "apps": "pins, startup entries, places, and Komble's installed manifest",
@@ -104,6 +104,7 @@ SECTION_NOTES = {
     "plugins": "third-party shell plugins (ewe-plugin): which ids are on, and where each came from",
     "plugins.sources": "id → git URL, so a fresh machine can `ewe-plugin add` what this one has",
     "companion": "the desktop companion's brain (ewe-companiond, RFC-007): proactive, quiet hours, providers; API keys live in the keyring, never here",
+    "safe": "Safe, the password manager (ewe-safed, RFC-008): place = local | nextcloud | webdav | folder | sftp | dropbox | gdrive; location; webdav_url, webdav_user; lock_after_minutes, lock_on_screen_lock, lock_on_sleep; clipboard_clear_seconds; generator_length, generator_words. The safe itself and every password live elsewhere, never here",
 }
 
 _INLINE_MAX = 96
@@ -1959,6 +1960,7 @@ ENUMS = {
     "desktop.bar.icon_size": ("small", "normal", "large"),
     "desktop.dock.icon_size": ("small", "medium", "large"),
     "desktop.accessibility.text_scale": (100, 115, 130),
+    "safe.place": ("local", "nextcloud", "webdav", "folder", "sftp", "dropbox", "gdrive"),
 }
 THEME_DEFAULTS = {ck: dflt for ck, _jk, dflt in THEME_MAP}
 
@@ -2121,6 +2123,10 @@ def _domain(dotted):
     # on every companion setting (RFC-007)
     if parts[0] == "companion":
         return "companion"
+    # read by ewe-safed, which watches the file: the same — store, apply
+    # nothing (RFC-008)
+    if parts[0] == "safe":
+        return "safe"
     return None
 
 

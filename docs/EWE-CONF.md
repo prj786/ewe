@@ -288,11 +288,27 @@ The fill picker (`Super+P`, the bundled `ewe.passwords` plugin — see the
 manual's **Passwords** section). Its `provider` and `press_enter` are plugin
 settings (`[plugins.settings]."ewe.passwords"`, `ewe-plugin set`); this
 table is the fallback the plugin's `ewe-pass` reads when they are unset:
-`provider` — `auto` (default: the first installed of 1Password's `op`,
-`rbw`, `pass`), `1password`, `bitwarden` or `pass`; `press_enter` (default
+`provider` — `auto` (default: ewe Safe once a safe is set up, else the
+first installed of 1Password's `op`, `rbw`, `pass`), `ewe`, `1password`,
+`bitwarden` or `pass`; `press_enter` (default
 `false`); `type_delay_ms` — pause between typed keys (default 8; raise it
 for an app that drops characters). Per-app pins live in
 `passwords-apps.json` next to `ewe.conf`, not in it.
+
+### `[safe]` — Safe, the password manager (RFC-008)
+
+Read by `ewe-safed` (the `ewe-safe` package); a `set safe.*` is stored and
+applies nothing, like `[companion]`. Non-secret settings only, so a restored
+machine knows where its safe lives and only asks for the master password:
+`place` — `local` | `nextcloud` | `webdav` | `folder` | `sftp` | `dropbox`
+| `gdrive` (anything else is refused); `location` — the file's path in that
+place (default `ewe/safe/passwords.kdbx`); `webdav_url`, `webdav_user` for
+`place = "webdav"`; `lock_after_minutes` (default 30), `lock_on_screen_lock`,
+`lock_on_sleep` (bools, default `true`); `clipboard_clear_seconds` (default
+30); `generator_length` (default 20), `generator_words` (default 5). The
+safe is an encrypted KeePass file in the place; the WebDAV password and the
+"unlock with my login" key live in the keyring (service `ewe-safe`), the
+Nextcloud app password behind `ewe-cloud` — never in this file.
 
 ### `[apps]`
 
