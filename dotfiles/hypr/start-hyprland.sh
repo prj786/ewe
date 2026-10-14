@@ -153,8 +153,11 @@ export EDITOR=micro VISUAL=micro
 # FIRST browser instance exits — `gh auth login` sat forever on the owner's
 # machine (2026-09-02). `gio launch` starts the desktop entry and returns at
 # once, so the caller gets on with its life. Only set when the shipped
-# browser is actually installed; otherwise the tools keep their own default.
-if [ -f /usr/share/applications/helium.desktop ]; then
+# browser is actually installed (ewe browser; Helium on machines that predate
+# it); otherwise the tools keep their own default.
+if [ -f /usr/share/applications/ewe-browser.desktop ]; then
+    export BROWSER="gio launch /usr/share/applications/ewe-browser.desktop"
+elif [ -f /usr/share/applications/helium.desktop ]; then
     export BROWSER="gio launch /usr/share/applications/helium.desktop"
 fi
 

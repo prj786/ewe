@@ -509,8 +509,13 @@ mkdir -p "$MPVDIR/script-opts"
   echo "font=Geist"
 } > "$MPVDIR/script-opts/uosc.conf"
 
-# ── Helium (the DE browser): chrome surface + vertical tabs ──────────────────
+# ── Helium, when a machine still has it: chrome surface + vertical tabs ─────
+# ewe browser (the DE browser since it replaced Helium) reads theme-tokens.json
+# itself and needs no hook; this one only runs while Helium is installed, so a
+# machine without it never grows a Helium profile.
 HT="$(dirname "$0")/helium-theme.sh"
-[ -x "$HT" ] && "$HT" "${STYLE:-flock}" "$ACC" || true
+if [ -x "$HT" ] && command -v helium-browser >/dev/null 2>&1; then
+    "$HT" "${STYLE:-flock}" "$ACC" || true
+fi
 
 exit 0

@@ -126,7 +126,7 @@ _desktop_ok() { [ -n "$1" ] && { [ -r "/usr/share/applications/$1" ] || [ -r "$H
 if command -v xdg-settings >/dev/null 2>&1; then
     cur_browser="$(xdg-settings get default-web-browser 2>/dev/null)"
     if ! _desktop_ok "$cur_browser"; then
-        for b in helium.desktop firefox.desktop firefox-esr.desktop org.mozilla.firefox.desktop; do
+        for b in ewe-browser.desktop helium.desktop firefox.desktop firefox-esr.desktop org.mozilla.firefox.desktop; do
             [ -r "/usr/share/applications/$b" ] && { xdg-settings set default-web-browser "$b" >/dev/null 2>&1 && break; }
         done
     fi
@@ -159,6 +159,7 @@ _mime() {
     done
 }
 if command -v xdg-mime >/dev/null 2>&1; then
+    _mime ewe-browser.desktop       x-scheme-handler/http x-scheme-handler/https text/html
     _mime helium.desktop            x-scheme-handler/http x-scheme-handler/https text/html
     _mime nemo.desktop              inode/directory
     _mime dev.zed.Zed.desktop text/plain text/markdown text/css text/javascript \
