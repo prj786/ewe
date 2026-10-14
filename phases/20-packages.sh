@@ -71,7 +71,7 @@ phase_packages() {
         off=("${keep[@]}")
     fi
 
-    info "${#off[@]} official packages + ${#aur[@]} AUR packages + 4 first-party apps (Komble, ewe-settings, ewe-sync, ewe-cast) + 2 source themes (Reversal, Mocu)"
+    info "${#off[@]} official packages + ${#aur[@]} AUR packages + 5 first-party apps (Komble, ewe-settings, ewe-sync, ewe-cast, ewe browser) + 2 source themes (Reversal, Mocu)"
     [ "${DEV:-0}" = "1" ] && info "+ ${#dev[@]} optional dev packages (--dev)"
     [ "${GAMING:-0}" = "1" ] && info "+ ${#game[@]} optional gaming packages (--gaming)"
     if [ "${DRY_RUN:-0}" = "1" ]; then
@@ -159,6 +159,11 @@ phase_packages() {
     # Cast card is the UI. Like the three above it is a dependency of the `ewe`
     # PACKAGE, so pacman covers it; this covers the get.sh path.
     install_release_pkg ewe-cast prj786/ewe-cast https://github.com/prj786/ewe-cast.git
+    # ewe browser — THE browser (web, files, PDFs, music). Electron with its
+    # own castlabs runtime for Widevine, so the prebuilt release matters even
+    # more than for the Tauri apps: the source fallback downloads ~100 MB and
+    # builds with pnpm. A dependency of the ewe PACKAGE; this covers get.sh.
+    install_release_pkg ewe-browser prj786/ewe-browser https://github.com/prj786/ewe-browser.git
     _install_themes
     ok "package phase done"
 }

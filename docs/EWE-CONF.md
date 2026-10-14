@@ -411,7 +411,11 @@ files are only replaced by a successful run. If the file and reality ever
 disagree (a fresh machine, a repair), `ewe-conf import` rebuilds the
 document from the live system.
 
-## desktop.browser — Helium
+## desktop.browser — Helium (only while installed)
+
+ewe's browser is ewe browser, which reads `theme-tokens.json` (colours,
+radius, fonts, motion) itself and has no key here. This key only matters on a
+machine that still has Helium, the browser ewe shipped before.
 
 | key | default | meaning |
 |---|---|---|

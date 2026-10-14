@@ -42,7 +42,7 @@ install_aur() {
 }
 
 # install_release_pkg <pkgname> <owner/repo> <git-url> — install a first-party
-# app from its latest GitHub release's prebuilt .pkg.tar.zst (built by the
+# app from its newest GitHub release's prebuilt .pkg.tar.zst (built by the
 # repo's release.yml in an Arch container), so the user's machine never spends
 # ~10 minutes compiling a Rust/Tauri app. Version-aware: upgrades when the
 # release is newer than the installed package (vercmp), no-ops when current.
@@ -58,14 +58,23 @@ install_release_pkg() {
     command -v curl >/dev/null 2>&1 || { install_git_pkgbuild "$name" "$giturl"; return 0; }
 
     local json tag ver url cur
-    json="$(curl -fsSL --max-time 15 "https://api.github.com/repos/$repo/releases/latest" 2>/dev/null)" || json=""
-    tag="$(printf '%s' "$json" | grep -m1 '"tag_name"' | sed 's/.*: *"//; s/".*//')"
-    ver="${tag#v}"
-    # first non-debug package asset for this machine's architecture
+    # Newest release, NOT GitHub's "Latest": every first-party app ships
+    # -beta tags, which GitHub marks prerelease and /releases/latest skips —
+    # it returned a months-old stable (or nothing), so get.sh installed stale
+    # apps or fell back to a source build. The [ewe] repo already takes the
+    # newest release; Komble's first_party.rs made the same fix.
+    json="$(curl -fsSL --max-time 15 "https://api.github.com/repos/$repo/releases?per_page=10" 2>/dev/null)" || json=""
+    # first non-debug package asset for this machine's architecture, newest
+    # release first; the tag is read from that asset's own URL so the version
+    # and the file always belong to the same release
     url="$(printf '%s' "$json" \
         | grep -o '"browser_download_url": *"[^"]*\.pkg\.tar\.zst"' \
         | sed 's/.*"\(https[^"]*\)"/\1/' \
         | grep -v -- '-debug-' | grep -m1 -e "$(uname -m)" -e '-any\.pkg')"
+    tag="$(printf '%s' "$url" | sed -n 's#.*/releases/download/\([^/]*\)/.*#\1#p')"
+    # tag v0.1.0-beta → pkgver 0.1.0beta (the PKGBUILDs' spelling, which is
+    # what pacman -Q reports and vercmp compares)
+    ver="${tag#v}"; ver="${ver//-/}"
     if [ -z "$ver" ] || [ -z "$url" ]; then
         info "$name: no prebuilt release found — building from source"
         install_git_pkgbuild "$name" "$giturl"

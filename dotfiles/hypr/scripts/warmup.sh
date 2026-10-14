@@ -36,7 +36,8 @@ renice -n 19 $$ >/dev/null 2>&1
 ionice -c3 -p $$ >/dev/null 2>&1
 
 for f in \
-    /usr/lib/firefox/libxul.so /usr/lib/firefox/firefox \
+    /usr/lib/ewe-browser/ewe-browser /usr/lib/ewe-browser/resources.pak \
+    /usr/lib/ewe-browser/resources/app.asar \
     /usr/lib/libwebkitgtk-6.0.so* /usr/lib/libwebkit2gtk-4.1.so* \
     /usr/bin/nemo /usr/lib/libnemo-private.so* \
     /usr/bin/komble /usr/bin/ewe-settings /usr/bin/ewe-sync \
