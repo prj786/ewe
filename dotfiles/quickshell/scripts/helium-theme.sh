@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
-# helium-theme.sh <flock|blacksheep> <accent-hex6> — dress Helium (the DE's
-# browser) as a part of ewe. Called from colorscheme.sh on every theme change.
+# helium-theme.sh <flock|blacksheep|light> <accent-hex6> — dress Helium (the
+# DE's browser before ewe browser) as a part of ewe. Called from colorscheme.sh
+# on every theme change while Helium is installed. `light` (a light scheme is
+# active) takes its surfaces from HELIUM_BG/TOOL/ELEV/FG/DIM, which
+# colorscheme.sh reads from the tokens;
+# Chromium's own menus follow the system light/dark (gsettings color-scheme).
 #
 # What it builds (all regenerable state under ~/.local/state/ewe/helium):
 #   theme/  — a real Chromium theme extension with ewe's exact surface palette
@@ -27,11 +31,13 @@ CFG="${XDG_CONFIG_HOME:-$HOME/.config}"
 STATE="${XDG_STATE_HOME:-$HOME/.local/state}/ewe/helium"
 HDIR="$CFG/net.imput.helium"
 
+FG="f2f2f7"; DIM="8e8e93"
 case "$STYLE" in
     blacksheep) BG="020202"; TOOL="101012"; ELEV="1a1a1c" ;;
+    light)      BG="${HELIUM_BG:-f4f2ee}"; TOOL="${HELIUM_TOOL:-faf9f6}"; ELEV="${HELIUM_ELEV:-e9e6e0}"
+                FG="${HELIUM_FG:-0b0a08}"; DIM="${HELIUM_DIM:-5d5a55}" ;;
     *)          BG="1c1c1e"; TOOL="2c2c2e"; ELEV="3a3a3c" ;;
 esac
-FG="f2f2f7"; DIM="8e8e93"
 rgb() { printf '[%d, %d, %d]' $((16#${1:0:2})) $((16#${1:2:2})) $((16#${1:4:2})); }
 
 mkdir -p "$STATE/theme" "$STATE/ntp"

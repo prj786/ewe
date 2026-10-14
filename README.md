@@ -26,8 +26,8 @@
 **ewe** *(the sheep, [juː])* is an Arch-based **operating system** — and this repo
 is the layer you actually look at: the desktop environment. **Hyprland** (Wayland
 compositor, Lua-configured) with a **Quickshell** QML shell — bar, dock, launcher,
-notifications, control centre, lock, OSD, three bundled plugins (clipboard
-history, screenshots, password fill) — plus the greeter, a
+notifications, control centre, lock, OSD, opt-in plugins from ewe (dock,
+clipboard history, screenshots, password fill and more) — plus the greeter, a
 silent Plymouth boot, the CLI tools, and the `ewe` package that installs the lot.
 
 > **Most people don't want this repo — they want the ISO.**
@@ -88,8 +88,10 @@ Then reboot, pick **Ewe** at the greeter, and you're in —
 
 - **The whole desktop, not a starting point** — greeter to lock screen, themed
   end to end, working out of the box.
-- **Dark by decision** — two dark looks (`flock` neutral greys, `blacksheep`
-  absolute black for OLED). There is no light mode, deliberately.
+- **Dark by default, light when you want it** — Ewe Dark out of the box, in
+  two looks (`flock` neutral greys, `blacksheep` absolute black for OLED),
+  and Ewe Light or any light scheme in Settings → Appearance. Every app
+  follows: the shell, ewe's own apps, GTK and Qt, kitty, Zed, the browser.
 - **One theme, one icon language** — the look carries across the shell, GTK apps,
   Qt strays, icons and cursor; the accent applies live, with no relogin.
 - **The machine as one file** — `~/.config/ewe/ewe.conf` describes the desktop;

@@ -507,8 +507,9 @@ hl.bind("switch:on:Lid Switch",  hl.dsp.exec_cmd(scripts .. "/lid.sh close"), { 
 hl.bind("switch:off:Lid Switch", hl.dsp.exec_cmd(scripts .. "/lid.sh open"),  { locked = true })
 -- Layout toggle disabled: single (US) layout. Re-enable with a second kb_layout.
 -- hl.bind(mainMod .. " + SHIFT + Space", hl.dsp.exec_cmd("hyprctl switchxkblayout current next"))
--- Super+period (clipboard + emoji) is the ewe.clipboard add-on's manifest keybind;
--- the old bind here called a `clipboard` target that no longer exists.
+-- Clipboard + emoji (the ewe.clipboard add-on) has no keybind: it opens from
+-- its scissors in the bar. The old Super+period bind here called a
+-- `clipboard` target that no longer exists.
 
 -- The Pen (Hyprland "special" workspace) -------------------------------------
 -- ewe's hidden workspace: stash a window out of sight, get it back later. The
