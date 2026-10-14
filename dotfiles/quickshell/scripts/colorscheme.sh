@@ -1,7 +1,9 @@
 #!/bin/bash
-# colorscheme.sh <mode> [accent-hex] — apply the ewe appearance (DARK ONLY —
-# ewe is dark-only by decision, 2026-09-01; the light branches were deleted, not
-# shipped), tinted with the shell accent, across the whole app ecosystem:
+# colorscheme.sh <mode> [accent-hex] — apply the ewe appearance (the active
+# scheme, dark or light, tinted with the shell accent) across the whole app
+# ecosystem. Dark is the default; light mode is supported since 2026-10-14
+# (owner): a scheme whose variant is "light" (Ewe Light, an imported light
+# scheme, "From wallpaper (light)") flips every toolkit below.
 #   • GTK 3/4 + libadwaita   (settings.ini + gsettings)        ← PRIMARY (first-party apps)
 #   • Qt 5/6                 (qt6ct/qt5ct, Fusion + dark palette) ← any stray Qt app
 #   • KDE / KF6              (kdeglobals)                       ← only if you add a KDE app
@@ -13,13 +15,14 @@
 # nudge for already-running apps.
 #
 # First-party apps are GTK now, so the GTK config is what matters; the qt6ct/kdeglobals
-# writes just keep any stray Qt/KDE app you install dark too. `set -u` only (NOT -e),
+# writes keep any stray Qt/KDE app you install on the same palette. `set -u` only (NOT -e),
 # so a stray non-zero line never aborts before every file is written.
 set -u
 
-# $1 (the former <dark|light> mode) is accepted and IGNORED so every existing
+# $1 (the old <dark|light> mode) is accepted and IGNORED so every existing
 # caller — Globals.applyColorScheme, Settings → Theme, ewe-conf apply, phase 60,
-# ewe-setup — keeps working unchanged. The mode is always dark.
+# ewe-setup — keeps working unchanged. Light or dark comes from the active
+# scheme's "variant" in theme-tokens.json (below), never from $1.
 
 # accent → 6 lowercase hex + decimal R,G,B. No accent given: ewellow, the
 # design system v3 default (bin/ewe-theme DEFAULTS) — the old blue fallback
@@ -82,9 +85,17 @@ tokrgb() {  # tok as "r,g,b" (kdeglobals' spelling)
 # light) flips the toolkit-level switches. Everything else already follows
 # the tokens, which are the scheme's own colours either way.
 VARIANT="$(sed -n 's/.*"variant": *"\([a-z]*\)".*/\1/p' "$TOK" 2>/dev/null | head -n1)"
+# Zed's own appearance and the few roles below that a dark palette
+# hard-coded: on light they come from the scheme's tokens, or grey-on-cream
+# and pastel syntax would be unreadable.
+ZED_APPEARANCE="dark"; Z_DIM="636366"
+S_FG2="aeaeb2"; S_DANGER="ff453a"; S_WARN="ff9f0a"; S_OK="30d158"
 if [ "$VARIANT" = "light" ]; then
     GTK_THEME="adw-gtk3"; PREFER_DARK=0; CS="prefer-light"; ICONS="Reversal-${RC}"
     CURSOR="Mocu-Black-Right"
+    ZED_APPEARANCE="light"; Z_DIM="$(tok text-disabled a8a49d)"
+    S_FG2="$(tok text-secondary 423f3a)"; S_DANGER="$(tok danger a04038)"
+    S_WARN="$(tok warning 964d09)"; S_OK="$(tok success 047554)"
 fi
 # the active scheme's palette (base00…base0F), for the terminal's sixteen
 # colours — absent in accent mode, where kitty keeps its defaults
@@ -208,7 +219,7 @@ cat > "$CFG/zathura/flock-colors" <<EOF
 set default-bg              "#${S_BG}"
 set default-fg              "#${S_FG}"
 set statusbar-bg            "#${S_PANEL}"
-set statusbar-fg            "#aeaeb2"
+set statusbar-fg            "#${S_FG2}"
 set inputbar-bg             "#${S_PANEL}"
 set inputbar-fg             "#${S_FG}"
 set completion-bg           "#${S_ELEV}"
@@ -226,9 +237,9 @@ set highlight-active-color  "rgba(${AR},${AG},${AB},0.55)"
 set notification-bg         "#${S_PANEL}"
 set notification-fg         "#${S_FG}"
 set notification-error-bg   "#${S_PANEL}"
-set notification-error-fg   "#ff453a"
+set notification-error-fg   "#${S_DANGER}"
 set notification-warning-bg "#${S_PANEL}"
-set notification-warning-fg "#ff9f0a"
+set notification-warning-fg "#${S_WARN}"
 set recolor-lightcolor      "#${S_BG}"
 set recolor-darkcolor       "#${S_FG}"
 EOF
@@ -238,6 +249,18 @@ EOF
 #    gitignored like kitty's flock.conf. Zed watches its themes dir, so a
 #    running window recolours on the next write. Syntax colours stay Gruvbox
 #    (same ANSI family as kitty); only the chrome + accent follow the shell. ──
+# Syntax: Gruvbox on dark (as it always was); on light the scheme's own
+# Base24 hues, whose "bright" half (base12…base17) is the darker, readable
+# one on a light ground. Status colours follow the same split.
+Z_KW="fb4934"; Z_STR="b8bb26"; Z_FN="83a598"; Z_TYPE="fabd2f"; Z_NUM="d3869b"
+Z_CONST="fe8019"; Z_OP="d5c4a1"; Z_PROP="8ec07c"
+Z_ERR="fb4934"; Z_WARN="fabd2f"; Z_INFO="83a598"
+if [ "$VARIANT" = "light" ]; then
+    Z_KW="$(tok base0E 814a8d)"; Z_STR="$(tok base0B 047554)"; Z_FN="$(tok base0D 026a9d)"
+    Z_TYPE="$(tok base13 7f3f02)"; Z_NUM="$(tok base09 964d09)"; Z_CONST="$(tok base09 964d09)"
+    Z_OP="$S_FG_DIM"; Z_PROP="$(tok base0C 057176)"
+    Z_ERR="$S_DANGER"; Z_WARN="$S_WARN"; Z_INFO="$(tok info 026a9d)"
+fi
 mkdir -p "$CFG/zed/themes"
 cat > "$CFG/zed/themes/ewe.json" <<EOF
 {
@@ -247,7 +270,7 @@ cat > "$CFG/zed/themes/ewe.json" <<EOF
   "themes": [
     {
       "name": "ewe",
-      "appearance": "dark",
+      "appearance": "${ZED_APPEARANCE}",
       "style": {
         "background": "#${S_PANEL}",
         "surface.background": "#${S_PANEL}",
@@ -255,7 +278,7 @@ cat > "$CFG/zed/themes/ewe.json" <<EOF
         "editor.background": "#${S_BG}",
         "editor.foreground": "#${S_FG}",
         "editor.gutter.background": "#${S_BG}",
-        "editor.line_number": "#636366",
+        "editor.line_number": "#${Z_DIM}",
         "editor.active_line_number": "#${S_FG}",
         "editor.active_line.background": "#${S_ELEV}",
         "border": "#${S_STROKE}",
@@ -275,7 +298,7 @@ cat > "$CFG/zed/themes/ewe.json" <<EOF
         "drop_target.background": "#${ACC}30",
         "text": "#${S_FG}",
         "text.muted": "#${S_FG_DIM}",
-        "text.placeholder": "#636366",
+        "text.placeholder": "#${Z_DIM}",
         "text.accent": "#${ACC}",
         "icon.accent": "#${ACC}",
         "link_text.hover": "#${ACC}",
@@ -283,28 +306,28 @@ cat > "$CFG/zed/themes/ewe.json" <<EOF
         "scrollbar.track.background": "#${S_BG}",
         "terminal.background": "#${S_BG}",
         "terminal.foreground": "#${S_FG}",
-        "error": "#fb4934",
-        "warning": "#fabd2f",
-        "info": "#83a598",
+        "error": "#${Z_ERR}",
+        "warning": "#${Z_WARN}",
+        "info": "#${Z_INFO}",
         "hint": "#${S_FG_DIM}",
         "players": [
           { "cursor": "#${ACC}", "selection": "#${ACC}59", "background": "#${ACC}" }
         ],
         "syntax": {
-          "keyword":     { "color": "#fb4934" },
-          "string":      { "color": "#b8bb26" },
+          "keyword":     { "color": "#${Z_KW}" },
+          "string":      { "color": "#${Z_STR}" },
           "comment":     { "color": "#${S_FG_DIM}" },
           "comment.doc": { "color": "#${S_FG_DIM}" },
-          "function":    { "color": "#83a598" },
-          "type":        { "color": "#fabd2f" },
-          "number":      { "color": "#d3869b" },
-          "constant":    { "color": "#fe8019" },
-          "boolean":     { "color": "#fe8019" },
-          "operator":    { "color": "#d5c4a1" },
+          "function":    { "color": "#${Z_FN}" },
+          "type":        { "color": "#${Z_TYPE}" },
+          "number":      { "color": "#${Z_NUM}" },
+          "constant":    { "color": "#${Z_CONST}" },
+          "boolean":     { "color": "#${Z_CONST}" },
+          "operator":    { "color": "#${Z_OP}" },
           "variable":    { "color": "#${S_FG}" },
-          "property":    { "color": "#8ec07c" },
-          "tag":         { "color": "#fb4934" },
-          "attribute":   { "color": "#fabd2f" },
+          "property":    { "color": "#${Z_PROP}" },
+          "tag":         { "color": "#${Z_KW}" },
+          "attribute":   { "color": "#${Z_TYPE}" },
           "punctuation": { "color": "#${S_FG_DIM}" }
         }
       }
@@ -347,15 +370,15 @@ EOF
     "--bg-popup": "rgba($S_PN_R, $S_PN_G, $S_PN_B, 0.97)",
     "--bg-secondary-full-opacity": "#${S_ELEV}",
     "--text-primary": "#${S_FG}",
-    "--text-secondary": "#aeaeb2",
+    "--text-secondary": "#${S_FG2}",
     "--text-tertiary": "#${S_FG_DIM}",
     "--border-color": "#${S_STROKE}",
     "--separator": "#${S_STROKE}",
     "--accent-primary": "#${ACC}",
     "--accent-primary-rgb": "$AR, $AG, $AB",
-    "--accent-success": "#30d158",
-    "--accent-warning": "#ff9f0a",
-    "--accent-danger": "#ff453a",
+    "--accent-success": "#${S_OK}",
+    "--accent-warning": "#${S_WARN}",
+    "--accent-danger": "#${S_DANGER}",
     "--shadow-color": "rgba(0, 0, 0, 0.6)",
     "--shadow-xs": "0 1px 2px var(--shadow-color)",
     "--shadow-sm": "0 2px 4px var(--shadow-color)",
@@ -397,9 +420,9 @@ if command -v gsettings >/dev/null 2>&1; then
     gsettings set org.gnome.desktop.wm.preferences button-layout ':' 2>/dev/null || true
 fi
 
-# ── Qt (qt6ct + qt5ct) — dark Fusion palette for any stray Qt app ──
-# First-party apps are GTK; this just keeps a Qt app you install (and the Quickshell
-# shell's own Qt dialogs) on a dark palette instead of blinding white. Style = Fusion
+# ── Qt (qt6ct + qt5ct) — the scheme's Fusion palette for any stray Qt app ──
+# First-party apps are GTK; this keeps a Qt app you install (and the Quickshell
+# shell's own Qt dialogs) on the scheme's palette, dark or light. Style = Fusion
 # (QT_QPA_PLATFORMTHEME=qt6ct is set in start-hyprland.sh).
 COLORS="$CFG/qt6ct/colors"
 mkdir -p "$COLORS"
@@ -437,7 +460,7 @@ done
 
 # ── KDE / KF6 fallback — kdeglobals (only matters if you add a KDE app) ──
 # We ship no KDE apps, but writing this keeps any KColorScheme-aware app you install
-# later dark (incl. its item views) instead of falling back to a light default.
+# later on the scheme's palette (incl. its item views), dark or light.
 # Accent = Selection + Decoration*.
 C_WIN="$(tokrgb surface-base 0b0a08)";   C_WINA="$(tokrgb surface-raised 151411)"
 C_VIEW="$(tokrgb surface-base 0b0a08)";  C_VIEWA="$(tokrgb surface-base 0b0a08)"
@@ -512,10 +535,16 @@ mkdir -p "$MPVDIR/script-opts"
 # ── Helium, when a machine still has it: chrome surface + vertical tabs ─────
 # ewe browser (the DE browser since it replaced Helium) reads theme-tokens.json
 # itself and needs no hook; this one only runs while Helium is installed, so a
-# machine without it never grows a Helium profile.
+# machine without it never grows a Helium profile. A light scheme hands Helium
+# its surfaces (it has no token reader of its own).
 HT="$(dirname "$0")/helium-theme.sh"
 if [ -x "$HT" ] && command -v helium-browser >/dev/null 2>&1; then
-    "$HT" "${STYLE:-flock}" "$ACC" || true
+    if [ "$VARIANT" = "light" ]; then
+        HELIUM_BG="$S_BG" HELIUM_TOOL="$S_PANEL" HELIUM_ELEV="$S_HOVER" \
+            HELIUM_FG="$S_FG" HELIUM_DIM="$S_FG_DIM" "$HT" light "$ACC" || true
+    else
+        "$HT" "${STYLE:-flock}" "$ACC" || true
+    fi
 fi
 
 exit 0

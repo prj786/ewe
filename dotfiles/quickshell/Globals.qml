@@ -365,10 +365,11 @@ QtObject {
     property real animationSpeed: 1.0
 
     // ── App appearance (GTK + Qt) ──────────────────────────────────────────────
-    // Dark-only by decision (2026-09-01): light mode was deleted, not shipped.
-    // The property stays because user-theme.json's "colorScheme" key is read by
-    // Komble to follow the DE's app colour scheme — it is always "dark"; a
-    // persisted "light" is ignored on load. colorscheme.sh ignores its mode arg.
+    // Light or dark comes from the active scheme's variant (theme-tokens.json),
+    // never from here: light mode is supported since 2026-10-14 (Ewe Light, any
+    // light scheme). This legacy key stays "dark" for user-theme.json, where
+    // Komble only uses it to notice a change, and colorscheme.sh ignores the
+    // mode argument it is passed.
     property string colorScheme: "dark"
     property Process _csApply: Process {}
     function applyColorScheme() {
@@ -602,7 +603,7 @@ QtObject {
                     if (j && j.barIconSize) g.barIconSize = j.barIconSize
                     if (j && j.barShow && typeof j.barShow === "object") g.barShow = j.barShow
                     if (j && j.animationSpeed !== undefined) g.animationSpeed = j.animationSpeed
-                    // dark-only by decision (2026-09-01): a persisted "light" is ignored
+                    // a persisted "colorScheme" is ignored: the scheme's variant decides
                     if (j && j.avatarShape) g.avatarShape = j.avatarShape
                     if (j && j.lidDockedSuspend !== undefined) g.lidDockedSuspend = j.lidDockedSuspend
                     if (j && j.lowPowerEnabled !== undefined) g.lowPowerEnabled = j.lowPowerEnabled

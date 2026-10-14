@@ -330,9 +330,13 @@ Settings app writes MUST be in `ewe-conf`'s `THEME_MAP`, or `absorb` drops
 them on the next write (that was the 0.12.7 "Top bar settings do nothing").
 
 `colorscheme.sh <mode> [accent-hex]` writes *every* toolkit's config in one
-pass — ewe is **dark-only by decision (2026-09-01)**; the mode argument is
-accepted and ignored for caller compatibility. GTK is **primary** (adw-gtk3 + gsettings + `gtk-3.0/4.0/settings.ini`); Qt
-gets a dark Fusion palette via `qt6ct` (`QT_QPA_PLATFORMTHEME=qt6ct`) as a fallback
+pass — ewe is **dark by default with a light mode (owner, 2026-10-14; it was
+dark-only from 2026-09-01)**: light or dark comes from the active scheme's
+`variant` in `theme-tokens.json`, and the mode argument is accepted and
+ignored for caller compatibility. Every generated config must follow the
+variant (no dark-only literals; take colours from the tokens), and
+`tests/ewe-theme-test.sh` applies Ewe Light to check it. GTK is **primary** (adw-gtk3 + gsettings + `gtk-3.0/4.0/settings.ini`); Qt
+gets the scheme's Fusion palette via `qt6ct` (`QT_QPA_PLATFORMTHEME=qt6ct`) as a fallback
 for stray Qt apps; a `kdeglobals` fallback covers any KDE app added later; plus the
 Reversal icon theme (hue-matched to the accent) and the Mocu cursor. It is `set -u`
 (not `-e`) on purpose so a stray non-zero line never aborts before all files are

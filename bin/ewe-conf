@@ -103,6 +103,7 @@ SECTION_NOTES = {
     "network.vpn": "NM VPN profile definitions; secrets re-prompt after restore",
     "plugins": "third-party shell plugins (ewe-plugin): which ids are on, and where each came from",
     "plugins.sources": "id → git URL, so a fresh machine can `ewe-plugin add` what this one has",
+    "companion": "the desktop companion's brain (ewe-companiond, RFC-007): proactive, quiet hours, providers; API keys live in the keyring, never here",
 }
 
 _INLINE_MAX = 96
@@ -2115,6 +2116,11 @@ def _domain(dotted):
         return "network"
     if parts[0] == "plugins":
         return "plugins"
+    # read by ewe-companiond itself, which watches the file: nothing to
+    # generate, and above all no full apply (theme rebuild + Hyprland reload)
+    # on every companion setting (RFC-007)
+    if parts[0] == "companion":
+        return "companion"
     return None
 
 

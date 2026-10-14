@@ -560,7 +560,8 @@ check "--scheme with an unknown slug is a clear error" "echo '$r' | grep -q 'no-
 
 # 14. the fan-out: colorscheme.sh + ewe-conf, side effects shadowed ---------
 mkdir -p "$SB/bin"
-for c in gsettings hyprctl pkill dbus-send notify-send qs gio xdg-settings; do printf '#!/bin/sh\nexit 0\n' > "$SB/bin/$c"; chmod +x "$SB/bin/$c"; done
+# helium-browser: colorscheme.sh dresses Helium only while it is installed
+for c in gsettings hyprctl pkill dbus-send notify-send qs gio xdg-settings helium-browser; do printf '#!/bin/sh\nexit 0\n' > "$SB/bin/$c"; chmod +x "$SB/bin/$c"; done
 export PATH="$SB/bin:$PATH"
 $T scheme --no-hooks import "$SB/gruvbox.yaml" >/dev/null
 $T scheme --no-hooks set accent '#fe8019' --slug gruvbox-dark-medium >/dev/null
@@ -578,10 +579,22 @@ $T scheme --no-hooks apply solarized-light >/dev/null
 $T build --css /dev/null >/dev/null
 sh dotfiles/quickshell/scripts/colorscheme.sh dark "$($T show | inp accent | tr -d '#')" >/dev/null 2>&1 || true
 check "light scheme flips GTK to light + light icons + its own ANSI" "grep -q 'gtk-application-prefer-dark-theme=0' '$SB/cfg/gtk-3.0/settings.ini' && grep -q 'gtk-theme-name=adw-gtk3$' '$SB/cfg/gtk-3.0/settings.ini' && grep -q '^color0  #fdf6e3' '$SB/cfg/kitty/flock.conf'"
+# light mode (owner, 2026-10-14): the built-in Ewe Light reaches every app,
+# not only GTK: Zed says light with the scheme's own hues, and nothing keeps
+# a dark-only grey (zathura's status line, Zed's placeholders) or Helium's
+# dark frame
+$T scheme --no-hooks apply ewe-light >/dev/null
+$T build --css /dev/null >/dev/null
+sh dotfiles/quickshell/scripts/colorscheme.sh dark eeb407 >/dev/null 2>&1 || true
+ZJ="$SB/cfg/zed/themes/ewe.json"
+check "ewe-light: Zed is a light theme with the scheme's syntax hues" "python3 -c 'import json,sys; t=json.load(open(sys.argv[1]))[\"themes\"][0]; st=t[\"style\"]; assert t[\"appearance\"]==\"light\" and st[\"syntax\"][\"keyword\"][\"color\"]==\"#814a8d\" and st[\"syntax\"][\"string\"][\"color\"]==\"#047554\"' '$ZJ' && ! grep -qi '636366\\|fb4934\\|fabd2f' '$ZJ'"
+check "ewe-light: zathura's status line is no dark-only grey; Helium's frame is light" "! grep -q aeaeb2 '$SB/cfg/zathura/flock-colors' && python3 -c 'import json,sys; c=json.load(open(sys.argv[1]))[\"theme\"][\"colors\"]; assert min(c[\"frame\"])>200 and max(c[\"tab_text\"])<80' '$SB/state/ewe/helium/theme/manifest.json'"
+check "ewe-light: GTK light, light icons, prefer-light" "grep -q 'gtk-application-prefer-dark-theme=0' '$SB/cfg/gtk-3.0/settings.ini' && grep -q 'gtk-icon-theme-name=Reversal-orange$' '$SB/cfg/gtk-3.0/settings.ini'"
 $T scheme --no-hooks apply ewe-dark >/dev/null
 $T build --css /dev/null >/dev/null
 sh dotfiles/quickshell/scripts/colorscheme.sh dark eeb407 >/dev/null 2>&1 || true
 check "ewe-dark: kitty wears Ewe Dark's palette, GTK dark again" "grep -q '^color0  #0b0a08' '$SB/cfg/kitty/flock.conf' && grep -q 'gtk-application-prefer-dark-theme=1' '$SB/cfg/gtk-3.0/settings.ini'"
+check "ewe-dark: Zed is dark again with its Gruvbox syntax; Helium's frame is dark" "python3 -c 'import json,sys; t=json.load(open(sys.argv[1]))[\"themes\"][0]; assert t[\"appearance\"]==\"dark\" and t[\"style\"][\"syntax\"][\"keyword\"][\"color\"]==\"#fb4934\"' '$SB/cfg/zed/themes/ewe.json' && python3 -c 'import json,sys; c=json.load(open(sys.argv[1]))[\"theme\"][\"colors\"]; assert max(c[\"frame\"])<60' '$SB/state/ewe/helium/theme/manifest.json'"
 # ewe-conf: the border follows the scheme's accent, user-theme.json carries the choice
 bin/ewe-conf set --no-hooks desktop.theme.scheme '"gruvbox-dark-medium"' >/dev/null
 check "ewe-conf: user-theme.json says scheme, window border = the scheme accent" "grep -q '\"scheme\": \"gruvbox-dark-medium\"' '$SB/cfg/quickshell/user-theme.json' && grep -q 'active_border = \"rgba(fe8019ff)\"' '$SB/cfg/hypr/generated/user.lua'"

@@ -6,7 +6,8 @@ it works and what to expect. (A proper website will eventually replace this.)
 
 ## Status & versioning
 
-**Beta — `0.5.0-beta`.** Usable and daily-drivable, but expect rough edges and
+**Beta — `0.26.0-beta` when this was last checked (2026-10-14; `VERSION` is
+the truth).** Usable and daily-drivable, but expect rough edges and
 breaking changes between versions. Tested on a minimal Arch install in a
 QEMU/KVM VM and on Intel Lunar Lake hardware.
 
@@ -112,16 +113,22 @@ sees your installed apps, with no KDE `ksycoca` cache to rebuild. Manage it from
 **Settings → Default Apps**. Right-click **Compress… / Extract Here** in Nemo
 ship as `system/nemo-actions/*.nemo_action` (calling engrampa).
 
-**Appearance** (dark + accent — ewe is dark-only by decision; there is no light
-mode) is applied by `dotfiles/quickshell/scripts/colorscheme.sh` and changed
-live in **Settings → Theme**:
+**Appearance** (a scheme + an accent: Ewe Dark by default; light mode is the
+built-in Ewe Light, an imported light scheme or *From wallpaper (light)*) is
+applied by `dotfiles/quickshell/scripts/colorscheme.sh` and changed live in
+**Settings → Appearance**:
 
 - **GTK** (primary) — gsettings + `gtk-3.0/4.0/settings.ini` (adw-gtk3[-dark]);
   accent changes recolour GTK apps live.
-- **Qt** — `qt6ct`/`qt5ct` write a dark **Fusion** palette
-  (`QT_QPA_PLATFORMTHEME=qt6ct`) so any stray Qt app stays dark. A `kdeglobals`
-  fallback covers any KDE app added later. No `plasma-integration`.
-- **Icons** — **Reversal**, auto-matched to the accent by hue.
+- **Qt** — `qt6ct`/`qt5ct` write a **Fusion** palette from the scheme
+  (`QT_QPA_PLATFORMTHEME=qt6ct`) so any stray Qt app matches, dark or light. A
+  `kdeglobals` fallback covers any KDE app added later. No `plasma-integration`.
+- **Icons** — **Reversal**, auto-matched to the accent by hue (its light
+  variant on a light scheme).
+- **Apps** — kitty, Zathura, Zed, mpv, ewe browser, Helium (while installed)
+  and ewe's own apps (Settings, Komble, ewe-sync) take the scheme too; Zed switches to a light theme with
+  the scheme's own syntax colours. The lock screen stays Ewe Dark over the
+  wallpaper.
 - **Cursor** — **Mocu** (`mocu-xcursor`), forced via `XCURSOR_THEME`,
   `~/.icons/default`, GTK, gsettings and qt6ct so it never flips between
   toolkits.
@@ -412,15 +419,17 @@ On 2026.1+ (Wayland by default) `-Dsun.awt.wl.WindowDecorationStyle=server`
 in Help → Edit Custom VM Options does the same for the runtime's own title
 bar. ewe does not write into IDE configs; these are yours to set once.
 
-## Clipboard, screenshots, passwords — the bundled plugins
+## Clipboard, screenshots, passwords — plugins from ewe
 
-Three things on the bar are plugins rather than parts of the shell: the
-clipboard history (scissors), screenshots (camera, and the `Print` keys) and
-the password fill picker (`Super+P`). They come with ewe and are on from the
-first login, but they are ordinary plugins — `ewe-plugin list` shows them as
-*bundled*, `ewe-plugin remove ewe.clipboard` takes one away for good (a later
-ewe update will not bring it back; `ewe-plugin seed --restore ewe.clipboard`
-does), and `ewe-plugin set ewe.screenshot copy false` changes what they do.
+The clipboard history (scissors), screenshots (camera, and the `Print` keys),
+the password fill picker (`Super+P`), the dock and the rest are plugins
+rather than parts of the shell. They ship inside ewe, but none is on at the
+first login: pick them in Welcome, in **Komble → Plugins → From ewe**, or with
+`ewe-plugin install ewe.clipboard`. (A machine that upgraded from a version
+where a feature was built in gets its plugin installed once.) They are
+ordinary plugins — `ewe-plugin list` shows them, `ewe-plugin remove
+ewe.clipboard` takes one away, and `ewe-plugin set ewe.screenshot copy false`
+changes what they do.
 Their code is public — `prj786/ewe-plugin-clipboard`, `-screenshot`,
 `-passwords` — and they are the reference for writing your own
 (`docs/PLUGINS.md`).
@@ -444,7 +453,8 @@ into the picker's own search box, and secrets never touch the clipboard
 history.
 
 Which manager: `ewe-plugin set ewe.passwords provider 1password` (or in
-Settings → Plugins; `auto`, the default, picks the first installed).
+Komble → Plugins → Passwords → Options; `auto`, the default, picks the first
+installed).
 Providers and their one-time setup:
 
 | provider | needs | setup |
