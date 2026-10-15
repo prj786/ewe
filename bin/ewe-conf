@@ -11,7 +11,10 @@ artifact of `ewe-conf apply`.
     ewe-conf get <dotted.key>         value (JSON for structures)
     ewe-conf set <dotted.key> <val>   val parsed as JSON, else string; applies
     ewe-conf unset <dotted.key>       remove a key; applies
-    ewe-conf import                   build ewe.conf FROM the live runtime files
+                                      (a part with dots is quoted, as in TOML:
+                                      plugins.settings."ewe.passwords".provider;
+                                      a broken key is refused: bad-key, exit 1)
+    ewe-conf import                  build ewe.conf FROM the live runtime files
     ewe-conf apply [--only DOMAIN] [--no-hooks]
                                       regenerate artifacts (+ colorscheme +
                                       settings-reload poke + hyprctl reload
@@ -219,8 +222,37 @@ class locked:
         self.f.close()
 
 
+def split_key(dotted):
+    # the TOML way: a quoted part keeps its dots, so a plugin id works as
+    # plugins.settings."ewe.passwords".provider. A plain split once turned
+    # that into a stray [plugins.settings."\"ewe"] table (2026-10-15).
+    parts, cur, i, n = [], None, 0, len(dotted)
+    while i < n:
+        c = dotted[i]
+        if c in "\"'":
+            end = dotted.find(c, i + 1)
+            if cur is not None or end < 0:
+                raise ValueError("bad key: %s" % dotted)
+            cur, i = dotted[i + 1:end], end + 1
+            if i < n and dotted[i] != ".":
+                raise ValueError("bad key: %s" % dotted)
+            continue
+        if c == ".":
+            if not cur:
+                raise ValueError("bad key: %s" % dotted)
+            parts.append(cur)
+            cur = None
+        else:
+            cur = (cur or "") + c
+        i += 1
+    if not cur:
+        raise ValueError("bad key: %s" % dotted)
+    parts.append(cur)
+    return parts
+
+
 def dig(doc, dotted, create=False):
-    *parts, last = dotted.split(".")
+    *parts, last = split_key(dotted)
     node = doc
     for p in parts:
         if p not in node or not isinstance(node[p], dict):
@@ -2022,6 +2054,12 @@ def main(argv):
     hooks = "--no-hooks" not in argv
     argv = [a for a in argv if a != "--no-hooks"]
     cmd = argv[0] if argv else "help"
+    if cmd in ("get", "set", "unset") and len(argv) >= 2:
+        try:
+            split_key(argv[1])
+        except ValueError as e:
+            print(json.dumps({"error": "bad-key", "key": argv[1], "message": str(e)}), file=sys.stderr)
+            return 1
     if cmd == "path":
         print(CONF)
     elif cmd == "dump":
@@ -2104,7 +2142,7 @@ def main(argv):
 
 def _domain(dotted):
     # first meaningful routing segment: desktop.<domain>… or apps.* / system.*
-    parts = dotted.split(".")
+    parts = split_key(dotted)
     if parts[0] == "desktop" and len(parts) > 1:
         return {"theme": "theme", "dock": "theme", "bar": "theme", "tiling": "theme",
                 "power": "theme", "accessibility": "theme", "animations": "animations",
