@@ -28,6 +28,11 @@ bin/ewe-conf set safe.lock_on_screen_lock true || no "set exited non-zero"
 [ "$(bin/ewe-conf get safe.lock_on_screen_lock)" = "true" ] && ok "a bool is stored" || no "get safe.lock_on_screen_lock"
 bin/ewe-conf set safe.place '"icloud"' 2>/dev/null && no "an unknown place was accepted" || ok "an unknown place is refused"
 [ "$(bin/ewe-conf get safe.place)" = "nextcloud" ] && ok "a refused set leaves the value" || no "a refused set changed safe.place"
+bin/ewe-conf set safe.ssh_agent true || no "set ssh_agent exited non-zero"
+[ "$(bin/ewe-conf get safe.ssh_agent)" = "true" ] && ok "ssh_agent is stored" || no "get safe.ssh_agent"
+bin/ewe-conf set safe.ssh_confirm '"Every-Time"' || no "set ssh_confirm exited non-zero"
+[ "$(bin/ewe-conf get safe.ssh_confirm)" = "every-time" ] && ok "ssh_confirm is stored, normalised" || no "get safe.ssh_confirm"
+bin/ewe-conf set safe.ssh_confirm '"sometimes"' 2>/dev/null && no "an unknown ssh_confirm was accepted" || ok "an unknown ssh_confirm is refused"
 for f in quickshell/theme-tokens.json quickshell/user-theme.json hypr/generated/user.lua; do
   [ -e "$S/cfg/$f" ] && no "a safe set regenerated $f" || ok "nothing regenerated: $f"
 done
