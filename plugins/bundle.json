@@ -45,8 +45,8 @@
     },
     "ewe.passwords": {
       "repo": "https://github.com/prj786/ewe-plugin-passwords",
-      "commit": "527afa50be56c76be7b4b81572d6a6dbb707072f",
-      "version": "1.2.0",
+      "commit": "98d2186585eb99382695476b57052ea5bff4b9e4",
+      "version": "1.3.0",
       "default": false,
       "migrate": true
     },
