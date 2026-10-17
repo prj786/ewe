@@ -200,7 +200,8 @@ These are proposed, and become Rules of the House when the companion ships.
 
 1. **Face:** eyes only. Two dots that blink and glance toward an event,
    within the motion tokens; reduce-motion holds them still.
-2. **Name:** "Companion".
+2. **Name:** "Companion"; renamed **"Shaun"** by the owner on 2026-10-17
+   (the user-facing name only: every id stays `companion`, rule 4).
 3. **Notifications:** takeover through Plugin API 4 with the core watchdog
    (P3). The `replace_banners` setting stays off by default.
 4. **Subscription lanes:** API keys, local models and ChatGPT (Codex / Sign

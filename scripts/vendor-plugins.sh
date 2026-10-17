@@ -97,8 +97,12 @@ while IFS=$'\t' read -r id repo; do
     # replace the vendored copy wholesale (python: no shell rm -r in a release script)
     python3 -c "import shutil,sys; shutil.rmtree(sys.argv[1], ignore_errors=True)" "plugins/$id"
     mkdir -p "plugins/$id"
-    # everything but git/dev files — the manifest, the QML, the scripts, the licence
-    (cd "$src" && tar --exclude=.git --exclude='*.bak.*' --exclude=node_modules --exclude=__pycache__ -cf - .) | (cd "plugins/$id" && tar -xf -)
+    # everything but git/dev files — the manifest, the QML, the scripts, the licence.
+    # AGENTS.md/CLAUDE.md are the plugin repo's agent guides: their relative
+    # paths point beside that repo, and a CLAUDE.md here would steer an agent
+    # working in ewe (ewe.companion has them, 2026-10-17)
+    (cd "$src" && tar --exclude=.git --exclude='*.bak.*' --exclude=node_modules --exclude=__pycache__ \
+        --exclude=./AGENTS.md --exclude=./CLAUDE.md -cf - .) | (cd "plugins/$id" && tar -xf -)
     v="$(python3 -c "import json;print(json.load(open('plugins/$id/manifest.json'))['version'])")"
     bin/ewe-plugin validate "plugins/$id" --first-party >/dev/null || { echo "$id: the vendored copy does not validate" >&2; exit 1; }
     record "$id" "$commit" "$v"

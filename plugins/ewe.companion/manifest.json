@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "id": "ewe.companion",
+  "name": "Shaun",
+  "version": "0.4.0",
+  "apiVersion": 3,
+  "description": "Shaun, your desktop companion: a notch under the top bar with what your AI agents are doing, their requests to approve, a glance at what needs you, quick actions and a small chat for questions and commands, with Safe, ewe browser and your files.",
+  "homepage": "https://github.com/prj786/ewe-plugin-companion",
+  "author": "prj786",
+  "icon": "icMessage",
+  "category": "System",
+  "kinds": ["service", "overlay"],
+  "entryPoints": {
+    "service": "Service.qml",
+    "overlay": "Drop.qml"
+  },
+  "keybinds": [
+    { "combo": "SUPER + A", "ipc": "ewe.companion toggle" }
+  ],
+  "requires": {
+    "packages": ["ewe-companion"],
+    "commands": ["ewe-companiond", "ewe-companion"]
+  },
+  "settings": [
+    { "key": "provider", "type": "choice", "default": "none",
+      "choices": ["none", "claude-code", "codex", "opencode", "anthropic", "openai", "gemini", "openrouter", "ollama", "lmstudio", "custom"],
+      "label": "Who answers questions",
+      "description": "claude-code / codex / opencode use your own login in that app (Anthropic's rules for apps driving Claude Code are not settled). anthropic / openai / gemini / openrouter need an API key: paste it in the companion, it goes to your keyring, never here. ollama / lmstudio run on this computer. Commands work with none." },
+    { "key": "model", "type": "string", "default": "",
+      "label": "Model", "description": "Empty picks the provider's quick model (haiku for Claude Code, the first local model for Ollama)." },
+    { "key": "base_url", "type": "string", "default": "",
+      "label": "Server address", "description": "Only for custom (any OpenAI-compatible server), or to point another provider elsewhere." },
+    { "key": "screen", "type": "choice", "default": "primary", "choices": ["primary", "focused", "all"],
+      "label": "Show on", "description": "The primary screen, the screen you are using, or every screen." },
+    { "key": "show_usage", "type": "bool", "default": true,
+      "label": "Show Claude plan usage", "description": "Your 5-hour and weekly limits in the notch (Pro and Max plans; needs ewe-companion agents usage claude on)." },
+    { "key": "peek_seconds", "type": "int", "default": 5, "min": 3, "max": 15,
+      "label": "Keep a line on screen for (seconds)" }
+  ]
+}

@@ -110,7 +110,7 @@ while that plugin is on. Your own launch keys live in ewe.conf
 | `Super` + `Print` | Screenshot of the focused window (`ewe.screenshot`) |
 | `Super` + `P` | **Passwords**: fill a login from your manager (the `ewe.passwords` plugin) |
 | `Super` + `Shift` + `C` | **Cast to TV**: the TV list, or hang up (the `ewe.cast` plugin) |
-| `Super` + `A` | **Companion**: open or close the notch (the `ewe.companion` plugin) |
+| `Super` + `A` | **Shaun** (the companion): open or close the notch (the `ewe.companion` plugin) |
 
 > The screenshot plugin's camera in the bar: Left = region · Right = focused
 > monitor · Middle = focused window. Clipboard history (`ewe.clipboard`) has no
