@@ -170,7 +170,9 @@ Column {
         return a.copy !== undefined ? "copy"
              : a.command === "open_folder" ? "folder"
              : a.command === "launch_app" ? "terminal"
-             : a.command === "open_url" ? "web" : ""
+             : a.command === "open_url" ? "web"
+             : a.command === "browser_download" && a.args && a.args.action === "show" ? "folder"
+             : a.command === "timer_cancel" ? "close" : ""
     }
     function glyphOf(name) {
         switch (name) {
@@ -180,6 +182,12 @@ Column {
         case "key": return Theme.icLock
         case "copy": return Theme.icClipboard
         case "terminal": return Theme.icSsh
+        // wave 2: the browser's downloads and workspaces, timers, Bluetooth
+        case "download": return Theme.icDownload
+        case "workspace": return Theme.icStack
+        case "timer": return Theme.icBellRing
+        case "bluetooth": return Theme.icBluetooth
+        case "close": return Theme.icClose
         default: return Theme.icChevronRight
         }
     }

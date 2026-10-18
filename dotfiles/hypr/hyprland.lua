@@ -380,6 +380,30 @@ hl.gesture({
     end,
 })
 
+-- Four-finger horizontal swipe → ewe browser's own workspaces, only while the
+-- browser is the focused window; anywhere else four fingers do nothing. Same
+-- sense as the desktop swipe: fingers left → the next one.
+local function browser_workspace(step)
+    return function()
+        local w = hl.get_active_window()
+        if w and w.class == "ewe-browser" then
+            hl.dispatch(hl.dsp.exec_cmd("ewe-browser workspace " .. step))
+        end
+    end
+end
+
+hl.gesture({
+    fingers   = 4,
+    direction = "left",
+    action    = browser_workspace("next"),
+})
+
+hl.gesture({
+    fingers   = 4,
+    direction = "right",
+    action    = browser_workspace("prev"),
+})
+
 
 -- ╭───────────────────────────────────────────────────────────────╮
 -- │ KEYBINDINGS — ported from desktop_env/keys/keybindings.py       │

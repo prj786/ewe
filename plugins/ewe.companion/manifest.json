@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "ewe.companion",
   "name": "Shaun",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "apiVersion": 3,
   "description": "Shaun, your desktop companion: a notch under the top bar with what your AI agents are doing, their requests to approve, a glance at what needs you, quick actions and a small chat for questions and commands, with Safe, ewe browser and your files.",
   "homepage": "https://github.com/prj786/ewe-plugin-companion",
