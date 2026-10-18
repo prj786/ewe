@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "ewe.safe",
   "name": "Safe",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "apiVersion": 3,
   "description": "Safe on your desktop: a lock in the bar, Quick Access to every item (Super+Shift+P) and a Quick settings tile. Copy a password, a username or a one-time code; lock and unlock.",
   "homepage": "https://github.com/prj786/ewe-plugin-safe",

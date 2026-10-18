@@ -140,6 +140,14 @@ TestCase {
         compare(Logic.rank(items, "shepherd").map(function (i) { return i.id }).join(), "3") // a username
         compare(Logic.rank(items, "work").map(function (i) { return i.id }).join(), "4,3")  // title before tag
         compare(Logic.rank(items, "zzz").length, 0)
+        // kinds Quick Access can't use stay in the Safe window
+        var more = items.concat([
+            { id: "5", kind: "card", title: "Work Visa", username: "", urls: [], tags: [] },
+            { id: "6", kind: "address", title: "Work address", username: "", urls: [], tags: [] },
+            { id: "7", kind: "ssh-key", title: "Work laptop key", username: "", urls: [], tags: [] }
+        ])
+        compare(Logic.rank(more, "").map(function (i) { return i.id }).join(), "1,3,4,2")
+        compare(Logic.rank(more, "work").map(function (i) { return i.id }).join(), "4,3")
     }
 
     function test_otp_text() {

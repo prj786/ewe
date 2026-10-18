@@ -141,7 +141,24 @@ ls ~/.local/share/keyrings/login.keyring                  # expect: present
 **You already have a "Default keyring".** The mask stops a new machine from
 ever getting one, but it cannot re-key the one you have: that keyring was
 created with a password PAM does not know, so it stays locked until you type
-it. Clear it and let PAM start over:
+it, at every start. Apps keep their passwords in it (it is the `default`), so
+the prompt comes back after every boot. Found on the owner's machine
+2026-10-18; at that boot two apps also asked at once and gnome-keyring
+crashed (`gkd-secret-unlock.c:244 perform_next_unlock: assertion failed`),
+and the copy D-Bus started next had no password at all.
+
+With Safe installed (0.3.0+), move everything into `login` and keep the old
+keyring as a backup — it asks for the old keyring's password one last time:
+
+```sh
+ewe-safe keyring status          # needs_repair: true when default isn't login
+ewe-safe keyring repair --dry-run
+ewe-safe keyring repair          # copies every item into login; default -> login
+```
+
+Safe → Settings → Keyring has the same as a button ("Fix the keyring password
+prompt"). Nothing is deleted; remove the old keyring later in Seahorse once
+everything works. Without Safe, clear it and let PAM start over:
 
 ```sh
 ewe-auth keyring-reset      # or: mv ~/.local/share/keyrings{,.bak}
