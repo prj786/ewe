@@ -29,8 +29,11 @@ otherwise; **Super+A** brings it out. It is one size whatever it says:
     my GitHub password" when several fit: a click copies that one), files
     and folders ("find my resume": **Open**, and small buttons for **Show in
     folder**, **Copy path**, **Open terminal here**), ewe browser's history
-    and tabs (**Open**, **Go to**). A locked Safe gets an **Unlock Safe**
-    button that opens Safe's own window for the master password.
+    and tabs (**Open**, **Go to**), its bookmarks, downloads (**Open**,
+    **Show in folder**) and workspaces (**Switch**), paired Bluetooth
+    devices (**Connect**), and timers (**Cancel**). A locked Safe gets an
+    **Unlock Safe** button that opens Safe's own window for the master
+    password.
 
 | kind | file | what |
 |---|---|---|
@@ -85,7 +88,8 @@ keyring.
 - **It never sees a password.** Safe copies it and clears the clipboard
   itself; the notch shows a login's title and username only, and *Copy
   path* is the one thing it puts on the clipboard itself (`wl-copy`).
-- **ewe browser's acts run here** (search, open, play, a tab), as
+- **ewe browser's acts run here** (search, open, play, a tab, a
+  workspace, back and forward), as
   `ewe-browser` with arguments, never a shell, so a browser they start
   belongs to your desktop. The notch closes first, as it does for apps.
 - **It needs the `ewe-companion` package** (`ewe-companiond`). Without it
