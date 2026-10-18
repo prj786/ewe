@@ -305,10 +305,13 @@ machine knows where its safe lives and only asks for the master password:
 place (default `ewe/safe/passwords.kdbx`); `webdav_url`, `webdav_user` for
 `place = "webdav"`; `lock_after_minutes` (default 30), `lock_on_screen_lock`,
 `lock_on_sleep` (bools, default `true`); `clipboard_clear_seconds` (default
-30); `generator_length` (default 20), `generator_words` (default 5). The
-safe is an encrypted KeePass file in the place; the WebDAV password and the
-"unlock with my login" key live in the keyring (service `ewe-safe`), the
-Nextcloud app password behind `ewe-cloud` — never in this file.
+30); `generator_length` (default 20), `generator_words` (default 5);
+`unlock_at_login` (bool, default `true`) — unlock the safe at login when
+unlock-with-my-login-password is on; `confirm_cards` (bool, default `true`)
+— ask for the password again before Safe fills a card. The safe is an
+encrypted KeePass file in the place; the WebDAV password and the login-unlock
+key live in the keyring (service `ewe-safe`), the Nextcloud app password
+behind `ewe-cloud` — never in this file.
 
 ### `[apps]`
 

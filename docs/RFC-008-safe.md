@@ -451,7 +451,7 @@ connection.
 | what | where | synced? |
 |---|---|---|
 | the safe (encrypted) | the place (`ewe/safe/passwords.kdbx` in a remote place; `~/.local/share/ewe/safe/passwords.kdbx` for this computer) | by `ewe-safed` |
-| settings (non-secret) | `ewe.conf` `[safe]`: `place`, `location`, `webdav_url`, `webdav_user`, `lock_after_minutes = 30`, `lock_on_screen_lock`, `lock_on_sleep`, `clipboard_clear_seconds = 30`, `generator_length = 20`, `generator_words = 5` | yes (ewe-sync) |
+| settings (non-secret) | `ewe.conf` `[safe]`: `place`, `location`, `webdav_url`, `webdav_user`, `lock_after_minutes = 30`, `lock_on_screen_lock`, `lock_on_sleep`, `clipboard_clear_seconds = 30`, `generator_length = 20`, `generator_words = 5`, `unlock_at_login = true`, `confirm_cards = true` | yes (ewe-sync) |
 | local cache + sync record | `~/.local/state/ewe/safe/cache/passwords.kdbx`, `sync.json` (etag, hash, newest-seen time, pending) | never |
 | backups | `~/.local/state/ewe/safe/backups/` (20, encrypted) | never |
 | per-machine choices | `~/.local/state/ewe/safe/machine.json` (safe id, unlock-with-login on/off) | never |

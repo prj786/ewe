@@ -33,6 +33,10 @@ bin/ewe-conf set safe.ssh_agent true || no "set ssh_agent exited non-zero"
 bin/ewe-conf set safe.ssh_confirm '"Every-Time"' || no "set ssh_confirm exited non-zero"
 [ "$(bin/ewe-conf get safe.ssh_confirm)" = "every-time" ] && ok "ssh_confirm is stored, normalised" || no "get safe.ssh_confirm"
 bin/ewe-conf set safe.ssh_confirm '"sometimes"' 2>/dev/null && no "an unknown ssh_confirm was accepted" || ok "an unknown ssh_confirm is refused"
+bin/ewe-conf set safe.unlock_at_login false || no "set unlock_at_login exited non-zero"
+[ "$(bin/ewe-conf get safe.unlock_at_login)" = "false" ] && ok "unlock_at_login is stored" || no "get safe.unlock_at_login"
+bin/ewe-conf set safe.confirm_cards true || no "set confirm_cards exited non-zero"
+[ "$(bin/ewe-conf get safe.confirm_cards)" = "true" ] && ok "confirm_cards is stored" || no "get safe.confirm_cards"
 for f in quickshell/theme-tokens.json quickshell/user-theme.json hypr/generated/user.lua; do
   [ -e "$S/cfg/$f" ] && no "a safe set regenerated $f" || ok "nothing regenerated: $f"
 done

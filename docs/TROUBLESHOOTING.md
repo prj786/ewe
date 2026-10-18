@@ -151,6 +151,19 @@ ewe-auth keyring-reset      # or: mv ~/.local/share/keyrings{,.bak}
 
 The old files are kept in `~/.local/share/keyrings.bak.<timestamp>`.
 
+**Safe as your login unlock.** Safe (the password manager, RFC-008) can open
+with your **login password** instead of its master password: turn it on in
+Safe → Settings → Security, or `ewe-safe login enable`. With it on, Safe on
+this computer is as strong as your login password; your copy in Nextcloud
+still needs the master password. It rides in the same `login` keyring
+`pam_gnome_keyring` already unlocks at the greeter (above), so when that
+keyring is healthy Safe opens at login with no extra prompt — if the keyring
+itself is stuck, fix it first (this section). Turn it back off with
+`ewe-safe login disable`; the master password always works. `[safe]`
+`unlock_at_login` (default true) controls the open-at-login step;
+`confirm_cards` (default true) asks for the password again before a card is
+filled.
+
 **A prompt appears anyway.** Then it is a genuine request from some app, not
 a stuck one — answer it with your **login password**. It is floated, centred
 and kept small by a window rule (`dotfiles/hypr/hyprland.lua`; gcr's GTK
