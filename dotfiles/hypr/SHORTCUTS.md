@@ -78,6 +78,8 @@ while that plugin is on. Your own launch keys live in ewe.conf
 | 3-finger swipe left / right | Switch workspaces |
 | 3-finger swipe up | Overview |
 | 3-finger swipe down | A new empty desktop (never piles up empty ones) |
+| 4-finger swipe left / right | In ewe browser: its next / previous workspace (nothing elsewhere) |
+| 2-finger swipe left / right | In ewe browser: back / forward (the browser's own gesture) |
 
 ## Session
 
