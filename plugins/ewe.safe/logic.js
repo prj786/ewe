@@ -154,6 +154,11 @@ function rowCaption(it) {
     return h || it.folder || ""
 }
 
+// the kinds Quick Access knows how to use; Safe's other kinds (SSH keys,
+// cards, addresses — PROTOCOL.md: "a caller that knows only logins and
+// notes skips other kinds") live in the Safe window
+var KINDS = { login: true, note: true }
+
 // rank items for what was typed: title start > word start in the title >
 // anywhere in the title > username / site / tag / folder. Empty query →
 // everything, logins before notes, by title (the CLI's own order kept).
@@ -162,6 +167,7 @@ function rank(items, query) {
     var out = []
     for (var i = 0; i < items.length; i++) {
         var it = items[i], t = (it.title || "").toLowerCase()
+        if (!KINDS[it.kind || "login"]) continue
         var score = 0
         if (!q) score = it.kind === "note" ? 1 : 2
         else if (t.indexOf(q) === 0) score = 100
