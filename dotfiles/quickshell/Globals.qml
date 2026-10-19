@@ -30,7 +30,7 @@ QtObject {
     // Project version — the shell's runtime copy. Keep in sync with the repo-root
     // VERSION file (the canonical source used for git tags / releases). Semver, with
     // an -alpha/-beta pre-release suffix until the first stable cut.
-    readonly property string version: "0.31.0-beta"
+    readonly property string version: "0.31.1-beta"
 
     // ── event sounds (GNOME-style; the freedesktop sound theme, one toggle) ──
     // playSound("message-new-instant") etc — names are theme event ids from
@@ -435,9 +435,43 @@ QtObject {
         if (on && i < 0) a.push(id)
         else if (!on && i >= 0) a.splice(i, 1)
         else return
+        g._writePins(a)
+    }
+    function _writePins(a) {
         g.pinnedApps = a
         g._pinWriter.command = [g.eweConf, "set", "--no-hooks", "apps.pinned", JSON.stringify(a)]
         g._pinWriter.running = false; g._pinWriter.running = true
+    }
+    // A pin from before ewe browser (firefox.desktop was the default pin,
+    // Helium the browser until 0.26) names an entry that is gone, so the
+    // dock's apps box showed no browser at all while `ewe-browser` ran fine
+    // from a terminal. Once the pins and the desktop entries are both in, a
+    // dead browser pin becomes ewe-browser.desktop in its place — once, and
+    // only while ewe browser is installed and not pinned already.
+    readonly property var _oldBrowserPins: ["helium.desktop", "firefox.desktop", "firefox-esr.desktop", "org.mozilla.firefox.desktop"]
+    property bool _pinsLoaded: false
+    property bool _browserPinChecked: false
+    function _migrateBrowserPin() {
+        if (g._browserPinChecked || !g._pinsLoaded) return
+        var all = DesktopEntries.applications ? DesktopEntries.applications.values : []
+        var a = (g.pinnedApps || []).slice()
+        if (all.length === 0 || a.length === 0) return   // a later reload may bring the pins
+        g._browserPinChecked = true
+        if (a.indexOf("ewe-browser.desktop") >= 0 || !DesktopEntries.byId("ewe-browser")) return
+        for (var i = 0; i < a.length; i++) {
+            if (g._oldBrowserPins.indexOf(a[i]) < 0) continue
+            if (DesktopEntries.byId(a[i].replace(/\.desktop$/, ""))) continue
+            a[i] = "ewe-browser.desktop"
+            g._writePins(a)
+            return
+        }
+    }
+    // the desktop entries arrive a moment after start-up (a scan); wait for
+    // them to settle so a still-installed Firefox is never taken for gone
+    property Timer _browserPinTimer: Timer { interval: 3000; onTriggered: g._migrateBrowserPin() }
+    property Connections _browserPinWatch: Connections {
+        target: DesktopEntries.applications
+        function onValuesChanged() { if (!g._browserPinChecked) g._browserPinTimer.restart() }
     }
     // (Pinned places — places.json / ewe-conf apps.places — belong to the
     // ewe.places add-on since 0.25; lib/deploy.sh still seeds places.json.default
@@ -498,7 +532,10 @@ QtObject {
     property Process _pinLoad: Process {
         running: true
         command: ["sh", "-c", "cat \"$HOME/.config/quickshell/pinned-apps.json\" 2>/dev/null"]
-        stdout: StdioCollector { onStreamFinished: { try { var j = JSON.parse(this.text); if (Array.isArray(j)) g.pinnedApps = j } catch (e) {} } }
+        stdout: StdioCollector { onStreamFinished: {
+            try { var j = JSON.parse(this.text); if (Array.isArray(j)) g.pinnedApps = j } catch (e) {}
+            g._pinsLoaded = true; g._browserPinTimer.restart()
+        } }
     }
 
     // The last parsed contents of user-theme.json, verbatim.
