@@ -1,0 +1,3 @@
+singleton SlackInbox 1.0 SlackInbox.qml
+SlackAvatar 1.0 SlackAvatar.qml
+SlackRow 1.0 SlackRow.qml

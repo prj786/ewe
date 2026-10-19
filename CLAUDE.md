@@ -239,7 +239,7 @@ External control (keybinds, scripts) uses **`qs ipc call <target> <fn>`** agains
 `IpcHandler { target: "<name>" }` in a component — core targets: `bar picker quicksettings
 lock osd overview settings applauncher store updates plugins widgets sync cloud google
 display power saver welcome toast` (plus each plugin's own, `ewe.clipboard ewe.screenshot
-ewe.passwords ewe.safe ewe.companion`…; the legacy targets `cast launcher places player mail` are the first-party
+ewe.passwords ewe.safe ewe.companion ewe.slack`…; the legacy targets `cast launcher places player mail` are the first-party
 plugins' `ipcAliases` now — present only while that plugin is installed). Most expose
 `toggle`/`show`/`hide`. Gotcha: `qs ipc call <t> show` collides with the `qs ipc
 show` subcommand and no-ops — bind to **`toggle`**.
