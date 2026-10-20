@@ -23,6 +23,29 @@ _hs_old_dir="${XDG_STATE_HOME:-$HOME/.local/state}/hypr-shell"
 [ -d "$_hs_old_dir" ] && [ ! -e "$_hs_log_dir" ] && mv "$_hs_old_dir" "$_hs_log_dir" 2>/dev/null
 mkdir -p "$_hs_log_dir" 2>/dev/null && exec >"$_hs_log_dir/session.log" 2>&1
 
+# migrate: ewe browser before 0.5 wrote its "open folders" handler as
+# ~/.local/share/applications/ewe-browser.desktop — the package's own id, so
+# the user copy shadowed the real entry and the launcher found a folder-icon
+# file manager instead of the browser. The handler is ewe-browser-folders.desktop
+# now; drop the old copy (only the folder-only one, never a user's own edit of
+# the browser entry) and hand inode/directory back if it pointed there.
+_hs_apps="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
+if [ -f "$_hs_apps/ewe-browser.desktop" ] && [ -f /usr/share/applications/ewe-browser.desktop ] \
+   && grep -qx 'MimeType=inode/directory;' "$_hs_apps/ewe-browser.desktop"; then
+    rm -f "$_hs_apps/ewe-browser.desktop"
+    _hs_mimeapps="${XDG_CONFIG_HOME:-$HOME/.config}/mimeapps.list"
+    if [ -f "$_hs_mimeapps" ]; then
+        if [ "$(awk -F= '/^\[/{s=($0=="[Default Applications]")} s && $1=="inode/directory" {sub(/;.*/,"",$2); print $2; exit}' "$_hs_mimeapps")" = ewe-browser.desktop ]; then
+            if [ -f "$_hs_apps/ewe-browser-folders.desktop" ]; then _hs_dir_app=ewe-browser-folders.desktop
+            else _hs_dir_app=nemo.desktop; fi
+            xdg-mime default "$_hs_dir_app" inode/directory 2>/dev/null
+        fi
+        # the old entry's "Open with" association goes with it
+        sed -i '/^inode\/directory=ewe-browser\.desktop;\?$/d' "$_hs_mimeapps"
+    fi
+    update-desktop-database "$_hs_apps" 2>/dev/null
+fi
+
 # ── Packaged installs: self-refresh at login ─────────────────────────────────
 # When ewe is installed as a pacman package, `pacman -Syu` only updates the
 # read-only payload at /usr/share/ewe. Pull it into the user tree now, and if
