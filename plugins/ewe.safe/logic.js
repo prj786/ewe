@@ -13,12 +13,14 @@ var REMEMBER_QUERY_MS = 120000
 // ── state ──────────────────────────────────────────────────────────────────
 //   phase  missing   ewe-safe isn't installed (no binary)
 //          down      the CLI answered but the daemon can't be reached
-//          new       no safe on this machine yet
+//          new       no safe on this machine yet (`offer`: but ewe.conf names
+//                    one in the account — the master password opens it)
 //          locked    set up, locked
 //          unlocked  set up, open
 function blank() {
     return { phase: "missing", items: -1, readOnly: false, reasons: [],
-             place: null, sync: null, keyChanged: false, message: "", lockReason: "" }
+             place: null, sync: null, keyChanged: false, message: "", lockReason: "",
+             offer: null }
 }
 
 function copyOf(s) {
@@ -43,6 +45,7 @@ function fromStatus(s, d) {
     o.readOnly = !!d.read_only
     o.reasons = d.reasons || []
     o.place = d.place || null
+    o.offer = !d.set_up && d.offer ? d.offer : null
     o.sync = d.sync || null
     o.message = ""
     if (!d.locked) o.keyChanged = false
@@ -133,7 +136,7 @@ function tileSub(s) {
     switch (s.phase) {
     case "missing": return "Not installed"
     case "down": return "Not running"
-    case "new": return "Not set up"
+    case "new": return s.offer ? "In your account" : "Not set up"
     case "locked": return s.keyChanged ? "Locked · new password" : "Locked"
     }
     return s.readOnly ? "Read-only" : "Unlocked"

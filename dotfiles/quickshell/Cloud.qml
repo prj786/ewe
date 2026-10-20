@@ -148,7 +148,7 @@ QtObject {
 
     function refreshAfterResume() {
         if (!cl.signedIn) { cl._probeRetries = 0; cl.refresh(); return }
-        cl.refresh(); cl.fetchCalendar(); cl.checkCloud()
+        cl.refresh(); cl.fetchCalendar(); cl.checkCloud(); cl.syncSoon()
     }
 
     // ── sign in / out ──────────────────────────────────────────────────────────
@@ -193,11 +193,14 @@ QtObject {
                         cl.error = ""; cl.errorCode = ""; cl.loginUrl = ""; cl.reason = ""
                         cl.signedIn = true
                         // the one file learns where its backup lives (identity,
-                        // never a secret)
+                        // never a secret), and sync is back on — sign-out
+                        // turned it off, and nothing ever turned it on again
                         Quickshell.execDetached(["sh", "-c",
                             '"$0" set --no-hooks sync.provider nextcloud >/dev/null 2>&1; "$0" set --no-hooks sync.server "$1" >/dev/null 2>&1; '
-                            + '"$0" set --no-hooks sync.user "$2" >/dev/null 2>&1; "$0" set --no-hooks sync.folder ewe >/dev/null 2>&1',
+                            + '"$0" set --no-hooks sync.user "$2" >/dev/null 2>&1; "$0" set --no-hooks sync.folder ewe >/dev/null 2>&1; '
+                            + '"$0" set --no-hooks sync.enabled true >/dev/null 2>&1',
                             cl.eweConf, cl.server, cl.user])
+                        cl.autoSync = true
                         cl.setUpFiles()
                         cl.sessionReady()
                     } else {
@@ -350,24 +353,13 @@ QtObject {
     }
 
     property bool _autoPushing: false
-    property string _pendingHash: ""
+    // `ewe-conf sync` (0.33): pull the account's copy, merge it key by key,
+    // push the result — the sync itself knows when nothing moved, so there is
+    // no content-hash short cut any more (it skipped the PULL as well)
     function syncNow() {
         if (!cl.signedIn || cl.syncState === "syncing") return
         cl.syncState = "syncing"; cl.syncError = ""; cl.restoreSummary = ""; cl.syncConflict = false
-        _hashProc.running = false; _hashProc.running = true
-    }
-    property Process _hashProc: Process {
-        command: ["sh", "-c", 'sha256sum "$HOME/.config/ewe/ewe.conf" 2>/dev/null | cut -d" " -f1']
-        stdout: StdioCollector {
-            onStreamFinished: {
-                var h = this.text.trim()
-                if (cl._autoPushing && h !== "" && h === cl.lastHash) {
-                    cl._autoPushing = false; cl.syncState = "idle"; return
-                }
-                cl._pendingHash = h
-                _pushProc.running = false; _pushProc.running = true
-            }
-        }
+        _pushProc.running = false; _pushProc.running = true
     }
     // after a pull the file IS the remote: record its hash so the watcher
     // does not push it straight back as "a change"
@@ -376,7 +368,7 @@ QtObject {
         stdout: StdioCollector { onStreamFinished: { var h = this.text.trim(); if (h !== "") { cl.lastHash = h; cl._saveSyncMeta() } } }
     }
     property Process _pushProc: Process {
-        command: [cl.eweConf, "push"]
+        command: [cl.eweConf, "sync", "--no-hooks"]
         stdout: StdioCollector {
             onStreamFinished: {
                 var j = null
@@ -384,10 +376,16 @@ QtObject {
                 var wasAuto = cl._autoPushing
                 cl._autoPushing = false
                 if (j && j.ok) {
-                    if (cl._pendingHash) { cl.lastHash = cl._pendingHash; cl._pendingHash = "" }
                     cl.lastSync = new Date().toISOString(); cl._saveSyncMeta()
                     cl.localSyncedAt = j.local_synced_at ? String(j.local_synced_at) : cl.lastSync
                     cl.syncState = "idle"
+                    // the account brought changes from the other machine: the
+                    // file is already applied (--no-hooks), the live shell and
+                    // Hyprland pick it up here, as after a restore
+                    if (j.changed && j.changed.length > 0) {
+                        Log.info("cloud", "sync merged", j.changed.length, "change(s) from", j.machine || "the account")
+                        cl._reloadAfterPull()
+                    }
                     cl.checkCloud()
                 } else if (j && (j.error === "remote-newer" || j.error === "remote-exists")) {
                     // the server (If-Match) refused: another machine saved a newer
@@ -398,9 +396,13 @@ QtObject {
                 } else if (j && (j.error === "unauthorized" || j.error === "not-signed-in")) {
                     cl.syncState = "error"; cl.syncError = "The account no longer accepts this machine — sign in again (the app password may have been revoked on the server)."
                     cl.refresh()
-                } else if (wasAuto) {
-                    cl.syncState = "idle"            // offline is normal; the next debounce retries
-                } else cl._syncFail(j && j.error ? j.error : "push failed")
+                } else if (wasAuto && (!j || String(j.error || "").indexOf("network") === 0)) {
+                    cl.syncState = "idle"            // offline is normal; the next tick retries
+                    Log.info("cloud", "auto-sync: offline —", j ? j.error : "no answer")
+                } else {
+                    Log.warn("cloud", "sync failed:", j && j.error ? j.error : "no answer")
+                    cl._syncFail(j && j.error ? j.error : "sync failed")
+                }
             }
         }
     }
@@ -465,7 +467,11 @@ QtObject {
                 // own (a lost upload reply) clears. "remote-exists" on a
                 // never-synced machine stays the restore offer's business.
                 if (j && j.ok && j.conflict !== undefined && cl.syncState !== "syncing") {
-                    if (j.conflict === "remote-newer" && cl.lastSync !== "")
+                    // with auto-sync on, another machine's save is not a
+                    // conflict any more — the next sync merges it in
+                    if (j.conflict === "remote-newer" && cl.autoPushAllowed())
+                        cl.syncSoon()
+                    else if (j.conflict === "remote-newer" && cl.lastSync !== "")
                         cl._setConflict(j.conflict, j.remote, j.remote_is_this_machine)
                     else if (!j.conflict && cl.syncConflict) {
                         cl.syncConflict = false; cl.syncState = "idle"; cl.syncError = ""
@@ -492,10 +498,19 @@ QtObject {
 
     // ── auto-sync: NEVER from a never-synced machine, nor while a restore is
     // on offer or the Welcome flow is up (the first metal install: a fresh
-    // near-empty file went up and the restore pulled it back down)
+    // near-empty file went up and the restore pulled it back down). "Synced"
+    // is either record: the shell's cloud-sync.json, or ewe-conf's own — a
+    // machine that lost the first never auto-synced again (0.33).
     function autoPushAllowed() {
-        return cl.autoSync && cl.signedIn && cl.lastSync !== ""
+        return cl.autoSync && cl.signedIn && (cl.lastSync !== "" || cl.localSyncedAt !== "")
             && cl.pendingRestore === null && !Globals.welcomeOpen
+    }
+    // the other machine's changes arrive without anyone touching this one:
+    // a sync every five minutes (and after resume, refreshAfterResume)
+    property Timer _pullTimer: Timer {
+        interval: 5 * 60 * 1000; repeat: true
+        running: cl.signedIn && cl.autoSync
+        onTriggered: { if (cl.autoPushAllowed() && cl.syncState !== "syncing") { cl._autoPushing = true; cl.syncNow() } }
     }
     property Connections _autoHook: Connections {
         target: Globals
@@ -549,14 +564,7 @@ QtObject {
                 try { a = JSON.parse(ls[ls.length - 1]) } catch (e) {}
                 if (!j || !j.ok) { cl._syncFail("restore: " + (j && j.error ? j.error : "pull failed")); return }
                 if (!a || !a.ok) { cl._syncFail("restore: " + (a && a.error ? a.error : "apply failed")); return }
-                Globals.reloadUserState()
-                HyprMon.reloadProfiles()
-                if (!HyprMon.virtualSession) {
-                    Globals.saverDimming = false
-                    Quickshell.execDetached(["sh", "-c",
-                        'hyprctl reload >/dev/null 2>&1; "$HOME/.config/hypr/scripts/wallpaper.sh" --reapply >/dev/null 2>&1; pkill -x hypridle; sleep 0.6; hypridle -c "$HOME/.config/hypr/generated/hypridle.conf" >/dev/null 2>&1'])
-                    Wallpaper.reapplied()
-                }
+                cl._reloadAfterPull()
                 cl.lastSync = new Date().toISOString(); cl._saveSyncMeta()
                 cl.localSyncedAt = cl.lastSync
                 cl._recordHash.running = false; cl._recordHash.running = true
@@ -567,6 +575,19 @@ QtObject {
                 cl._pluginsProc.running = false; cl._pluginsProc.running = true
                 cl.checkCloud()
             }
+        }
+    }
+    // the file changed under the live session (a restore, or a sync that
+    // merged another machine's changes): shell state, displays, Hyprland,
+    // wallpaper and idle all re-read it
+    function _reloadAfterPull() {
+        Globals.reloadUserState()
+        HyprMon.reloadProfiles()
+        if (!HyprMon.virtualSession) {
+            Globals.saverDimming = false
+            Quickshell.execDetached(["sh", "-c",
+                'hyprctl reload >/dev/null 2>&1; "$HOME/.config/hypr/scripts/wallpaper.sh" --reapply >/dev/null 2>&1; pkill -x hypridle; sleep 0.6; hypridle -c "$HOME/.config/hypr/generated/hypridle.conf" >/dev/null 2>&1'])
+            Wallpaper.reapplied()
         }
     }
     // after a restore: how many apps does the pulled file want back? ewe

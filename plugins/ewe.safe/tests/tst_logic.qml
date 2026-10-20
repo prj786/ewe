@@ -31,6 +31,19 @@ TestCase {
         compare(Logic.fromStatus(b, status({ locked: true, items: null })).items, -1)
     }
 
+    // a new machine whose ewe.conf names the account's safe: still "new",
+    // but offered — the tile says where it is, a set-up machine never is
+    function test_offer() {
+        var b = Logic.blank()
+        compare(b.offer, null)
+        var o = Logic.fromStatus(b, status({ set_up: false, offer: { place: "nextcloud", location: "ewe/safe/passwords.kdbx" } }))
+        compare(o.phase, "new")
+        compare(o.offer.place, "nextcloud")
+        compare(Logic.tileSub(o), "In your account")
+        compare(Logic.tileSub(Logic.fromStatus(b, status({ set_up: false }))), "Not set up")
+        compare(Logic.fromStatus(o, status({})).offer, null)
+    }
+
     function test_watch_first_line_either_shape() {
         var plain = Logic.applyLine(Logic.blank(), JSON.stringify(status({ locked: true })))
         compare(plain.state.phase, "locked")

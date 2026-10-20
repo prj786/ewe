@@ -75,8 +75,8 @@
       "repo": "https://github.com/prj786/ewe-plugin-safe",
       "default": false,
       "migrate": false,
-      "commit": "19610ee2be7c9dac5db4e77e7a4d6cb7b63d9a0d",
-      "version": "1.0.1"
+      "commit": "9b776c2a95897ad9f086598e18536f36bf64d32e",
+      "version": "1.1.0"
     },
     "ewe.screenshot": {
       "repo": "https://github.com/prj786/ewe-plugin-screenshot",
