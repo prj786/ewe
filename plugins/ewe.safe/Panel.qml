@@ -80,7 +80,7 @@ Scope {
 
     // ── actions ──────────────────────────────────────────────────────────
     function enter(ctrl) {
-        if (SafeState.locked) { root.resumeAfterUnlock = true; root.open = false; SafeState.unlock(); return }
+        if (SafeState.locked || SafeState.offered) { root.resumeAfterUnlock = true; root.open = false; SafeState.unlock(); return }
         if (SafeState.phase === "new") { root.open = false; SafeState.openApp(""); return }
         var it = root.current
         if (!it) return
@@ -344,6 +344,7 @@ Scope {
                                 width: parent.width; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.Wrap
                                 text: SafeState.phase === "missing" ? "Safe isn't installed."
                                     : SafeState.phase === "down" ? "Safe isn't running."
+                                    : SafeState.offered ? "Your safe is in your ewe account."
                                     : SafeState.phase === "new" ? "No safe on this computer yet."
                                     : SafeState.locked ? "Safe is locked — press Enter to unlock"
                                     : root.loadError !== "" ? root.loadError
@@ -356,6 +357,7 @@ Scope {
                                 width: parent.width; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.Wrap
                                 text: SafeState.phase === "missing" ? "Install Safe from Komble."
                                     : SafeState.phase === "down" ? "Its service is stopped or not installed."
+                                    : SafeState.offered ? "Press Enter and type your master password to open it here."
                                     : SafeState.phase === "new" ? "Press Enter to set one up in Safe."
                                     : SafeState.locked && SafeState.state.keyChanged ? "The master password was changed on another computer. Unlock with the new one."
                                     : SafeState.unlocked && root.items.length === 0 && root.loadError === "" ? "Ctrl+N adds a login."
@@ -372,6 +374,7 @@ Scope {
                 TextCaption {
                     width: parent.width
                     text: SafeState.locked ? "Enter unlock · Esc close"
+                        : SafeState.offered ? "Enter open your safe · Esc close"
                         : SafeState.phase === "new" ? "Enter open Safe · Esc close"
                         : !SafeState.unlocked ? "Esc close"
                         : (root.current && root.current.kind === "note")

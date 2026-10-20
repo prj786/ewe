@@ -46,6 +46,10 @@ through the broker). One client id, one consent screen, one sign-out.
     `[sync].enabled`;
   - download on demand only — `ewe-conf pull` (and the greeter/first-login
     "restore this machine?" flow) — never silent overwrite in the background;
+    *superseded in 0.33 (owner, 2026-10-20): `ewe-conf sync` pulls and
+    merges key by key in the background — nothing is overwritten wholesale,
+    a machine's own paths never come from the account, and every merge
+    keeps a backup. See EWE-CONF.md → Sync;*
   - conflicts: every push and pull records the remote's id + `modifiedTime`
     locally; a push is refused when the remote no longer matches the record
     (someone else saved since we last synced) — `pull` adopts theirs with

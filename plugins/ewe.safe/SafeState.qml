@@ -31,6 +31,9 @@ QtObject {
     readonly property string phase: safe.state.phase
     readonly property bool unlocked: safe.phase === "unlocked"
     readonly property bool locked: safe.phase === "locked"
+    // not set up here, but the account holds the safe another computer
+    // made (ewe.conf [safe], synced): unlocking opens it and sets this one up
+    readonly property bool offered: safe.phase === "new" && !!safe.state.offer
     readonly property string attention: Logic.attention(safe.state)
     readonly property string syncLine: Logic.syncLine(safe.state, safe.now)
     readonly property string tileSub: Logic.tileSub(safe.state)
@@ -49,7 +52,7 @@ QtObject {
     function lock() { if (!safe._lock.running) safe._lock.running = true }
     function toggleLock() {
         if (safe.unlocked) safe.lock()
-        else if (safe.locked) safe.unlock()
+        else if (safe.locked || safe.offered) safe.unlock()
         else if (safe.phase === "new") safe.openApp("")
         else Shell.toast(safe.phase === "down" ? "Safe isn't running." : "Safe isn't installed.", "warning")
     }

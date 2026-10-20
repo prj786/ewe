@@ -47,6 +47,7 @@ ewe-conf apply [--only <domain>]   regenerate artifacts + poke the shell + reloa
 ewe-conf path                      print the canonical file path
 ewe-conf push [--force]            upload the file to your account (see Sync)
 ewe-conf pull [--out <path>]       download it — run `apply` afterwards
+ewe-conf sync [--settle]           pull + merge key by key + push (see Sync)
 ewe-conf sync-status               the remote copy, and this machine's sync record
 ```
 
@@ -113,8 +114,44 @@ separately from *when this machine last synced* (`local_synced_at`), plus
 `"remote-exists"` or `null`; `error` stays the transport error only) —
 `provider`, `server`, `folder`, `enabled` and `in_sync`. Credentials come
 from the brokers — `ewe-cloud token` / `ewe-auth token` — never from this
-file. `[sync].enabled` is THE auto-sync switch: every `set` schedules a
-debounced push when it is on.
+file. `[sync].enabled` is THE auto-sync switch: every `set`, `unset` and
+`absorb` schedules a `sync --settle` when it is on — it waits out the 30 s
+push throttle and then syncs whatever the file holds, so the last change of
+a burst always goes up.
+
+### `sync` — two machines, one file (0.33)
+
+`push` and `pull` move the whole file; `sync` is what keeps two machines
+together. It downloads the account's copy and merges it **key by key**
+against the copy this machine and the account last agreed on
+(`~/.local/state/ewe/sync-base.conf`, written by every push, pull and
+sync):
+
+- a key only one side changed takes that change — added, edited or deleted;
+- a key both sides changed takes the value from the newer file (this file's
+  mtime against the remote's `saved_at`);
+- a machine with no common copy yet — a fresh install, or one that synced
+  with another provider before — takes the account's value on a conflict
+  and keeps every key only it has;
+- **this machine's own** paths never come from the account: `[sync]`,
+  `[system]`, `apps.installed`, `desktop.displays.lastKey`,
+  `desktop.input.devices`, `desktop.wallpapers.outputs`, and
+  `plugins.enabled` / `sources` / `removed` / `widgets` (plugin code is
+  installed per machine). Differences there alone never cause an upload.
+
+A merge that changed the file keeps the previous one as
+`ewe.conf.<timestamp>.merge.bak` (the last five), applies it, and pushes
+the result under the same guard as `push`; a push that loses a race to
+another machine (412) starts over from the new remote. The shell runs
+`sync` at login, after resume, 20 s after the file changes, and every five
+minutes while auto-sync is on. Each `sync`, `push` and `pull` appends a
+JSON line to `~/.local/state/ewe/sync.log` (the last 300).
+
+With no `[sync].provider` in the file, a machine signed in to the ewe
+account (`~/.config/ewe/cloud.json` names a server and a login) syncs to
+Nextcloud and records `provider = "nextcloud"` at its first push — before
+0.33 it fell back to Google Drive, and two machines could each sync to a
+different cloud.
 
 ## Reference
 

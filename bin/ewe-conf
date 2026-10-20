@@ -22,6 +22,8 @@ artifact of `ewe-conf apply`.
     ewe-conf push [--force]           upload the file to the account (RFC-005:
                                       [sync].provider = nextcloud | google)
     ewe-conf pull [--out PATH]        download it — then `apply` to make it live
+    ewe-conf sync [--settle]          pull + merge key by key + push (0.33); --settle
+                                      waits out the push throttle first (after a write)
     ewe-conf sync-status              the remote copy + this machine's sync record
 
 Python stdlib only: tomllib reads, the constrained emitter below writes (our
@@ -1467,12 +1469,25 @@ PROVIDERS = ("google", "nextcloud")
 CLOUD_META = os.path.join(EWE_DIR, "cloud.json")           # written by ewe-cloud
 
 
+def _cloud_signed_in():
+    """the Nextcloud broker's record names a server + login (ewe-cloud wrote
+    it at sign-in) — the ewe account exists on this machine"""
+    try:
+        with open(CLOUD_META) as f:
+            meta = json.load(f)
+        return bool(meta.get("server") and (meta.get("login_name") or meta.get("user")))
+    except (OSError, ValueError, AttributeError):
+        return False
+
+
 def sync_cfg(doc=None):
-    """[sync] as the tools see it. An absent provider means the pre-RFC-005
-    default (google) so existing machines keep working until they sign in
-    to a Nextcloud; the shell shows the migration note."""
+    """[sync] as the tools see it. An absent provider is the ewe account
+    (nextcloud) once this machine is signed in to one — the shell's sign-in
+    writes `provider`, but fire-and-forget, and a machine that lost it went
+    on syncing to Google Drive while its twin used Nextcloud (0.33). Without
+    a Nextcloud sign-in it stays the pre-RFC-005 default, google."""
     s = (doc if doc is not None else load()).get("sync") or {}
-    prov = str(s.get("provider") or "google").lower()
+    prov = str(s.get("provider") or ("nextcloud" if _cloud_signed_in() else "google")).lower()
     server, user = str(s.get("server") or ""), str(s.get("user") or "")
     if prov == "nextcloud" and not (server and user):
         # signed in from the terminal (no UI to write these): the broker's
@@ -1505,15 +1520,16 @@ def _adopt_sync_identity(cfg):
     user = str(meta.get("login_name") or meta.get("user") or "")
     if not (server and user):
         return
-    doc = load()
-    node, last = dig(doc, "sync", create=True)
-    sec = node.get(last) if isinstance(node.get(last), dict) else {}
-    if sec.get("server") == server and sec.get("user") == user:
-        return
-    sec["server"], sec["user"] = server, user
-    sec.setdefault("folder", cfg.get("folder") or "ewe")
-    node[last] = sec
-    save(doc)
+    with locked():
+        doc = load()
+        node, last = dig(doc, "sync", create=True)
+        sec = node.get(last) if isinstance(node.get(last), dict) else {}
+        if sec.get("provider") == "nextcloud" and sec.get("server") == server and sec.get("user") == user:
+            return
+        sec["provider"], sec["server"], sec["user"] = "nextcloud", server, user
+        sec.setdefault("folder", cfg.get("folder") or "ewe")
+        node[last] = sec
+        save(doc)
 
 
 class _Nc:
@@ -1839,12 +1855,19 @@ def do_push(quiet=False, force=False):
                 "local_mtime": local_mtime,
                 "remote_is_this_machine": _is_this_machine(remote),
                 "recorded_remote_modified": rec.get("remote_modified", "")}
+    return _push_content(cfg, be, content, rec, remote, force)
+
+
+def _push_content(cfg, be, content, rec, remote, force=False):
+    """the upload and everything a successful one records: the remote's id,
+    the bytes as the merge base, the identity, the throttle stamp"""
     _sync_pending(_sha(content))
     res, err = be["push"](content, force, rec, remote)
     if err:
         return {"ok": False, "error": err, "remote": remote, "provider": cfg["provider"]}
     st = _sync_record(res["id"], res["modified"], res["machine"], provider=cfg["provider"],
                       sha256=_sha(content))
+    _base_write(content)
     _adopt_sync_identity(cfg)
     with open(PUSH_STAMP, "w") as f:
         f.write(str(int(__import__("time").time())))
@@ -1901,9 +1924,266 @@ def do_pull(out_path=None):
         st = _sync_record(remote.get("id", ""), remote.get("modifiedTime", ""),
                           (remote.get("appProperties") or {}).get("machine", ""),
                           provider=cfg["provider"], sha256=_sha(raw))
+        _base_write(raw)
     return {"ok": True, "bytes": len(raw), "modified": remote.get("modifiedTime", ""),
             "provider": cfg["provider"], "machine": st["remote_machine"],
             "backup": backed_up, "written": target, "local_synced_at": st["local_synced_at"]}
+
+
+# ── sync: pull + merge + push (0.33) ─────────────────────────────────────────
+#
+# push alone left two machines apart for good: nothing ever pulled, and once
+# one machine saved, every push from the other was refused (remote-newer) —
+# silently, from the auto-push. `sync` brings the account's copy in KEY BY
+# KEY against the copy both sides last agreed on (sync-base.conf, written by
+# every push/pull/sync): a key only one side changed takes that change, a
+# key both changed takes the newer file's value, and LOCAL_ONLY paths are
+# this machine's own and never come from the account. The merged file is
+# saved (the previous one kept as ewe.conf.<ts>.merge.bak, the last five),
+# applied, and pushed back under the same If-Match guard as push.
+SYNC_BASE = os.path.join(STATE_DIR, "sync-base.conf")
+SYNC_LOG = os.path.join(STATE_DIR, "sync.log")
+SYNC_LOCK = os.path.join(STATE_DIR, ".sync.lock")
+SETTLE_LOCK = os.path.join(os.environ.get("XDG_RUNTIME_DIR") or "/tmp", "ewe-conf-settle.lock")
+LOCAL_ONLY = {
+    ("sync",),                            # this machine's account + folder pairs
+    ("system",),                          # what this machine is (gaming, development)
+    ("apps", "installed"),                # Komble's manifest of THIS machine
+    ("desktop", "displays", "lastKey"),   # the monitor set plugged in here
+    ("desktop", "input", "devices"),      # this machine's mice and touchpads
+    ("desktop", "wallpapers", "outputs"),  # keyed by this machine's connectors
+    ("plugins", "enabled"),               # plugin code is installed per machine
+    ("plugins", "sources"),
+    ("plugins", "removed"),
+    ("plugins", "widgets"),               # placed on this machine's screens
+}
+_GONE = object()
+
+
+def merge3(base, mine, theirs, prefer, path=()):
+    """one value of the merged document, or _GONE (deleted). `base` None =
+    no common copy known: keys present on one side only are kept, and a key
+    both sides hold differently takes `prefer` ("mine" | "theirs")."""
+    if path in LOCAL_ONLY:
+        return mine
+    if mine == theirs:
+        return mine
+    if isinstance(mine, dict) and isinstance(theirs, dict):
+        b = None if base is None else (base if isinstance(base, dict) else {})
+        out = {}
+        for k in list(mine) + [k for k in theirs if k not in mine]:
+            v = merge3(None if b is None else b.get(k, _GONE),
+                       mine.get(k, _GONE), theirs.get(k, _GONE), prefer, path + (k,))
+            if v is not _GONE:
+                out[k] = v
+        return out
+    if base is not None:
+        if mine == base:
+            return theirs
+        if theirs == base:
+            return mine
+    elif mine is _GONE or theirs is _GONE:
+        return theirs if mine is _GONE else mine
+    return mine if prefer == "mine" else theirs
+
+
+def _shared(doc, path=()):
+    """the document without its LOCAL_ONLY paths — what two machines share"""
+    if not isinstance(doc, dict):
+        return doc
+    return {k: _shared(v, path + (k,)) for k, v in doc.items() if path + (k,) not in LOCAL_ONLY}
+
+
+def _base_write(raw):
+    _wbytes(SYNC_BASE, raw)
+
+
+def _base_doc(rec):
+    """the copy this machine and the account last agreed on — only when it is
+    the one the record names (a base from before a provider switch, or from a
+    version that kept none, would invent deletions)"""
+    try:
+        raw = open(SYNC_BASE, "rb").read()
+    except OSError:
+        return None
+    if not rec.get("sha256") or _sha(raw) != rec["sha256"]:
+        return None
+    try:
+        return tomllib.loads(raw.decode())
+    except (ValueError, UnicodeDecodeError):
+        return None
+
+
+def _merge_backup():
+    import glob
+    import time as _t
+    if not os.path.exists(CONF):
+        return ""
+    path = CONF + "." + _t.strftime("%Y%m%d-%H%M%S") + ".merge.bak"
+    shutil.copy2(CONF, path)
+    for old in sorted(glob.glob(CONF + ".*.merge.bak"))[:-5]:
+        try:
+            os.unlink(old)
+        except OSError:
+            pass
+    return path
+
+
+def _changed_paths(a, b, path=()):
+    """the leaf paths that differ between two documents, for the log"""
+    if isinstance(a, dict) and isinstance(b, dict):
+        out = []
+        for k in list(a) + [k for k in b if k not in a]:
+            out += _changed_paths(a.get(k, _GONE), b.get(k, _GONE), path + (k,))
+        return out
+    return [] if a == b else [".".join(path)]
+
+
+def _sync_once(cfg, be, hooks):
+    remote, err = be["find"]()
+    if err:
+        return {"ok": False, "error": err, "provider": cfg["provider"]}
+    try:
+        local = open(CONF, "rb").read()
+    except OSError:
+        local = b""
+    rec = _sync_state()
+    if not remote:
+        if not local:
+            return {"ok": False, "error": "no-local-file", "provider": cfg["provider"]}
+        return dict(_push_content(cfg, be, local, rec, None), action="pushed")
+    known = rec.get("provider", "google") == cfg["provider"] and bool(rec.get("id"))
+    if known and _guard(rec, remote, cfg, False) is None:
+        # the account still holds what this machine last synced; `local_sha`
+        # is this file as it was then, when only LOCAL_ONLY keys set the two
+        # apart (no push for those, or two machines would trade them forever)
+        if rec.get("local_sha", rec.get("sha256")) == _sha(local):
+            return {"ok": True, "action": "none", "provider": cfg["provider"]}
+        return dict(_push_content(cfg, be, local, rec, remote), action="pushed")
+    raw, err = be["pull"](remote)          # nextcloud: refreshes remote["id"] from the GET
+    if err or raw is None:
+        return {"ok": False, "error": err or "pull failed", "provider": cfg["provider"]}
+    theirs = tomllib.loads(raw.decode())   # never merge a document we can't read
+    machine = (remote.get("appProperties") or {}).get("machine", "")
+    own = _sha(raw) in set(rec.get("pending") or []) | {rec.get("sha256")}
+    base = _base_doc(rec) if known else None
+    if own:
+        base = theirs                      # our own upload whose reply was lost
+    # a never-synced machine joins the account: its copy wins a conflict
+    prefer = "theirs"
+    if known and not own:
+        try:
+            if os.path.getmtime(CONF) > _rfc3339_epoch(remote.get("modifiedTime", "")):
+                prefer = "mine"
+        except OSError:
+            pass
+    with locked():
+        try:
+            cur = open(CONF, "rb").read()
+        except OSError:
+            cur = b""
+        mine = tomllib.loads(cur.decode()) if cur else {"schema": SCHEMA}
+        merged = merge3(base, mine, theirs, prefer)
+        changed = _changed_paths(mine, merged)
+        backup = ""
+        if changed:
+            backup = _merge_backup()
+            save(merged)
+            do_apply(merged, hooks=hooks)
+        content = open(CONF, "rb").read()
+        same = _shared(tomllib.loads(content.decode())) == _shared(theirs)
+        rec = _sync_record(remote.get("id", ""), remote.get("modifiedTime", ""), machine,
+                           provider=cfg["provider"], sha256=_sha(raw), local_sha=_sha(content))
+        _base_write(raw)
+    out = {"ok": True, "provider": cfg["provider"], "machine": machine,
+           "changed": changed, "backup": backup, "prefer": prefer, "base": base is not None}
+    if same:
+        out.update(action="pulled" if changed else "none", local_synced_at=rec["local_synced_at"])
+        return out
+    res = _push_content(cfg, be, content, rec, remote)
+    if not res.get("ok"):
+        res.update(changed=changed, backup=backup)
+        return res
+    out.update(action="merged" if changed else "pushed", id=res["id"],
+               local_synced_at=res["local_synced_at"])
+    return out
+
+
+def do_sync(hooks=True):
+    """pull + merge + push, one at a time per machine (SYNC_LOCK). A push that
+    races another machine's save (412) starts over from the new remote."""
+    _adopt_network()
+    cfg = sync_cfg()
+    be, err = _backend(cfg)
+    if err:
+        return {"ok": False, "error": err, "provider": cfg["provider"]}
+    os.makedirs(STATE_DIR, exist_ok=True)
+    with open(SYNC_LOCK, "w") as lk:
+        fcntl.flock(lk, fcntl.LOCK_EX)
+        for _ in range(3):
+            res = _sync_once(cfg, be, hooks)
+            if res.get("error") not in ("remote-newer", "remote-exists"):
+                break
+    return res
+
+
+def settle_sync(hooks=True):
+    """after a write: wait out the 30 s push throttle, then sync — and again
+    while writes keep landing, so the last change of a burst always goes up
+    (the old throttle just dropped it). One waiter per session (SETTLE_LOCK);
+    a write that finds one waiting leaves it to that one."""
+    import time as _t
+    lk = open(SETTLE_LOCK, "w")
+    try:
+        fcntl.flock(lk, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        return {"ok": True, "action": "queued"}
+    res = {"ok": True, "action": "none"}
+    for _ in range(10):
+        try:
+            with open(PUSH_STAMP) as f:
+                last = int(f.read().strip() or 0)
+        except (OSError, ValueError):
+            last = 0
+        _t.sleep(max(2, 30 - (_t.time() - last)))
+        try:
+            before = _sha(open(CONF, "rb").read())
+        except OSError:
+            before = ""
+        res = _sync_log("sync", do_sync(hooks=hooks))
+        try:
+            after = _sha(open(CONF, "rb").read())
+        except OSError:
+            after = ""
+        if not res.get("ok") or after == before:
+            break
+    return res
+
+
+def _sync_log(verb, res):
+    """one JSON line per sync verb in ~/.local/state/ewe/sync.log (the last
+    300) — the auto-sync used to fail into /dev/null"""
+    import time as _t
+    try:
+        os.makedirs(STATE_DIR, exist_ok=True)
+        entry = {"at": _t.strftime("%Y-%m-%dT%H:%M:%SZ", _t.gmtime()), "verb": verb,
+                 **{k: res.get(k) for k in ("ok", "action", "error", "provider", "machine",
+                                            "changed", "backup", "warning") if res.get(k) not in (None, "", [])}}
+        try:
+            lines = open(SYNC_LOG).read().splitlines()[-299:]
+        except OSError:
+            lines = []
+        _wtext_plain(SYNC_LOG, "\n".join(lines + [json.dumps(entry)]) + "\n")
+    except OSError:
+        pass
+    return res
+
+
+def _wtext_plain(path, text):
+    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), prefix=".sync.log.")
+    with os.fdopen(fd, "w") as f:
+        f.write(text)
+    os.replace(tmp, path)
 
 
 def sync_status():
@@ -1955,21 +2235,17 @@ def _wbytes(path, data):
         raise
 
 
-def maybe_auto_push(doc):
-    """fire-and-forget push after a write — only when the user opted in,
-    debounced so bursts of Settings changes cost one upload."""
+def maybe_auto_push(doc, hooks=True):
+    """a sync after a write — only when the user opted in. `sync --settle`
+    waits out the 30 s throttle and syncs whatever the file holds THEN, so a
+    burst of Settings changes costs one upload and its last change is never
+    dropped; the result lands in sync.log."""
     node, last = dig(doc, "sync.enabled")
     if not (node and node.get(last)):
         return
-    try:
-        with open(PUSH_STAMP) as f:
-            import time as _t
-            if _t.time() - int(f.read().strip() or 0) < 30:
-                return
-    except OSError:
-        pass
-    subprocess.Popen([sys.executable, os.path.abspath(__file__), "push", "--quiet"],
-                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.Popen([sys.executable, os.path.abspath(__file__), "sync", "--settle"]
+                     + ([] if hooks else ["--no-hooks"]),
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
 
 
 # ── CLI ──────────────────────────────────────────────────────────────────────
@@ -2092,7 +2368,7 @@ def main(argv):
             node[last] = val
             save(doc)
             do_apply(doc, only=_domain(argv[1]), hooks=hooks)
-            maybe_auto_push(doc)
+            maybe_auto_push(doc, hooks)
     elif cmd == "unset" and len(argv) == 2:
         with locked():
             doc = load()
@@ -2101,6 +2377,7 @@ def main(argv):
                 del node[last]
                 save(doc)
                 do_apply(doc, only=_domain(argv[1]), hooks=hooks)
+                maybe_auto_push(doc, hooks)
     elif cmd == "absorb" and len(argv) == 3 and argv[1] == "user-theme":
         # legacy adapter: a full user-theme.json object from a Settings UI —
         # the jk→conf mapping stays HERE so no caller ever duplicates it
@@ -2113,15 +2390,22 @@ def main(argv):
                     node[last] = ut[jk]
             save(doc)
             do_apply(doc, only="theme", hooks=hooks)
+            maybe_auto_push(doc, hooks)
     elif cmd == "sync-status":
         print(json.dumps(sync_status()))
+    elif cmd == "sync":
+        if "--settle" in argv:
+            print(json.dumps(settle_sync(hooks=hooks)))
+        else:
+            print(json.dumps(_sync_log("sync", do_sync(hooks=hooks))))
     elif cmd == "push":
-        print(json.dumps(do_push(quiet="--quiet" in argv, force="--force" in argv)))
+        print(json.dumps(_sync_log("push", do_push(quiet="--quiet" in argv, force="--force" in argv))))
     elif cmd == "pull":
         outp = None
         if "--out" in argv:
             outp = argv[argv.index("--out") + 1]
-        print(json.dumps(do_pull(outp)))
+        res = do_pull(outp)
+        print(json.dumps(res if outp else _sync_log("pull", res)))
     elif cmd == "import":
         with locked():
             do_import()
