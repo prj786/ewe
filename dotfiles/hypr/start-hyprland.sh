@@ -171,18 +171,15 @@ case ":$PATH:" in *":$HOME/.local/share/mise/shims:"*) ;; *) export PATH="$HOME/
 # in a TTY), Zed for everything graphical (mime defaults, phase 60).
 export EDITOR=micro VISUAL=micro
 
-# Default browser for CLI hand-offs (gh auth login, python's webbrowser, …).
-# Those tools fall back to xdg-open, which under Hyprland blocks until the
-# FIRST browser instance exits — `gh auth login` sat forever on the owner's
-# machine (2026-09-02). `gio launch` starts the desktop entry and returns at
-# once, so the caller gets on with its life. Only set when the shipped
-# browser is actually installed (ewe browser; Helium on machines that predate
-# it); otherwise the tools keep their own default.
-if [ -f /usr/share/applications/ewe-browser.desktop ]; then
-    export BROWSER="gio launch /usr/share/applications/ewe-browser.desktop"
-elif [ -f /usr/share/applications/helium.desktop ]; then
-    export BROWSER="gio launch /usr/share/applications/helium.desktop"
-fi
+# Default browser for link hand-offs (gh auth login, python's webbrowser, and
+# xdg-open's own fallback — which is how an app's "Sign in" reaches a browser
+# when xdg-open rejects a quoted AppImage entry). Plain xdg-open under
+# Hyprland blocks until the FIRST browser instance exits — `gh auth login`
+# sat forever on the owner's machine (2026-09-02). open-url.sh opens the
+# user's CHOSEN browser through GIO and returns at once; it used to be a
+# hard-coded `gio launch` of ewe browser, which ignored the choice and, from
+# Unity Hub, crashed on the inherited CHROME_DESKTOP (2026-10-21).
+export BROWSER="$HOME/.config/hypr/scripts/open-url.sh"
 
 # GPU escape hatch: if the Arc 140V (xe) driver ever tears/hangs/corrupts, log
 # in once with DE_SOFTWARE_RENDER=1 in your environment to fall back to Mesa
