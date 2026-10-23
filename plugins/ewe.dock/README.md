@@ -6,7 +6,7 @@ fresh machine (ewe 0.25: plugins are opt-in). Upgraders who had the dock keep it
 
 A small, centred dock at the bottom of the main screen:
 
-    [ apps ] [ overview ] [ komble ] [ music ] [ places ] … | [ 1: ▢ ▢ ] [ 2: empty ] | [ ↓ ▢ ▢ ] [ ◔ ]
+    [ apps ] [ overview ] [ komble ] [ music ] [ places ] … | [ 1: ▢ ▢ ] [ 2: empty ] | [▣] [▣] [ ◔ ]
 
 - **the sheep** — the pinned-apps popup: your pinned apps, or type to search
   every installed app; click to launch (middle-click for a fresh instance),
@@ -18,13 +18,14 @@ A small, centred dock at the bottom of the main screen:
   button, and the button lights while it is open.
 - **workspace boxes** — one per workspace with windows plus the current one;
   click a tile to focus that window, click the box to switch.
-- **Minimized** (1.2.0) — the windows Super+Z minimized (`special:minimized`,
-  bound in ewe's hyprland.lua): the newest three as app icons, `+N` past
-  that. A click opens a panel of window thumbnails (one frame each, captured
-  while the panel shows); click one to bring it back to the workspace you are
-  on, ✕ closes it, "Restore all" brings them all back. Shown only while
-  something is minimized. It replaced the Pen: windows left in `special:pen`
-  count as minimized.
+- **minimized windows** (1.2.1, as in macOS's dock) — one tile per window
+  Super+Z minimized (`special:minimized`, bound in ewe's hyprland.lua),
+  oldest first and the newest at the right end: the window's picture with
+  the app's icon on its corner. Click one to bring it back to the workspace
+  you are on. The picture is one captured frame, shrunk to the tile and
+  kept as a small image — the capture itself is dropped at once. They
+  replaced the Pen: windows left in `special:pen` count as minimized.
+  (1.2.0 had a Minimized box with a thumbnail panel instead.)
 - **Downloads** (1.2.0) — the ewe browser's downloads: a progress ring round
   the glyph while one runs; a click lists the running ones and the day's
   finished ones (open the file, show it in its folder, Clear). Shown only
@@ -71,8 +72,7 @@ removed, so nothing leaves a gap without a dock.
     qs ipc call ewe.dock launcher|showLauncher|hideLauncher|isLauncherOpen
 
 Layer namespaces: `quickshell:dock` (the dock), `quickshell:launcher` (the
-popup), `quickshell:minimized` and `quickshell:downloads` (the two 1.2.0
-panels) — the Hyprland layer rules and the Glass blur rule match them by name.
+popup), `quickshell:downloads` (the Downloads panel) — the Hyprland layer rules and the Glass blur rule match them by name.
 
 ## Development
 

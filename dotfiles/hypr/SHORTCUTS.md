@@ -68,7 +68,7 @@ while that plugin is on. Your own launch keys live in ewe.conf
 | `Super` + `1`…`8` | Switch to workspace 1–8 |
 | `Super` + `Shift` + `1`…`8` | Move focused window to workspace (and follow) |
 | `Super` + scroll | Cycle workspaces (on the scrolling layout: scroll the strip) |
-| `Super` + `Z` | Minimize the focused window (it waits in the dock's Minimized box) |
+| `Super` + `Z` | Minimize the focused window (it waits in the dock as its own picture) |
 | `Super` + `Shift` + `Z` | Bring back the window minimized last, onto this workspace |
 
 ## Touchpad
@@ -127,6 +127,6 @@ while that plugin is on. Your own launch keys live in ewe.conf
   floats, `Super` + `Shift` + `V` pseudo-tiles, `Super` + `Shift` + `F` maximises.
 - The dropdown terminal/file/music scratchpads became the Pen, one Hyprland
   "special" workspace — and on 2026-10-23 the Pen became Minimize
-  (`Super` + `Z`, the dock's Minimized box).
+  (`Super` + `Z`; each minimized window waits in the dock as its picture).
 - The old `Super` + `Shift` + `N` "reset split" is gone: Hyprland's Lua API has
   no `splitratio`. Even a split out with `Super` + `Ctrl` + `H/L`.

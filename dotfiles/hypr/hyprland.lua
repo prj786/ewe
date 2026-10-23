@@ -538,8 +538,8 @@ hl.bind("switch:off:Lid Switch", hl.dsp.exec_cmd(scripts .. "/lid.sh open"),  { 
 -- Minimize ---------------------------------------------------------------------
 -- Super+Z minimizes the focused window: it goes to the hidden special
 -- workspace "minimized" (never shown as a workspace — nothing toggles it).
--- The dock plugin's Minimized box lists what is there, with a thumbnail for
--- each; clicking one brings that window back to the workspace you are on.
+-- The dock plugin shows each one as its own tile — the window's picture,
+-- like macOS; clicking one brings it back to the workspace you are on.
 -- Super+Shift+Z brings back the one minimized last (the most recently
 -- focused of them) without the dock. This replaced the Pen (special:pen) on
 -- 2026-10-23; windows still in the Pen count as minimized, so nothing is
@@ -733,10 +733,10 @@ hl.window_rule({
 -- animates its own Overview slide in QML and remaps on enable/disable; the
 -- compositor fade would fight both. The add-ons keep today's namespaces
 -- (launcher, places, dock, mediaplayer), so this rule still covers them;
--- the dock's Minimized and Downloads panels (dock 1.2.0) fade in QML too.
+-- the dock's Downloads panel (dock 1.2.0) fades in QML too.
 hl.layer_rule({
     name    = "quickshell-self-animated",
-    match   = { namespace = "^quickshell:(overview|control|launcher|applauncher|store|clipboard|places|traymenu|osd|preview|dock|minimized|downloads)$" },
+    match   = { namespace = "^quickshell:(overview|control|launcher|applauncher|store|clipboard|places|traymenu|osd|preview|dock|downloads)$" },
     no_anim = true,
 })
 
