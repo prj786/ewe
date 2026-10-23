@@ -9,7 +9,7 @@ import Quickshell.Hyprland
 // Globals and the panels, so the shell's internals can move without the
 // plugins noticing.
 //
-//   read     overviewOpen · quickSettingsOpen · lowPower · onBattery · locked ·
+//   read     overviewOpen · overviewCover · quickSettingsOpen · lowPower · onBattery · locked ·
 //            dnd · bottomInset · bottomReserved · dockPresent · dockPrefs ·
 //            pinnedApps · primaryScreenName · dockItems · activeCount
 //   call     toast() · openQuickSettings() · closeQuickSettings() ·
@@ -26,6 +26,10 @@ QtObject {
 
     // ── read ───────────────────────────────────────────────────────────────
     readonly property bool overviewOpen: Globals.overviewOpen
+    // the Overview owns the screen: true from the frame its windows start to
+    // fly until they have flown home — when a bottom/top surface (a dock)
+    // should be out of view (0.34)
+    readonly property bool overviewCover: Globals.overviewCover
     readonly property bool quickSettingsOpen: Globals.quickSettingsOpen
     readonly property bool lowPower: Globals.lowPower
     readonly property bool onBattery: Globals.onBattery

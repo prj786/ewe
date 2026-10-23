@@ -30,7 +30,7 @@ QtObject {
     // Project version — the shell's runtime copy. Keep in sync with the repo-root
     // VERSION file (the canonical source used for git tags / releases). Semver, with
     // an -alpha/-beta pre-release suffix until the first stable cut.
-    readonly property string version: "0.33.1-beta"
+    readonly property string version: "0.34.0-beta"
 
     // ── event sounds (GNOME-style; the freedesktop sound theme, one toggle) ──
     // playSound("message-new-instant") etc — names are theme event ids from
@@ -52,7 +52,10 @@ QtObject {
     property var server: null              // set by Notifications.qml (the live NotificationServer)
     property string netBusy: ""            // "wifi" (or "vpn", set by the VPN add-on) while a connection attempt runs (bar spinner)
     property int netEpoch: 0               // bumped by the bar on every NetworkManager event (nmcli monitor) — panels re-read on change
-    property bool overviewOpen: false      // GNOME-style window overview (Super tapped alone)
+    property bool overviewOpen: false      // the Overview: every window spread out (Super tapped alone)
+    // "open the app launcher searching for <query>" — the Overview's
+    // public `find` verb lands here since the search left it; Launcher.qml listens
+    signal launcherFind(string query)
     property bool overviewCover: false     // the Overview owns the screen: backdrop up, bar (and a dock add-on) out of view (Overview.qml sequences it)
     property bool widgetsArrange: false    // desktop widgets in arrange mode (Super+Shift+W): frames with pinned/lock/hide chips
     property bool settingsOpen: false      // the Quickshell Settings window (Super+, or the CC gear)

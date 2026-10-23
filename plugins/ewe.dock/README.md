@@ -6,7 +6,7 @@ fresh machine (ewe 0.25: plugins are opt-in). Upgraders who had the dock keep it
 
 A small, centred dock at the bottom of the main screen:
 
-    [ apps ] [ overview ] [ komble ] [ music ] [ places ] … | [ the Pen ] [ 1: ▢ ▢ ] [ 2: empty ]
+    [ apps ] [ overview ] [ komble ] [ music ] [ places ] … | [ 1: ▢ ▢ ] [ 2: empty ] | [ ↓ ▢ ▢ ] [ ◔ ]
 
 - **the sheep** — the pinned-apps popup: your pinned apps, or type to search
   every installed app; click to launch (middle-click for a fresh instance),
@@ -16,11 +16,22 @@ A small, centred dock at the bottom of the main screen:
 - **dock items** other plugins declare (`dock-item` in their manifest: Music,
   Places, …), in their manifest order; a click opens their popup above the
   button, and the button lights while it is open.
-- **the Pen** — ewe's stashed windows (`special:pen`, Super+Z): shown only
-  while something is stashed; click a tile to fetch it, middle-click to send
-  it back to the current workspace, click the box to show or hide the Pen.
 - **workspace boxes** — one per workspace with windows plus the current one;
   click a tile to focus that window, click the box to switch.
+- **Minimized** (1.2.0) — the windows Super+Z minimized (`special:minimized`,
+  bound in ewe's hyprland.lua): the newest three as app icons, `+N` past
+  that. A click opens a panel of window thumbnails (one frame each, captured
+  while the panel shows); click one to bring it back to the workspace you are
+  on, ✕ closes it, "Restore all" brings them all back. Shown only while
+  something is minimized. It replaced the Pen: windows left in `special:pen`
+  count as minimized.
+- **Downloads** (1.2.0) — the ewe browser's downloads: a progress ring round
+  the glyph while one runs; a click lists the running ones and the day's
+  finished ones (open the file, show it in its folder, Clear). Shown only
+  while there is something to list. It reads the browser's own record,
+  `$XDG_CONFIG_HOME/ewe-browser/downloads.json`, through a file watch — no
+  polling, no process; "Clear" is a local mark in
+  `~/.local/state/ewe/dock-downloads.json`, never ewe.conf.
 
 It slides out of view while the Overview is open and comes back when the
 cards have gone; with auto-hide on it ducks when the current workspace has a
@@ -60,7 +71,8 @@ removed, so nothing leaves a gap without a dock.
     qs ipc call ewe.dock launcher|showLauncher|hideLauncher|isLauncherOpen
 
 Layer namespaces: `quickshell:dock` (the dock), `quickshell:launcher` (the
-popup) — the Hyprland layer rules and the Glass blur rule match them by name.
+popup), `quickshell:minimized` and `quickshell:downloads` (the two 1.2.0
+panels) — the Hyprland layer rules and the Glass blur rule match them by name.
 
 ## Development
 

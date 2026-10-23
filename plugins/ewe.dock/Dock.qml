@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Effects
+import QtQuick.Shapes
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
@@ -8,14 +9,19 @@ import qs
 
 // ewe.dock — the dock, as a plugin (ewe 0.25, plugin API 3). A small,
 // centred bottom dock on the main screen:
-//   [ apps ] [ overview ] [ komble ] [ plugin dock items … ] | [ the Pen ] [ workspace boxes … ]
+//   [ apps ] [ overview ] [ komble ] [ plugin dock items … ] | [ workspace boxes … ] | [ minimized ] [ downloads ]
 // The sheep opens the pinned-apps popup (PinnedApps.qml, IPC `launcher`),
 // the layers glyph opens the window Overview, the store glyph brings Komble
 // forward; every other plugin with a `dock-item` (Music, Places, …) gets a
 // button here that runs its action with this button as the anchor. Each
 // workspace box shows its windows as little app tiles (click a tile to
-// focus that window, click the box to switch to that workspace); the Pen is
-// ewe's hidden workspace (special:pen, Super+Z).
+// focus that window, click the box to switch to that workspace).
+// After them (1.2.0): the Minimized box — the windows Super+Z minimized
+// (special:minimized), a click shows them as thumbnails (Minimized.qml) —
+// and Downloads — the ewe browser's downloads, with a progress ring while
+// one runs and the day's list on a click (Downloads.qml). Both show only
+// when there is something in them. The Pen (special:pen) is gone: what was
+// left in it counts as minimized.
 //
 // Its settings are its own (manifest `settings`, Komble → Plugins → Dock →
 // Options; ewe.conf [plugins.settings]."ewe.dock"): `autohide` and
@@ -179,14 +185,50 @@ Scope {
         return true
     }
 
-    // the Pen: windows stashed on the special workspace (id < 0) — Super+Z
-    readonly property var penWins: {
+    function addrOf(t) {
+        var a = String((t && (t.address || (t.lastIpcObject && t.lastIpcObject.address))) || "")
+        if (a !== "" && a.indexOf("0x") !== 0) a = "0x" + a
+        return a
+    }
+    function titleOf(t) { return (t && t.title) ? t.title : (root.clsOf(t) || "Window") }
+
+    // ── minimized: windows on special:minimized (Super+Z, hyprland.lua) —
+    //    and the retired Pen's special:pen, so nothing left there is lost.
+    //    Oldest first, the one minimized last at the end (macOS's order):
+    //    the order is learnt from the move events while the shell runs. ──
+    function isMinimizedWs(name) { return name === "special:minimized" || name === "special:pen" }
+    property var minOrder: []                 // addresses, in the order they were minimized
+    readonly property var minWins: {
         var rev = root.claimRev
         var out = []
         var tls = Hyprland.toplevels ? Hyprland.toplevels.values : []
-        for (var i = 0; i < tls.length; i++) { var t = tls[i]; if (t.workspace && t.workspace.id < 0) out.push(t) }
+        for (var i = 0; i < tls.length; i++) {
+            var t = tls[i]
+            if (t.workspace && root.isMinimizedWs(String(t.workspace.name))) out.push(t)
+        }
+        var order = root.minOrder
+        out.sort(function (a, b) { return order.indexOf(root.addrOf(a)) - order.indexOf(root.addrOf(b)) })
         return out
     }
+    // back to the workspace you are on, focused
+    function restore(t) {
+        var a = root.addrOf(t)
+        if (a === "") return
+        var ws = Hyprland.focusedWorkspace ? Hyprland.focusedWorkspace.id : 1
+        Hyprland.dispatch('hl.dsp.window.move({ workspace = ' + ws + ', window = "address:' + a + '", follow = false })')
+        Hyprland.dispatch('hl.dsp.focus({ window = "address:' + a + '" })')
+    }
+    function restoreAll() {
+        var w = root.minWins.slice()
+        for (var i = 0; i < w.length; i++) root.restore(w[i])
+    }
+    function closeWin(t) {
+        var a = root.addrOf(t)
+        if (a !== "") Hyprland.dispatch('hl.dsp.window.close({ window = "address:' + a + '" })')
+    }
+
+    Minimized { id: minimized; host: root }
+    Downloads { id: downloads }
 
     // workspaces (id>0) that have windows, plus the focused one — sorted, each with its toplevels
     readonly property var wsList: {
@@ -214,11 +256,14 @@ Scope {
                 Hyprland.refreshToplevels()
                 root.claimRev++
             }
-            // entering/leaving the Pen — the monitor's specialWorkspace field
-            // only lives in lastIpcObject, so refetch it on the raw event
-            if (n === "activespecial") {
-                Hyprland.refreshMonitors()
-                root.claimRev++
+            // movewindowv2 = ADDR,WORKSPACEID,WORKSPACENAME: learn the order
+            // windows are minimized in (and forget the ones that come back)
+            if (n === "movewindowv2") {
+                var f = String(ev.data).split(",")
+                var a = f[0].indexOf("0x") === 0 ? f[0] : "0x" + f[0]
+                var keep = root.minOrder.filter(function (x) { return x !== a })
+                if (root.isMinimizedWs(f.slice(2).join(","))) keep.push(a)
+                root.minOrder = keep
             }
         }
     }
@@ -285,13 +330,6 @@ Scope {
         // A toplevel whose IPC object hasn't arrived yet counts as claiming —
         // better a dock that ducks a beat early than one sitting over a tile.
         readonly property var hyMon: Hyprland.monitorFor(win.screen)
-        // the second flow: the Pen is OPEN on this screen — the dock then
-        // shows only the Pen box, no numbered desktops (you are elsewhere)
-        readonly property bool penOpen: {
-            var rev = root.claimRev
-            var o = win.hyMon ? win.hyMon.lastIpcObject : null
-            return !!(o && o.specialWorkspace && String(o.specialWorkspace.name).indexOf("special") === 0)
-        }
         readonly property bool wsClaimed: {
             var rev = root.claimRev
             var wid = win.hyMon && win.hyMon.activeWorkspace ? win.hyMon.activeWorkspace.id : -1
@@ -473,77 +511,9 @@ Scope {
                 // spaceS shorter than the items beside it (Dock card #3)
                 Rectangle { anchors.verticalCenter: parent.verticalCenter; width: Theme.borderWidth1; height: win.cell - Theme.spaceS; color: Theme.dockOutline }
 
-                // ── the Pen — ewe's hidden workspace (special:pen). Appears
-                //    only while something is stashed: package glyph + a tile
-                //    per window. Tile → fetch that window; box → show/hide
-                //    the Pen; Super+Z stashes/toggles from the keyboard. ──
-                Rectangle {
-                    id: penBox
-                    visible: root.penWins.length > 0 || win.penOpen
-                    anchors.verticalCenter: parent.verticalCenter
-                    height: win.cell; radius: Theme.radiusPrimary
-                    width: Math.max(win.cell, penRow.implicitWidth + 2 * Theme.spaceS)
-                    // open = accentSubtle with an accent border (Dock card)
-                    color: win.penOpen ? Theme.dockSelectedFill
-                         : penMa.hovered ? Theme.barHoverFill : "transparent"
-                    border.color: win.penOpen ? Theme.accent : Theme.dockOutline
-                    border.width: Theme.borderWidth1
-                    Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
-                    MouseArea { id: penMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                        readonly property bool hovered: containsMouse
-                        onClicked: Hyprland.dispatch('hl.dsp.workspace.toggle_special("pen")') }
-                    Row {
-                        id: penRow
-                        anchors.centerIn: parent
-                        spacing: Theme.spaceXs
-                        Text {
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: Theme.icPen
-                            color: win.penOpen ? Theme.barAccentText : Theme.barTextMuted
-                            font.family: Theme.fontIcons; font.pixelSize: Theme.iconSm
-                        }
-                        Repeater {
-                            model: root.penWins
-                            delegate: Rectangle {
-                                required property var modelData
-                                anchors.verticalCenter: parent.verticalCenter
-                                width: win.tileW; height: win.tileH; radius: Theme.radiusSecondary
-                                color: modelData.activated && win.penOpen ? Theme.accent
-                                     : penTileMa.containsMouse ? Theme.barHoverFill : "transparent"
-                                Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
-                                Image {
-                                    anchors.centerIn: parent
-                                    width: win.appPx; height: win.appPx
-                                    sourceSize.width: 2 * win.appPx; sourceSize.height: 2 * win.appPx; mipmap: true
-                                    source: root.iconFor(modelData)
-                                }
-                                MouseArea {
-                                    id: penTileMa
-                                    anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                                    acceptedButtons: Qt.LeftButton | Qt.MiddleButton
-                                    // left: go to that window (inside the Pen);
-                                    // middle: send it home to the normal flow
-                                    onClicked: function (m) {
-                                        if (m.button === Qt.MiddleButton) {
-                                            // move THAT window (by address, not "the
-                                            // active one"), then focus it where it lands
-                                            var ws = Hyprland.focusedWorkspace ? Hyprland.focusedWorkspace.id : 1
-                                            var a = String(modelData.address || "")
-                                            if (a !== "" && a.indexOf("0x") !== 0) a = "0x" + a
-                                            if (a !== "") Hyprland.dispatch('hl.dsp.window.move({ workspace = ' + ws + ', window = "address:' + a + '", follow = false })')
-                                            root.focusToplevel(modelData)
-                                        } else root.focusToplevel(modelData)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // ── workspace boxes (hidden while the Pen flow is open —
-                //    one flow at a time, exactly what you see) ──
+                // ── workspace boxes ──
                 Repeater {
-                    model: win.penOpen ? [] : root.wsList
+                    model: root.wsList
                     delegate: Rectangle {
                         id: wsBox
                         required property var modelData
@@ -604,6 +574,154 @@ Scope {
                                     }
                                 }
                             }
+                        }
+                    }
+                }
+
+                // a second divider: what is put away comes after the workspaces
+                Rectangle {
+                    visible: minBox.visible || dlBtn.visible
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: Theme.borderWidth1; height: win.cell - Theme.spaceS
+                    color: Theme.dockOutline
+                }
+
+                // ── Minimized — the windows Super+Z put away: the glyph, the
+                //    newest three as app tiles (+N past that); a click shows
+                //    them all as thumbnails (Minimized.qml) ──
+                Rectangle {
+                    id: minBox
+                    visible: root.minWins.length > 0
+                    anchors.verticalCenter: parent.verticalCenter
+                    height: win.cell; radius: Theme.radiusPrimary
+                    width: Math.max(win.cell, minRow.implicitWidth + 2 * Theme.spaceS)
+                    color: minimized.open ? Theme.dockOpenFill
+                         : minMa.pressed ? Theme.barPressedFill
+                         : minMa.containsMouse ? Theme.barHoverFill : "transparent"
+                    border.color: minimized.open ? Theme.accent : Theme.dockOutline
+                    border.width: Theme.borderWidth1
+                    Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
+                    readonly property var shownWins: root.minWins.slice(Math.max(0, root.minWins.length - 3))
+                    // a window just arrived: the box nods (Reduce motion: still)
+                    property int lastCount: -1        // -1 until the first count: no nod at login
+                    SequentialAnimation {
+                        id: nod
+                        NumberAnimation { target: minBox; property: "scale"; to: 1.08; duration: Theme.durFast; easing.type: Theme.easeFast }
+                        NumberAnimation { target: minBox; property: "scale"; to: 1; duration: Theme.durBase; easing.type: Theme.ease }
+                    }
+                    Connections {
+                        target: root
+                        function onMinWinsChanged() {
+                            if (minBox.lastCount >= 0 && root.minWins.length > minBox.lastCount && !Theme.reduceMotion) nod.restart()
+                            minBox.lastCount = root.minWins.length
+                        }
+                    }
+                    MouseArea {
+                        id: minMa
+                        anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            root.launcherOpen = false; root.closeStoreFallback()
+                            minimized.toggleAt(Shell.anchorFor(minBox, win))
+                        }
+                    }
+                    Row {
+                        id: minRow
+                        anchors.centerIn: parent
+                        spacing: Theme.spaceXs
+                        Text {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: Theme.icMinimized || Theme.icChevronDown
+                            color: minimized.open ? Theme.barAccentText : Theme.barTextMuted
+                            font.family: Theme.fontIcons; font.pixelSize: Theme.iconSm
+                        }
+                        Repeater {
+                            model: minBox.shownWins
+                            delegate: Item {
+                                required property var modelData
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: win.tileW; height: win.tileH
+                                Image {
+                                    anchors.centerIn: parent
+                                    width: win.appPx; height: win.appPx
+                                    sourceSize.width: 2 * win.appPx; sourceSize.height: 2 * win.appPx; mipmap: true
+                                    source: root.iconFor(modelData)
+                                    // put away, so a step quieter than a live tile
+                                    opacity: Theme.opacityGlass
+                                }
+                            }
+                        }
+                        Text {
+                            visible: root.minWins.length > 3
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: "+" + (root.minWins.length - 3)
+                            color: Theme.barTextMuted
+                            font.family: Theme.type.label.family
+                            font.pixelSize: Theme.type.label.size
+                            font.weight: Theme.fontWeightSemibold
+                            font.features: ({ "tnum": 1 })
+                        }
+                    }
+                    Accessible.role: Accessible.Button
+                    Accessible.name: "Minimized, " + root.minWins.length + (root.minWins.length === 1 ? " window" : " windows")
+                }
+
+                // ── Downloads — the ewe browser's: a progress ring round the
+                //    glyph while one runs, the day's list on a click ──
+                DockBtn {
+                    id: dlBtn
+                    visible: downloads.shown
+                    a11yName: downloads.busy ? "Downloads, " + (downloads.progress >= 0 ? Math.round(downloads.progress * 100) + "%" : "in progress") : "Downloads"
+                    // the glyph steps down inside the ring while it runs
+                    glyph: downloads.busy ? "" : Theme.icDownload
+                    activeState: downloads.open || downloads.landed
+                    anchors.verticalCenter: parent.verticalCenter
+                    onGo: {
+                        root.launcherOpen = false; root.closeStoreFallback()
+                        downloads.toggleAt(Shell.anchorFor(dlBtn, win))
+                    }
+                    Item {
+                        id: ring
+                        visible: downloads.busy
+                        anchors.centerIn: parent
+                        width: win.glyphPx; height: win.glyphPx
+                        readonly property real r: (ring.width - Theme.borderWidth2) / 2
+                        Text {
+                            anchors.centerIn: parent
+                            text: Theme.icDownload
+                            font.family: Theme.fontIcons; font.pixelSize: Theme.iconXs
+                            color: dlBtn.tint
+                        }
+                        Shape {
+                            anchors.fill: parent
+                            preferredRendererType: Shape.CurveRenderer
+                            // the track (Progress ring card: surfaceHover)
+                            ShapePath {
+                                strokeColor: Theme.surfaceHover
+                                strokeWidth: Theme.borderWidth2
+                                fillColor: "transparent"
+                                PathAngleArc { centerX: ring.width / 2; centerY: ring.height / 2; radiusX: ring.r; radiusY: ring.r; startAngle: 0; sweepAngle: 360 }
+                            }
+                            // the fill: accent, round ends, from the top, clockwise
+                            ShapePath {
+                                strokeColor: Theme.accent
+                                strokeWidth: Theme.borderWidth2
+                                fillColor: "transparent"
+                                capStyle: ShapePath.RoundCap
+                                PathAngleArc {
+                                    centerX: ring.width / 2; centerY: ring.height / 2; radiusX: ring.r; radiusY: ring.r
+                                    startAngle: -90
+                                    // an unknown size spins a quarter arc instead
+                                    sweepAngle: downloads.progress >= 0 ? Math.max(1, 360 * ring.shownProgress) : 90
+                                }
+                            }
+                        }
+                        property real shownProgress: Math.max(0, downloads.progress)
+                        Behavior on shownProgress { NumberAnimation { duration: Theme.durSlow; easing.type: Theme.ease } }
+                        RotationAnimation on rotation {
+                            running: ring.visible && downloads.progress < 0 && !Theme.reduceMotion
+                            from: 0; to: 360; loops: Animation.Infinite
+                            duration: Theme.durDim
+                            onRunningChanged: if (!running) ring.rotation = 0
                         }
                     }
                 }

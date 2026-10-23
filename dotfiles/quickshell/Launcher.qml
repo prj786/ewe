@@ -41,6 +41,16 @@ Scope {
         else { fileDebounce.stop(); fileProc.running = false; fileResults = [] }
     }
 
+    // `overview find <q>` (Globals.launcherFind): open with the query typed.
+    // Opening resets the field synchronously, so the query lands after it.
+    Connections {
+        target: Globals
+        function onLauncherFind(q) {
+            root.opened = true
+            input.text = String(q || "")
+        }
+    }
+
     IpcHandler {
         target: "applauncher"
         function toggle(): void { root.toggle() }
