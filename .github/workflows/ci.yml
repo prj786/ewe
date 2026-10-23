@@ -42,7 +42,7 @@ jobs:
       - name: luac -p
         run: |
           cd dotfiles/hypr
-          luac5.4 -p hyprland.lua colors.lua
+          luac5.4 -p hyprland.lua colors.lua workspaces.lua
           echo "lua config: syntax OK"
 
   qmldir:

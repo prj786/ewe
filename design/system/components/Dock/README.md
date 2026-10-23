@@ -10,7 +10,7 @@ The dock floats at the bottom of the main screen with the shell's launchers, one
 1. Container: `surface-raised`, 1px `border-subtle`, `shadow-float`, 8px padding, 8px between items. Its radius is `primary` + 8px (16px) so it stays concentric with the 8px items inside. With transparency on, it is Glass (`glass-raised`).
 2. Launchers, in order: the sheep (app launcher), `layers` (Overview), `store` (Komble), `folder` (Places), `music` (media player, only while something is playing). Glyphs are 24px `text-secondary`; the sheep uses the same color.
 3. Divider: 1px `border-subtle`, 8px shorter than the items.
-4. Workspace groups: one per workspace that has windows, plus the current one even when empty, in number order.
+4. Workspace groups: one per workspace that has windows, plus the current one even when empty, in number order. With several displays: the focused display's own workspaces (separate), or one group per number holding every display's windows (shared); always numbered 1, 2, 3 …
    - Box: as tall as the items, 8px side padding, 4px between parts, `primary` radius, 1px `border-subtle`.
    - Label: the number and a colon, 12px weight 600, `text-muted`.
    - Window tiles: 36 × 32px, `secondary` radius, the app's 20px icon. "empty" in 12px `text-secondary` when there are none.

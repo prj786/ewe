@@ -11,6 +11,7 @@
 -- ╚══════════════════════════════════════════════════════════════════════════╝
 
 local c        = require("colors")
+local ws       = require("workspaces")    -- per-display workspaces (separate | shared)
 local home     = os.getenv("HOME")
 local scripts  = home .. "/.config/hypr/scripts"
 
@@ -364,20 +365,13 @@ hl.gesture({
     action    = function() hl.dispatch(hl.dsp.exec_cmd("qs ipc call overview toggle")) end,
 })
 
--- Three-finger swipe down → new desktop. Never stacks empties: if the highest
--- desktop is already empty, just go there instead of minting another one.
+-- Three-finger swipe down → a new workspace on the display you are on. Never
+-- stacks empties: if the last one is already empty, just go there instead
+-- of minting another (workspaces.lua).
 hl.gesture({
     fingers   = 3,
     direction = "down",
-    action    = function()
-        local last = nil
-        for _, ws in ipairs(hl.get_workspaces()) do
-            if ws.id >= 1 and ws.id < 100 and (not last or ws.id > last.id) then last = ws end
-        end
-        local maxid  = last and last.id or 1
-        local target = (last and last.is_empty) and maxid or math.min(maxid + 1, 10)
-        hl.dispatch(hl.dsp.focus({ workspace = target }))
-    end,
+    action    = ws.new_workspace,
 })
 
 -- Four-finger horizontal swipe → ewe browser's own workspaces, only while the
@@ -555,25 +549,33 @@ local unminimize = [[ws=$(hyprctl monitors -j | jq -r '.[] | select(.focused).ac
 hl.bind(mainMod .. " + SHIFT + Z", hl.dsp.exec_cmd(unminimize))
 
 -- Workspaces 1–8 (Qtile groups) ----------------------------------------------
---   Super + N         → switch to workspace N
+--   Super + N         → switch to workspace N of the display you are on
 --   Super + Shift + N → move the focused window to workspace N (and follow)
+-- With several displays each has its own workspaces 1, 2, 3 … (or one set
+-- across all of them, `[desktop.workspaces] mode = "shared"`): workspaces.lua
+-- maps N to the display's own Hyprland id. One display: ids 1–8 as always.
 for i = 1, 8 do
-    hl.bind(mainMod .. " + " .. i,           hl.dsp.focus({ workspace = i }))
-    hl.bind(mainMod .. " + SHIFT + " .. i,   hl.dsp.window.move({ workspace = i }))
+    hl.bind(mainMod .. " + " .. i,           ws.go(i))
+    hl.bind(mainMod .. " + SHIFT + " .. i,   ws.move(i))
 end
+ws.setup()
 
 -- Scroll over an empty area / hold Super to cycle workspaces.
 -- Super + wheel adapts to the layout: on the scrolling layout it nudges the
 -- tape (in gentle pixel steps, not whole columns — a notch a column was far
--- too fast); on dwindle/master it cycles workspaces as always.
-local function superwheel(px, ws)
-    return hl.dsp.exec_cmd(
-        [[if [ "$(hyprctl getoption general:layout -j | jq -r .str)" = scrolling ]; then ]]
-        .. [[hyprctl dispatch 'hl.dsp.layout("move ]] .. px .. [[")'; ]]
-        .. [[else hyprctl dispatch 'hl.dsp.focus({ workspace = "]] .. ws .. [[" })'; fi]])
+-- too fast); on dwindle/master it cycles the workspaces of the display you
+-- are on. Decided in Lua, inside the compositor: no process per notch.
+local function superwheel(px, step)
+    return function()
+        if hl.get_config("general:layout") == "scrolling" then
+            hl.dispatch(hl.dsp.layout("move " .. px))
+        else
+            ws.cycle(step)
+        end
+    end
 end
-hl.bind(mainMod .. " + mouse_down", superwheel("+120", "e+1"))
-hl.bind(mainMod .. " + mouse_up",   superwheel("-120", "e-1"))
+hl.bind(mainMod .. " + mouse_down", superwheel("+120", 1))
+hl.bind(mainMod .. " + mouse_up",   superwheel("-120", -1))
 
 -- Mouse: Super + drag to move (LMB) / resize (RMB) ---------------------------
 hl.bind(mainMod .. " + mouse:272", hl.dsp.window.drag(),   { mouse = true })

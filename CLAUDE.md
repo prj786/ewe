@@ -377,6 +377,19 @@ written. Called live by Settings → Theme, at shell startup, and by phase 60.
   (`dotfiles/fastfetch/`, PNG logo in kitty, braille text elsewhere). Test:
   `tests/ewe-shell-test.sh`; to run real zsh/fastfetch without installing
   them, see the vault note "Terminal Shell — zsh in kitty, bash at login".
+- **Workspaces per display (2026-10-23, 0.35):** `dotfiles/hypr/workspaces.lua`
+  (required by hyprland.lua) gives every display a block of ten Hyprland ids
+  (1–10, 11–20 …) shown as 1, 2, 3 … (`Globals.wsNumber`, plugins:
+  `Shell.workspaceNumber`) — never show a raw workspace id. ewe.conf
+  `[desktop.workspaces] mode` = `separate` (default, macOS "Displays have
+  separate Spaces") | `shared` (one set; the `workspace.active` hook moves
+  every display along). Super+N/Shift+N/wheel and the swipe-down are Lua
+  functions in the compositor (no process per key); a display that leaves
+  merges its workspaces into the same numbers of the one its windows land on.
+  Never start an `hl.timer` from `config.reloaded`: it also fires while the
+  config is first parsed (`Hyprland --verify-config` segfaulted). Test:
+  `tests/ewe-workspaces-test.sh`; a second display in the nested harness is
+  `hyprctl output create headless`.
 - **One brand mark (2026-09-21):** the line-art logo everywhere; the cartoon
   `sheep.svg` is gone. `dotfiles/quickshell/assets/ewe-mark.svg` is the bold
   cut (white, tinted by a `MultiEffect`); the vectors live in

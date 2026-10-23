@@ -71,6 +71,8 @@ The system's version is the `version` field in `tokens.json`. The repositories s
 
 **Dock:** the Pen is gone. After the workspace groups come the minimized windows (one tile each with the window's picture, like macOS — Dock 1.2.1; 1.2.0 had a group with a thumbnail panel) and Downloads (the ewe browser's, with a progress ring and a list). See the Dock card.
 
+**Workspaces on several displays:** every display numbers its own workspaces 1, 2, 3 … (macOS's separate Spaces); a Shared setting makes it one set across all displays. The Dock's workspace groups and the Overview's strip follow (ewe 0.35, Dock 1.3.0). See the two cards.
+
 **To do in the repos:** ewe 0.34 and Dock 1.2.0 implement both. The two cards' `preview.html` still show the old designs.
 
 ## Version 2 and earlier

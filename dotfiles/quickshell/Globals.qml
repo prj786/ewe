@@ -30,7 +30,7 @@ QtObject {
     // Project version — the shell's runtime copy. Keep in sync with the repo-root
     // VERSION file (the canonical source used for git tags / releases). Semver, with
     // an -alpha/-beta pre-release suffix until the first stable cut.
-    readonly property string version: "0.34.1-beta"
+    readonly property string version: "0.35.0-beta"
 
     // ── event sounds (GNOME-style; the freedesktop sound theme, one toggle) ──
     // playSound("message-new-instant") etc — names are theme event ids from
@@ -352,6 +352,16 @@ QtObject {
     // with nobody listening. It worked from Settings and nowhere else.
     // Go through setTiling(), which is always here.
     property bool tilingEnabled: true
+    // Workspaces on several displays (ewe.conf [desktop.workspaces] mode,
+    // carried in user-theme.json): "separate" — each display has its own
+    // workspaces 1, 2, 3 … — or "shared" — one set across all of them, and
+    // switching one switches every display. dotfiles/hypr/workspaces.lua does
+    // the switching; every display owns a block of ten Hyprland ids (the
+    // first 1–10, the second 11–20 …), so the shell shows wsNumber(id).
+    property string workspacesMode: "separate"
+    readonly property bool workspacesShared: g.workspacesMode === "shared"
+    function wsNumber(id) { return id >= 1 ? ((id - 1) % 10) + 1 : id }
+    function wsBlock(id) { return id >= 1 ? Math.floor((id - 1) / 10) : 0 }
 
     // The one way to change it: ewe-conf owns the file, regenerates user.lua
     // and reloads Hyprland, then pokes `settings reload` — which comes back
@@ -648,6 +658,7 @@ QtObject {
                     if (j && j.lidDockedSuspend !== undefined) g.lidDockedSuspend = j.lidDockedSuspend
                     if (j && j.lowPowerEnabled !== undefined) g.lowPowerEnabled = j.lowPowerEnabled
                     if (j && j.tilingEnabled !== undefined) g.tilingEnabled = j.tilingEnabled
+                    if (j && (j.workspacesMode === "separate" || j.workspacesMode === "shared")) g.workspacesMode = j.workspacesMode
                     if (j && j.eventSounds !== undefined) g.eventSounds = j.eventSounds
                     if (j && j.saver) {
                         if (j.saver.enabled !== undefined) g.saverEnabled = j.saver.enabled

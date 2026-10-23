@@ -17,7 +17,10 @@ A small, centred dock at the bottom of the main screen:
   Places, …), in their manifest order; a click opens their popup above the
   button, and the button lights while it is open.
 - **workspace boxes** — one per workspace with windows plus the current one;
-  click a tile to focus that window, click the box to switch.
+  click a tile to focus that window, click the box to switch. With several
+  displays (1.3.0, ewe 0.35) they are numbered 1, 2, 3 … on every display
+  (`Shell.workspaceNumber`); separate workspaces show the focused display's
+  own, shared workspaces one box per number across every display.
 - **minimized windows** (1.2.1, as in macOS's dock) — one tile per window
   Super+Z minimized (`special:minimized`, bound in ewe's hyprland.lua),
   oldest first and the newest at the right end: the window's picture with
