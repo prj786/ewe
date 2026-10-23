@@ -298,7 +298,7 @@ cmd_spawn()   {
   local cmd="$*"; cmd="${cmd//\\/\\\\}"; cmd="${cmd//\"/\\\"}"
   HYPRLAND_INSTANCE_SIGNATURE="$NEST_SIG" hyprctl dispatch "hl.dsp.exec_cmd(\"$cmd\")" >/dev/null && echo "spawned: $*"
 }
-cmd_check()   { command -v luac >/dev/null || die "luac not found"; ( cd "$REPO/dotfiles/hypr" && luac -p hyprland.lua colors.lua && echo "lua config: syntax OK" ); }
+cmd_check()   { command -v luac >/dev/null || die "luac not found"; ( cd "$REPO/dotfiles/hypr" && luac -p hyprland.lua colors.lua workspaces.lua && echo "lua config: syntax OK" ); }
 
 cmd_open() {
   load

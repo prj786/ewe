@@ -252,16 +252,36 @@ Scope {
     }
     Downloads { id: downloads }
 
-    // workspaces (id>0) that have windows, plus the focused one — sorted, each with its toplevels
+    // ── workspaces on several displays (1.3.0, ewe 0.35): each display owns
+    //    ten Hyprland ids (1–10, 11–20 …) and shows them as 1, 2, 3 …
+    //    (Shell.workspaceNumber). Separate: the boxes are the FOCUSED
+    //    display's own workspaces; shared: one box per number across every
+    //    display. An older shell has neither — then every id is its own. ──
+    readonly property bool wsKnowsDisplays: typeof Shell.workspaceNumber === "function"
+    readonly property bool wsShared: root.wsKnowsDisplays && Shell.workspacesShared === true
+    function wsNum(id) { return root.wsKnowsDisplays ? Shell.workspaceNumber(id) : id }
+    function wsBlock(id) { return (root.wsKnowsDisplays && id >= 1) ? Math.floor((id - 1) / 10) : 0 }
+
+    // workspaces (id>0) that have windows, plus the focused one — sorted by
+    // number, each with its toplevels and the id a click goes to
     readonly property var wsList: {
-        var byws = {}
-        var tls = Hyprland.toplevels ? Hyprland.toplevels.values : []
-        for (var i = 0; i < tls.length; i++) { var t = tls[i]; var w = t.workspace ? t.workspace.id : -1; if (w > 0) { (byws[w] = byws[w] || []).push(t) } }
         var fid = Hyprland.focusedWorkspace ? Hyprland.focusedWorkspace.id : 1
-        if (fid > 0 && !byws[fid]) byws[fid] = []
-        var ids = Object.keys(byws).map(Number).sort(function (a, b) { return a - b })
+        var block = root.wsBlock(fid)
+        var byNum = {}
+        var tls = Hyprland.toplevels ? Hyprland.toplevels.values : []
+        for (var i = 0; i < tls.length; i++) {
+            var t = tls[i]
+            var w = t.workspace ? t.workspace.id : -1
+            if (w < 1) continue
+            if (!root.wsShared && root.wsBlock(w) !== block) continue   // another display's
+            var n = root.wsNum(w);
+            (byNum[n] = byNum[n] || []).push(t)
+        }
+        if (fid > 0 && !byNum[root.wsNum(fid)]) byNum[root.wsNum(fid)] = []
+        var nums = Object.keys(byNum).map(Number).sort(function (a, b) { return a - b })
         var out = []
-        for (var k = 0; k < ids.length; k++) out.push({ id: ids[k], wins: byws[ids[k]] })
+        for (var k = 0; k < nums.length; k++)
+            out.push({ id: root.wsKnowsDisplays ? block * 10 + nums[k] : nums[k], num: nums[k], wins: byNum[nums[k]] })
         return out
     }
 
@@ -558,7 +578,7 @@ Scope {
                             spacing: Theme.spaceXs
                             Text {
                                 anchors.verticalCenter: parent.verticalCenter
-                                text: wsBox.modelData.id + ":"
+                                text: wsBox.modelData.num + ":"
                                 color: wsBox.focused ? Theme.barAccentText : Theme.barTextMuted
                                 font.family: Theme.type.label.family
                                 font.pixelSize: Theme.type.label.size

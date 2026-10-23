@@ -65,11 +65,16 @@ while that plugin is on. Your own launch keys live in ewe.conf
 
 | Shortcut | Action |
 |---|---|
-| `Super` + `1`…`8` | Switch to workspace 1–8 |
-| `Super` + `Shift` + `1`…`8` | Move focused window to workspace (and follow) |
-| `Super` + scroll | Cycle workspaces (on the scrolling layout: scroll the strip) |
+| `Super` + `1`…`8` | Switch to workspace 1–8 of the display you are on |
+| `Super` + `Shift` + `1`…`8` | Move focused window to that workspace (and follow) |
+| `Super` + scroll | Cycle this display's workspaces (on the scrolling layout: scroll the strip) |
 | `Super` + `Z` | Minimize the focused window (it waits in the dock as its own picture) |
 | `Super` + `Shift` + `Z` | Bring back the window minimized last, onto this workspace |
+
+With two or more displays every display has its own workspaces 1, 2, 3 …
+(like macOS). Settings → Displays → Workspaces → **Shared** makes it one set
+across all displays instead: switching one switches every display
+(`ewe-conf set desktop.workspaces.mode shared`).
 
 ## Touchpad
 
@@ -77,7 +82,7 @@ while that plugin is on. Your own launch keys live in ewe.conf
 |---|---|
 | 3-finger swipe left / right | Switch workspaces |
 | 3-finger swipe up | Overview |
-| 3-finger swipe down | A new empty desktop (never piles up empty ones) |
+| 3-finger swipe down | A new empty workspace on this display (never piles up empty ones) |
 | 4-finger swipe left / right | In ewe browser: its next / previous workspace (nothing elsewhere) |
 | 2-finger swipe right / left | In ewe browser: back / forward (the browser's own gesture; with natural scrolling, the default — the other way round without it) |
 

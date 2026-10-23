@@ -358,17 +358,23 @@ Scope {
             return out
         }
 
-        // the workspaces of this screen, for the strip
+        // the workspaces of this screen, for the strip. Each display owns a
+        // block of ten ids (workspaces.lua): separate — the ones on this
+        // screen; shared — every number in use on ANY display, as this
+        // screen's own part of it (one set across all of them)
         readonly property var wsIds: {
             if (!win.visible) return []
             var ws = Hyprland.workspaces ? Hyprland.workspaces.values : []
             var name = win.screen ? win.screen.name : ""
+            var block = Globals.wsBlock(win.shownWs)
             var seen = {}, out = []
             for (var i = 0; i < ws.length; i++) {
                 var w = ws[i]
                 if (!w || w.id < 1) continue
-                if (w.monitor && name !== "" && w.monitor.name !== name) continue
-                if (!seen[w.id]) { seen[w.id] = true; out.push(w.id) }
+                var id = w.id
+                if (Globals.workspacesShared) id = block * 10 + Globals.wsNumber(w.id)
+                else if (w.monitor && name !== "" && w.monitor.name !== name) continue
+                if (!seen[id]) { seen[id] = true; out.push(id) }
             }
             if (win.shownWs > 0 && !seen[win.shownWs]) out.push(win.shownWs)
             out.sort(function (a, b) { return a - b })
@@ -682,7 +688,7 @@ Scope {
                         }
 
                         Accessible.role: Accessible.Button
-                        Accessible.name: root.classOf(modelData) + ", " + root.titleOf(modelData) + ", workspace " + win.shownWs
+                        Accessible.name: root.classOf(modelData) + ", " + root.titleOf(modelData) + ", workspace " + Globals.wsNumber(win.shownWs)
                     }
                 }
             }
@@ -823,7 +829,7 @@ Scope {
                                 Text {
                                     id: labelText
                                     anchors.centerIn: parent
-                                    text: "Workspace " + ws.wsId
+                                    text: "Workspace " + Globals.wsNumber(ws.wsId)
                                     color: ws.current ? Theme.accentText : Theme.textPrimary
                                     font.family: Theme.type.label.family
                                     font.pixelSize: Theme.type.label.size
@@ -841,7 +847,7 @@ Scope {
                                 onClicked: root.gotoWs(ws.wsId)
                             }
                             Accessible.role: Accessible.Button
-                            Accessible.name: "Workspace " + ws.wsId
+                            Accessible.name: "Workspace " + Globals.wsNumber(ws.wsId)
                         }
                     }
                 }

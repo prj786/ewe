@@ -285,7 +285,8 @@ features, the `_private` plumbing) is internal and may move without notice.
 | | member | meaning |
 |---|---|---|
 | read | `apiVersion` | `3` |
-| read | `overviewOpen`, `overviewCover` (0.34: the Overview's windows are out — slide a dock away on this), `quickSettingsOpen`, `lowPower`, `onBattery`, `locked`, `dnd` | shell state, bindable |
+| read | `overviewOpen`, `overviewCover` (0.34: the Overview's windows are out — slide a dock away on this), `workspacesShared` (0.35: one set of workspaces across every display, not each display's own), `quickSettingsOpen`, `lowPower`, `onBattery`, `locked`, `dnd` | shell state, bindable |
+| call | `workspaceNumber(id)` (0.35) | a Hyprland workspace id as the number the user sees: every display owns ten ids (1–10, 11–20 …), so 11 is that display's workspace 1. Never show a raw id |
 | read | `bottomInset` | px a dock takes from the bottom of the screen (its strip + `windowGap`); `0` without a dock. Panels that open above the dock keep this clear — so nothing leaves a gap when no dock is installed |
 | read | `bottomReserved` | the dock reserves that strip as an exclusive zone (always-visible dock) — a bottom-anchored surface is already pushed up and adds only its own gap |
 | read | `dockPresent` | `bottomInset > 0` |

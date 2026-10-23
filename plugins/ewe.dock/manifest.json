@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "ewe.dock",
   "name": "Dock",
-  "version": "1.2.1",
+  "version": "1.3.0",
   "apiVersion": 3,
   "description": "A centred bottom dock on the main screen: app launcher, Overview, Komble, one box per workspace with its windows, your minimized windows, downloads from the ewe browser, and the dock items other plugins provide.",
   "homepage": "https://github.com/prj786/ewe-plugin-dock",

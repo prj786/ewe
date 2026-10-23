@@ -92,6 +92,7 @@ SECTION_NOTES = {
     "desktop.dock": "the bottom dock (autohide = intelligent hide)",
     "desktop.animations": "speed multiplies every duration; detail = per-leaf tuning",
     "desktop.displays": "per-monitor-set profiles (Settings → Displays owns this)",
+    "desktop.workspaces": "with two or more displays: mode = separate (each display has its own workspaces 1, 2, 3 …) | shared (one set across every display; switching one switches all)",
     "desktop.window_rules": "per-app workspace/float rules",
     "desktop.input": "keyboard layouts + mouse/touchpad; devices = per-device overrides",
     "desktop.layout": "gaps/border/corner radius — user.lua is generated from these + theme",
@@ -335,6 +336,7 @@ THEME_MAP = [  # ewe.conf key ↔ user-theme.json key (with defaults)
     ("desktop.accessibility.text_scale", "textScale", 100),
     ("desktop.animations.speed", "animationSpeed", 1),
     ("desktop.tiling.enabled", "tilingEnabled", True),
+    ("desktop.workspaces.mode", "workspacesMode", "separate"),
     ("desktop.sound.event_sounds", "eventSounds", True),
     ("desktop.power.low_power", "lowPowerEnabled", True),
     ("desktop.power.lid_docked_suspend", "lidDockedSuspend", False),
@@ -579,7 +581,14 @@ def do_apply(doc, only=None, hooks=True):
     # file without [desktop.layout] used to leave a stale user.lua behind,
     # so the window border kept the previous accent while the shell wore
     # the new one; gen_user_lua falls back to LAYOUT_DEFAULTS.
-    if want("theme") or want("animations") or want("layout"):
+    if want("workspaces") and not want("theme"):
+        # only the shell's copy of the mode (Globals.workspacesMode) — a
+        # workspace switch must not re-run the whole theme
+        node, last = dig(doc, "desktop.workspaces.mode")
+        ut = _rj("user-theme.json", {})
+        ut["workspacesMode"] = (node or {}).get(last, "separate") if node else "separate"
+        _wj("user-theme.json", ut)
+    if want("theme") or want("animations") or want("layout") or want("workspaces"):
         # trailing extra \n matches the shell's heredoc atomicWrite
         _wtext(os.path.join(HYPR_GEN, "user.lua"), gen_user_lua(doc) + "\n")
     if want("network"):
@@ -621,7 +630,8 @@ def do_apply(doc, only=None, hooks=True):
         # Only inside a live session; failures are nobody's problem.
         if os.environ.get("HYPRLAND_INSTANCE_SIGNATURE") and (
                 want("theme") or want("animations") or want("layout")
-                or want("window_rules") or want("keybinds") or want("input")):
+                or want("window_rules") or want("keybinds") or want("input")
+                or want("workspaces")):
             try:
                 subprocess.run(["hyprctl", "reload"], capture_output=True, timeout=10)
             except (OSError, subprocess.TimeoutExpired):
@@ -972,6 +982,9 @@ def gen_user_lua(doc):
     tiling = gv("desktop.tiling", {}) or {}
     if not tiling.get("enabled", True):
         s += 'hl.window_rule({ name = "float-all", match = { class = ".*" }, float = true })\n'
+    # workspaces.lua reads it lazily; separate (the default) writes nothing
+    if gv("desktop.workspaces.mode", "separate") == "shared":
+        s += '_G.ewe_workspaces_mode = "shared"\n'
     return s
 
 
@@ -2268,6 +2281,7 @@ ENUMS = {
     "desktop.bar.icon_size": ("small", "normal", "large"),
     "desktop.dock.icon_size": ("small", "medium", "large"),
     "desktop.accessibility.text_scale": (100, 115, 130),
+    "desktop.workspaces.mode": ("separate", "shared"),
     "safe.place": ("local", "nextcloud", "webdav", "folder", "sftp", "dropbox", "gdrive"),
     "safe.ssh_confirm": ("first-use", "every-time", "never"),
 }
@@ -2434,6 +2448,7 @@ def _domain(dotted):
                 "displays": "displays", "window_rules": "window_rules",
                 "wallpapers": "wallpapers", "input": "input",
                 "layout": "layout", "keybinds": "keybinds",
+                "workspaces": "workspaces",
                 }.get(parts[1], None)
     if parts[0] == "apps":
         return "apps"

@@ -342,11 +342,16 @@ Scope {
                         anchors.verticalCenter: parent.verticalCenter
                         active: Globals.overviewOpen
                         underline: true
-                        a11yName: "Workspace " + (Hyprland.focusedWorkspace ? Hyprland.focusedWorkspace.id : 1) + ", open Overview"
+                        // THIS screen's workspace, as its number on the screen
+                        // (each display owns ten Hyprland ids: 11 shows as 1)
+                        readonly property var hyMon: Hyprland.monitorFor(win.screen)
+                        readonly property int wsNum: Globals.wsNumber(hyMon && hyMon.activeWorkspace ? hyMon.activeWorkspace.id
+                                                                      : Hyprland.focusedWorkspace ? Hyprland.focusedWorkspace.id : 1)
+                        a11yName: "Workspace " + wsChip.wsNum + ", open Overview"
                         onActivated: Globals.overviewOpen = !Globals.overviewOpen
                         Text {
                             anchors.verticalCenter: parent.verticalCenter
-                            text: Hyprland.focusedWorkspace ? Hyprland.focusedWorkspace.id : 1
+                            text: wsChip.wsNum
                             color: Theme.textPrimary
                             font.family: Theme.type.bodyStrong.family
                             font.pixelSize: Theme.barLarge ? Theme.fontSizeLg : Theme.fontSizeMd

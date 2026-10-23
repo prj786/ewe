@@ -9,7 +9,7 @@ import Quickshell.Hyprland
 // Globals and the panels, so the shell's internals can move without the
 // plugins noticing.
 //
-//   read     overviewOpen · overviewCover · quickSettingsOpen · lowPower · onBattery · locked ·
+//   read     overviewOpen · overviewCover · workspacesShared · workspaceNumber(id) · quickSettingsOpen · lowPower · onBattery · locked ·
 //            dnd · bottomInset · bottomReserved · dockPresent · dockPrefs ·
 //            pinnedApps · primaryScreenName · dockItems · activeCount
 //   call     toast() · openQuickSettings() · closeQuickSettings() ·
@@ -30,6 +30,12 @@ QtObject {
     // fly until they have flown home — when a bottom/top surface (a dock)
     // should be out of view (0.34)
     readonly property bool overviewCover: Globals.overviewCover
+    // workspaces on several displays (0.35): each display owns ten Hyprland
+    // ids (1–10, 11–20 …); show workspaceNumber(id), never the raw id.
+    // workspacesShared: one set across all displays (switching one switches
+    // all) instead of each display's own
+    readonly property bool workspacesShared: Globals.workspacesShared
+    function workspaceNumber(id) { return Globals.wsNumber(id) }
     readonly property bool quickSettingsOpen: Globals.quickSettingsOpen
     readonly property bool lowPower: Globals.lowPower
     readonly property bool onBattery: Globals.onBattery

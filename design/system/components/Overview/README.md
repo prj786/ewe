@@ -10,7 +10,7 @@ The Overview spreads out every window on the workspace, with your workspaces alo
 1. Backdrop: the wallpaper, full screen, edge to edge, under half the `scrim` once open. No blur. Clicking it closes the Overview.
 2. Window cards: one captured frame of each window, `rounded` radius, `shadow-float`. Every window keeps its proportions and its size against the others (one scale for the workspace, never larger than the window), arranged in 1 to 4 rows ordered by where the windows sit; 32px between cards, 44px between rows. A close button (24px, `fully-rounded`, Glass) shows at the top left on hover.
 3. Title: under the pointed-at or selected card, a Glass pill (`fully-rounded`, 28px) with the app icon and the window title.
-4. Workspace strip: at the top, one label per workspace on this screen ("Workspace 1"; Glass pill, 28px, `fully-rounded`). Pointing at it, or dragging a window up to it, slides it down into thumbnails (a ninth of the screen tall; the wallpaper with the workspace's windows drawn as shapes with their app icons) over a `glass-base` band, and the spread shrinks down to make room. There is no button to add a workspace.
+4. Workspace strip: at the top, one label per workspace on this screen ("Workspace 1"; Glass pill, 28px, `fully-rounded`). Every display numbers its own workspaces from 1; with shared workspaces every screen lists every number in use on any display. Pointing at it, or dragging a window up to it, slides it down into thumbnails (a ninth of the screen tall; the wallpaper with the workspace's windows drawn as shapes with their app icons) over a `glass-base` band, and the spread shrinks down to make room. There is no button to add a workspace.
 
 ## States
 | Part | State | Look |
