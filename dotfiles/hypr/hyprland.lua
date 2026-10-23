@@ -535,23 +535,24 @@ hl.bind("switch:off:Lid Switch", hl.dsp.exec_cmd(scripts .. "/lid.sh open"),  { 
 -- its scissors in the bar. The old Super+period bind here called a
 -- `clipboard` target that no longer exists.
 
--- The Pen (Hyprland "special" workspace) -------------------------------------
--- ewe's hidden workspace: stash a window out of sight, get it back later. The
--- dock add-on grows a Pen box (package glyph) whenever something is inside —
--- click a tile to fetch that window, click the box to show/hide the whole Pen.
-hl.bind(mainMod .. " + grave",     hl.dsp.workspace.toggle_special("pen"))
-hl.bind(mainMod .. " + S",         hl.dsp.workspace.toggle_special("pen"))
-hl.bind(mainMod .. " + Z",         hl.dsp.workspace.toggle_special("pen"))   -- same, muscle-memory alias
--- Stash is a TOGGLE: in the normal flow it sends the window to the Pen; on a
--- window already in the Pen it sends it home to the current desktop. Needs a
--- runtime decision, so it shells out (jq ships with the DE).
-local stash = [[w=$(hyprctl activewindow -j | jq -r .workspace.name); ]]
-           .. [[if [ "${w#special}" != "$w" ]; then ]]
-           .. [[ws=$(hyprctl monitors -j | jq -r '.[] | select(.focused).activeWorkspace.id'); ]]
-           .. [[hyprctl dispatch "hl.dsp.window.move({ workspace = $ws })"; ]]
-           .. [[else hyprctl dispatch 'hl.dsp.window.move({ workspace = "special:pen" })'; fi]]
-hl.bind(mainMod .. " + SHIFT + S", hl.dsp.exec_cmd(stash))
-hl.bind(mainMod .. " + SHIFT + Z", hl.dsp.exec_cmd(stash))
+-- Minimize ---------------------------------------------------------------------
+-- Super+Z minimizes the focused window: it goes to the hidden special
+-- workspace "minimized" (never shown as a workspace — nothing toggles it).
+-- The dock plugin's Minimized box lists what is there, with a thumbnail for
+-- each; clicking one brings that window back to the workspace you are on.
+-- Super+Shift+Z brings back the one minimized last (the most recently
+-- focused of them) without the dock. This replaced the Pen (special:pen) on
+-- 2026-10-23; windows still in the Pen count as minimized, so nothing is
+-- stranded by the upgrade. The restore needs a runtime decision, so it
+-- shells out (jq ships with the DE).
+hl.bind(mainMod .. " + Z", hl.dsp.window.move({ workspace = "special:minimized", follow = false }))
+local unminimize = [[ws=$(hyprctl monitors -j | jq -r '.[] | select(.focused).activeWorkspace.id'); ]]
+                .. [[a=$(hyprctl clients -j | jq -r '[.[] | select(.workspace.name == "special:minimized" or .workspace.name == "special:pen")] ]]
+                .. [[| sort_by(.focusHistoryID) | .[0].address // empty'); ]]
+                .. [[[ -n "$a" ] && [ -n "$ws" ] ]]
+                .. [[&& hyprctl dispatch "hl.dsp.window.move({ workspace = $ws, window = \"address:$a\", follow = false })" ]]
+                .. [[&& hyprctl dispatch "hl.dsp.focus({ window = \"address:$a\" })"]]
+hl.bind(mainMod .. " + SHIFT + Z", hl.dsp.exec_cmd(unminimize))
 
 -- Workspaces 1–8 (Qtile groups) ----------------------------------------------
 --   Super + N         → switch to workspace N
@@ -731,10 +732,11 @@ hl.window_rule({
 -- it. The dock (the ewe.dock add-on, same namespace) is listed because it
 -- animates its own Overview slide in QML and remaps on enable/disable; the
 -- compositor fade would fight both. The add-ons keep today's namespaces
--- (launcher, places, dock, mediaplayer), so this rule still covers them.
+-- (launcher, places, dock, mediaplayer), so this rule still covers them;
+-- the dock's Minimized and Downloads panels (dock 1.2.0) fade in QML too.
 hl.layer_rule({
     name    = "quickshell-self-animated",
-    match   = { namespace = "^quickshell:(overview|control|launcher|applauncher|store|clipboard|places|traymenu|osd|preview|dock)$" },
+    match   = { namespace = "^quickshell:(overview|control|launcher|applauncher|store|clipboard|places|traymenu|osd|preview|dock|minimized|downloads)$" },
     no_anim = true,
 })
 

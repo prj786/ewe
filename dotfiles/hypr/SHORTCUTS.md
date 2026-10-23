@@ -16,7 +16,7 @@ while that plugin is on. Your own launch keys live in ewe.conf
 
 | Shortcut | Action | Program |
 |---|---|---|
-| `Super` | **Overview** (tap it alone): every window and workspace, type to search | Quickshell |
+| `Super` | **Overview** (tap it alone): every window spread out, your workspaces along the top | Quickshell |
 | `Super` + `D` | **Launcher**: fuzzy app and file search (press again to close) | Quickshell |
 | `Super` + `Return` | Terminal | `kitty` |
 | `Super` + `E` | File manager | `nemo` |
@@ -61,15 +61,15 @@ while that plugin is on. Your own launch keys live in ewe.conf
 | `Super` + `Alt` + `P` | Give the window its own column |
 | `Super` + `Alt` + `C` | Merge into / split from the next column |
 
-## Workspaces (1–8) and the Pen
+## Workspaces (1–8) and minimizing
 
 | Shortcut | Action |
 |---|---|
 | `Super` + `1`…`8` | Switch to workspace 1–8 |
 | `Super` + `Shift` + `1`…`8` | Move focused window to workspace (and follow) |
 | `Super` + scroll | Cycle workspaces (on the scrolling layout: scroll the strip) |
-| `Super` + `S` / `Z` | Enter / leave the Pen, the hidden workspace for stashed windows (Super + the key above Tab too) |
-| `Super` + `Shift` + `S` / `Z` | Stash ⇄ unstash: to the Pen from a desktop, back home from the Pen |
+| `Super` + `Z` | Minimize the focused window (it waits in the dock's Minimized box) |
+| `Super` + `Shift` + `Z` | Bring back the window minimized last, onto this workspace |
 
 ## Touchpad
 
@@ -126,7 +126,7 @@ while that plugin is on. Your own launch keys live in ewe.conf
   is no layout to cycle). New: `Super` + `T` toggles the dwindle split, `Super` + `V`
   floats, `Super` + `Shift` + `V` pseudo-tiles, `Super` + `Shift` + `F` maximises.
 - The dropdown terminal/file/music scratchpads became the Pen, one Hyprland
-  "special" workspace (`Super` + backtick / `Super` + `S`). Fill it with
-  `Super` + `Shift` + `S`.
+  "special" workspace — and on 2026-10-23 the Pen became Minimize
+  (`Super` + `Z`, the dock's Minimized box).
 - The old `Super` + `Shift` + `N` "reset split" is gone: Hyprland's Lua API has
   no `splitratio`. Even a split out with `Super` + `Ctrl` + `H/L`.

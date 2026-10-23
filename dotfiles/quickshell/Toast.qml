@@ -74,7 +74,7 @@ Scope {
         root.closed()
     }
     // the action, from its button or from `ipc call toast undo` (no keybind:
-    // Super+Z belongs to the Pen)
+    // Super+Z minimizes)
     function runAction() {
         if (root.actionLabel === "")
             return

@@ -43,12 +43,20 @@ grep -q 'property var settings' Dock.qml && grep -q 'root.settings.autohide' Doc
 # a hex colour, a named colour other than "transparent", a duration or a pixel
 # figure that is not a Theme token (bare integers are allowed only where they
 # are counts, indices, factors or the 0/1 of a flag)
-if grep -nE '"#[0-9a-fA-F]{3,8}"|Qt\.rgba\(|"(white|black|red|grey|gray)"' Dock.qml PinnedApps.qml; then bad "raw colour"; else ok "no raw colour"; fi
-if grep -nE 'duration: *[0-9]|interval: *[0-9]|pixelSize: *[0-9]|(width|height|radius|margin[A-Za-z]*|spacing|x|y): *[0-9]{2,}' Dock.qml PinnedApps.qml; then bad "raw size/duration"; else ok "no raw size or duration"; fi
+if grep -nE '"#[0-9a-fA-F]{3,8}"|Qt\.rgba\(|"(white|black|red|grey|gray)"' Dock.qml PinnedApps.qml Minimized.qml Downloads.qml; then bad "raw colour"; else ok "no raw colour"; fi
+if grep -nE 'duration: *[0-9]|interval: *[0-9]|pixelSize: *[0-9]|(width|height|radius|margin[A-Za-z]*|spacing|x|y): *[0-9]{2,}' Dock.qml PinnedApps.qml Minimized.qml Downloads.qml; then bad "raw size/duration"; else ok "no raw size or duration"; fi
 
 # 3 — compat contracts ---------------------------------------------------------
 grep -q 'WlrLayershell.namespace: "quickshell:dock"' Dock.qml        && ok "namespace quickshell:dock"     || bad "namespace quickshell:dock"
 grep -q 'WlrLayershell.namespace: "quickshell:launcher"' PinnedApps.qml && ok "namespace quickshell:launcher" || bad "namespace quickshell:launcher"
+grep -q 'name: "minimized"' Minimized.qml && ok "namespace quickshell:minimized" || bad "namespace quickshell:minimized"
+grep -q 'name: "downloads"' Downloads.qml && ok "namespace quickshell:downloads" || bad "namespace quickshell:downloads"
+# Minimize: hyprland.lua sends windows to special:minimized; the Pen's are kept
+grep -q '"special:minimized"' Dock.qml && grep -q '"special:pen"' Dock.qml && ok "minimized = special:minimized + the Pen" || bad "minimized workspaces"
+# Downloads: the ewe browser's own record (a cross-repo contract)
+grep -q '/ewe-browser/downloads.json' Downloads.qml && ok "reads ewe-browser/downloads.json" || bad "downloads.json path"
+# captures only while a panel shows, ✕ drops the capture before the close
+grep -q 'captureSource: (mz.shown && !cell.closing' Minimized.qml && ok "Minimized captures gated" || bad "Minimized captures not gated"
 grep -q 'target: "launcher"' Dock.qml  && ok "IPC alias launcher"  || bad "IPC alias launcher"
 grep -q 'target: "ewe.dock"' Dock.qml  && ok "IPC target ewe.dock" || bad "IPC target ewe.dock"
 grep -q 'Shell.setBottomInset(root.pluginId, 0, false)' Dock.qml && ok "inset withdrawn on destruction" || bad "inset withdrawn on destruction"
