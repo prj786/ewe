@@ -599,7 +599,7 @@ QtObject {
     readonly property string icApps:         ic(0xE0E9)  // grid-3x3 — dock app grid
     readonly property string icStack:        ic(0xE529)  // layers — dock overview
     readonly property string icPen:          ic(0xE129)  // package — the retired Pen (kept: plugins may still name it)
-    readonly property string icMinimized:    ic(0xE455)  // arrow-down-to-line — dock: minimized windows
+    readonly property string icMinimized:    ic(0xE455)  // arrow-down-to-line — minimize (the dock's 1.2.0 box; 1.2.1 shows the windows themselves)
     readonly property string icDownload:     ic(0xE0B2)  // download — dock downloads
     readonly property string icStore:        ic(0xE3E4)  // store — dock: Komble, the software manager
     readonly property string icKeyboard:     ic(0xE284)  // keyboard

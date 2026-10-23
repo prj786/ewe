@@ -15,7 +15,7 @@ The dock floats at the bottom of the main screen with the shell's launchers, one
    - Label: the number and a colon, 12px weight 600, `text-muted`.
    - Window tiles: 36 × 32px, `secondary` radius, the app's 20px icon. "empty" in 12px `text-secondary` when there are none.
 5. A second divider, shown while either of the next two is.
-6. Minimized: a group like a workspace box with an `arrow-down-to-line` glyph and the newest three minimized windows as app icons at `opacity-glass`, then "+N". Shown only while a window is minimized (Super+Z).
+6. Minimized windows: one tile per window Super+Z minimized, as tall and wide as the items, oldest first and the newest at the right end (like macOS). The tile is the window's picture fitted inside the cell with `space-xs` around it, `slight` radius, a 1px `border-subtle` hairline and `shadow-float`, with the app's 16px icon over its bottom-right corner. The picture is one frame captured when the window arrives, kept as a small image; until it arrives, the app's icon. Shown only while a window is minimized.
 7. Downloads: a launcher with the `download` glyph. While a download runs, the glyph steps down to 12px inside a Progress ring (the glyph size, 2px stroke, `surface-hover` track, `accent` fill from the top, clockwise; a quarter arc spins while the size is unknown). Shown only while a download runs or one finished in the last day.
 
 ## Sizes
@@ -35,20 +35,20 @@ The dock floats at the bottom of the main screen with the shell's launchers, one
 | Workspace group | Hover | `surface-hover` |
 | Window tile | Focused window | solid `accent` behind the app icon |
 | Window tile | Hover | `surface-hover` |
-| Minimized | Its panel is open | `accent-subtle`, 1px `accent` border |
-| Minimized | A window arrives | the box nods: up to 108% at `fast`, back at `base` (Reduce motion: still) |
+| Minimized tile | Hover / pressed | `surface-hover` / `surface-pressed` behind it, like a launcher |
+| Minimized tile | A window arrives | it grows in from 60% and fades in at `base` (Reduce motion: it just appears) |
 | Downloads | One just finished | lit like an open launcher for `dim` |
 | Any | Focus | 1px `focus-ring`, 1px outside the edge (tiles and launchers draw it on their edge) |
 
 ## Behavior
 - Launchers toggle their panel; opening one closes the others.
 - Clicking a group switches to that workspace; clicking a tile focuses that window.
-- Minimized: click the group for the Minimized panel: a card over the button (`panel-sm` per two columns, up to four columns) titled "Minimized", with "Restore all" when there are two or more. Each window is a thumbnail of one captured frame, 180 × 112px at most, its own shape, `primary` radius, `shadow-float`, the app's 32px icon on its bottom-right corner and its title under it (12px). Hover lifts it to 104% with a 2px `accent` ring and shows a 24px close button. Click one to bring the window back to the current workspace, focused.
+- Minimized: click a tile to bring that window back to the current workspace, focused. There is no group and no panel.
 - Downloads: click for the Downloads panel (`panel-sm` wide): "Downloads" with a folder button (the Downloads folder) and "Clear"; up to eight 48px rows, each with the file's icon, its name (middle-elided), a 4px progress bar while it runs, and a caption: "950 MB of 1.2 GB", "Paused · …", "2.4 MB · 29 min ago", "Cancelled", or "Failed" in `danger`. A finished row opens the file and has a folder button that shows it in the file manager; a running row brings the browser forward.
 - Auto-hide: the dock slides down, leaving a 6px peek, when the current workspace has a tiled or fullscreen window. It comes back when the pointer reaches the bottom edge (a strip as wide as the dock), while any of its panels is open, and for a moment after the pointer leaves.
 
 ## Accessibility
-- A toolbar. Launchers are named (“Apps”, “Overview”, “Downloads, 34%”); groups say their number and window count (“Workspace 3, 3 windows”, “Minimized, 2 windows”); tiles say the app and window title.
+- A toolbar. Launchers are named (“Apps”, “Overview”, “Downloads, 34%”); groups say their number and window count (“Workspace 3, 3 windows”); a minimized tile says “Minimized: ” and the window title; tiles say the app and window title.
 
 ## What a build provides
 `size` · `autoHide` · `opacity` · `workspaces` (id, windows, current) · `minimized` · `downloads` (name, status, received, total, ended) · `player` · `onLaunch` · `onWorkspace` · `onWindow` · `onRestore`.

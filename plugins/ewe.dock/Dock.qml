@@ -5,20 +5,22 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
 import Quickshell.Hyprland
+import Quickshell.Widgets
 import qs
 
 // ewe.dock — the dock, as a plugin (ewe 0.25, plugin API 3). A small,
 // centred bottom dock on the main screen:
-//   [ apps ] [ overview ] [ komble ] [ plugin dock items … ] | [ workspace boxes … ] | [ minimized ] [ downloads ]
+//   [ apps ] [ overview ] [ komble ] [ plugin dock items … ] | [ workspace boxes … ] | [ minimized windows … ] [ downloads ]
 // The sheep opens the pinned-apps popup (PinnedApps.qml, IPC `launcher`),
 // the layers glyph opens the window Overview, the store glyph brings Komble
 // forward; every other plugin with a `dock-item` (Music, Places, …) gets a
 // button here that runs its action with this button as the anchor. Each
 // workspace box shows its windows as little app tiles (click a tile to
 // focus that window, click the box to switch to that workspace).
-// After them (1.2.0): the Minimized box — the windows Super+Z minimized
-// (special:minimized), a click shows them as thumbnails (Minimized.qml) —
-// and Downloads — the ewe browser's downloads, with a progress ring while
+// After them: the minimized windows (1.2.1) — one tile per window Super+Z
+// sent to special:minimized, its picture with the app's icon on the corner,
+// the newest at the right end; a click brings it back (macOS's dock) — and
+// Downloads (1.2.0) — the ewe browser's downloads, with a progress ring while
 // one runs and the day's list on a click (Downloads.qml). Both show only
 // when there is something in them. The Pen (special:pen) is gone: what was
 // left in it counts as minimized.
@@ -77,7 +79,7 @@ Scope {
     function publishInset() { Shell.setBottomInset(root.pluginId, root.publishedInset, root.publishedReserved) }
     onPublishedInsetChanged: root.publishInset()
     onPublishedReservedChanged: root.publishInset()
-    Component.onCompleted: root.publishInset()
+    Component.onCompleted: { root.publishInset(); root.minWins = root.minWinsNow }
     Component.onDestruction: Shell.setBottomInset(root.pluginId, 0, false)
 
     // ── the pinned-apps popup (PinnedApps.qml) ─────────────────────────────
@@ -198,8 +200,16 @@ Scope {
     //    the order is learnt from the move events while the shell runs. ──
     function isMinimizedWs(name) { return name === "special:minimized" || name === "special:pen" }
     property var minOrder: []                 // addresses, in the order they were minimized
-    readonly property var minWins: {
-        var rev = root.claimRev
+    // The tiles' model changes only when the set or order does: a new array
+    // on every window event would rebuild every tile (the Repeater has no
+    // keys), so the fresh list replaces it only when its addresses differ.
+    property var minWins: []
+    onMinWinsNowChanged: {
+        var a = root.minWinsNow, b = root.minWins, same = a.length === b.length
+        for (var i = 0; same && i < a.length; i++) same = a[i] === b[i]
+        if (!same) root.minWins = a
+    }
+    readonly property var minWinsNow: {
         var out = []
         var tls = Hyprland.toplevels ? Hyprland.toplevels.values : []
         for (var i = 0; i < tls.length; i++) {
@@ -218,16 +228,28 @@ Scope {
         Hyprland.dispatch('hl.dsp.window.move({ workspace = ' + ws + ', window = "address:' + a + '", follow = false })')
         Hyprland.dispatch('hl.dsp.focus({ window = "address:' + a + '" })')
     }
-    function restoreAll() {
-        var w = root.minWins.slice()
-        for (var i = 0; i < w.length; i++) root.restore(w[i])
-    }
-    function closeWin(t) {
-        var a = root.addrOf(t)
-        if (a !== "") Hyprland.dispatch('hl.dsp.window.close({ window = "address:' + a + '" })')
-    }
 
-    Minimized { id: minimized; host: root }
+    // One still picture per minimized window, taken as it arrives: the
+    // capture is shrunk to the tile (grabToImage) and dropped at once, so
+    // the dock holds no live capture and no window-sized buffer, and a
+    // window that closes while minimized can never race a pending frame
+    // (Hyprland 0.56 disconnects the whole shell — "invalid object N").
+    // Keyed by address, so the picture survives the tiles being rebuilt;
+    // forgotten when the window comes back, so the next minimize is fresh.
+    // The picture's shape is kept with it: Hyprland tiles the hidden
+    // workspace too, so a minimized window is resized as others join it.
+    property var thumbs: ({})                 // address -> { grab: QQuickItemGrabResult, aspect }
+    // windows already minimized when the shell starts just appear; the ones
+    // minimized later grow in (a dimmed beat after start)
+    property bool minArrivals: false
+    Timer { interval: Math.max(1, Theme.durDim); running: true; onTriggered: root.minArrivals = true }
+    function setThumb(a, g, aspect) { var m = Object.assign({}, root.thumbs); m[a] = { grab: g, aspect: aspect }; root.thumbs = m }
+    onMinWinsChanged: {
+        var here = {}, m = {}, dropped = false
+        for (var i = 0; i < root.minWins.length; i++) here[root.addrOf(root.minWins[i])] = true
+        for (var k in root.thumbs) { if (here[k]) m[k] = root.thumbs[k]; else dropped = true }
+        if (dropped) root.thumbs = m
+    }
     Downloads { id: downloads }
 
     // workspaces (id>0) that have windows, plus the focused one — sorted, each with its toplevels
@@ -580,89 +602,129 @@ Scope {
 
                 // a second divider: what is put away comes after the workspaces
                 Rectangle {
-                    visible: minBox.visible || dlBtn.visible
+                    visible: root.minWins.length > 0 || dlBtn.visible
                     anchors.verticalCenter: parent.verticalCenter
                     width: Theme.borderWidth1; height: win.cell - Theme.spaceS
                     color: Theme.dockOutline
                 }
 
-                // ── Minimized — the windows Super+Z put away: the glyph, the
-                //    newest three as app tiles (+N past that); a click shows
-                //    them all as thumbnails (Minimized.qml) ──
-                Rectangle {
-                    id: minBox
-                    visible: root.minWins.length > 0
-                    anchors.verticalCenter: parent.verticalCenter
-                    height: win.cell; radius: Theme.radiusPrimary
-                    width: Math.max(win.cell, minRow.implicitWidth + 2 * Theme.spaceS)
-                    color: minimized.open ? Theme.dockOpenFill
-                         : minMa.pressed ? Theme.barPressedFill
-                         : minMa.containsMouse ? Theme.barHoverFill : "transparent"
-                    border.color: minimized.open ? Theme.accent : Theme.dockOutline
-                    border.width: Theme.borderWidth1
-                    Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
-                    readonly property var shownWins: root.minWins.slice(Math.max(0, root.minWins.length - 3))
-                    // a window just arrived: the box nods (Reduce motion: still)
-                    property int lastCount: -1        // -1 until the first count: no nod at login
-                    SequentialAnimation {
-                        id: nod
-                        NumberAnimation { target: minBox; property: "scale"; to: 1.08; duration: Theme.durFast; easing.type: Theme.easeFast }
-                        NumberAnimation { target: minBox; property: "scale"; to: 1; duration: Theme.durBase; easing.type: Theme.ease }
-                    }
-                    Connections {
-                        target: root
-                        function onMinWinsChanged() {
-                            if (minBox.lastCount >= 0 && root.minWins.length > minBox.lastCount && !Theme.reduceMotion) nod.restart()
-                            minBox.lastCount = root.minWins.length
+                // ── Minimized — one tile per window Super+Z put away, oldest
+                //    first and the newest at the right end (macOS's dock):
+                //    the window's picture with the app's icon on its corner.
+                //    A click brings it back to the workspace you are on. ──
+                Repeater {
+                    model: root.minWins
+                    delegate: Item {
+                        id: mini
+                        required property var modelData
+                        readonly property string addr: root.addrOf(modelData)
+                        readonly property var shot: root.thumbs[mini.addr] || null
+                        // capture until the picture is taken, or the wait runs out
+                        // (no frame — the tile keeps the app's icon instead)
+                        property bool gaveUp: false
+                        readonly property bool capturing: !mini.shot && !mini.gaveUp
+                        Timer { interval: Math.max(1, Theme.durDim); running: mini.capturing; onTriggered: mini.gaveUp = true }
+                        function take() {
+                            var aspect = mini.aspect
+                            sc.grabToImage(function (g) { root.setThumb(mini.addr, g, aspect) }, Qt.size(2 * mini.tw, 2 * mini.th))
                         }
-                    }
-                    MouseArea {
-                        id: minMa
-                        anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            root.launcherOpen = false; root.closeStoreFallback()
-                            minimized.toggleAt(Shell.anchorFor(minBox, win))
+
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: win.cell; height: win.cell
+
+                        // the picture's shape, fitted inside the cell
+                        readonly property real aspect: {
+                            if (mini.shot) return mini.shot.aspect
+                            if (sc.hasContent && sc.sourceSize.height > 0) return sc.sourceSize.width / sc.sourceSize.height
+                            var o = mini.modelData.lastIpcObject
+                            return (o && o.size && o.size[1] > 0) ? o.size[0] / o.size[1] : 1
                         }
-                    }
-                    Row {
-                        id: minRow
-                        anchors.centerIn: parent
-                        spacing: Theme.spaceXs
-                        Text {
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: Theme.icMinimized || Theme.icChevronDown
-                            color: minimized.open ? Theme.barAccentText : Theme.barTextMuted
-                            font.family: Theme.fontIcons; font.pixelSize: Theme.iconSm
+                        readonly property int box: win.cell - 2 * Theme.spaceXs
+                        readonly property int tw: mini.aspect >= 1 ? mini.box : Math.max(1, Math.round(mini.box * mini.aspect))
+                        readonly property int th: mini.aspect >= 1 ? Math.max(1, Math.round(mini.box / mini.aspect)) : mini.box
+
+                        // a launcher's ground: hover and pressed
+                        Rectangle {
+                            anchors.fill: parent
+                            radius: Theme.radiusPrimary
+                            color: miniMa.pressed ? Theme.barPressedFill : miniMa.containsMouse ? Theme.barHoverFill : "transparent"
+                            Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
                         }
-                        Repeater {
-                            model: minBox.shownWins
-                            delegate: Item {
-                                required property var modelData
-                                anchors.verticalCenter: parent.verticalCenter
-                                width: win.tileW; height: win.tileH
+                        Item {
+                            id: pic
+                            anchors.centerIn: parent
+                            width: mini.tw; height: mini.th
+                            RectangularShadow {
+                                anchors.fill: parent
+                                radius: Theme.radiusSlight
+                                offset.x: Theme.shadowFloat.x; offset.y: Theme.shadowFloat.y
+                                blur: Theme.shadowFloat.blur
+                                color: Theme.shadowFloat.color
+                            }
+                            ClippingRectangle {
+                                anchors.fill: parent
+                                radius: Theme.radiusSlight
+                                color: Theme.surfaceSunken
+                                ScreencopyView {
+                                    id: sc
+                                    anchors.fill: parent
+                                    visible: !mini.shot && hasContent
+                                    captureSource: (mini.capturing && mini.modelData.wayland) || null
+                                    live: false
+                                    onHasContentChanged: if (hasContent && mini.capturing) mini.take()
+                                }
+                                Image {
+                                    anchors.fill: parent
+                                    visible: !!mini.shot
+                                    source: mini.shot ? mini.shot.grab.url : ""
+                                    smooth: true
+                                }
+                                // no picture (yet, or at all): the app's icon
                                 Image {
                                     anchors.centerIn: parent
-                                    width: win.appPx; height: win.appPx
+                                    visible: !mini.shot && !sc.hasContent
+                                    width: Math.min(win.appPx, mini.th); height: width
                                     sourceSize.width: 2 * win.appPx; sourceSize.height: 2 * win.appPx; mipmap: true
-                                    source: root.iconFor(modelData)
-                                    // put away, so a step quieter than a live tile
-                                    opacity: Theme.opacityGlass
+                                    source: root.iconFor(mini.modelData)
                                 }
                             }
+                            Rectangle {
+                                anchors.fill: parent
+                                radius: Theme.radiusSlight
+                                color: "transparent"
+                                border.color: Theme.dockOutline
+                                border.width: Theme.borderWidth1
+                            }
                         }
-                        Text {
-                            visible: root.minWins.length > 3
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: "+" + (root.minWins.length - 3)
-                            color: Theme.barTextMuted
-                            font.family: Theme.type.label.family
-                            font.pixelSize: Theme.type.label.size
-                            font.weight: Theme.fontWeightSemibold
-                            font.features: ({ "tnum": 1 })
+                        // the app, on the picture's corner
+                        Image {
+                            visible: !!mini.shot || sc.hasContent
+                            anchors.right: pic.right; anchors.bottom: pic.bottom
+                            anchors.rightMargin: -Theme.spaceXs; anchors.bottomMargin: -Theme.spaceXs
+                            width: Theme.iconMd; height: Theme.iconMd
+                            sourceSize.width: 2 * Theme.iconMd; sourceSize.height: 2 * Theme.iconMd; mipmap: true
+                            source: root.iconFor(mini.modelData)
                         }
+
+                        // a window that just arrived grows in
+                        scale: 1; opacity: 1
+                        ParallelAnimation {
+                            id: arrive
+                            NumberAnimation { target: mini; property: "scale"; from: 0.6; to: 1; duration: Theme.durBase; easing.type: Theme.ease }
+                            NumberAnimation { target: mini; property: "opacity"; from: 0; to: 1; duration: Theme.durBase; easing.type: Theme.ease }
+                        }
+                        Component.onCompleted: if (!mini.shot && root.minArrivals && !Theme.reduceMotion) arrive.start()
+
+                        MouseArea {
+                            id: miniMa
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.restore(mini.modelData)
+                        }
+                        Accessible.role: Accessible.Button
+                        Accessible.name: "Minimized: " + root.titleOf(mini.modelData)
                     }
-                    Accessible.role: Accessible.Button
-                    Accessible.name: "Minimized, " + root.minWins.length + (root.minWins.length === 1 ? " window" : " windows")
                 }
 
                 // ── Downloads — the ewe browser's: a progress ring round the

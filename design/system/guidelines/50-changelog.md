@@ -69,7 +69,7 @@ The system's version is the `version` field in `tokens.json`. The repositories s
 
 **Overview:** rebuilt after macOS Mission Control. The windows fly from their real places into a spread that keeps their proportions and relative sizes, and back on close; the workspaces sit along the top as labels and slide down into thumbnails on hover or while dragging a window. No search (the app launcher has it), no workspace pager at the bottom, no blur on the backdrop. See the Overview card.
 
-**Dock:** the Pen is gone. After the workspace groups come Minimized (the windows Super+Z minimized, with a thumbnail panel) and Downloads (the ewe browser's, with a progress ring and a list). See the Dock card.
+**Dock:** the Pen is gone. After the workspace groups come the minimized windows (one tile each with the window's picture, like macOS — Dock 1.2.1; 1.2.0 had a group with a thumbnail panel) and Downloads (the ewe browser's, with a progress ring and a list). See the Dock card.
 
 **To do in the repos:** ewe 0.34 and Dock 1.2.0 implement both. The two cards' `preview.html` still show the old designs.
 
