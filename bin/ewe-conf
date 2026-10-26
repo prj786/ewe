@@ -765,7 +765,10 @@ def gen_windowrules_lua(rules):
         s += f'    name  = "user-rule-{n}",\n'
         s += f'    match = {{ class = "(?i)^{_lua_esc(_regex_esc(klass))}$" }},\n'
         if ws > 0:
-            s += f'    workspace = "{ws}",\n'
+            # a tag, not `workspace = "N"`: N is a raw Hyprland id, and with
+            # several displays each owns ten (workspaces.lua) — the tag lets
+            # workspaces.lua open it on workspace N of the display you are on
+            s += f'    tag   = "+ewe-ws-{min(ws, 10)}",\n'
         if mode:
             s += f"    {mode} = true,\n"
         s += "})\n"

@@ -109,7 +109,8 @@ _G.ewe_workspaces_mode = nil
 reset({ { "eDP-1", 1 }, { "DP-1", 4 } }, { { 1, "eDP-1", { "a" } }, { 4, "DP-1", { "b" } } })
 -- a reload settles at once (config.reloaded is not routed through a timer)
 _G.hl.timer = function() error("no timer on reload") end
-_G.hl.on = function(ev, fn) if ev == "config.reloaded" then RELOAD = fn end end
+ON = {}
+_G.hl.on = function(ev, fn) ON[ev] = fn; if ev == "config.reloaded" then RELOAD = fn end end
 ws.setup()
 RELOAD()
 check(W[14] and W[14].windows[1] == "b" and active("DP-1") == 14, "upgrade: the second display's workspace 4 becomes its own 4 (id 14)")
@@ -126,6 +127,28 @@ D[2] = { id = 1, name = "HDMI-A-1", active = 2 }
 W[2] = { id = 2, monitor = "HDMI-A-1", windows = {} }
 RELOAD()
 check(active("HDMI-A-1") == 11, "plugged: a new display starts on its own workspace 1 (id 11)")
+
+-- 0.35.1: nothing may leave another display's workspace on this one — two
+-- "Workspace 3" on one display was the 0.35.0 bug (a window rule's raw id)
+local function opened(addr, wsid, mon, tags)
+  local w = W[wsid] or { id = wsid, monitor = mon, windows = {} }
+  W[wsid] = w; table.insert(w.windows, addr)
+  ON["window.open_early"]({ address = addr, tags = tags, monitor = { name = mon },
+                            workspace = { id = wsid, special = false } })
+end
+opened("k", 3, "HDMI-A-1")                      -- an old `workspace = "3"` rule, focused on the second display
+check(W[13] and W[13].windows[1] == "k" and #W[3].windows == 0, "old rule: a raw workspace 3 on the second display → its own 3 (id 13)")
+opened("t", 11, "HDMI-A-1", { "ewe-ws-4*" })     -- a Settings rule now: tag ewe-ws-4
+check(W[14] and W[14].windows[1] == "t", "rule tag: workspace 4 of the second display (id 14)")
+opened("u", 1, "eDP-1", { "ewe-ws-4*" })
+check(W[4] and W[4].windows[#W[4].windows] == "u", "rule tag: workspace 4 of the first display (id 4)")
+local before = #log
+opened("v", 12, "HDMI-A-1")
+check(#log == before, "a window where it belongs is left alone")
+_G.hl.timer = function(fn) fn() end
+W[7] = { id = 7, monitor = "HDMI-A-1", windows = {} }; byname("HDMI-A-1").active = 7
+ON["workspace.created"]()
+check(active("HDMI-A-1") == 17, "a raw workspace 7 made on the second display → its own 7 (id 17), not its 1")
 
 -- three fingers down: a new workspace on this display, never a pile of empties
 reset({ { "eDP-1", 1 } }, { { 1, "eDP-1", { "a" } }, { 2, "eDP-1" } })
@@ -165,5 +188,13 @@ grep -q "ewe_workspaces_mode" "$USERLUA" && no "separate left a line in user.lua
 bin/ewe-conf set desktop.workspaces.mode sideways 2>"$S/err" && no "a bad mode was accepted" || {
   grep -q '"bad-value"' "$S/err" && ok "a bad mode is refused" || no "no bad-value error"
 }
+
+# ── 3. Settings → Window Rules: "open on workspace N" is a tag, not a raw id ──
+rules=$(python3 -c "
+from importlib.machinery import SourceFileLoader
+m = SourceFileLoader('ewe_conf', 'bin/ewe-conf').load_module()
+print(m.gen_windowrules_lua([{'class': 'kitty', 'workspace': 3}]))")
+grep -q 'tag   = "+ewe-ws-3"' <<<"$rules" && ok "a window rule tags ewe-ws-3" || no "no ewe-ws tag in the window rule"
+grep -q 'workspace = ' <<<"$rules" && no "a window rule still names a raw workspace id" || ok "no raw workspace id in the window rules"
 
 exit $fail
