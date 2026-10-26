@@ -103,15 +103,18 @@ end
 
 -- every workspace lives in the block of the display it is on: one that sits
 -- elsewhere gives its windows to the same-numbered workspace of that display.
--- An empty one is only a new display's first workspace (Hyprland hands a new
--- display the lowest free id): that display starts on its own workspace 1.
-local function normalize()
+-- After a display arrives (`fresh`) an empty one is only that display's first
+-- workspace (Hyprland hands a new display the lowest free id): it starts on
+-- its own workspace 1. Otherwise an empty one keeps its number — something
+-- asked for "workspace 3" by its raw id (a script, the swipe) on the wrong
+-- display.
+local function normalize(fresh)
     local moves, switch = {}, {}
     for _, w in ipairs(hl.get_workspaces() or {}) do
         if w.id >= 1 and not w.special and w.monitor and slots[w.monitor.name] ~= nil then
             local k = slots[w.monitor.name]
             if M.block_of(w.id) ~= k then
-                local target = id_for(k, (w.windows or 0) > 0 and M.number(w.id) or 1)
+                local target = id_for(k, (fresh and (w.windows or 0) == 0) and 1 or M.number(w.id))
                 for _, win in ipairs(hl.get_workspace_windows(w.id) or {}) do
                     moves[#moves + 1] = { address = win.address, id = target }
                 end
@@ -207,10 +210,30 @@ function M.new_workspace()
     hl.dispatch(hl.dsp.focus({ workspace = id_for(k, target) }))
 end
 
+-- a window opening: Settings → Window Rules tag it `ewe-ws-N` (ewe-conf) —
+-- it goes to workspace N of the display it opens on, like Super+N. A window
+-- that lands in another display's block anyway (a rule from before 0.35.1
+-- that says `workspace = "3"`, a raw id) goes to the same number of the
+-- display it is on: two "Workspace 3" on one display was the 0.35.0 bug.
+function M.place(win)
+    if not win or not win.monitor or not win.workspace or win.workspace.special then return end
+    if slots[win.monitor.name] == nil then return end   -- a display still settling
+    local k = slots[win.monitor.name]
+    local n
+    for _, t in ipairs(win.tags or {}) do
+        n = n or tonumber(tostring(t):match("^ewe%-ws%-(%d+)"))
+    end
+    if not n and win.workspace.id >= 1 and M.block_of(win.workspace.id) ~= k then
+        n = M.number(win.workspace.id)
+    end
+    if not n or n < 1 or n > SPAN or win.workspace.id == id_for(k, n) then return end
+    hl.dispatch(hl.dsp.window.move({ workspace = id_for(k, n), window = "address:" .. win.address }))
+end
+
 -- ── wiring ─────────────────────────────────────────────────────────────────
 local function settle()
     assign()
-    normalize()
+    normalize(true)
     if M.mode() == "shared" then M.sync(hl.get_active_workspace()) end
 end
 
@@ -225,6 +248,13 @@ function M.setup()
     -- (`Hyprland --verify-config` segfaulted on an hl.timer from here)
     hl.on("config.reloaded", settle)
     hl.on("workspace.active", function(ws) M.sync(ws) end)
+    hl.on("window.open_early", function(win) M.place(win) end)
+    -- a workspace made by its raw id on the wrong display: re-home it once
+    -- Hyprland has finished making it (displays not yet in `slots` are left
+    -- to settle())
+    hl.on("workspace.created", function()
+        if not syncing then hl.timer(function() normalize(false) end, { timeout = 1, type = "oneshot" }) end
+    end)
 end
 
 return M

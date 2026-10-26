@@ -386,6 +386,10 @@ written. Called live by Settings → Theme, at shell startup, and by phase 60.
   every display along). Super+N/Shift+N/wheel and the swipe-down are Lua
   functions in the compositor (no process per key); a display that leaves
   merges its workspaces into the same numbers of the one its windows land on.
+  Nothing may hand Hyprland a raw id (0.35.1 hotfix: a window rule's
+  `workspace = "3"` made id 3 on the second display, beside its own 13 —
+  two "3"s): window rules carry a `+ewe-ws-N` tag that `M.place` resolves on
+  `window.open_early`, and `workspace.created` re-homes any stray id.
   Never start an `hl.timer` from `config.reloaded`: it also fires while the
   config is first parsed (`Hyprland --verify-config` segfaulted). Test:
   `tests/ewe-workspaces-test.sh`; a second display in the nested harness is
