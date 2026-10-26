@@ -28,7 +28,10 @@ A small, centred dock at the bottom of the main screen:
   you are on. The picture is one captured frame, shrunk to the tile and
   kept as a small image — the capture itself is dropped at once. They
   replaced the Pen: windows left in `special:pen` count as minimized.
-  (1.2.0 had a Minimized box with a thumbnail panel instead.)
+  (1.2.0 had a Minimized box with a thumbnail panel instead.) Only the
+  dock on screen captures the picture (1.3.1): the other displays' docks
+  are hidden windows, where a grab has no scene and the capture was a GPU
+  copy for nothing.
 - **Downloads** (1.2.0) — the ewe browser's downloads: a progress ring round
   the glyph while one runs; a click lists the running ones and the day's
   finished ones (open the file, show it in its folder, Clear). Shown only

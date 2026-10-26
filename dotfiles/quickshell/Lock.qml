@@ -3,6 +3,7 @@ import QtQuick.Effects
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
+import Quickshell.Hyprland
 import Quickshell.Services.Pam
 
 // Lock — a Quickshell session-lock (ext-session-lock-v1) (design system:
@@ -69,6 +70,13 @@ Scope {
         function lock(): void { root.locked = true }
         function unlock(): void { root.locked = false }   // emergency only
         function toggle(): void { root.locked = !root.locked }
+    }
+    // Super+Alt+L — `hl.dsp.global("ewe:lock")` in hyprland.lua: delivered
+    // over the global-shortcuts protocol, no process per press (Launcher.qml)
+    GlobalShortcut {
+        appid: "ewe"; name: "lock"
+        description: "Lock the session"
+        onPressed: root.locked = true
     }
 
     // ── logind ────────────────────────────────────────────────────────────────

@@ -222,6 +222,14 @@ Scope {
         description: "Toggle the Overview"
         onReleased: root.toggle()
     }
+    // The 3-finger swipe up (a gesture action = a dispatch, which sends
+    // `pressed` only): its own shortcut, toggling on pressed, so the swipe
+    // needs no `qs ipc call` spawn either.
+    GlobalShortcut {
+        appid: "ewe"; name: "overview-swipe"
+        description: "Toggle the Overview (swipe)"
+        onPressed: root.toggle()
+    }
 
     // ── the sequence ────────────────────────────────────────────────────────
     // open:  map (held) → wait for the captures (armed) → fly 0 → 1 (durSlow)

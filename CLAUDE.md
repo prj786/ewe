@@ -242,7 +242,16 @@ display power saver welcome toast` (plus each plugin's own, `ewe.clipboard ewe.s
 ewe.passwords ewe.safe ewe.companion ewe.slack`…; the legacy targets `cast launcher places player mail` are the first-party
 plugins' `ipcAliases` now — present only while that plugin is installed). Most expose
 `toggle`/`show`/`hide`. Gotcha: `qs ipc call <t> show` collides with the `qs ipc
-show` subcommand and no-ops — bind to **`toggle`**.
+show` subcommand and no-ops — bind to **`toggle`**. **The shell's OWN keys
+(0.35.2)** — Super+D/N/comma, Super+Alt+L, Super+Shift+B/W/R, the power
+button, the swipe-up — are `hl.dsp.global("ewe:<name>")` in hyprland.lua and a
+`GlobalShortcut { appid: "ewe"; name }` beside the matching IpcHandler: the
+global-shortcuts protocol, no `sh -c qs ipc call` process per press. A press
+bind delivers pressed+released, a gesture/dispatch pressed only, a release
+bind released only — toggle on `pressed` (the Overview's Super tap is the
+release-bind exception, so the swipe has its own `overview-swipe`). Plugin
+manifest keybinds still go through `qs ipc call` (the shell cannot reach a
+plugin's IpcHandler in-process).
 
 Drag-out idiom (used by the Places plugin and the screenshot plugin's preview): an invisible proxy `Item` with
 `Drag.active` + `Drag.mimeData: ({"text/uri-list": "file://"+path+"\r\n"})`, plus a

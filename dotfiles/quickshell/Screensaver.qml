@@ -34,6 +34,9 @@ Scope {
         // irreversible stage, and fires undim the moment you touch anything
         function dim(): void { Globals.saverDimming = true }
         function undim(): void { Globals.saverDimming = false }
+        // why idle is (not) held off right now — the test driver and
+        // troubleshooting read it
+        function inhibited(): string { return JSON.stringify({ media: root.mediaPlaying, fullscreen: root.fullscreenFocused, call: root.callActive }) }
     }
 
     // ── pre-lock dim ─────────────────────────────────────────────────────────
@@ -146,19 +149,33 @@ Scope {
     }
     Component.onCompleted: micProbe.running = true
 
-    property bool fullscreenFocused: false
+    // The focused window is FULLSCREEN (clients -j `fullscreen` 2; 1 is
+    // maximized, which used to count — a maximized editor kept the screen
+    // from ever dimming). Read off Quickshell's toplevels: the old
+    // `sh -c "hyprctl | grep"` spawned three processes after every focus
+    // change and workspace switch (2026-10-26). `fullscreen` and the focus
+    // live in the IPC objects, which a focus/fullscreen event re-fetches
+    // over the socket; fsRev makes the binding look again when they land.
+    property int fsRev: 0
+    readonly property bool fullscreenFocused: {
+        void root.fsRev
+        var tls = Hyprland.toplevels ? Hyprland.toplevels.values : []
+        for (var i = 0; i < tls.length; i++) {
+            var t = tls[i]
+            if (!t.activated) continue
+            var o = t.lastIpcObject
+            return !!(o && o.fullscreen >= 2)
+        }
+        return false
+    }
     Connections {
         target: Hyprland
         function onRawEvent(ev) {
-            if (ev.name === "fullscreen" || ev.name === "activewindow" || ev.name === "workspace") fsProbe.restart()
+            if (ev.name === "fullscreen" || ev.name === "activewindowv2" || ev.name === "workspacev2") fsProbe.restart()
         }
     }
-    Timer { id: fsProbe; interval: 300; onTriggered: { fsProc.running = false; fsProc.running = true } }
-    Process {
-        id: fsProc
-        command: ["sh", "-c", "hyprctl -j activewindow 2>/dev/null | grep -c '\"fullscreen\": [1-9]'"]
-        stdout: StdioCollector { onStreamFinished: root.fullscreenFocused = this.text.trim() === "1" }
-    }
+    Timer { id: fsProbe; interval: 150; onTriggered: { Hyprland.refreshToplevels(); fsSettle.restart() } }
+    Timer { id: fsSettle; interval: 250; onTriggered: root.fsRev++ }
     PanelWindow {
         id: inhibitWin
         implicitWidth: 1

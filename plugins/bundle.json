@@ -27,7 +27,7 @@
       "default": false,
       "migrate": true,
       "commit": "c88fdc4e2e49ac4446c2efa5aeff7bdf6171d9ab",
-      "version": "1.3.0"
+      "version": "1.3.1"
     },
     "ewe.insomnia": {
       "repo": "https://github.com/prj786/ewe-plugin-insomnia",
