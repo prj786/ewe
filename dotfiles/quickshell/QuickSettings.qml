@@ -3,6 +3,7 @@ import QtQuick.Effects
 import Quickshell
 import Quickshell.Wayland
 import Quickshell.Io
+import Quickshell.Hyprland
 import Quickshell.Services.Pipewire
 import Quickshell.Services.UPower
 import Quickshell.Services.Notifications
@@ -383,6 +384,20 @@ Scope {
     }
 
     Connections { target: Globals; function onQuickSettingsOpenChanged() { if (Globals.quickSettingsOpen) { root.tab = "home"; root.refresh() } } }
+    // Super+N and the power button — `hl.dsp.global("ewe:quicksettings")` /
+    // `("ewe:power")` in hyprland.lua: delivered over the global-shortcuts
+    // protocol, no process per press (Launcher.qml). The IPC verbs below stay
+    // for scripts.
+    GlobalShortcut {
+        appid: "ewe"; name: "quicksettings"
+        description: "Toggle Quick settings"
+        onPressed: Globals.quickSettingsOpen = !Globals.quickSettingsOpen
+    }
+    GlobalShortcut {
+        appid: "ewe"; name: "power"
+        description: "Shut down (confirmation)"
+        onPressed: { Globals.quickSettingsOpen = true; root.askPower("poweroff", "Shut down this computer?", "Shut down") }
+    }
     IpcHandler {
         target: "quicksettings"
         function toggle(): void { Globals.quickSettingsOpen = !Globals.quickSettingsOpen }

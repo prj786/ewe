@@ -36,8 +36,8 @@ if command -v checkupdates >/dev/null 2>&1; then
     # persists say so OUT LOUD — an explicit error lets Globals keep the last
     # known counts AND schedule a short-interval retry, where empty output
     # used to mean an hour of a silently wrong bar.
-    out=$(checkupdates 2>/dev/null); rc=$?
-    if [ "$rc" -eq 1 ]; then sleep 3; out=$(checkupdates 2>/dev/null); rc=$?; fi
+    out=$(nice -n 19 ionice -c 3 checkupdates 2>/dev/null); rc=$?
+    if [ "$rc" -eq 1 ]; then sleep 3; out=$(nice -n 19 ionice -c 3 checkupdates 2>/dev/null); rc=$?; fi
     if [ "$rc" -eq 1 ]; then
         printf '{"error":true,"busy":%s}\n' "$busy"
         exit 0
@@ -45,7 +45,7 @@ if command -v checkupdates >/dev/null 2>&1; then
     repo=$(printf '%s\n' "$out" | grep -c ' -> ')
 fi
 if command -v paru >/dev/null 2>&1; then
-    aur=$(paru -Qua 2>/dev/null | grep -c ' -> ')
+    aur=$(nice -n 19 ionice -c 3 paru -Qua 2>/dev/null | grep -c ' -> ')
 fi
 
 # The snapshot keeps only the counts — "busy" is a right-now fact and a

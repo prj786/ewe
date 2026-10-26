@@ -3,6 +3,7 @@ import QtQuick.Effects
 import Quickshell
 import Quickshell.Wayland
 import Quickshell.Io
+import Quickshell.Hyprland
 
 // Launcher — a centered, frosted app launcher with fuzzy search.
 // Toggled via IPC:  qs ipc call applauncher toggle   (bound to Super+D).
@@ -31,8 +32,8 @@ Scope {
     property bool held: false
     property Timer _closeHold: Timer { interval: Math.max(1, Theme.durBase + 60); onTriggered: root.held = false }
     onOpenedChanged: {
-        if (opened) { _closeHold.stop(); held = true; query = ""; input.text = ""; selected = 0; fileResults = []; if (!indexProc.running) indexProc.running = true }
-        else _closeHold.restart()
+        if (opened) { _closeHold.stop(); held = true; query = ""; input.text = ""; selected = 0; fileResults = []; if (!root.indexed && !indexProc.running) indexProc.running = true }
+        else { _closeHold.restart(); if (!indexProc.running) indexProc.running = true }   // refresh the file index while nothing is on screen
     }
     onResultsChanged: if (selected >= results.length) selected = Math.max(0, results.length - 1)
     onQueryChanged: {
@@ -57,6 +58,17 @@ Scope {
         function show(): void { root.opened = true }
         function hide(): void { root.opened = false }
     }
+    // Super+D: hyprland.lua binds it to `hl.dsp.global("ewe:launcher")`, which
+    // Hyprland delivers here over the global-shortcuts protocol — no
+    // `sh -c qs ipc call …` per press (a Qt process start, ~20 ms, that also
+    // swallowed the first letters typed). A press bind sends pressed AND
+    // released, so toggle on pressed only. `qs ipc call applauncher toggle`
+    // stays for scripts.
+    GlobalShortcut {
+        appid: "ewe"; name: "launcher"
+        description: "Toggle the Launcher"
+        onPressed: root.toggle()
+    }
 
     // ── file/folder search (plocate, basename match, home-scoped, noise-filtered) ──
     // The launcher keeps ITS OWN index of $HOME (~/.cache/ewe/files.db): the
@@ -64,14 +76,19 @@ Scope {
     // takes a subvolume mount for a bind mount and PRUNE_BIND_MOUNTS drops it
     // (2026-09-20: no file was ever found on a stock install). Indexing a
     // home takes well under a second, needs no root, and is redone in the
-    // background on open once the index is 10 minutes old. Until the first
-    // one exists the system index answers.
+    // background once the index is 10 minutes old — on CLOSE, not on open:
+    // the half second of disk and CPU it takes (375k files on a full home)
+    // used to land on the open animation and the first keystrokes. Only the
+    // very first index (none on disk yet) runs on open, so the first search
+    // has something to answer; until it exists the system index answers.
+    // Lowest CPU and I/O priority: the desktop must not notice it.
     readonly property string fileDb: "${XDG_CACHE_HOME:-$HOME/.cache}/ewe/files.db"
     readonly property string indexScript: "db=\"" + fileDb + "\"; mkdir -p \"${db%/*}\"; "
         + "if [ ! -s \"$db\" ] || [ -n \"$(find \"$db\" -mmin +10 2>/dev/null)\" ]; then "
-        + "updatedb -l 0 --prune-bind-mounts no -U \"$HOME\" -o \"$db.new\" --prunenames \".git .cache node_modules .cargo .rustup .npm .gradle\" 2>/dev/null "
+        + "nice -n 19 ionice -c 3 updatedb -l 0 --prune-bind-mounts no -U \"$HOME\" -o \"$db.new\" --prunenames \".git .cache node_modules .cargo .rustup .npm .gradle\" 2>/dev/null "
         + "&& mv -f \"$db.new\" \"$db\"; fi"
-    Process { id: indexProc; command: ["sh", "-c", root.indexScript] }
+    property bool indexed: false
+    Process { id: indexProc; command: ["sh", "-c", root.indexScript]; onExited: root.indexed = true }
     // $1 = query; emits "<d|f>\t<abs-path>" per line so the icon can be a folder/file.
     // the first line echoes the query the run was started with: the one
     // collector serves every run, so a result must prove it is for the query

@@ -24,7 +24,12 @@ local fileManager = "nemo"
 local browser     = 'b="$(xdg-settings get default-web-browser 2>/dev/null)"; '
                  .. 'f="$HOME/.local/share/applications/$b"; [ -f "$f" ] || f="/usr/share/applications/$b"; '
                  .. 'if [ -n "$b" ] && [ -f "$f" ]; then exec gio launch "$f"; else exec ewe-browser; fi'
-local applauncher = "qs ipc call applauncher toggle"  -- Quickshell launcher (QML)
+-- The shell's own surfaces (Launcher, Quick Settings, Settings, lock, bar …)
+-- are bound below with hl.dsp.global("ewe:<name>"): Hyprland hands the key
+-- to the shell over the global-shortcuts protocol (a GlobalShortcut in the
+-- QML next to each IpcHandler). The old `qs ipc call …` form started a Qt
+-- process per press (~20 ms, and the first letters typed into the Launcher
+-- were lost); it stays for scripts and the plugin keybinds.
 
 local mainMod = "SUPER"   -- the Super / Windows key
 
@@ -358,11 +363,13 @@ hl.gesture({
     action    = "workspace",
 })
 
--- Three-finger swipe up → Overview (GNOME muscle memory).
+-- Three-finger swipe up → Overview (GNOME muscle memory). A gesture action
+-- is a dispatch, which sends `pressed` only — so this is the Overview's
+-- second shortcut (overview-swipe toggles on pressed; Overview.qml).
 hl.gesture({
     fingers   = 3,
     direction = "up",
-    action    = function() hl.dispatch(hl.dsp.exec_cmd("qs ipc call overview toggle")) end,
+    action    = function() hl.dispatch(hl.dsp.global("ewe:overview-swipe")) end,
 })
 
 -- Three-finger swipe down → a new workspace on the display you are on. Never
@@ -405,26 +412,26 @@ hl.gesture({
 
 -- Launchers ------------------------------------------------------------------
 hl.bind(mainMod .. " + Return", hl.dsp.exec_cmd(terminal))
-hl.bind(mainMod .. " + D",      hl.dsp.exec_cmd(applauncher))  -- Launcher
+hl.bind(mainMod .. " + D",      hl.dsp.global("ewe:launcher"))  -- Launcher (Launcher.qml)
 -- Super+Space switches keyboard layout (cycles input sources). No-op with a single
 -- layout; add a second to input.kb_layout above to make it useful.
 hl.bind(mainMod .. " + Space",  hl.dsp.exec_cmd("hyprctl switchxkblayout current next"))
 hl.bind(mainMod .. " + E",      hl.dsp.exec_cmd(fileManager))
 hl.bind(mainMod .. " + B",      hl.dsp.exec_cmd(browser))
 hl.bind(mainMod .. " + C",      hl.dsp.exec_cmd(scripts .. "/calendar.sh"))
-hl.bind(mainMod .. " + N",      hl.dsp.exec_cmd("qs ipc call quicksettings toggle"))  -- Quick Settings
-hl.bind(mainMod .. " + comma",  hl.dsp.exec_cmd("qs ipc call settings toggle")) -- Super+, Settings
+hl.bind(mainMod .. " + N",      hl.dsp.global("ewe:quicksettings"))  -- Quick Settings
+hl.bind(mainMod .. " + comma",  hl.dsp.global("ewe:settings"))       -- Super+, Settings
 -- Super+P (fill a login) is the ewe.passwords plugin's keybind since 0.21;
 -- Super+Shift+C (Cast to TV) is the ewe.cast plugin's since 0.25.
 -- Desktop widgets (plugins of kind desktop-widget): arrange mode — drag them,
 -- pin, lock or hide each; Esc or the same key ends it. (Dragging and the
 -- pin also work outside it, from each widget's hover toolbar.)
-hl.bind(mainMod .. " + SHIFT + W", hl.dsp.exec_cmd("qs ipc call widgets arrange"))
+hl.bind(mainMod .. " + SHIFT + W", hl.dsp.global("ewe:widgets"))
 -- Blind display recovery: works with a BLACK screen — forces every output's
 -- dpms on and re-asserts the saved display profile. If a plug/unplug or the
 -- xe driver ever blanks everything, press this instead of the power button.
 -- (Super+Ctrl+R is taken by config reload below.)
-hl.bind(mainMod .. " + SHIFT + R", hl.dsp.exec_cmd("qs ipc call display reset"))
+hl.bind(mainMod .. " + SHIFT + R", hl.dsp.global("ewe:display-reset"))
 
 -- Super tapped ALONE → Overview (GNOME-style window switcher). `release` fires on key-up;
 -- with the modifier as its own key Hyprland only triggers it on a clean tap (no other key
@@ -513,8 +520,8 @@ hl.bind(mainMod .. " + SHIFT + Tab", hl.dsp.window.cycle_next({ prev = true }))
 -- Session --------------------------------------------------------------------
 hl.bind(mainMod .. " + CTRL + R", hl.dsp.exec_cmd("hyprctl reload"))     -- reload config
 hl.bind(mainMod .. " + CTRL + Q", hl.dsp.exit())                         -- quit / log out
-hl.bind(mainMod .. " + SHIFT + B", hl.dsp.exec_cmd("qs ipc call bar toggle"))  -- toggle bar
-hl.bind(mainMod .. " + ALT + L",   hl.dsp.exec_cmd("qs ipc call lock lock"))  -- lock (Quickshell session lock)
+hl.bind(mainMod .. " + SHIFT + B", hl.dsp.global("ewe:bar"))   -- toggle bar
+hl.bind(mainMod .. " + ALT + L",   hl.dsp.global("ewe:lock"))  -- lock (Quickshell session lock)
 
 -- Laptop lid (clamshell via lid.sh). While the shell runs it holds a
 -- handle-lid-switch block inhibitor (logind-bridge.py), so logind stands down
@@ -590,7 +597,7 @@ hl.bind("XF86AudioMicMute",      hl.dsp.exec_cmd("wpctl set-mute @DEFAULT_AUDIO_
 -- tap can't hard-poweroff; show the shutdown confirmation instead. Not `locked`
 -- on purpose — while the session is locked the tap does nothing (long press
 -- still powers off via logind).
-hl.bind("XF86PowerOff",          hl.dsp.exec_cmd("qs ipc call quicksettings powerdialog"))
+hl.bind("XF86PowerOff",          hl.dsp.global("ewe:power"))   -- QuickSettings.qml: the shutdown dialog
 hl.bind("XF86MonBrightnessUp",   hl.dsp.exec_cmd("brightnessctl -e4 -n2 set 5%+ && qs ipc call osd brightness"), { locked = true, repeating = true })
 hl.bind("XF86MonBrightnessDown", hl.dsp.exec_cmd("brightnessctl -e4 -n2 set 5%- && qs ipc call osd brightness"), { locked = true, repeating = true })
 -- Keyboard backlight (0-3 on ASUS). The shell writes it through logind's

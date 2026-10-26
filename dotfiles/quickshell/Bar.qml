@@ -93,6 +93,13 @@ Scope {
         function show(): void { Globals.barVisible = true }
         function hide(): void { Globals.barVisible = false }
     }
+    // Super+Shift+B — `hl.dsp.global("ewe:bar")` in hyprland.lua: delivered
+    // over the global-shortcuts protocol, no process per press (Launcher.qml)
+    GlobalShortcut {
+        appid: "ewe"; name: "bar"
+        description: "Toggle the bar"
+        onPressed: Globals.barVisible = !Globals.barVisible
+    }
 
     // ── clock: date and time as two fields spaceS apart, shown inside the
     //    Quick settings button (Bar card #10) ──────────────────────────────

@@ -644,7 +644,13 @@ Scope {
                         property bool gaveUp: false
                         readonly property bool capturing: !mini.shot && !mini.gaveUp
                         Timer { interval: Math.max(1, Theme.durDim); running: mini.capturing; onTriggered: mini.gaveUp = true }
+                        // only the dock that is on screen takes it: the other
+                        // screens' docks are hidden windows (visible: isPrimary),
+                        // where a grab has no scene ("item is not attached to a
+                        // window") and the capture is a GPU copy for nothing —
+                        // thumbs is shared, so they show the picture all the same
                         function take() {
+                            if (!win.visible) return
                             var aspect = mini.aspect
                             sc.grabToImage(function (g) { root.setThumb(mini.addr, g, aspect) }, Qt.size(2 * mini.tw, 2 * mini.th))
                         }
@@ -689,7 +695,7 @@ Scope {
                                     id: sc
                                     anchors.fill: parent
                                     visible: !mini.shot && hasContent
-                                    captureSource: (mini.capturing && mini.modelData.wayland) || null
+                                    captureSource: (win.visible && mini.capturing && mini.modelData.wayland) || null
                                     live: false
                                     onHasContentChanged: if (hasContent && mini.capturing) mini.take()
                                 }

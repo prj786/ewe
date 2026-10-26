@@ -212,6 +212,13 @@ QtObject {
         function lid(state: string): void { mgr.setLid(state === "close" || state === "closed") }
         function reset(): void { mgr.resetDisplays() }
     }
+    // Super+Shift+R — `hl.dsp.global("ewe:display-reset")` in hyprland.lua:
+    // over the global-shortcuts protocol, no process per press (Launcher.qml)
+    property GlobalShortcut _resetKey: GlobalShortcut {
+        appid: "ewe"; name: "display-reset"
+        description: "Wake and reset the displays"
+        onPressed: mgr.resetDisplays()
+    }
     // The lid switch, from ACPI — the one source that cannot be stale. lid.sh
     // reports EVENTS, and events get missed: the shell is restarted with the
     // lid shut (docked boot), or the machine hibernates and resumes with the

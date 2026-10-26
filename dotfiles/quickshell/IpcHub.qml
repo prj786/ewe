@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import Quickshell.Hyprland
 
 // IpcHub — the always-resident IPC verbs for surfaces that are otherwise
 // LAZY-LOADED (RSS diet, ewe#18). The in-shell Settings and AppStore panels
@@ -20,6 +21,23 @@ Scope {
         }
     }
 
+    // Super+, and Super+Shift+W — `hl.dsp.global("ewe:settings")` /
+    // `("ewe:widgets")` in hyprland.lua: delivered over the global-shortcuts
+    // protocol, no process per press (Launcher.qml). Same routes as the IPC
+    // verbs below, which stay for scripts.
+    GlobalShortcut {
+        appid: "ewe"; name: "settings"
+        description: "Toggle Settings"
+        onPressed: {
+            if (Globals.settingsAppInstalled) { Globals.openSettings(); return }
+            Globals.settingsOpen = !Globals.settingsOpen
+        }
+    }
+    GlobalShortcut {
+        appid: "ewe"; name: "widgets"
+        description: "Arrange the desktop widgets"
+        onPressed: Globals.widgetsArrange = !Globals.widgetsArrange
+    }
     IpcHandler {
         target: "settings"
         // Every "open" verb routes through Globals.openSettings(): the

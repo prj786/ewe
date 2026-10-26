@@ -56,8 +56,11 @@ grep -q '"special:minimized"' Dock.qml && grep -q '"special:pen"' Dock.qml && ok
 grep -q '/ewe-browser/downloads.json' Downloads.qml && ok "reads ewe-browser/downloads.json" || bad "downloads.json path"
 # a minimized window's tile captures ONE frame, shrinks it (grabToImage)
 # and drops the capture — no live capture sits in the dock
-grep -q 'captureSource: (mini.capturing && mini.modelData.wayland)' Dock.qml && grep -q 'sc.grabToImage' Dock.qml \
+grep -q 'captureSource: (win.visible && mini.capturing && mini.modelData.wayland)' Dock.qml && grep -q 'sc.grabToImage' Dock.qml \
   && ok "minimized tiles: one frame, then the capture goes" || bad "minimized tiles keep a capture"
+# 1.3.1: only the dock on screen captures — a hidden (non-primary) dock's
+# grab has no scene and its capture was a GPU copy for nothing
+grep -q 'if (!win.visible) return' Dock.qml && ok "minimized tiles: only the dock on screen captures" || bad "hidden docks still capture"
 grep -q 'target: "launcher"' Dock.qml  && ok "IPC alias launcher"  || bad "IPC alias launcher"
 grep -q 'target: "ewe.dock"' Dock.qml  && ok "IPC target ewe.dock" || bad "IPC target ewe.dock"
 grep -q 'Shell.setBottomInset(root.pluginId, 0, false)' Dock.qml && ok "inset withdrawn on destruction" || bad "inset withdrawn on destruction"
