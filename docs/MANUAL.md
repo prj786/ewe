@@ -44,11 +44,17 @@ interactively; `--yes` skips both. Flags combine.
 Run it as your **normal user** (not root) — the AUR helper and `makepkg` refuse
 root, and the script uses `sudo` only where it must.
 
-**Updating** — for tarball installs (the `get.sh` one-liner), just re-run the
-one-liner: it refreshes `~/.local/share/ewe` in place and re-runs the installer.
-For git clones, `./update.sh` pulls, re-runs the installer unattended, and
-restarts the shell. Either way the repo tree is the single source of truth and
-one command converges the machine onto it.
+**Updating** — `./update.sh` in the install tree (`~/.local/share/ewe` for the
+`get.sh` one-liner) fetches the latest, re-runs the installer unattended and
+restarts the shell; `./update.sh --check` only says whether there is anything
+new. A git clone pulls origin; a tarball install downloads the newest GitHub
+release and unpacks it in place (0.35.3 — before that it only knew `git pull`
+and told a tarball install "up to date" for ever), and re-running the
+one-liner still does the same. A pacman install is pacman's: `sudo pacman -Syu`
+(`./update.sh --check` still tells you when the `[ewe]` repository has a newer
+`ewe` package — it is built from each release and lands about half an hour
+after it). Either way the repo tree is the single source of truth and one command
+converges the machine onto it.
 
 The installer is fully **re-runnable**: package installs are skipped if already
 present, dotfiles are a symlink farm (re-linking is a no-op), system files in
@@ -422,7 +428,10 @@ bar. ewe does not write into IDE configs; these are yours to set once.
 ## Clipboard, screenshots, passwords — plugins from ewe
 
 The clipboard history (scissors), screenshots (camera, and the `Print` keys),
-the password fill picker (`Super+P`), the dock and the rest are plugins
+the password fill picker (`Super+P`), the Alt+Tab window switcher
+(`ewe.switcher`: the open windows as icons while Alt is held, most recent
+first — this workspace, this display or everywhere, its one setting), the
+dock and the rest are plugins
 rather than parts of the shell. They ship inside ewe, but none is on at the
 first login: pick them in Welcome, in **Komble → Plugins → From ewe**, or with
 `ewe-plugin install ewe.clipboard`. (A machine that upgraded from a version

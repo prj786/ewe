@@ -111,6 +111,9 @@ hl.config({
 
         resize_on_border = true,
         allow_tearing    = false,
+        -- dwindle · master · scrolling · monocle: Settings → Layout → Tiling
+        -- style writes any other choice into generated/user.lua (ewe-conf),
+        -- loaded last, so this is the default only.
         layout           = "dwindle",
     },
 
@@ -514,8 +517,25 @@ hl.bind(mainMod .. " + ALT + R",     onscroll("colresize +conf"))    -- cycle th
 hl.bind(mainMod .. " + ALT + F",     onscroll("fit visible"))        -- fit every visible column on screen
 hl.bind(mainMod .. " + ALT + P",     onscroll("promote"))            -- window → its own column
 hl.bind(mainMod .. " + ALT + C",     onscroll("consume_or_expel next"))  -- merge into / split from the neighbour
-hl.bind(mainMod .. " + Tab",         hl.dsp.window.cycle_next())
-hl.bind(mainMod .. " + SHIFT + Tab", hl.dsp.window.cycle_next({ prev = true }))
+-- Super+Tab / Super+Shift+Tab: the next / previous window, blind (the
+-- ewe.switcher plugin's Alt+Tab is the picker with a panel). On the monocle
+-- layout (Settings → Layout → Tiling style: Monocle, Hyprland ≥ 0.54 — one
+-- window at a time, filling the screen) `cycle_next` does nothing: the stack
+-- is turned with the layout's own `cyclenext` / `cycleprev` messages (wiki,
+-- Monocle layout), so the keys look at the live layout first.
+local function cycle_windows(prev)
+    return function()
+        if hl.get_config("general:layout") == "monocle" then
+            hl.dispatch(hl.dsp.layout(prev and "cycleprev" or "cyclenext"))
+        elseif prev then
+            hl.dispatch(hl.dsp.window.cycle_next({ prev = true }))
+        else
+            hl.dispatch(hl.dsp.window.cycle_next())
+        end
+    end
+end
+hl.bind(mainMod .. " + Tab",         cycle_windows(false))
+hl.bind(mainMod .. " + SHIFT + Tab", cycle_windows(true))
 
 -- Session --------------------------------------------------------------------
 hl.bind(mainMod .. " + CTRL + R", hl.dsp.exec_cmd("hyprctl reload"))     -- reload config
