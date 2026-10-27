@@ -46,7 +46,8 @@ while that plugin is on. Your own launch keys live in ewe.conf
 | `Super` + `V` | Toggle floating |
 | `Super` + `Shift` + `V` | Pseudo-tile |
 | `Super` + `T` | Toggle split direction (dwindle) |
-| `Super` + `Tab` / `Super` + `Shift` + `Tab` | Cycle to next / previous window |
+| `Super` + `Tab` / `Super` + `Shift` + `Tab` | Cycle to next / previous window (on the Monocle tiling style: turn the stack) |
+| `Alt` + `Tab` / `Alt` + `Shift` + `Tab` | The window switcher — icons of the open windows, let go of `Alt` to switch (the `ewe.switcher` plugin, once installed) |
 | `Super` + left-drag | Move window |
 | `Super` + right-drag | Resize window |
 

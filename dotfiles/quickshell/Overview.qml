@@ -22,7 +22,13 @@ import Quickshell.Widgets
 //   · the WORKSPACE STRIP at the top: one label per workspace on this screen;
 //     point at it (or drag a window up to it) and it slides down into
 //     thumbnails. Click one to go there; drop a window on one to move it
-//     there. No "add" — a workspace exists when you go to it (Super+N).
+//     there; drop it beside them — or on the "+" that shows while a window
+//     is dragged — and it goes to a NEW workspace of this display (the next
+//     number after the last one in use, like the swipe). No "add" button:
+//     a workspace exists when you go to it (Super+N) or put a window on it.
+//   · a window GROUP (Hyprland's tabs, Super+G) is one card: the tab on top,
+//     with the tabs' icons and their count in a pill on its corner; the
+//     hidden tabs are not spread out as windows of their own.
 //   · no search: the app launcher (Super+D) has it; `overview find` hands
 //     its query over.
 //
@@ -96,6 +102,49 @@ Scope {
         var a = (tl && tl.address) ? String(tl.address) : ""
         if (a !== "" && a.indexOf("0x") !== 0) a = "0x" + a   // Hyprland events sometimes omit the 0x
         return a
+    }
+    // a window group (Hyprland's tabs): every member lists the group in
+    // `grouped`; a group is ONE card, the tab on top, so the tabs behind it
+    // are left out. The tab on top is the member Hyprland lets input through
+    // to — 0.56 reports the others `acceptsInput: false` (older builds
+    // `hidden: true`); should none or several read that way (the group on a
+    // workspace off screen), it is the member focused last.
+    function groupOf(tl) {
+        var o = tl && tl.lastIpcObject ? tl.lastIpcObject : null
+        return (o && o.grouped && o.grouped.length > 1) ? o.grouped : null
+    }
+    function topOfGroup(g) {
+        var by = {}, cand = [], best = "", bestRank = 1e9
+        for (var i = 0; i < root.allWins.length; i++) by[root.addrOf(root.allWins[i])] = root.allWins[i]
+        for (i = 0; i < g.length; i++) {
+            var a = String(g[i])
+            if (a.indexOf("0x") !== 0) a = "0x" + a
+            var t = by[a]
+            if (!t) continue
+            var o = t.lastIpcObject || {}
+            if (o.hidden !== true && o.acceptsInput !== false) cand.push(a)
+            var r = (o.focusHistoryID !== undefined) ? o.focusHistoryID : 1e8
+            if (r < bestRank) { bestRank = r; best = a }
+        }
+        return cand.length === 1 ? cand[0] : best
+    }
+    function isHiddenTab(tl) {
+        var g = root.groupOf(tl)
+        return !!g && root.addrOf(tl) !== root.topOfGroup(g)
+    }
+    // the group's members as toplevels, in tab order ([] for a lone window)
+    function tabsOf(tl) {
+        var g = root.groupOf(tl)
+        if (!g) return []
+        var by = {}
+        for (var i = 0; i < root.allWins.length; i++) by[root.addrOf(root.allWins[i])] = root.allWins[i]
+        var out = []
+        for (i = 0; i < g.length; i++) {
+            var a = String(g[i])
+            if (a.indexOf("0x") !== 0) a = "0x" + a
+            if (by[a]) out.push(by[a])
+        }
+        return out
     }
 
     // a window's real rectangle on its monitor (screen-local, logical px),
@@ -182,6 +231,20 @@ Scope {
         var a = root.addrOf(tl)
         if (a === "" || root.wsOf(tl) === ws) return
         Hyprland.dispatch('hl.dsp.window.move({workspace=' + ws + ', window="address:' + a + '", follow=false})')
+    }
+    // a drop on the strip beside the workspaces (or on its "+"): the window
+    // goes to a NEW workspace of this display — the number after the last
+    // one in use in the display's block of ten (workspaces.lua), the way
+    // the swipe makes one; the lowest free number once 10 is taken. All ten
+    // in use: a toast, nothing moves.
+    function moveToNew(tl, shownWs, ids) {
+        var block = Globals.wsBlock(shownWs), used = {}, last = 0
+        for (var i = 0; i < ids.length; i++) { var n = Globals.wsNumber(ids[i]); used[n] = true; last = Math.max(last, n) }
+        var target = 0
+        if (last < 10) target = last + 1
+        else for (n = 1; n <= 10; n++) if (!used[n]) { target = n; break }
+        if (target === 0) { Shell.toast("Every workspace of this display is in use", "warning"); return }
+        root.moveWin(tl, block * 10 + target)
     }
     function killWin(tl) {
         var a = root.addrOf(tl)
@@ -362,7 +425,7 @@ Scope {
             var out = []
             if (!win.visible) return out
             for (var i = 0; i < root.allWins.length; i++)
-                if (root.wsOf(root.allWins[i]) === win.shownWs) out.push(root.allWins[i])
+                if (root.wsOf(root.allWins[i]) === win.shownWs && !root.isHiddenTab(root.allWins[i])) out.push(root.allWins[i])
             return out
         }
 
@@ -630,10 +693,12 @@ Scope {
                             // ParentChange snaps the content back the instant
                             // the drag ends, racing a DropArea's drop event)
                             onReleased: function (mouse) {
+                                // hit-test BEFORE the strip starts closing (dragActive)
+                                var ws = didDrag ? strip.wsAt(cardMa.mapToItem(strip, mouse.x, mouse.y)) : -1
                                 root.dragActive = false
                                 if (!didDrag) return
-                                var ws = strip.wsAt(cardMa.mapToItem(strip, mouse.x, mouse.y))
                                 if (ws > 0) root.moveWin(card.modelData, ws)
+                                else if (ws === 0) root.moveToNew(card.modelData, win.shownWs, win.wsIds)
                             }
                         }
 
@@ -657,6 +722,47 @@ Scope {
                                 id: closeMa
                                 anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
                                 onClicked: { card.closing = true; closeLater.restart() }
+                            }
+                        }
+
+                        // a group: the tabs' icons and their count in a Glass
+                        // pill on the top right — this card is the tab on top,
+                        // the others sit behind it in Hyprland's groupbar
+                        readonly property var tabs: root.tabsOf(card.modelData)
+                        Rectangle {
+                            visible: card.tabs.length > 1 && !cardMa.drag.active
+                            anchors.top: parent.top; anchors.right: parent.right
+                            anchors.margins: Theme.spaceS
+                            width: tabRow.implicitWidth + 2 * Theme.spaceS
+                            height: Theme.controlMd
+                            radius: Theme.radiusFull
+                            color: Theme.glassRaised
+                            border.color: Theme.glassBorder; border.width: Theme.borderWidth1
+                            opacity: root.fly
+                            Row {
+                                id: tabRow
+                                anchors.centerIn: parent
+                                spacing: Theme.spaceXs
+                                Repeater {
+                                    model: card.tabs.slice(0, 4)
+                                    delegate: Image {
+                                        required property var modelData
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        width: Theme.iconMd; height: Theme.iconMd
+                                        sourceSize.width: 2 * Theme.iconMd; sourceSize.height: 2 * Theme.iconMd; mipmap: true
+                                        source: root.iconFor(modelData)
+                                        opacity: modelData === card.modelData ? 1 : Theme.opacityGlass
+                                    }
+                                }
+                                Text {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: card.tabs.length + " tabs"
+                                    color: Theme.textSecondary
+                                    font.family: Theme.type.caption.family
+                                    font.pixelSize: Theme.type.caption.size
+                                    font.weight: Theme.fontWeightMedium
+                                    font.features: ({ "tnum": 1 })
+                                }
                             }
                         }
 
@@ -697,6 +803,7 @@ Scope {
 
                         Accessible.role: Accessible.Button
                         Accessible.name: root.classOf(modelData) + ", " + root.titleOf(modelData) + ", workspace " + Globals.wsNumber(win.shownWs)
+                                         + (card.tabs.length > 1 ? ", a group of " + card.tabs.length + " tabs" : "")
                     }
                 }
             }
@@ -736,11 +843,14 @@ Scope {
                 }
 
                 // the workspace whose thumbnail or label is under a point
-                // (strip coordinates), or -1
+                // (strip coordinates); 0 = the strip with no workspace under
+                // the point (its "+", or the band beside them — a drop there
+                // makes a new workspace); -1 = not on the strip
                 function wsAt(p) {
                     var q = strip.mapToItem(wsRow, p.x, p.y)
                     var c = wsRow.childAt(q.x, q.y)
-                    return (c && c.wsId !== undefined) ? c.wsId : -1
+                    if (c && c.wsId !== undefined) return c.wsId
+                    return (p.x >= 0 && p.x <= strip.width && p.y >= 0 && p.y <= strip.height) ? 0 : -1
                 }
 
                 Row {
@@ -788,7 +898,7 @@ Scope {
                                         var out = []
                                         if (strip.reveal <= 0) return out
                                         for (var i = 0; i < root.allWins.length; i++)
-                                            if (root.wsOf(root.allWins[i]) === ws.wsId) out.push(root.allWins[i])
+                                            if (root.wsOf(root.allWins[i]) === ws.wsId && !root.isHiddenTab(root.allWins[i])) out.push(root.allWins[i])
                                         return out
                                     }
                                     delegate: Rectangle {
@@ -857,6 +967,61 @@ Scope {
                             Accessible.role: Accessible.Button
                             Accessible.name: "Workspace " + Globals.wsNumber(ws.wsId)
                         }
+                    }
+
+                    // "+" — the new-workspace target, only while a window is
+                    // being dragged (and a number is free): the same cell as
+                    // a thumbnail, outlined, with a plus; dropping on the
+                    // band beside the workspaces does the same (wsAt → 0)
+                    Item {
+                        id: newWs
+                        readonly property int wsId: 0
+                        visible: root.dragActive && win.wsIds.length < 10
+                        readonly property bool dropHot: newDrop.containsDrag
+                        width: Math.max(strip.thumbW * strip.reveal, newLabel.width)
+                        height: strip.reveal * (strip.thumbH + Theme.spaceS) + Theme.controlMd
+
+                        Rectangle {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            width: strip.thumbW; height: strip.thumbH
+                            visible: strip.reveal > 0
+                            opacity: strip.reveal
+                            transform: Translate { y: (strip.reveal - 1) * strip.thumbH }
+                            radius: Theme.radiusPrimary
+                            color: newWs.dropHot ? Theme.glassHover : "transparent"
+                            border.color: newWs.dropHot ? Theme.accent : Theme.glassBorder
+                            border.width: newWs.dropHot ? Theme.borderWidth2 : Theme.borderWidth1
+                            Text {
+                                anchors.centerIn: parent
+                                text: Theme.icPlus
+                                font.family: Theme.fontIcons
+                                font.pixelSize: Theme.iconXl
+                                color: newWs.dropHot ? Theme.accentText : Theme.textSecondary
+                            }
+                        }
+                        Rectangle {
+                            id: newLabel
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            anchors.bottom: parent.bottom
+                            width: newLabelText.implicitWidth + 2 * Theme.spaceS + Theme.spaceXs
+                            height: Theme.controlMd
+                            radius: Theme.radiusFull
+                            color: newWs.dropHot ? Theme.accentSubtle : Theme.glassBase
+                            border.color: newWs.dropHot ? Theme.accent : Theme.glassBorder
+                            border.width: Theme.borderWidth1
+                            Text {
+                                id: newLabelText
+                                anchors.centerIn: parent
+                                text: "New workspace"
+                                color: newWs.dropHot ? Theme.accentText : Theme.textPrimary
+                                font.family: Theme.type.label.family
+                                font.pixelSize: Theme.type.label.size
+                                font.weight: Theme.fontWeightMedium
+                            }
+                        }
+                        DropArea { id: newDrop; anchors.fill: parent; keys: ["overview-window"] }
+                        Accessible.role: Accessible.Button
+                        Accessible.name: "New workspace"
                     }
                 }
             }

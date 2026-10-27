@@ -28,7 +28,17 @@ a release or two has passed. The dev checkout may still sit in a directory
 called `hypr-shell`; that's outside the repo. Distribution:
 `get.sh` (curl bootstrap → `~/.local/share/ewe`) installs the
 `ewe-<version>.tar.zst` artefact built by `release.sh` (`--publish` creates the
-GitHub release).
+GitHub release, then fires `prj786/ewe-repo`'s `publish` workflow by
+`repository_dispatch` — that workflow builds the `ewe` pacman package of the
+`[ewe]` repository from the LATEST release tag and takes ~35 min; until
+0.35.3 it was a manual step, so a release was "not ready" for pacman installs
+until someone ran it or the Monday cron did). `update.sh` knows three installs
+(0.35.3): a git clone pulls origin, a tarball install (no `.git`) downloads the
+newest release the way get.sh does and unpacks it in place, a pacman install
+is pointed at `pacman -Syu` (`--check` reads `checkupdates` for a newer `ewe`
+package); `--check`/`--json` keep Komble's exit-code contract (0/10/20/30/1).
+Test: `tests/ewe-update-test.sh` (fake curl/pacman/checkupdates/systemctl on
+PATH).
 
 ## Design system
 
@@ -69,6 +79,15 @@ the host's real session is untouched:
   benign "already registered" D-Bus / PolkitAgent / "hyprland-guiutils not
   installed" warnings (artifacts of nesting beside a live session).
 - After editing shell scripts: `bash -n <file>`.
+- **Keys in the nest:** a virtual keyboard (`wtype`) never reaches the nested
+  Hyprland's binds (plain keys do reach the focused surface — `wtype -k
+  Escape` tests a panel's keyboard focus). Exercise a bind by what it does:
+  `driver.sh hc eval '<the hl.bind line>'` registers it, `driver.sh hc
+  dispatch 'hl.dsp.global("<id>:<name>")'` fires a global shortcut; windows
+  come from `driver.sh spawn kitty --title win1`, a group from
+  `hc dispatch 'hl.dsp.group.toggle()'` (new windows then auto-join). Kill a
+  stale nest by process name (`pgrep -a -x Hyprland | grep hs-driver`), never
+  with `pkill -f` on a string your own shell command contains.
 
 Installer (only meaningfully runs on Arch, but the dry-run is safe anywhere):
 
@@ -125,8 +144,10 @@ dock (+ launcher panel), Places, the music player, Insomnia (keep awake),
 the CPU/memory meters, SSH, VPN, the phone (KDE Connect), mail (+ the Gmail
 half of Google.qml) and Cast are NOT shell components — they are
 first-party plugins (`ewe.dock ewe.places ewe.media ewe.insomnia ewe.sysmon
-ewe.ssh ewe.vpn ewe.phone ewe.mail ewe.cast`, repos
-`prj786/ewe-plugin-<name>`), carved out on 2026-10-04; their prefs
+ewe.ssh ewe.vpn ewe.phone ewe.mail ewe.cast ewe.switcher`, repos
+`prj786/ewe-plugin-<name>`; `ewe.switcher` — the Alt+Tab window switcher,
+2026-10-27 — was written straight into `plugins/`, its repo is still to be
+created and vendored), carved out on 2026-10-04; their prefs
 (`apps.pinned`, `apps.places`, `network.*`, the mail account) stay in
 ewe.conf and the shell exposes what they need through `Shell` (pinnedApps,
 bottomInset…). The dock's auto-hide / icon size are its own plugin settings
@@ -188,7 +209,17 @@ since Dock 1.1.0 (`desktop.dock.*` is only their `legacy` fallback,
   (`install <id>` or `seed --restore <id>` undoes that). Manifest `keybinds` become
   `generated/plugin-keybinds.lua` (written by every state-changing verb,
   sourced by hyprland.lua) — the Print keys and Super+P are no longer in
-  hyprland.lua. Reserved `ewe.` ids validate only in the payload, with
+  hyprland.lua. A keybind is `ipc` (`qs ipc call …`, a spawn) or, API 3 /
+  0.36, `global` (`hl.dsp.global("<id>:<name>")` → a `GlobalShortcut
+  { appid: "<id>"; name }` in the plugin, no spawn) with Hyprland's
+  `release` / `repeat` / `transparent` flags. `transparent` matters: Hyprland
+  shadows a modifier's release bind once another bind fired during the hold
+  (`src/keybinds/Manager.cpp` `shadowBinds`), so the switcher's "Alt up →
+  commit" after Alt+Tab must be transparent — and the panel hears the Alt
+  release itself too (ON-DEMAND keyboard focus while open, never Exclusive:
+  Hyprland refuses to focus a window while a layer surface holds the
+  keyboard exclusively, so the commit's `hl.dsp.focus` was silently lost in
+  the race with the panel letting go — verified in the nest 2026-10-27). Reserved `ewe.` ids validate only in the payload, with
   `--first-party`, or INSTALLED as a copy of an id the payload ships
   (`payload_ships` — NOT only `[plugins.sources]` = bundled: ewe.conf syncs,
   and a Restore from the account once left all 13 INVALID; `enable`/`seed`
@@ -403,6 +434,20 @@ written. Called live by Settings → Theme, at shell startup, and by phase 60.
   config is first parsed (`Hyprland --verify-config` segfaulted). Test:
   `tests/ewe-workspaces-test.sh`; a second display in the nested harness is
   `hyprctl output create headless`.
+- **Tiling styles (0.36, 2026-10-27):** `[desktop.layout] mode` = `dwindle`
+  (default, emits nothing) · `master` · `scrolling` · `monocle` (Hyprland
+  ≥ 0.54, one window at a time); ewe-conf writes `general.layout` into
+  user.lua for the three, ewe-settings' Layout page lists all four. On
+  monocle `hl.dsp.window.cycle_next()` is a no-op — Super+Tab checks the
+  live layout and sends the `cyclenext` / `cycleprev` layout messages there.
+- **Overview, groups and the new-workspace drop (0.36):** a Hyprland group
+  is ONE card (members with `lastIpcObject.hidden` + a `grouped` list of >1
+  are filtered from the cards and thumbnails; the tab on top carries a pill
+  of the tabs' icons). Dropping a card on the strip beside the workspaces,
+  or on the "+" cell that shows while dragging, moves the window to a new
+  workspace of that display (`moveToNew`: last number in use + 1, lowest
+  free once 10 is taken, a toast when all ten are in use). Hit-test the drop
+  BEFORE flipping `dragActive` — the strip starts closing on it.
 - **One brand mark (2026-09-21):** the line-art logo everywhere; the cartoon
   `sheep.svg` is gone. `dotfiles/quickshell/assets/ewe-mark.svg` is the bold
   cut (white, tinted by a `MultiEffect`); the vectors live in

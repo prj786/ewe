@@ -307,7 +307,11 @@ profile, natural scroll, scroll factors, the eight touchpad switches, and
 
 ### `[desktop.layout]`
 
-Four numbers — `gaps_in`, `gaps_out`, `border_size`, `rounding`. Everything
+Four numbers — `gaps_in`, `gaps_out`, `border_size`, `rounding` — and the
+tiling style: `mode` = `dwindle` (the default, hyprland.lua's own, emits
+nothing) · `master` · `scrolling` (Hyprland ≥ 0.55's PaperWM-style tape,
+with `column_width`, 0.2–1) · `monocle` (Hyprland ≥ 0.54: one window at a
+time, filling the screen; Super+Tab turns the stack). Everything
 else in `generated/user.lua` (border tint + accent, window transparency,
 animation speed fallback, the tiling float rule) is derived from the other
 domains, so changing any of them regenerates the file.

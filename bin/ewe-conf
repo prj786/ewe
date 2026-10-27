@@ -934,10 +934,11 @@ def gen_user_lua(doc):
     s += gen + " } })\n"
     s += "hl.config({ decoration = { rounding = %s } })\n" % _lua_num(lay["rounding"])
     # window layout (0.8): dwindle is hyprland.lua's default and emits nothing;
-    # master and scrolling (Hyprland >= 0.55's PaperWM-style tape) override
+    # master, scrolling (Hyprland >= 0.55's PaperWM-style tape) and monocle
+    # (>= 0.54: one window at a time, filling the screen; 0.36) override
     # general.layout here, scrolling with its column width alongside
     mode = str(lay.get("mode", "dwindle"))
-    if mode in ("master", "scrolling"):
+    if mode in ("master", "scrolling", "monocle"):
         s += 'hl.config({ general = { layout = "%s" } })\n' % mode
     if mode == "scrolling":
         s += ("hl.config({ scrolling = { column_width = %s, follow_focus = true, "

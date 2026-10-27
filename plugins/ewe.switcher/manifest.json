@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "id": "ewe.switcher",
+  "name": "Window switcher",
+  "version": "1.0.0",
+  "apiVersion": 3,
+  "description": "Alt+Tab: the open windows as icons while Alt is held, most recent first; let go to switch. This workspace, this display, or everywhere.",
+  "homepage": "https://github.com/prj786/ewe-plugin-switcher",
+  "author": "prj786",
+  "icon": "icFloating",
+  "category": "Desktop",
+  "kinds": [
+    "panel"
+  ],
+  "entryPoints": {
+    "panel": "Panel.qml"
+  },
+  "keybinds": [
+    { "combo": "ALT + Tab", "global": "next", "repeat": true },
+    { "combo": "ALT + SHIFT + Tab", "global": "prev", "repeat": true },
+    { "combo": "ALT + Alt_L", "global": "commit", "release": true, "transparent": true },
+    { "combo": "ALT + Alt_R", "global": "commit", "release": true, "transparent": true }
+  ],
+  "requires": {
+    "packages": [],
+    "commands": []
+  },
+  "settings": [
+    {
+      "key": "scope",
+      "type": "choice",
+      "default": "workspace",
+      "choices": ["workspace", "display", "everywhere"],
+      "label": "Windows to show",
+      "description": "This workspace, every workspace of this display, or every window everywhere. A window elsewhere carries its workspace number."
+    }
+  ]
+}

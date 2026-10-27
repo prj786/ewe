@@ -74,6 +74,7 @@ Or the release tarball without git:
 
 ```sh
 bash <(curl -fsSL https://raw.githubusercontent.com/prj786/ewe/main/get.sh)
+~/.local/share/ewe/update.sh   # later: the newest release + converge + restart
 ```
 
 Both are idempotent and back up every config they touch; `uninstall.sh` restores
@@ -105,6 +106,8 @@ Then reboot, pick **Ewe** at the greeter, and you're in —
   ([docs/PLUGINS.md](docs/PLUGINS.md)): the **dock**, the clipboard history,
   screenshots, the password picker, **Insomnia** (keep awake), the system
   monitor, **SSH** and **VPN** tiles, the **music** player, **Places**, the
+  **Alt+Tab window switcher** (icons of the open windows while Alt is held:
+  this workspace, this display or everywhere), the
   **phone link** (KDE Connect's daemon driven from the shell: battery,
   notifications, SMS), **mail** (any IMAP account or Gmail: unread badge,
   latest mail, notifications) and **Cast to TV** (Miracast / Chromecast,

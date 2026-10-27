@@ -104,6 +104,11 @@ python3 -c "import json; d=json.load(open('$SANDBOX/quickshell/user-theme.json')
 grep -q 'general = { layout = "scrolling" }' "$SANDBOX/hypr/generated/user.lua" \
     && grep -q 'column_width = 0.6' "$SANDBOX/hypr/generated/user.lua" \
     && echo "ok  scrolling layout → user.lua" || { echo "FAIL scrolling layout not in user.lua"; exit 1; }
+# monocle (0.36, Hyprland >= 0.54): the layout line alone, no column width
+./bin/ewe-conf set --no-hooks desktop.layout.mode '"monocle"' >/dev/null 2>&1
+grep -q 'general = { layout = "monocle" }' "$SANDBOX/hypr/generated/user.lua" \
+    && ! grep -q 'column_width' "$SANDBOX/hypr/generated/user.lua" \
+    && echo "ok  monocle layout → user.lua" || { echo "FAIL monocle layout not in user.lua"; exit 1; }
 ./bin/ewe-conf set --no-hooks desktop.layout.mode '"dwindle"' >/dev/null 2>&1
 grep -q 'layout = ' "$SANDBOX/hypr/generated/user.lua" && { echo "FAIL dwindle must emit no layout line"; exit 1; } || echo "ok  dwindle emits nothing"
 echo "ALL PASS"

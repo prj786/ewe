@@ -99,6 +99,13 @@
       "commit": "0e6b55ecc2d05fd8dbbb5bb8ba36ad5eaa94c6ae",
       "version": "1.0.1"
     },
+    "ewe.switcher": {
+      "repo": "https://github.com/prj786/ewe-plugin-switcher",
+      "default": false,
+      "migrate": false,
+      "commit": "24f1b565d04f792143eaecc6045ee8aeb10c3ef7",
+      "version": "1.0.0"
+    },
     "ewe.sysmon": {
       "repo": "https://github.com/prj786/ewe-plugin-sysmon",
       "default": false,

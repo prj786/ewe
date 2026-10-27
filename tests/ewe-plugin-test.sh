@@ -76,11 +76,24 @@ mkdir -p "$SB/payload/plugins/ewe.alias"; cp "$V3/Status.qml" "$SB/payload/plugi
 cat > "$SB/payload/plugins/ewe.alias/manifest.json" <<'J'
 {"schemaVersion":1,"id":"ewe.alias","name":"Alias","version":"1.0.0","apiVersion":3,"kinds":["bar-status"],
  "entryPoints":{"bar-status":"Status.qml"},"ipcAliases":["player"],
- "keybinds":[{"combo":"SUPER + M","ipc":"player toggle"}],
+ "keybinds":[{"combo":"SUPER + M","ipc":"player toggle"},
+             {"combo":"ALT + Tab","global":"next","repeat":true},
+             {"combo":"ALT + Alt_L","global":"commit","release":true,"transparent":true}],
  "requires":{"packages":["ewe-test-no-such-package"],"commands":["ewe-test-no-such-command","sh"]},
  "icon":"icMusic","category":"Media"}
 J
 check "v3: ipcAliases accepted for ewe.* and a keybind may target the alias" "$P validate '$SB/payload/plugins/ewe.alias' --first-party >/dev/null"
+# global-shortcut keybinds (0.36): {combo, global} + the release/repeat/transparent flags
+mkdir -p "$SB/bad.kb"; cp "$SB/acme.clock/Widget.qml" "$SB/bad.kb/"
+cat > "$SB/bad.kb/manifest.json" <<'J'
+{"schemaVersion":1,"id":"bad.kb","name":"Bad keys","version":"0.1.0","apiVersion":3,"kinds":["bar-widget"],"entryPoints":{"bar-widget":"Widget.qml"},
+ "keybinds":[{"combo":"ALT + Tab","global":"Nope!"},{"combo":"ALT + X","ipc":"bad.kb toggle","global":"x"},{"combo":"ALT + Y","global":"ok","release":"yes"}]}
+J
+out="$($P validate "$SB/bad.kb" 2>&1 || true)"
+check "v3: global keybinds — a bad name, ipc+global together, a non-bool flag all reported" "echo '$out' | grep -q 'keybinds\[0\].global must be' && echo '$out' | grep -q 'keybinds\[1\] needs exactly one' && echo '$out' | grep -q 'keybinds\[2\].release must be'"
+sed -i 's/"apiVersion":3/"apiVersion":2/' "$SB/bad.kb/manifest.json"
+out="$($P validate "$SB/bad.kb" 2>&1 || true)"
+check "v2: a global keybind needs apiVersion 3" "echo '$out' | grep -q 'global needs apiVersion 3'"
 
 # settings carried over from an old ewe.conf key ("legacy", first-party only),
 # Show in bar's manifest switches, the new widget fields -------------------------
@@ -215,6 +228,7 @@ $P remove ewe.demo --yes >/dev/null; $P remove ewe.alias --yes >/dev/null
 # install ----------------------------------------------------------------------
 r="$($P install ewe.alias --no-restart)"
 check "install: copied, source bundled, enabled, keybind generated, JSON" "echo '$r' | jq 'assert j[\"ok\"] and j[\"installed\"] and j[\"enabled\"] and j[\"version\"]==\"1.0.0\" and j[\"restarted\"] is False, j' && grep -q '\"ewe.alias\" = \"bundled\"' '$SB/cfg/ewe/ewe.conf' && grep -q 'qs ipc call player toggle' '$SB/cfg/hypr/generated/plugin-keybinds.lua'"
+check "install: global keybinds become hl.dsp.global binds with Hyprland's flags" "grep -qF 'hl.bind(\"ALT + Tab\", hl.dsp.global(\"ewe.alias:next\"), { repeating = true })' '$SB/cfg/hypr/generated/plugin-keybinds.lua' && grep -qF 'hl.bind(\"ALT + Alt_L\", hl.dsp.global(\"ewe.alias:commit\"), { release = true, transparent = true })' '$SB/cfg/hypr/generated/plugin-keybinds.lua'"
 check "install: reports the missing requirements" "echo '$r' | jq 'assert \"ewe-test-no-such-command\" in j[\"missing\"][\"commands\"]'"
 r="$($P install nope.plugin --no-restart || true)"
 check "install: an id not in the payload → ok:false, exit 1" "echo '$r' | jq 'assert j[\"ok\"] is False and \"not in the payload\" in j[\"error\"]' && ! $P install nope.plugin --no-restart >/dev/null 2>&1"

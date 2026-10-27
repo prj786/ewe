@@ -26,7 +26,8 @@ Preinstalled is the shell core (bar, launcher, Overview, the Quick settings
 basics, notifications, lock, OSD, polkit, Welcome), ewe-settings, Komble and
 ewe-sync. Everything else — the clipboard history, screenshots, the password
 picker, and from 0.25 the features that left the shell (Insomnia, the system
-monitor, SSH, VPN, music, Places, phone, mail, cast, the dock — none of them
+monitor, SSH, VPN, music, Places, phone, mail, cast, the dock, and from 0.36
+the Alt+Tab window switcher (`ewe.switcher`) — none of them
 is in the core any more; their legacy IPC targets `cast launcher places
 player mail` and Quick settings keys `ssh vpn mobile mail cast` are these
 plugins' `ipcAliases` / `quickPage.key`) — is a **first-party plugin** that
@@ -204,7 +205,7 @@ A plugin is a git repository with `manifest.json` at its root:
 | `barWidget.defaultShown` | optional bool, default `true` — Show in bar before the user picks |
 | `barWidget.toggle` | optional bool, default `true`. `false` = the plugin's own settings place its button (a "bar / dock" choice — Music, Places), so the host offers no Show in bar switch and always loads the widget |
 | `settings` | optional: `[{ "key", "type", "default", "label", "description"?, "choices"?, "min"?, "max"?, "legacy"? }]`, `type` one of `bool`, `int`, `string`, `choice`, `color`. The values reach every entry point as `settings` and render as a form in Komble's Options dialog, `description` as the line under the label. `legacy` (**`ewe.` plugins only**) names a dotted ewe.conf key (`"desktop.dock.autohide"`) whose value stands until the user sets the plugin's own — how a feature's settings move into its plugin without changing anybody's desktop (the Dock's auto-hide and icon size left Settings that way) |
-| `keybinds` | optional: `[{ "combo": "SUPER + P", "ipc": "acme.weather toggle" }]` — Hyprland binds generated while the plugin is enabled (`generated/plugin-keybinds.lua`). With `apiVersion` 3 the target must be the plugin's own id or one of its `ipcAliases` |
+| `keybinds` | optional: `[{ "combo": "SUPER + P", "ipc": "acme.weather toggle" }]` — Hyprland binds generated while the plugin is enabled (`generated/plugin-keybinds.lua`). With `apiVersion` 3 the target must be the plugin's own id or one of its `ipcAliases`. **Or** (API 3, 0.36) `{ "combo": "ALT + Tab", "global": "next" }`: the bind is `hl.dsp.global("<id>:next")` — the global-shortcuts protocol, delivered in-process to a `GlobalShortcut { appid: "<id>"; name: "next" }` in your QML, no process per press (how the shell's own keys work). Optional flags, Hyprland's of the same names: `release` (fires on key-up and delivers `released` only), `repeat` (again while held), `transparent` (never shadowed by another bind that fired during the same hold — what a modifier's release bind needs after a combo on that modifier, Alt+Tab then Alt up) |
 | `order` (in the four slot objects) | plugins sort by it, then by id; the shell's own come first |
 | `description`, `homepage`, `author` | optional, shown by `info` |
 
@@ -371,13 +372,26 @@ Name IPC targets after your id so they cannot collide with the shell's own
 (`bar`, `quicksettings`, `settings`, `store`, `plugins`, …). Only a
 first-party plugin may keep a legacy target (`ipcAliases`).
 
+A key that must not cost a process per press (a switcher stepping on every
+Tab) is a **global shortcut**: declare the bind with `global` in the
+manifest and receive it in-process —
+
+```qml
+GlobalShortcut { appid: "acme.weather"; name: "next"; onPressed: root.step(1) }
+```
+
+`appid` is your plugin id. A press bind delivers `pressed` and `released`,
+a `release` bind `released` only. `qs ipc call` stays for scripts; the
+bundled `ewe.switcher` is the worked example (Alt+Tab, Alt up).
+
 API history: **3** (0.25) adds the four Quick settings / bar / dock kinds,
 the injected properties, the `Shell` singleton, the public components,
 `requires`, `ipcAliases`, the first-party plugins in the payload — a
 superset; every API 2 plugin still loads. 0.25.1 adds, within 3 and
 optional: `Shell.setSetting`, `barWidget`/`barStatus` `defaultShown` and
 `toggle`, `desktopWidget` `pinLevel`, `locked` and the `overlay` layer,
-and the settings' `description` and `legacy`. **2** is the Ewe design system v3 (the Fluent-era `Theme` names
+and the settings' `description` and `legacy`; 0.36 adds the keybind
+`global` form with its `release`, `repeat` and `transparent` flags. **2** is the Ewe design system v3 (the Fluent-era `Theme` names
 are gone; the website's plugin API page has the rename table). **1** was the
 Fluent-era surface and is refused at install.
 
