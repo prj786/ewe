@@ -103,7 +103,7 @@ SECTION_NOTES = {
     "apps": "pins, startup entries, places, and Komble's installed manifest",
     "apps.installed": "what Komble manages here — a fresh machine reinstalls from this",
     "system": "what this MACHINE is — read by the installer/OS tooling only",
-    "sync": "where the file syncs: provider (nextcloud | google), server, user, folder; credentials never live here",
+    "sync": "where the file syncs: provider (nextcloud | google), server, user, folder; enabled; browser (this computer syncs its browser, default true); folders = the folder pairs ewe-sync keeps in step, shared by every machine; credentials never live here",
     "network": "connection DEFINITIONS only — keys and passwords never sync",
     "network.ssh": "~/.ssh/config host aliases (the ewe-managed block)",
     "network.vpn": "NM VPN profile definitions; secrets re-prompt after restore",
@@ -1963,7 +1963,15 @@ SYNC_LOG = os.path.join(STATE_DIR, "sync.log")
 SYNC_LOCK = os.path.join(STATE_DIR, ".sync.lock")
 SETTLE_LOCK = os.path.join(os.environ.get("XDG_RUNTIME_DIR") or "/tmp", "ewe-conf-settle.lock")
 LOCAL_ONLY = {
-    ("sync",),                            # this machine's account + folder pairs
+    # this machine's account and its own choices; [[sync.folders]] is NOT
+    # here — the folders you sync follow you to every machine (2026-10-31:
+    # the whole table was local, so a second machine never got them)
+    ("sync", "enabled"),
+    ("sync", "provider"),
+    ("sync", "server"),
+    ("sync", "user"),
+    ("sync", "folder"),
+    ("sync", "browser"),                  # whether THIS computer syncs its browser
     ("system",),                          # what this machine is (gaming, development)
     ("apps", "installed"),                # Komble's manifest of THIS machine
     ("desktop", "displays", "lastKey"),   # the monitor set plugged in here

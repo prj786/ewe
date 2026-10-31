@@ -487,7 +487,9 @@ QtObject {
     // ── first-login restore offer — "log in, get your machine back" ─────────
     property bool _restoreOffered: false
     function _maybeOfferRestore() {
-        if (cl._restoreOffered || cl.lastSync !== "" || !cl.cloudInfo) return
+        // localSyncedAt: ewe-conf's own record — ewe-sync's "Bring everything
+        // back" restored without this file's lastSync, so never offer twice
+        if (cl._restoreOffered || cl.lastSync !== "" || cl.localSyncedAt !== "" || !cl.cloudInfo) return
         cl._restoreOffered = true
         cl.pendingRestore = { updatedAt: cl.cloudInfo.updatedAt, device: cl.cloudInfo.device }
         if (!Globals.welcomeOpen)

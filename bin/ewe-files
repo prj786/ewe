@@ -36,6 +36,32 @@ ewe_cloud() {
 
 mounted() { mountpoint -q "$MOUNT" 2>/dev/null; }
 
+# ~/Nextcloud already holds files and is no mount: a sync engine owns it
+# (ewe-sync's two-way pair, or the Nextcloud desktop app) — the whole
+# account is already there, so mounting over it would hide the real files
+# (rclone refuses a non-empty mountpoint anyway; the mount just failed)
+occupied() {
+    [ -d "$MOUNT" ] && ! mounted && [ -n "$(ls -A "$MOUNT" 2>/dev/null)" ]
+}
+
+# ewe-sync's folder snapshot names this folder (any engine)
+synced() {
+    local snap="${XDG_STATE_HOME:-$HOME/.local/state}/ewe/sync-folders.json"
+    [ -r "$snap" ] || return 1
+    python3 - "$snap" "$MOUNT" <<'PY' 2>/dev/null
+import json, os, sys
+try:
+    j = json.load(open(sys.argv[1]))
+except (OSError, ValueError):
+    sys.exit(1)
+want = os.path.realpath(sys.argv[2])
+for f in j.get("folders") or []:
+    if isinstance(f, dict) and os.path.realpath(str(f.get("local") or "/nonexistent")) == want:
+        sys.exit(0)
+sys.exit(1)
+PY
+}
+
 case "${1:-status}" in
 
 setup)
@@ -88,6 +114,10 @@ mount)
     [ -r "$CONF" ] || exit 0                       # not set up — silent no-op
     command -v rclone >/dev/null 2>&1 || exit 0
     mounted && exit 0
+    if occupied; then
+        say "$MOUNT already holds your synced files — not mounting over it"
+        exit 0
+    fi
     # a dead FUSE endpoint ("Transport endpoint is not connected", e.g. after
     # a killed rclone) blocks everything until lazily unmounted — probe with
     # ls and heal on ANY failure (see ewe-drive for the history)
@@ -122,9 +152,14 @@ forget)
     ;;
 
 status)
-    printf '{"configured": %s, "mounted": %s, "path": "%s"}\n' \
+    # occupied: the folder holds files and is no mount (a sync engine owns
+    # it); synced: ewe-sync's snapshot lists it — either way the account's
+    # files are there without a mount
+    printf '{"configured": %s, "mounted": %s, "occupied": %s, "synced": %s, "path": "%s"}\n' \
         "$([ -r "$CONF" ] && echo true || echo false)" \
-        "$(mounted && echo true || echo false)" "$MOUNT"
+        "$(mounted && echo true || echo false)" \
+        "$(occupied && echo true || echo false)" \
+        "$(synced && echo true || echo false)" "$MOUNT"
     ;;
 
 *) die "usage: ewe-files setup [--offline]|mount|unmount|forget|status" ;;

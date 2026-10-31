@@ -169,6 +169,20 @@ on a sync --no-hooks >/dev/null                                 # A's older edit
 [ "$(get a desktop.theme.accent)" = "#333333" ] || fail "newer save lost to an older edit: $(get a desktop.theme.accent)"
 ok "the same key changed on both: the newer file wins"
 
+# 8b · the folders you sync follow you; this machine's own [sync] choices do not
+on a set --no-hooks sync.folders '[{"remote": "Documents", "local": "~/Documents", "mode": "two-way"}]' >/dev/null
+on a set --no-hooks sync.browser false >/dev/null
+on a sync --no-hooks >/dev/null
+on b sync --no-hooks >/dev/null
+on b get sync.folders | grep -q '"Documents"' || fail "B did not get A's folder pairs: $(get b sync.folders)"
+[ "$(get b sync.browser)" = "<unset>" ] || fail "A's sync.browser landed on B: $(get b sync.browser)"
+[ "$(get b sync.enabled)" = "false" ] || fail "B's sync.enabled moved: $(get b sync.enabled)"
+on b set --no-hooks sync.folders '[]' >/dev/null
+on b sync --no-hooks >/dev/null
+on a sync --no-hooks >/dev/null
+[ "$(get a sync.folders)" = "[]" ] || fail "A kept a folder pair B removed: $(get a sync.folders)"
+ok "[[sync.folders]] travels between machines; enabled/browser stay on each machine"
+
 # 9 · the log
 [ -s "$WORK/a/state/ewe/sync.log" ] || fail "no sync.log"
 tail -1 "$WORK/a/state/ewe/sync.log" | python3 -c 'import json,sys; j=json.loads(sys.stdin.read()); assert j["verb"]=="sync" and j["ok"] and j["at"].endswith("Z"), j' \
