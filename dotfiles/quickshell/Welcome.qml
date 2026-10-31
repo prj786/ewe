@@ -176,7 +176,9 @@ Scope {
 
     // a restore is worth offering when the account has a backup and THIS
     // machine has never synced — the same rule Cloud._maybeOfferRestore uses
-    readonly property bool restoreWorthIt: Cloud.signedIn && Cloud.cloudInfo !== null && Cloud.lastSync === ""
+    // (localSyncedAt: ewe-conf's own record — the installer's "Your ewe
+    // account" step, or ewe-sync, may have restored already)
+    readonly property bool restoreWorthIt: Cloud.signedIn && Cloud.cloudInfo !== null && Cloud.lastSync === "" && Cloud.localSyncedAt === ""
     readonly property bool online: wifi.online
     // the browser and the keyring prompt must be clickable: get out of the way
     readonly property bool yielding: Cloud.busy === "signin"
@@ -558,9 +560,10 @@ Scope {
                             }
                         }
                     }
-                    Note { visible: Cloud.signedIn; text: "Your files are at ~/Nextcloud (Files → sidebar)." }
-                    // the account app (RFC-006): machines, folder sync, conflicts
-                    Note { visible: Cloud.signedIn && Globals.syncAppInstalled; text: "Folders and your machines: ewe-sync (the tray icon)." }
+                    Note { visible: Cloud.signedIn; text: "Your whole account opens as ~/Nextcloud in Files." }
+                    // the account app (RFC-006): everything the account keeps,
+                    // the folders to keep in it, machines, conflicts
+                    Note { visible: Cloud.signedIn && Globals.syncAppInstalled; text: "Pick the folders to keep in your account — Documents, Desktop, any folder — in ewe-sync." }
                     Row {
                         visible: Cloud.signedIn && Globals.syncAppInstalled
                         anchors.horizontalCenter: parent.horizontalCenter; spacing: Theme.spaceMd
@@ -651,7 +654,7 @@ Scope {
                     Body {
                         text: "A backup from “" + (Cloud.cloudInfo ? Cloud.cloudInfo.device : "another machine") + "”"
                             + (Cloud.cloudInfo && Cloud.cloudInfo.updatedAt ? " (saved " + Qt.formatDateTime(new Date(Cloud.cloudInfo.updatedAt), "d MMMM, h:mm AP") + ")" : "")
-                            + " is waiting. Restore it and your layout, theme, keybinds and network profiles come back to this machine; your apps line up in Komble, one click from reinstalled."
+                            + " is waiting. Restore it and your layout, theme, keybinds and network profiles come back to this machine, the folders you sync come down by themselves, your browser brings back its bookmarks and tabs, and your apps line up in Komble, one click from reinstalled."
                     }
                     Row {
                         visible: root._restoring

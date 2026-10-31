@@ -133,8 +133,10 @@ sync):
 - a machine with no common copy yet — a fresh install, or one that synced
   with another provider before — takes the account's value on a conflict
   and keeps every key only it has;
-- **this machine's own** paths never come from the account: `[sync]`,
-  `[system]`, `apps.installed`, `desktop.displays.lastKey`,
+- **this machine's own** paths never come from the account: `[sync]`'s
+  `enabled` / `provider` / `server` / `user` / `folder` / `browser` (but
+  `sync.folders` — the folders you sync — is shared, so every computer you
+  sign in to gets them; 2026-10-31), `[system]`, `apps.installed`, `desktop.displays.lastKey`,
   `desktop.input.devices`, `desktop.wallpapers.outputs`, and
   `plugins.enabled` / `sources` / `removed` / `widgets` (plugin code is
   installed per machine). Differences there alone never cause an upload.
@@ -417,8 +419,13 @@ file said.
 ### `[sync]`
 
 `provider` (`"nextcloud"` | `"google"`) · `server` · `user` · `folder`
-(default `ewe`) · `enabled` (bool, the auto-sync switch). Identity only,
-so a restored machine knows where its backup lives. The app password (or
+(default `ewe`) · `enabled` (bool, the auto-sync switch) · `browser` (bool,
+default true: this computer's ewe browser syncs with the account) — this
+machine's own. Identity only, so a restored machine knows where its backup
+lives. `[[sync.folders]]` (`remote`, `local`, `mode` two-way | upload |
+download, `trigger` change | interval | login, `interval`, `exclude`,
+`hidden`) are ewe-sync's folder pairs, **shared** by every machine; each
+machine keeps its own local path override and pause in ewe-sync's state. The app password (or
 the Google refresh token) lives in the keyring behind `ewe-cloud` /
 `ewe-auth`, never in this file.
 
