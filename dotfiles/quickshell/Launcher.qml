@@ -449,15 +449,19 @@ Scope {
                     }
 
                     // ── footer: what the keyboard does, on surfaceBase ──
+                    // It reaches the panel's edge, so it takes the panel's
+                    // bottom corners and outline (its top edge is the
+                    // divider) — a plain rectangle painted square corners
+                    // over the rounded panel (clip is rectangular).
                     Rectangle {
                         id: foot
                         width: parent.width
                         height: hints.implicitHeight + 2 * Theme.spaceS
                         color: Theme.surfaceBase
-                        Rectangle {
-                            anchors { left: parent.left; right: parent.right; top: parent.top }
-                            height: Theme.borderWidth1; color: Theme.borderSubtle
-                        }
+                        border.color: Theme.borderSubtle
+                        border.width: Theme.borderWidth1
+                        bottomLeftRadius: panel.radius
+                        bottomRightRadius: panel.radius
                         Row {
                             id: hints
                             anchors.verticalCenter: parent.verticalCenter
