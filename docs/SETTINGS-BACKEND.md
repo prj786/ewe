@@ -211,6 +211,33 @@ Phase 30 also tunes `/etc/bluetooth/main.conf`: `JustWorksRepairing = always`
 (a device paired elsewhere re-pairs instead of failing), `Experimental = true`
 (battery levels), `AutoEnable = true` (adapter on at boot).
 
+## Network state + Tailscale — `NetState.qml`, `ewe-tailscale`
+
+The bar and Quick settings read ONE network state, `NetState.qml`: on every
+NetworkManager event (the one `nmcli monitor`, debounced 400 ms — it also
+bumps `Globals.netEpoch`, which Quick settings' Wi-Fi list and the `ewe.vpn`
+plugin re-read on) it runs `scripts/net-state.py`, which prints the devices
+and their states, NetworkManager's connectivity verdict, the device traffic
+leaves by (`ip route get`) and the physical link under it, each ethernet
+port's carrier / speed (`/sys/class/net/<dev>/speed`) / fastest supported
+and partner-advertised mode (`ethtool <dev>`, unprivileged), and the active
+VPNs. Test: `tests/ewe-netstate-test.sh`. The Settings app may use the same
+script (read-only, JSON, exit 0).
+
+**`bin/ewe-tailscale`** (one JSON object per call, exit 0 — like ewe-bt).
+`tailscale` is in `packages/common.list`; no phase enables `tailscaled`.
+
+| verb | does |
+|---|---|
+| `status` | `{ok, installed, enabled, running, state, self:{ip4, ip6, dns, name}, operator_ok, needs_setup, health:[…], exit_node: null\|{name, ip, online}, peers:{total, online}, login_server, accept_routes, accept_dns, relay_only, login_url}` — `state` is tailscaled's BackendState (`NeedsLogin` · `Running` · `Stopped` · `Starting` · `NoState`) or `NotRunning`; no binary → `{ok: true, installed: false}` |
+| `setup` | ONE `pkexec`: `systemctl enable --now tailscaled` + `tailscale set --operator=<you>`; a no-op (no prompt) when already done |
+| `up [--login-server URL] [--no-open]` | `tailscale up --accept-routes=false --accept-dns=true --json`, ≤ 25 s: `login_url` (opened with xdg-open unless `--no-open`) when sign-in is needed, else the status. On "requires mentioning all non-default flags" it runs the command tailscale prints (keeps every setting, never `--reset`), once |
+| `down` · `logout` · `reconnect` (down + up) · `exit-node off` | the obvious |
+
+Errors are `{ok: false, error: "<plain words>", code}` — `needs-setup`,
+`not-running`, `cancelled` (password dialog dismissed), `timeout`, `usage`….
+Test: `tests/ewe-tailscale-test.sh` (fake tailscale/systemctl/pkexec/xdg-open).
+
 ## Screensaver (hypridle-driven)
 
 Quickshell 0.3.0 has no `IdleMonitor`, so idle timing stays with **hypridle**:

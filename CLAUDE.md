@@ -250,6 +250,34 @@ since Dock 1.1.0 (`desktop.dock.*` is only their `legacy` fallback,
   input), and output returns to where it was when the headset leaves.
   WirePlumber will not do this once a user ever picked a default. The bar's
   sound and mic glyphs read it.
+- **`NetState.qml`** (2026-11) — ONE network reading for the bar and Quick
+  settings: it owns the `nmcli monitor` (moved out of Bar.qml; still bumps
+  `Globals.netEpoch`) and runs `scripts/net-state.py` (devices + states,
+  NM connectivity, the device traffic leaves by and the physical link under
+  it, each port's carrier/speed/`ethtool` modes, VPNs) per debounced event.
+  The bar shows the glyph of the link that CARRIES traffic (a cable that is
+  the default route beats Wi-Fi), muted with no internet, + a warning dot
+  when connectivity is limited/none/portal; the wired row says "No cable
+  detected / Waiting for an address · N min / Connected · no internet".
+  Tailscale comes through `bin/ewe-tailscale` (JSON, exit 0; `setup` = one
+  pkexec: enable tailscaled + operator; `up` always `--accept-routes=false
+  --accept-dns=true`). `system/networkmanager/20-ewe-wired.conf` (phase 30)
+  makes ethernet DHCP never time out — NM's 45 s fail + 5-minute block cost
+  the owner two reboots. Tests: `tests/ewe-netstate-test.sh`,
+  `tests/ewe-tailscale-test.sh` (fakes only — never touch the live network).
+- **`RemoteState.qml` + `RemotePage.qml`** (2026-11, RFC-009) — Share this
+  computer: the Control Centre **Sharing** tile + the built-in `remote` tab +
+  the bar's share glyph (a SECURITY indicator, not a bar preference: shown
+  whenever sharing is on, accent + count while someone is connected). All
+  actions are `bin/ewe-remote` (JSON, exit 0): a per-user sshd
+  (`systemd/ewe-remote-sshd.service`, port 3933, key-only, ewe's own
+  `authorized_keys` in `~/.local/share/ewe/remote/`, never root), pairing by
+  an 8-digit code checked with SPAKE2 (`python-spake2`) inside SSH via a
+  PUBLIC pairing key whose only power is the forced command `ewe-remote
+  pair-serve`; the account's `ewe/remote/<id>.json` is discovery only.
+  `[remote]` in ewe.conf is LOCAL_ONLY. Test: `tests/ewe-remote-test.sh`
+  (two sandboxed computers, a real sshd on loopback — `EWE_REMOTE_NO_SYSTEMD`
+  keeps it off the user manager).
 - **`HyprMon.qml`** — display manager: per-monitor-set profiles
   (`display-profiles.json` → `hypr/generated/monitors.lua`), live apply via
   `hyprctl eval 'hl.monitor{…}'`, re-assert on hotplug/AC events. The Settings

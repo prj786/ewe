@@ -15,7 +15,9 @@ singleton BtAgent 1.0 BtAgent.qml
 singleton PluginHost 1.0 PluginHost.qml
 singleton Shell 1.0 Shell.qml
 singleton AudioState 1.0 AudioState.qml
+singleton NetState 1.0 NetState.qml
 singleton GlobalShortcuts 1.0 GlobalShortcuts.qml
+singleton RemoteState 1.0 RemoteState.qml
 Elevation 1.0 Elevation.qml
 Spinner 1.0 Spinner.qml
 BarIcon 1.0 BarIcon.qml
@@ -72,3 +74,4 @@ Battery 1.0 Battery.qml
 IpcHub 1.0 IpcHub.qml
 Welcome 1.0 Welcome.qml
 WifiPicker 1.0 WifiPicker.qml
+RemotePage 1.0 RemotePage.qml

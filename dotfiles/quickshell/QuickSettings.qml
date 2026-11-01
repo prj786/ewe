@@ -204,7 +204,7 @@ Scope {
     readonly property string expanded: tab === "home" ? "" : tab
     Connections { target: Globals; function onQuickSettingsTabRequested(name) { root.setTab(name) } }
     // the pages the shell itself has; anything else is an add-on's quickPage.key
-    readonly property var builtinTabs: ["home", "wifi", "bt", "audio", "cal", "notifs"]
+    readonly property var builtinTabs: ["home", "wifi", "bt", "audio", "cal", "notifs", "remote"]
     function hasTab(t) {
         if (root.builtinTabs.indexOf(t) >= 0) return true
         var ps = PluginHost.quickPages
@@ -228,7 +228,6 @@ Scope {
     // wifi
     property var wifiList: []
     property bool wifiOn: true
-    property bool wiredUp: false   // a wired (ethernet) link is the active connection
     property string pwTarget: ""
     property bool pwShow: false        // reveal the Wi-Fi password while typing
     property string pwText: ""
@@ -247,8 +246,9 @@ Scope {
         var d = new Date()
         Globals.openDd = ""   // never reopen with a stale dropdown expanded
         root.today = d; root.calYear = d.getFullYear(); root.calMonth = d.getMonth(); root.calDate = d.getDate()
-        wifiState.running = true; wiredState.running = true; brightnessProc.running = true; volumeProc.running = true; wifiSavedScan.running = true
+        wifiState.running = true; brightnessProc.running = true; volumeProc.running = true; wifiSavedScan.running = true
         if (root.expanded === "wifi") wifiScan.running = true
+        NetState.panelOpened()     // a fresh connectivity verdict + Tailscale
     }
     function clearAll() {
         if (!Globals.server) return
@@ -458,42 +458,22 @@ Scope {
         }
     }
     Process { id: wifiState; command: ["nmcli", "-t", "-f", "WIFI", "radio"]; stdout: StdioCollector { onStreamFinished: root.wifiOn = this.text.trim() === "enabled" } }
-    // the (first) ethernet port: its device name and NetworkManager state —
-    // connected / connecting / disconnected (cable in, link turned off here) /
-    // unavailable (no cable). wiredUp is the old boolean, kept for the tile.
-    property string wiredDev: ""
-    property string wiredStateStr: ""
-    readonly property bool wiredPresent: wiredDev !== ""
-    // nmcli's device states carry a parenthetical — "connecting (getting IP
-    // configuration)", "connected (externally)" — so match the word, not the string
-    readonly property bool wiredConnecting: wiredStateStr.indexOf("connecting") === 0
-    property bool wiredBusy: false
-    Process { id: wiredState; command: ["sh", "-c", "nmcli -t -f DEVICE,TYPE,STATE device 2>/dev/null | awk -F: '$2==\"ethernet\"{print $1\":\"$3; exit}'"]; stdout: StdioCollector { onStreamFinished: { var p = this.text.trim().split(":"); root.wiredDev = p[0] || ""; root.wiredStateStr = p[1] || ""; root.wiredUp = root.wiredStateStr.indexOf("connected") === 0; if (!wiredSetProc.running) root.wiredBusy = false } } }
-    // the wired switch: `device disconnect` drops the link and stops
-    // autoconnect until `device connect` (or a re-plug) — the way to be on
-    // Wi-Fi with the cable still in
-    Process { id: wiredSetProc; onExited: { wiredState.running = true; wiredRescan.restart() } }
-    Timer { id: wiredRescan; interval: 1500; onTriggered: wiredState.running = true }
-    function setWired(on) {
-        if (!root.wiredPresent || root.wiredStateStr === "unavailable") return
-        root.wiredBusy = true
-        wiredSetProc.command = ["nmcli", "device", on ? "connect" : "disconnect", root.wiredDev]
-        wiredSetProc.running = true
-    }
+    // the wired port, the connectivity verdict, VPNs and Tailscale: NetState
+    // (one reading for the bar and this panel — see NetState.qml)
     Process { id: brightnessProc; command: ["sh", "-c", "brightnessctl -m 2>/dev/null | cut -d, -f4 | tr -d '%'"]; stdout: StdioCollector { onStreamFinished: { var n = parseInt(this.text.trim()); if (!isNaN(n)) root.brightnessVal = n / 100 } } }
     Process { id: volumeProc; command: ["sh", "-c", "wpctl get-volume @DEFAULT_AUDIO_SINK@ 2>/dev/null | grep -oE '[0-9]+\\.[0-9]+'"]; stdout: StdioCollector { onStreamFinished: { var f = parseFloat(this.text.trim()); if (!isNaN(f)) root.volumeVal = Math.min(1, f) } } }
     Timer { id: rescanTimer; interval: 2500; onTriggered: { wifiState.running = true; wifiScan.running = true } }
     // the network we just joined, until a list read shows it IN-USE
     property string wifiConfirm: ""
     Timer { id: wifiConfirmTimer; interval: 4000; onTriggered: { root.wifiConfirm = ""; root.wifiPending = "" } }
-    // NetworkManager events (the bar's `nmcli monitor`) — re-read while the
+    // NetworkManager events (NetState's `nmcli monitor`) — re-read while the
     // panel is open instead of waiting for the 6 s poll; this is what makes a
     // cable plug or a Wi-Fi join show at once
     Connections {
         target: Globals
         function onNetEpochChanged() {
             if (!Globals.quickSettingsOpen) return
-            wifiState.running = true; wiredState.running = true
+            wifiState.running = true
             if (root.expanded === "wifi") wifiScan.running = true
         }
     }
@@ -511,7 +491,7 @@ Scope {
                 // now (the old 2.5 s one-shot left a dead gap), and stop
                 // waiting after 4 s whatever it says
                 root.wifiConfirm = failed
-                wifiScan.running = true; wifiSavedScan.running = true; wiredState.running = true
+                wifiScan.running = true; wifiSavedScan.running = true
                 wifiConfirmTimer.restart()
                 rescanTimer.restart()
                 return
@@ -529,7 +509,7 @@ Scope {
     }
     // gated on the panel, not just no-op'd inside it: this used to wake every 6 s
     // for the whole session only to hit the early return on the first line
-    Timer { interval: 6000; running: Globals.quickSettingsOpen; repeat: true; onTriggered: { wifiState.running = true; wiredState.running = true; if (root.expanded === "wifi") wifiScan.running = true } }
+    Timer { interval: 6000; running: Globals.quickSettingsOpen; repeat: true; onTriggered: { wifiState.running = true; if (root.expanded === "wifi") wifiScan.running = true } }
 
     PanelWindow {
         id: win
@@ -684,7 +664,8 @@ Scope {
                             { key: "bt",     icon: Theme.icBluetooth },
                             { key: "audio",  icon: Theme.icVolHigh },
                             { key: "cal",    icon: Theme.icCalendar },
-                            { key: "notifs", icon: Theme.icBell }
+                            { key: "notifs", icon: Theme.icBell },
+                            { key: "remote", icon: Theme.icShare }
                         ]
                         delegate: RailBtn {
                             required property var modelData
@@ -805,20 +786,39 @@ Scope {
                         visible: root.tab === "home"
                         width: parent.width; spacing: Theme.spaceS
                         Tile {
-                            // adapts to the live link: the wired glyph and "Wired"
-                            // when a cable is the active connection and Wi-Fi isn't (e.g. VMs)
-                            readonly property bool onWired: root.wiredUp && root.curSsid() === ""
+                            // follows the link that CARRIES traffic (NetState):
+                            // the cable's glyph when a cable is the default route
+                            // — even with Wi-Fi up — or is still waiting for an
+                            // address; Wi-Fi's otherwise. Its second line says
+                            // what is wrong first, then where you are.
+                            readonly property bool onWired: NetState.uplinkType === "ethernet"
+                                                         || (NetState.uplink === null && NetState.wiredWaiting)
                             ic: onWired ? Theme.icEthernet : Theme.icWifi
-                            label: root.wiredUp ? "Network" : "Wi-Fi"
-                            active: root.wifiOn || onWired               // on = the radio or the link is up
+                            label: NetState.wiredUp || NetState.wiredWaiting ? "Network" : "Wi-Fi"
+                            active: root.wifiOn || NetState.wiredUp       // on = the radio or the link is up
                             opened: root.expanded === "wifi"
                             hasMenu: true
                             busy: (root.expanded === "wifi" && wifiScan.running) || root.wifiPending !== ""
+                                  || (NetState.uplink === null && NetState.wiredWaiting)
                             // joining: say so, and where to. Both links up: say both —
-                            // the cable used to vanish behind the SSID
-                            sub: root.wifiPending !== "" ? "Joining " + root.wifiPending + "…"
-                               : root.curSsid() !== "" ? (root.wiredUp ? root.curSsid() + " · Wired" : root.curSsid())
-                               : (onWired ? "Wired" : (root.wifiOn ? "On" : "Off"))
+                            // the one carrying traffic first
+                            sub: {
+                                if (root.wifiPending !== "") return "Joining " + root.wifiPending + "…"
+                                // the scanned list knows the SSID; before the first scan
+                                // the profile's name is the best there is
+                                var ssid = root.curSsid()
+                                if (ssid === "" && NetState.wifi && NetState.wifi.state === "connected") ssid = NetState.wifi.connection.trim()
+                                var name = NetState.uplinkType === "ethernet" ? "Wired"
+                                         : NetState.uplinkType === "wifi" ? (ssid !== "" ? ssid : "Wi-Fi") : ""
+                                if (NetState.portal) return "Sign in to this network"
+                                // the VPN in the way is named on the page ("No internet through …")
+                                if (NetState.noInternet) return (NetState.activeVpn ? NetState.activeVpn.name : name) + " · no internet"
+                                if (name === "Wired" && ssid !== "") return "Wired · " + ssid
+                                if (name !== "" && NetState.uplinkType === "wifi" && NetState.wiredUp) return name + " · Wired"
+                                if (name !== "") return name
+                                if (NetState.wiredWaiting) return "Waiting for an address"
+                                return root.wifiOn ? "On" : "Off"
+                            }
                             // body = the switch (no list needed to turn Wi-Fi off);
                             // details = the network list
                             onClicked: { Quickshell.execDetached(["nmcli", "radio", "wifi", root.wifiOn ? "off" : "on"]); rescanTimer.restart() }
@@ -842,6 +842,21 @@ Scope {
                             sub: Globals.dnd ? "On" : "Off"
                             onClicked: Globals.dnd = !Globals.dnd
                         }
+                        // Remote (RFC-009). Turning sharing ON is never one
+                        // stray click: off → the page (switch + what it means);
+                        // on → off in one click (the safe direction)
+                        Tile {
+                            ic: Theme.icShare; label: "Sharing"
+                            active: RemoteState.sharing
+                            opened: root.expanded === "remote"
+                            hasMenu: true
+                            busy: RemoteState.busy === "share"
+                            sub: !RemoteState.sharing ? "Off"
+                               : RemoteState.connectedCount > 0 ? RemoteState.connectedNames + " connected"
+                               : "On · " + RemoteState.codeDisplay
+                            onClicked: RemoteState.sharing ? RemoteState.setSharing(false) : root.setTab("remote")
+                            onMenu: root.setTab("remote")
+                        }
                         // the add-ons' tiles: the host sizes the Loader (half the
                         // row, or all of it for span 2); the plugin fills a Tile
                         Repeater {
@@ -860,6 +875,12 @@ Scope {
                                 Connections { target: PluginHost; function onSettingsChanged() { if (tileSlot.status === Loader.Ready) PluginHost._giveSettings(tileSlot.item, tileSlot.modelData.id) } }
                             }
                         }
+                    }
+
+                    // ═══ REMOTE: share this computer, your computers (RFC-009) ═══
+                    RemotePage {
+                        visible: root.tab === "remote"
+                        width: parent.width
                     }
 
                     // ═══ SOUND: output and input devices ═══
@@ -920,19 +941,165 @@ Scope {
                             hasSwitch: true; on: root.wifiOn
                             onToggled: { Quickshell.execDetached(["nmcli", "radio", "wifi", root.wifiOn ? "off" : "on"]); rescanTimer.restart() }
                         }
+                        // WHAT IS WRONG, whatever the link: a sign-in page in the
+                        // way (hotel, café, guest network) or a VPN with no
+                        // internet behind it. The VPN itself is the ewe.vpn
+                        // plugin's page — here it is only named.
+                        Row {
+                            visible: NetState.portal
+                            width: parent.width
+                            spacing: Theme.spaceS
+                            leftPadding: Theme.spaceS
+                            QsNote {
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: parent.width - parent.leftPadding - portalBtn.width - parent.spacing
+                                tone: "warning"
+                                text: "Sign in to this network"
+                            }
+                            QsButton {
+                                id: portalBtn
+                                anchors.verticalCenter: parent.verticalCenter
+                                variant: "primary"; label: "Open sign-in page"
+                                onGo: NetState.openPortal()
+                            }
+                        }
+                        QsNote {
+                            visible: NetState.vpnHint !== ""
+                            leftPadding: Theme.spaceS; rightPadding: Theme.spaceS
+                            tone: "warning"
+                            text: NetState.vpnHint
+                        }
                         // WIRED — only when the machine has a port. The switch is
-                        // the "I'm on Wi-Fi, ignore the cable" control; unplugged,
-                        // it just says so.
-                        QsSwitchRow {
-                            visible: root.wiredPresent
-                            ic: Theme.icEthernet; label: "Wired"
-                            desc: root.wiredStateStr === "unavailable" ? "No cable"
-                                : root.wiredConnecting || root.wiredBusy ? "Connecting…"
-                                : root.wiredUp ? "Connected" : "Off"
-                            busy: root.wiredBusy || root.wiredConnecting
-                            on: root.wiredUp || root.wiredConnecting
-                            disabled: root.wiredStateStr === "unavailable"
-                            onToggled: root.setWired(!on)
+                        // the "I'm on Wi-Fi, ignore the cable" control; the line
+                        // under it says what the port is really doing (no cable ·
+                        // waiting for an address, and for how long · connected,
+                        // with or without internet), then a hint when there is
+                        // something to try, and Reconnect while it is stuck.
+                        Column {
+                            visible: NetState.wiredPresent
+                            width: parent.width
+                            spacing: Theme.spaceXs
+                            QsSwitchRow {
+                                ic: Theme.icEthernet; label: "Wired"
+                                desc: NetState.wiredBusy ? "Connecting…" : NetState.wiredText
+                                busy: NetState.wiredBusy || NetState.wiredWaiting
+                                on: NetState.wiredUp || NetState.wiredWaiting
+                                disabled: NetState.wiredPhase === "unplugged" || NetState.wiredPhase === "unmanaged"
+                                onToggled: NetState.setWired(!on)
+                            }
+                            QsNote {
+                                visible: NetState.wiredHint !== ""
+                                leftPadding: Theme.spaceS; rightPadding: Theme.spaceS
+                                tone: NetState.wiredWaiting ? "warning" : ""
+                                text: NetState.wiredHint
+                            }
+                            QsButton {
+                                visible: NetState.wiredWaiting || NetState.wiredNoInternet
+                                x: Theme.spaceS
+                                ic: Theme.icRefresh; label: "Reconnect"
+                                busy: NetState.wiredBusy
+                                onGo: NetState.reconnectWired()
+                            }
+                        }
+                        // TAILSCALE — only when it is installed (every ewe install
+                        // has it; the daemon runs only once set up here). The
+                        // switch turns it on and off; the buttons are the one
+                        // next step (Set up · Sign in) or Reconnect; an exit node
+                        // in use is named, and Tailscale's own health messages
+                        // are shown as they are.
+                        Column {
+                            visible: NetState.tsInstalled
+                            width: parent.width
+                            spacing: Theme.spaceXs
+                            QsSwitchRow {
+                                ic: Theme.icNetwork; label: "Tailscale"
+                                desc: NetState.tsText
+                                busy: NetState.tsBusy !== "" || NetState.tsPhase === "starting"
+                                on: NetState.tsPhase === "on" || NetState.tsPhase === "starting"
+                                disabled: NetState.tsBusy !== ""
+                                onToggled: NetState.tsRun(NetState.tsPhase === "setup" ? "setup"
+                                                        : on ? "down" : "up")
+                            }
+                            Row {
+                                visible: NetState.tsExit !== null
+                                width: parent.width
+                                spacing: Theme.spaceS
+                                leftPadding: Theme.spaceS
+                                Row {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    width: parent.width - parent.leftPadding - tsExitBtn.width - parent.spacing
+                                    spacing: Theme.spaceXs
+                                    TextCaption {
+                                        id: tsExitName
+                                        width: Math.min(implicitWidth, parent.width - (NetState.tsExit && !NetState.tsExit.online ? tsExitOff.implicitWidth + parent.spacing : 0))
+                                        text: NetState.tsExit ? "Using exit node " + NetState.tsExit.name : ""
+                                        color: Theme.textSecondary
+                                    }
+                                    TextCaption {
+                                        id: tsExitOff
+                                        visible: NetState.tsExit !== null && !NetState.tsExit.online
+                                        text: "· offline"
+                                        color: Theme.danger
+                                    }
+                                }
+                                QsButton {
+                                    id: tsExitBtn
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    label: "Stop using"
+                                    busy: NetState.tsBusy === "exit-node"
+                                    onGo: NetState.tsRun("exit-node")
+                                }
+                            }
+                            Repeater {
+                                model: NetState.tsHealth.slice(0, 2)
+                                delegate: QsNote {
+                                    required property var modelData
+                                    leftPadding: Theme.spaceS; rightPadding: Theme.spaceS
+                                    tone: "warning"
+                                    text: modelData
+                                }
+                            }
+                            QsNote {
+                                visible: NetState.tsPhase === "signin" && NetState.tsLoginUrl !== "" && NetState.tsBusy === ""
+                                leftPadding: Theme.spaceS; rightPadding: Theme.spaceS
+                                text: "Finish signing in in your browser."
+                            }
+                            QsNote {
+                                visible: NetState.tsError !== ""
+                                leftPadding: Theme.spaceS; rightPadding: Theme.spaceS
+                                tone: "danger"
+                                text: NetState.tsError
+                            }
+                            Row {
+                                x: Theme.spaceS
+                                spacing: Theme.spaceS
+                                // from the phase, never from the buttons' `visible`: that
+                                // reads back EFFECTIVE visibility, false while this Row
+                                // is hidden — the Row would never show
+                                visible: NetState.tsPhase === "setup" || NetState.tsPhase === "signin"
+                                         || NetState.tsPhase === "on" || NetState.tsPhase === "starting"
+                                QsButton {
+                                    id: tsSetupBtn
+                                    visible: NetState.tsPhase === "setup"
+                                    variant: "primary"; label: "Set up Tailscale"
+                                    busy: NetState.tsBusy === "setup"
+                                    onGo: NetState.tsRun("setup")
+                                }
+                                QsButton {
+                                    id: tsSignInBtn
+                                    visible: NetState.tsPhase === "signin"
+                                    variant: "primary"; label: "Sign in"
+                                    busy: NetState.tsBusy === "up"
+                                    onGo: NetState.tsRun("up")
+                                }
+                                QsButton {
+                                    id: tsReconnectBtn
+                                    visible: NetState.tsPhase === "on" || NetState.tsPhase === "starting"
+                                    ic: Theme.icRefresh; label: "Reconnect"
+                                    busy: NetState.tsBusy === "reconnect"
+                                    onGo: NetState.tsRun("reconnect")
+                                }
+                            }
                         }
                         // a scan with nothing to show yet — say so instead of
                         // sitting there as an empty box that looks broken
@@ -964,7 +1131,9 @@ Scope {
                                         glyphColor: wRow.modelData.active ? Theme.accentText : Theme.textSecondary
                                         label: wRow.modelData.ssid
                                         desc: root.wifiPending === wRow.modelData.ssid ? "Connecting…"
-                                            : wRow.modelData.active ? "Connected"
+                                            : wRow.modelData.active ? (NetState.wifiInternet === "portal" ? "Sign in to this network"
+                                                                     : NetState.isProblem(NetState.wifiInternet) ? "Connected · no internet"
+                                                                     : "Connected")
                                             : saved ? "Saved"
                                             : wRow.modelData.sec === "" ? "Open" : ""
                                         active: wRow.modelData.active

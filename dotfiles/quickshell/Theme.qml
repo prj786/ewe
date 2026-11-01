@@ -534,10 +534,13 @@ QtObject {
     readonly property string icWifiLow:      ic(0xE5F8)  // wifi-low
     readonly property string icWifiOff:      ic(0xE1AF)  // wifi-off
     readonly property string icEthernet:     ic(0xE620)  // ethernet-port
+    readonly property string icNetwork:      ic(0xE125)  // network — Tailscale (a tailnet), Quick settings
     readonly property string icBluetooth:    ic(0xE05C)  // bluetooth
     readonly property string icBluetoothOn:  ic(0xE1B8)  // bluetooth-connected
     readonly property string icVpn:          ic(0xE1FF)  // shield-check — bar AND control centre
     readonly property string icSsh:          ic(0xE20A)  // square-terminal
+    readonly property string icShare:        ic(0xE14F)  // screen-share — this computer is shared (Remote, RFC-009)
+    readonly property string icComputer:     ic(0xE11D)  // monitor — one of your other computers (Remote)
     readonly property string icWeb:          ic(0xE0E8)  // globe — browse / port-forward
     readonly property string icCamera:       ic(0xE064)  // camera
     readonly property string icClipboard:    ic(0xE14E)  // scissors — clipboard popup

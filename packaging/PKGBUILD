@@ -27,7 +27,7 @@ pkgname=ewe
 # <repo>-<tag without the leading v>, so both the source URL and the directory
 # below follow _tag, never pkgver. ewe-repo's publish workflow rewrites both.
 _tag=v0.22.0-beta
-pkgver=0.22.0beta
+pkgver=0.38.0beta
 pkgrel=1
 pkgdesc="ewe — a clean, dark Hyprland + Quickshell desktop environment"
 arch=('any')
@@ -99,6 +99,10 @@ package() {
     install -Dm755 bin/ewe-auth "$pkgdir/usr/bin/ewe-auth"
     install -Dm755 bin/ewe-drive "$pkgdir/usr/bin/ewe-drive"
     install -Dm755 bin/ewe-bt "$pkgdir/usr/bin/ewe-bt"
+    # Tailscale, set up from ewe (Quick settings → Wi-Fi; docs/SETTINGS-BACKEND.md)
+    install -Dm755 bin/ewe-tailscale "$pkgdir/usr/bin/ewe-tailscale"
+    # RFC-009: Remote — share this computer, pair by code, reach your others over SSH
+    install -Dm755 bin/ewe-remote "$pkgdir/usr/bin/ewe-remote"
     # third-party shell plugins: a git URL in, one config bit (docs/PLUGINS.md)
     install -Dm755 bin/ewe-plugin "$pkgdir/usr/bin/ewe-plugin"
     # the fill picker (Super+P) and the portal global-shortcut binder (docs/MANUAL.md "Passwords")

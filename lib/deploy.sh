@@ -74,6 +74,9 @@ deploy_dotfiles() {
     run mkdir -p "$HOME/.config/systemd/user"
     run cp -f "$DOTREPO/systemd/hyprland-session.target" "$HOME/.config/systemd/user/"
     run cp -f "$DOTREPO/systemd/ewe.service"      "$HOME/.config/systemd/user/"
+    # Remote (RFC-009): the per-user sshd behind "Share this computer" —
+    # installed, never enabled here; `ewe-remote share on` enables it
+    run cp -f "$DOTREPO/systemd/ewe-remote-sshd.service" "$HOME/.config/systemd/user/"
     # migrate: the unit was called hypr-shell.service before the ewe rename —
     # a stale copy would keep a second shell respawn loop alive
     if [ -f "$HOME/.config/systemd/user/hypr-shell.service" ]; then
@@ -81,5 +84,5 @@ deploy_dotfiles() {
         run rm -f "$HOME/.config/systemd/user/hypr-shell.service"
     fi
     run systemctl --user daemon-reload 2>/dev/null || true
-    ok "installed hyprland-session.target + ewe.service (shell respawn)"
+    ok "installed hyprland-session.target + ewe.service (shell respawn) + ewe-remote-sshd.service"
 }

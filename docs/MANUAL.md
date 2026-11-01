@@ -69,12 +69,12 @@ never blocks the rest of the install.
 | 00 preflight | tool/network/disk checks; announces the backup policy |
 | 10 repos | bootstraps **paru**; enables **[multilib]** only with `--gaming` |
 | 20 packages | installs `packages/common.list` (pacman) + `packages/aur.list` (AUR); `packages/gaming.list` only with `--gaming`, `packages/dev.list` only with `--dev` |
-| 30 services | pipewire/NM/bluetooth/ppd; installs **greetd** + the themed greeter (ReGreet fallback) + the Wayland session entry |
+| 30 services | pipewire/NM/bluetooth/ppd (+ NM drop-ins: DNS through systemd-resolved, a cable never gives up on DHCP); installs **greetd** + the themed greeter (ReGreet fallback) + the Wayland session entry |
 | 35 bootsplash | **Plymouth** boot splash: installs the theme, adds the `plymouth` initramfs hook, and adds `quiet splash …` to the kernel cmdline (systemd-boot/GRUB/UKI, auto-detected + backed up) so no boot text ever hits the screen |
 | 37 cpu microcode | detects the CPU and installs the matching **`intel-ucode`** / **`amd-ucode`**, then wires the early-boot microcode initrd into the bootloader. Skipped in a VM |
 | 40 gpu | per-vendor Vulkan + VAAPI drivers for the detected GPU (Intel `xe` DPMS guard, NVIDIA suspend fix, AMD); mesa-only in a VM |
 | 50 dotfiles | symlinks `~/.config/{hypr,quickshell,zed,kitty,oh-my-posh,mise}` (backing up any existing), installs the session target |
-| 60 userconfig | default apps (**Zed** as editor, micro for `$EDITOR`), **mise** Node toolchain, zram (laptops) |
+| 60 userconfig | default apps (**Zed** as editor, micro for `$EDITOR`), **mise** Node toolchain, zram swap (every machine since 2026-11 — a desktop with no swap ran out of memory) |
 | 90 postcheck | green/red verification checklist |
 
 Everything routes through one `run()`/`sudo_run()` choke point, so `--dry-run`
@@ -252,6 +252,45 @@ The first connect asks for the credentials once, inline, and keeps them in the
 profile (root-only, under `/etc/NetworkManager`); the one file records the
 definition, never the secrets, so a restored machine asks once again.
 
+## Remote: your other computers, over SSH
+
+Share a computer, then reach it from your other ewe computers: a terminal
+on it, its files (SFTP), and an ewe browser workspace whose web traffic
+leaves from it (RFC-009). Not screen sharing: a full SSH login as you.
+
+1. On the computer to share: **Control Centre → Sharing** (or the rail's
+   share icon) → **Share this computer** on. It shows an **8-digit code**.
+2. On the other computer: **Control Centre → Sharing → Your computers** →
+   the shared one → **Pair** → type the code. Nobody needs to be at the
+   shared computer when you do this; it can be locked, across town.
+3. From then on: the row's terminal icon opens kitty on it, the globe opens
+   ewe browser's remote workspace for it. In a terminal:
+   `ssh -F ~/.local/share/ewe/remote/ssh_config <name>`.
+
+While a computer is shared the bar shows the share icon; it turns the
+accent colour with a count while someone is connected, and its page lists
+who, with **Disconnect** and **Remove**. Turning sharing off ends every
+remote session.
+
+How it works: a per-user `sshd` (`ewe-remote-sshd.service`, a systemd
+**user** unit — no root, port 3933 or `ewe.conf` `[remote] port`), key-only,
+with ewe's own `authorized_keys` in `~/.local/share/ewe/remote/` (never
+`~/.ssh/authorized_keys`). Your Nextcloud account only says where your
+computers are (`<sync folder>/remote/<id>.json`); trust comes from the code:
+pairing checks it with SPAKE2 inside an SSH connection, which also pins the
+shared computer's key. The code works once; ten wrong tries make a new one.
+Sharing is this computer's choice — `[remote]` never syncs.
+
+Between networks (home ↔ work) the computers need **Tailscale**: it ships
+with ewe and stays off until you set it up — **Set up Tailscale** on the
+Sharing page or the Wi-Fi page (one admin password), then **Sign in**
+(`ewe-tailscale setup`, `ewe-tailscale up`). Without it, only computers on the same network can
+reach each other. Needs `python-spake2` and `openssh` (both ewe dependencies).
+
+CLI: `ewe-remote status | share on|off | code [--new] | pair <name|id> <code>
+| terminal <id> | tunnel <id> | untunnel <id> | revoke <id> | disconnect <id>
+| forget <id>` — JSON, exit 0, like every ewe tool.
+
 ## Phone (KDE Connect, optional) — a plugin
 
 The **Phone plugin** (`ewe.phone`, Komble → Plugins) gives the control centre
@@ -399,8 +438,48 @@ cable plug or a VPN coming up shows at once.
 **Wired has a switch.** Quick Settings → Wi-Fi and Settings → Networking show
 the ethernet port with its own toggle: off keeps you on Wi-Fi with the cable
 still in (`nmcli device disconnect`, autoconnect resumes on re-plug or when
-you switch it back on). With both links up the tile says so ("SSID · Wired")
-instead of hiding the cable behind the SSID.
+you switch it back on). With both links up the tile says so, the link that
+carries traffic first ("Wired · SSID") instead of hiding the cable behind the
+SSID.
+
+**The network says what is really going on.** The bar shows the glyph of the
+link your traffic actually takes — a cable that is the default route wins
+over Wi-Fi. It is **muted** while there is no internet yet (a cable still
+getting an address, Wi-Fi still joining) and muted **with a warning dot**
+when the link is up but NetworkManager finds no internet behind it. Quick
+Settings → Wi-Fi puts it in words:
+
+| The wired row says | It means |
+|---|---|
+| No cable detected | the port sees no link — unplugged, or a dead cable/port/dock |
+| Waiting for an address · 3 min | link is up, nobody answers DHCP yet; after a minute: *The network isn't answering — try another port or cable*, and **Reconnect** asks again right away |
+| Connected | an address and the internet |
+| Connected · no internet | an address, but nothing gets out (Reconnect is offered) |
+| Sign in to this network | a captive portal — **Open sign-in page** opens `http://neverssl.com`, which the portal redirects |
+| Off | you turned the port off here |
+
+*Cable runs at 100 Mb/s — the cable or port may be faulty* appears only when
+the network card can do 1 Gb/s or more and the other end does not say it is
+slower itself (a gigabit link stuck at 100 is the classic half-broken cable).
+When a VPN is up and the internet is not, the page says *No internet through
+<the VPN>*. A cable never "gives up" any more: phase 30 installs
+`/etc/NetworkManager/conf.d/20-ewe-wired.conf` (no DHCP timeout on ethernet),
+so a slow DHCP server no longer gets the port blocked for five minutes —
+the lease lands the moment the server answers, no reboot needed.
+
+**Tailscale is built in.** Every install has the `tailscale` package, but its
+daemon only runs once you press **Set up Tailscale** (Quick Settings →
+Wi-Fi): one admin password enables `tailscaled` and makes you its operator,
+then **Sign in** opens the login page in your browser. After that the row is
+a switch (on/off), says *Connected* or *Connected through a relay* (no direct
+path to your devices — usually UDP blocked by the network), shows Tailscale's
+own health messages, and names an exit node in use (*Using exit node X*, red
+*offline* when it is down) with **Stop using**. **Reconnect** runs `down` +
+`up`. ewe always brings Tailscale up with `--accept-routes=false` (a tailnet
+subnet router cannot take over your LAN or another VPN's routes) and
+`--accept-dns=true` (MagicDNS goes to systemd-resolved beside the other
+links). From a terminal: `ewe-tailscale status|setup|up|down|reconnect|logout|exit-node off`
+(JSON, see docs/SETTINGS-BACKEND.md).
 
 **X11 apps on a HiDPI screen** (Steam, JetBrains Toolbox — still XWayland in
 2026) looked blurry because Hyprland upscaled them. At login ewe reads the

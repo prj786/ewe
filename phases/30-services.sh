@@ -324,6 +324,13 @@ phase_services() {
         sudo_run install -d /etc/NetworkManager/conf.d
         sudo_run install -m 644 "$DOTREPO/system/networkmanager/10-ewe-dns.conf" \
             /etc/NetworkManager/conf.d/10-ewe-dns.conf
+        # a plugged-in cable never "fails" into NetworkManager's 5-minute
+        # autoconnect block while DHCP is slow to answer (work desktop,
+        # 2026-10-28: link up, no lease, two reboots) — the reload below
+        # applies it to the next activation
+        sudo_run install -m 644 "$DOTREPO/system/networkmanager/20-ewe-wired.conf" \
+            /etc/NetworkManager/conf.d/20-ewe-wired.conf \
+            && ok "network: a cable keeps asking for an address (no 5-minute DHCP give-up)"
         sudo_run systemctl enable --now systemd-resolved.service || warn "could not start systemd-resolved"
         if [ "$(readlink /etc/resolv.conf 2>/dev/null)" = /run/systemd/resolve/stub-resolv.conf ]; then
             ok "dns: /etc/resolv.conf already follows systemd-resolved"

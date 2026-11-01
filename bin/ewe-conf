@@ -111,6 +111,7 @@ SECTION_NOTES = {
     "plugins.sources": "id → git URL, so a fresh machine can `ewe-plugin add` what this one has",
     "companion": "the desktop companion's brain (ewe-companiond, RFC-007): proactive, quiet hours, providers; API keys live in the keyring, never here",
     "safe": "Safe, the password manager (ewe-safed, RFC-008): place = local | nextcloud | webdav | folder | sftp | dropbox | gdrive; location; webdav_url, webdav_user; lock_after_minutes, lock_on_screen_lock, lock_on_sleep; clipboard_clear_seconds; generator_length, generator_words; ssh_agent (Safe answers ssh and git), ssh_confirm = first-use | every-time | never; unlock_at_login (unlock the safe at login), confirm_cards (ask for the password before filling a card) — both bools, default true. The safe itself and every password live elsewhere, never here",
+    "remote": "Remote (RFC-009, ewe-remote): THIS computer only — sharing (bool: Share this computer), port (int, default 3933). Keys, the code and who may log in live in ~/.local/share/ewe/remote, never here",
 }
 
 _INLINE_MAX = 96
@@ -1981,6 +1982,7 @@ LOCAL_ONLY = {
     ("plugins", "sources"),
     ("plugins", "removed"),
     ("plugins", "widgets"),               # placed on this machine's screens
+    ("remote",),                          # sharing THIS computer is this computer's choice (RFC-009)
 }
 _GONE = object()
 
@@ -2332,6 +2334,19 @@ def validate(key, value):
         if s in ("1", "true", "yes", "on", "0", "false", "no", "off"):
             return True, s in ("1", "true", "yes", "on")
         return False, "%s must be true or false" % key
+    if key == "remote.sharing":
+        s = str(value).strip().lower()
+        if isinstance(value, bool) or s in ("1", "true", "yes", "on", "0", "false", "no", "off"):
+            return True, value if isinstance(value, bool) else s in ("1", "true", "yes", "on")
+        return False, "remote.sharing must be true or false"
+    if key == "remote.port":
+        try:
+            v = int(value)
+        except (TypeError, ValueError):
+            return False, "remote.port must be 1024-65535"
+        if not 1024 <= v <= 65535:
+            return False, "remote.port must be 1024-65535"
+        return True, v
     if key == "desktop.theme.bar_opacity":
         try:
             v = int(value)
