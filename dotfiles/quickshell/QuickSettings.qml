@@ -237,7 +237,7 @@ Scope {
     signal pageShown()
 
     // ── you: the account row of the head ──────────────────────────────────
-    // the passwd entry's full name (what Settings → Account edits), else the
+    // the passwd entry's full name (what ewe Settings → User edits), else the
     // login name
     property string userName: Quickshell.env("USER") || ""
     Process {
@@ -245,7 +245,7 @@ Scope {
         command: ["sh", "-c", 'getent passwd "$USER" | cut -d: -f5 | cut -d, -f1']
         stdout: StdioCollector { onStreamFinished: { var t = this.text.trim(); if (t !== "") root.userName = t } }
     }
-    // the account entry: ewe Sync (your machines, folders, conflicts) — the
+    // the account entry: ewe Sync (your computers, folders, conflicts) — the
     // same door as the bar's sync glyph; Settings when ewe Sync is missing
     function openAccount() {
         Globals.quickSettingsOpen = false

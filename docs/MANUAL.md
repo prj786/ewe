@@ -210,7 +210,7 @@ backed up to the account, which one saved last) and **folder sync** — pairs
 of a local folder and a folder in the account, two-way through the Nextcloud
 sync engine or one-way copies, on change, on a timer or at login, with
 conflicts resolved in place. It starts with the session (`ewe-sync.service`,
-enabled by `ewe-setup`); Welcome and ewe Settings → Account open it with
+enabled by `ewe-setup`); Welcome and ewe Settings → User open it with
 **Open ewe Sync** / **Manage in ewe Sync**. Komble and ewe Settings keep
 no sync buttons — they only write the one file, ewe Sync moves it.
 
