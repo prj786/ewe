@@ -123,8 +123,10 @@ V3_KINDS = ("quick-tile", "quick-page", "bar-status", "dock-item")
 # a dock item is static (icon + label + action in the manifest) — no QML
 NO_ENTRY_KINDS = ("dock-item",)
 # Quick settings pages the shell keeps for itself; a plugin page cannot take
-# these keys (vpn/ssh/cast/mobile/mail are NOT here: those pages move out)
-QS_CORE_KEYS = ("home", "wifi", "bt", "audio", "cal", "notifs")
+# these keys (vpn/ssh/cast/mobile/mail are NOT here: those pages move out).
+# remote (0.38) and power (0.39) are the shell's newer pages — before 0.39 a
+# plugin page with one of them validated and was then never shown
+QS_CORE_KEYS = ("home", "wifi", "bt", "audio", "cal", "notifs", "remote", "power")
 # icons are Theme property NAMES ("icMusic"), resolved by the host as Theme[icon]
 ICON_RE = re.compile(r"^ic[A-Z][A-Za-z0-9]*$")
 QS_KEY_RE = re.compile(r"^[a-z][a-z0-9_-]{0,23}$")
