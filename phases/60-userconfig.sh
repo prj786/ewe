@@ -306,12 +306,18 @@ phase_userconfig() {
         ok "profiles recorded in $("$EWE_CONF_BIN" path)"
     fi
 
-    # zram (laptop benefit). Ship a sane generator config if none exists.
-    if [ "$CHASSIS" = "laptop" ] && [ ! -e /etc/systemd/zram-generator.conf ]; then
+    # zram — compressed swap in RAM — on EVERY machine, not only laptops. It
+    # was laptop-only, and the owner's work desktop (no swap at all) ran out
+    # of memory on 2026-10-28: the browser was OOM-killed and Tailscale's
+    # relay timed out under the pressure. A desktop has more RAM, not
+    # unlimited RAM. Ship a sane generator config only if none exists — an
+    # admin's own zram-generator.conf is never overwritten. It takes effect
+    # at the next boot (systemd-zram-setup@zram0 is generated from it).
+    if [ ! -e /etc/systemd/zram-generator.conf ]; then
         info "writing /etc/systemd/zram-generator.conf (zstd, capped at 8G)"
         if [ "${DRY_RUN:-0}" != "1" ]; then
             printf '[zram0]\nzram-size = min(ram, 8192)\ncompression-algorithm = zstd\n' \
-                | sudo_run tee /etc/systemd/zram-generator.conf >/dev/null && ok "zram configured"
+                | sudo_run tee /etc/systemd/zram-generator.conf >/dev/null && ok "zram configured (active after the next boot)"
         fi
     fi
 

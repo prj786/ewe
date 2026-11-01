@@ -1,0 +1,1487 @@
+#!/usr/bin/env python3
+"""ewe-remote — your other ewe computers, over SSH (RFC-009).
+
+Share this computer: a per-user sshd (systemd --user unit
+ewe-remote-sshd.service, port 3933, key-only, ewe's own authorized_keys —
+never ~/.ssh/authorized_keys, never root). Another computer of yours pairs
+ONCE by typing the 8-digit code this one shows; nobody has to be at this
+one when that happens. After that it has a terminal here, SFTP, port
+forwards, and a SOCKS tunnel for ewe browser's remote workspace.
+
+Every command prints one JSON object and exits 0 (rule 5):
+
+  status [--refresh|--offline]   this computer, your computers, Tailscale
+  share on|off                   start/stop sharing (+ publish the record)
+  code [--new]                   the pairing code of THIS computer
+  pair <id|name|user@host[:port]> <code>
+  forget <id>                    drop a computer we paired with
+  revoke <id>                    a computer that paired with US can't log in any more
+  disconnect <id>                end its live sessions, keep the pairing
+  terminal <id>                  kitty, already ssh'd in
+  tunnel <id> [--port N]         SOCKS5 on 127.0.0.1 → {"socks": "127.0.0.1:N"}
+  untunnel <id> | tunnels        stop one | list the live ones
+  publish                        write <sync.folder>/remote/<id>.json now
+  prepare                        (the unit's ExecStartPre) keys + sshd_config
+  pair-serve                     (sshd forced command for the pairing key)
+
+Trust: the account record (Nextcloud) is DISCOVERY ONLY — address, port,
+a hint of the host key. Pairing is SPAKE2 on the code, run inside an SSH
+connection made with a public, well-known pairing key whose authorized_keys
+line is `restrict,command="ewe-remote pair-serve"` (no shell, no pty, no
+forwarding). The host proves the code with HMAC(K, host-key fingerprint) —
+binding the SSH host key the joiner actually saw — before the joiner sends
+its own key. One attempt per 5 s, 10 wrong codes → a new code. A successful
+pairing also makes a new code (single use).
+
+Files (~/.local/share/ewe/remote, 0700): host_ed25519 (sharing host key),
+id_ed25519 (this computer's client key — never leaves it), authorized_keys,
+sshd_config, code (0600), pairing.json, computers.json, known_hosts,
+ssh_config, registry.json (cache). Runtime: $XDG_RUNTIME_DIR/ewe-remote.
+"""
+import base64
+import fcntl
+import hashlib
+import hmac
+import ipaddress
+import json
+import os
+import pwd
+import re
+import secrets
+import select
+import shutil
+import signal
+import socket
+import subprocess
+import sys
+import tempfile
+import threading
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+
+HOME = os.path.expanduser("~")
+DATA = os.environ.get("EWE_REMOTE_DIR") or os.path.join(
+    os.environ.get("XDG_DATA_HOME") or os.path.join(HOME, ".local", "share"), "ewe", "remote")
+RUN = os.environ.get("EWE_REMOTE_RUN") or os.path.join(
+    os.environ.get("XDG_RUNTIME_DIR") or "/tmp", "ewe-remote")
+
+HOST_KEY = os.path.join(DATA, "host_ed25519")
+CLIENT_KEY = os.path.join(DATA, "id_ed25519")
+PAIR_KEY = os.path.join(DATA, "pairing_ed25519")
+AUTH_KEYS = os.path.join(DATA, "authorized_keys")
+SSHD_CONFIG = os.path.join(DATA, "sshd_config")
+CODE_FILE = os.path.join(DATA, "code")
+PAIRING_STATE = os.path.join(DATA, "pairing.json")
+PAIRING_LOCK = os.path.join(DATA, ".pairing.lock")
+COMPUTERS = os.path.join(DATA, "computers.json")
+KNOWN_HOSTS = os.path.join(DATA, "known_hosts")
+SSH_CONFIG = os.path.join(DATA, "ssh_config")
+REGISTRY_CACHE = os.path.join(DATA, "registry.json")
+PUBLISHED = os.path.join(DATA, "published.json")
+TUNNELS = os.path.join(RUN, "tunnels.json")
+
+UNIT = "ewe-remote-sshd.service"
+PORT_DEFAULT = 3933
+CODE_DIGITS = 8
+PAIR_MIN_GAP = 5.0          # seconds between two pairing attempts
+PAIR_MAX_FAILS = 10         # then the code changes
+REGISTRY_TTL = 60           # seconds a cached account listing is fresh
+REPUBLISH_AFTER = 600       # a sharing computer refreshes its record this often
+ONLINE_WINDOW = 1200        # last_seen this recent counts as online without Tailscale
+HTTP_TIMEOUT = 8
+SPAKE_ID_JOINER = b"ewe-remote-joiner"
+SPAKE_ID_HOST = b"ewe-remote-host"
+
+# Tests run two "computers" on one box and must never touch the real user
+# manager, the real account or the real Tailscale.
+NO_SYSTEMD = os.environ.get("EWE_REMOTE_NO_SYSTEMD") == "1"
+LAX_MODES = os.environ.get("EWE_REMOTE_LAX_MODES") == "1"      # sshd StrictModes no (test dirs live in /tmp)
+SSH_BIN = os.environ.get("EWE_REMOTE_SSH") or "ssh"
+SSHD_BIN = os.environ.get("EWE_REMOTE_SSHD") or shutil.which("sshd") or "/usr/bin/sshd"
+TAILSCALE_BIN = os.environ.get("EWE_REMOTE_TAILSCALE", "tailscale")
+
+# The pairing key is PUBLIC on purpose: every ewe ships the same one. Its only
+# power is the forced command `ewe-remote pair-serve` under `restrict` — the
+# door to the code check, nothing else. The code is the secret.
+PAIRING_PRIVATE = """-----BEGIN OPENSSH PRIVATE KEY-----
+b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW
+QyNTUxOQAAACB2iQ9MyhrJZtN9zi3mM6K4T/NGrqBs1WD0gFQW43xCAQAAAJC9JIpHvSSK
+RwAAAAtzc2gtZWQyNTUxOQAAACB2iQ9MyhrJZtN9zi3mM6K4T/NGrqBs1WD0gFQW43xCAQ
+AAAEAfczSIRDOC29v0Fx8K0t+oPHme9U6RPBidUJEb//M2LHaJD0zKGslm033OLeYzorhP
+80auoGzVYPSAVBbjfEIBAAAAC2V3ZS1wYWlyaW5nAQI=
+-----END OPENSSH PRIVATE KEY-----
+"""
+PAIRING_PUBLIC = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHaJD0zKGslm033OLeYzorhP80auoGzVYPSAVBbjfEIB"
+
+
+# ── output ───────────────────────────────────────────────────────────────────
+
+def out(obj):
+    print(json.dumps(obj))
+    sys.exit(0)
+
+
+def fail(code, message, **extra):
+    out({"ok": False, "error": code, "message": message, **extra})
+
+
+# ── small helpers ────────────────────────────────────────────────────────────
+
+def run(argv, timeout=10, input_text=None, env=None):
+    """(rc, stdout, stderr) — never raises; rc 127 = not found, 124 = timeout."""
+    try:
+        p = subprocess.run(argv, input=input_text, capture_output=True, text=True,
+                           timeout=timeout, env=env)
+        return p.returncode, p.stdout, p.stderr
+    except FileNotFoundError:
+        return 127, "", "%s: not found" % argv[0]
+    except subprocess.TimeoutExpired:
+        return 124, "", "%s: timed out" % argv[0]
+    except OSError as e:
+        return 126, "", str(e)
+
+
+def read_json(path, default):
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return default
+
+
+def write_file(path, text, mode=0o600):
+    d = os.path.dirname(path)
+    os.makedirs(d, mode=0o700, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=d, prefix=".ewe-remote.")
+    try:
+        with os.fdopen(fd, "w") as f:
+            f.write(text)
+        os.chmod(tmp, mode)
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
+def write_json(path, obj):
+    write_file(path, json.dumps(obj, indent=2, sort_keys=True) + "\n")
+
+
+def ensure_dirs():
+    os.makedirs(DATA, mode=0o700, exist_ok=True)
+    os.chmod(DATA, 0o700)
+    os.makedirs(RUN, mode=0o700, exist_ok=True)
+
+
+def this_user():
+    try:
+        return pwd.getpwuid(os.getuid()).pw_name
+    except KeyError:
+        return os.environ.get("USER") or "user"
+
+
+def this_name():
+    n = os.environ.get("EWE_REMOTE_NAME")
+    if n:
+        return n
+    try:
+        with open("/etc/hostname") as f:
+            n = f.read().strip()
+    except OSError:
+        n = ""
+    return n or socket.gethostname() or "ewe"
+
+
+def this_id():
+    """first 16 hex of sha256("ewe:" + machine-id): stable per install, not the
+    raw machine id, and NOT the hostname (two of the owner's machines are both
+    called "emoh")."""
+    forced = os.environ.get("EWE_REMOTE_MACHINE_ID")
+    if forced:
+        return forced
+    for p in ("/etc/machine-id", "/var/lib/dbus/machine-id"):
+        try:
+            with open(p) as f:
+                mid = f.read().strip()
+            if mid:
+                return hashlib.sha256(("ewe:" + mid).encode()).hexdigest()[:16]
+        except OSError:
+            continue
+    return hashlib.sha256(("ewe-host:" + this_name()).encode()).hexdigest()[:16]
+
+
+def ewe_version():
+    here = os.path.dirname(os.path.realpath(__file__))
+    for p in (os.path.join(here, "..", "VERSION"), "/usr/share/ewe/VERSION",
+              os.path.join(HOME, ".local", "share", "ewe", "VERSION")):
+        try:
+            with open(p) as f:
+                v = f.read().strip()
+            if v:
+                return v
+        except OSError:
+            continue
+    return ""
+
+
+def self_path():
+    p = shutil.which("ewe-remote")
+    mine = os.path.realpath(__file__)
+    # the forced command must be THIS script when run from a checkout (tests)
+    if os.environ.get("EWE_REMOTE_SELF"):
+        return os.environ["EWE_REMOTE_SELF"]
+    return p if p and os.path.realpath(p) == mine else mine
+
+
+def safe_name(s, limit=48):
+    s = re.sub(r"[^A-Za-z0-9._-]+", "-", str(s or "")).strip("-.")
+    return s[:limit] or "computer"
+
+
+ID_RE = re.compile(r"^[0-9a-f]{16}$")
+
+
+def valid_id(s):
+    return bool(ID_RE.match(str(s or "")))
+
+
+def conf_get(key):
+    rc, so, _ = run(["ewe-conf", "get", key], timeout=5)
+    if rc != 0:
+        return None
+    s = so.strip()
+    try:
+        return json.loads(s)
+    except ValueError:
+        return s
+
+
+def conf_set(key, value):
+    run(["ewe-conf", "set", key, json.dumps(value) if not isinstance(value, str) else value], timeout=10)
+
+
+def port():
+    env = os.environ.get("EWE_REMOTE_PORT")
+    if env and env.isdigit():
+        return int(env)
+    v = conf_get("remote.port")
+    try:
+        v = int(v)
+        if 1024 <= v <= 65535:
+            return v
+    except (TypeError, ValueError):
+        pass
+    return PORT_DEFAULT
+
+
+def notify(summary, body=""):
+    if os.environ.get("EWE_REMOTE_NO_NOTIFY") == "1":
+        return
+    try:
+        subprocess.Popen(["notify-send", "-a", "Remote", "-i", "network-server", summary, body],
+                         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                         stderr=subprocess.DEVNULL, start_new_session=True)
+    except OSError:
+        pass
+
+
+def b64e(b):
+    return base64.b64encode(b).decode()
+
+
+def b64d(s):
+    return base64.b64decode(str(s).encode(), validate=True)
+
+
+# ── keys ─────────────────────────────────────────────────────────────────────
+
+KEY_RE = re.compile(r"^(ssh-ed25519|ecdsa-sha2-nistp256|ecdsa-sha2-nistp384|ecdsa-sha2-nistp521|"
+                    r"sk-ssh-ed25519@openssh\.com|ssh-rsa) ([A-Za-z0-9+/]+={0,3})(?: .*)?$")
+
+
+def parse_pub(line):
+    """'type base64 [comment]' → (type, base64) or None"""
+    m = KEY_RE.match(str(line or "").strip())
+    if not m:
+        return None
+    try:
+        blob = base64.b64decode(m.group(2), validate=True)
+    except ValueError:
+        return None
+    # the blob starts with the key type as an SSH string — a cheap sanity check
+    if len(blob) < 4 + len(m.group(1)) or blob[4:4 + len(m.group(1))] != m.group(1).encode():
+        return None
+    return m.group(1), m.group(2)
+
+
+def fingerprint(b64blob):
+    d = hashlib.sha256(base64.b64decode(b64blob)).digest()
+    return "SHA256:" + base64.b64encode(d).decode().rstrip("=")
+
+
+def ensure_key(path, comment):
+    if not (os.path.exists(path) and os.path.exists(path + ".pub")):
+        ensure_dirs()
+        for p in (path, path + ".pub"):
+            try:
+                os.unlink(p)
+            except OSError:
+                pass
+        rc, _, err = run(["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-C", comment, "-f", path], timeout=20)
+        if rc != 0:
+            fail("keygen", "could not create a key: %s" % err.strip())
+    with open(path + ".pub") as f:
+        k = parse_pub(f.read())
+    if not k:
+        fail("keygen", "unreadable key %s.pub" % path)
+    return "%s %s" % k
+
+
+def host_pub():
+    return ensure_key(HOST_KEY, "ewe-remote-host@%s" % safe_name(this_name()))
+
+
+def client_pub():
+    return ensure_key(CLIENT_KEY, "ewe-remote@%s" % safe_name(this_name()))
+
+
+def write_pairing_key():
+    ensure_dirs()
+    if not os.path.exists(PAIR_KEY):
+        write_file(PAIR_KEY, PAIRING_PRIVATE, 0o600)
+
+
+# ── the code ─────────────────────────────────────────────────────────────────
+
+def new_code():
+    c = "%0*d" % (CODE_DIGITS, secrets.randbelow(10 ** CODE_DIGITS))
+    write_file(CODE_FILE, c + "\n", 0o600)
+    return c
+
+
+def get_code(create=True):
+    try:
+        with open(CODE_FILE) as f:
+            c = f.read().strip()
+        if re.fullmatch(r"\d{%d}" % CODE_DIGITS, c):
+            return c
+    except OSError:
+        pass
+    return new_code() if create else None
+
+
+def show_code(c):
+    return "%s %s" % (c[:4], c[4:]) if c and len(c) == 8 else c
+
+
+# ── authorized_keys (who may log in HERE) ────────────────────────────────────
+
+def auth_lines():
+    try:
+        with open(AUTH_KEYS) as f:
+            return [l.rstrip("\n") for l in f]
+    except OSError:
+        return []
+
+
+def pairing_line():
+    return 'restrict,command="%s pair-serve" %s ewe-pairing' % (self_path().replace('"', ""), PAIRING_PUBLIC)
+
+
+def allowed():
+    """computers that paired with us: [{id, name, since, fingerprint}]"""
+    res = []
+    for l in auth_lines():
+        m = re.match(r"^(\S+) (\S+) ewe-remote:([0-9a-f]{16}):([^:\s]*):(\S*)$", l)
+        if m and parse_pub("%s %s" % (m.group(1), m.group(2))):
+            res.append({"id": m.group(3), "name": m.group(4), "since": m.group(5),
+                        "fingerprint": fingerprint(m.group(2))})
+    return res
+
+
+def write_auth(lines):
+    # the pairing line is first and present only while sharing (prepare adds it)
+    write_file(AUTH_KEYS, "\n".join(lines) + ("\n" if lines else ""), 0o600)
+
+
+def add_allowed(pub, cid, name):
+    t, b = parse_pub(pub)
+    lines = [l for l in auth_lines() if not re.search(r" ewe-remote:%s:" % cid, l)]
+    lines.append("%s %s ewe-remote:%s:%s:%s" % (t, b, cid, safe_name(name), time.strftime("%Y-%m-%d")))
+    write_auth(lines)
+
+
+# ── the sharing server ───────────────────────────────────────────────────────
+
+def sshd_config_text(p):
+    uid = os.getuid()
+    rt = "/run/user/%d" % uid
+    # every address: Tailscale and the LAN both lead here; keys are the gate.
+    # EWE_REMOTE_LISTEN (tests) keeps a test server on loopback.
+    listen = [os.environ["EWE_REMOTE_LISTEN"]] if os.environ.get("EWE_REMOTE_LISTEN") else ["0.0.0.0", "::"]
+    lines = [
+        "# generated by ewe-remote (RFC-009) — rewritten on every start, edits are lost",
+        "Port %d" % p,
+    ] + ["ListenAddress %s" % a for a in listen] + [
+        "HostKey %s" % HOST_KEY,
+        "PidFile %s" % os.path.join(RUN, "sshd.pid"),
+        "AuthorizedKeysFile %s" % AUTH_KEYS,
+        "PubkeyAuthentication yes",
+        "PasswordAuthentication no",
+        "KbdInteractiveAuthentication no",
+        "HostbasedAuthentication no",
+        "UsePAM no",
+        "PermitRootLogin no",
+        "AllowUsers %s" % this_user(),
+        "StrictModes %s" % ("no" if LAX_MODES else "yes"),
+        "AllowTcpForwarding yes",
+        "AllowStreamLocalForwarding no",
+        "GatewayPorts no",
+        "X11Forwarding no",
+        "PermitTunnel no",
+        "PermitUserEnvironment no",
+        "MaxAuthTries 3",
+        "MaxSessions 10",
+        "MaxStartups 10:30:60",
+        "LoginGraceTime 30",
+        "ClientAliveInterval 30",
+        "ClientAliveCountMax 4",
+        "LogLevel VERBOSE",
+        # no PAM → no logind session → no XDG_RUNTIME_DIR / session bus; give
+        # the remote shell the desktop's, so systemctl --user, qs ipc and
+        # notify-send work from there
+        "SetEnv XDG_RUNTIME_DIR=%s DBUS_SESSION_BUS_ADDRESS=unix:path=%s/bus" % (rt, rt),
+        "Subsystem sftp internal-sftp",
+    ]
+    return "\n".join(lines) + "\n"
+
+
+def prepare():
+    """keys, code, sshd_config, the pairing line — idempotent. Returns the port."""
+    ensure_dirs()
+    host_pub()
+    client_pub()
+    get_code()
+    p = port()
+    write_file(SSHD_CONFIG, sshd_config_text(p), 0o600)
+    lines = [l for l in auth_lines() if not l.endswith(" ewe-pairing")]
+    write_auth([pairing_line()] + lines)
+    return p
+
+
+def unit_installed():
+    rc, so, _ = run(["systemctl", "--user", "cat", UNIT], timeout=5)
+    return rc == 0
+
+
+def install_unit():
+    """the payload copies the unit (lib/deploy.sh); a tarball/dev install that
+    predates it gets it from the payload here."""
+    here = os.path.dirname(os.path.realpath(__file__))
+    for src in (os.path.join(here, "..", "systemd", UNIT), "/usr/share/ewe/systemd/" + UNIT,
+                os.path.join(HOME, ".local", "share", "ewe", "systemd", UNIT)):
+        if os.path.exists(src):
+            dst = os.path.join(os.environ.get("XDG_CONFIG_HOME") or os.path.join(HOME, ".config"),
+                               "systemd", "user", UNIT)
+            os.makedirs(os.path.dirname(dst), exist_ok=True)
+            shutil.copyfile(src, dst)
+            run(["systemctl", "--user", "daemon-reload"], timeout=10)
+            return True
+    return False
+
+
+def test_pidfile():
+    return os.path.join(RUN, "sshd-test.pid")
+
+
+def pid_alive(pid):
+    try:
+        os.kill(int(pid), 0)
+        return True
+    except (OSError, ValueError, TypeError):
+        return False
+
+
+def sharing_active():
+    if NO_SYSTEMD:
+        try:
+            with open(test_pidfile()) as f:
+                return pid_alive(f.read().strip())
+        except OSError:
+            return False
+    rc, so, _ = run(["systemctl", "--user", "is-active", UNIT], timeout=5)
+    return so.strip() == "active"
+
+
+def port_listening(p, host="127.0.0.1", timeout=0.5):
+    try:
+        with socket.create_connection((host, int(p)), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
+def wait_listening(p, seconds, proc=None):
+    end = time.time() + seconds
+    while time.time() < end:
+        if port_listening(p):
+            return True
+        if proc is not None and proc.poll() is not None:
+            return False
+        time.sleep(0.15)
+    return False
+
+
+def start_sharing():
+    p = prepare()
+    rc, _, err = run([SSHD_BIN, "-t", "-f", SSHD_CONFIG], timeout=10)
+    if rc != 0:
+        fail("sshd-config", "the sharing server's config is invalid: %s" % err.strip()[:300])
+    if NO_SYSTEMD:
+        log = open(os.path.join(RUN, "sshd.log"), "a")
+        proc = subprocess.Popen([SSHD_BIN, "-D", "-e", "-f", SSHD_CONFIG], stdin=subprocess.DEVNULL,
+                                stdout=log, stderr=log, start_new_session=True)
+        write_file(test_pidfile(), str(proc.pid), 0o600)
+        ok = wait_listening(p, 6, proc)
+    else:
+        if not unit_installed() and not install_unit():
+            fail("no-unit", "%s is not installed — update ewe" % UNIT)
+        rc, _, err = run(["systemctl", "--user", "enable", "--now", UNIT], timeout=20)
+        if rc != 0:
+            fail("start", "could not start sharing: %s" % err.strip()[:300])
+        ok = wait_listening(p, 6)
+    if not ok:
+        fail("start", "the sharing server did not come up on port %d (port in use?)" % p)
+    return p
+
+
+def stop_sharing():
+    if NO_SYSTEMD:
+        try:
+            with open(test_pidfile()) as f:
+                pid = int(f.read().strip())
+            os.killpg(pid, signal.SIGTERM)
+        except (OSError, ValueError):
+            pass
+        try:
+            os.unlink(test_pidfile())
+        except OSError:
+            pass
+    else:
+        # KillMode=control-group (default): every remote session ends with it
+        run(["systemctl", "--user", "disable", "--now", UNIT], timeout=20)
+
+
+# ── who is connected right now ───────────────────────────────────────────────
+
+def _addr_port(s):
+    s = s.strip()
+    m = re.match(r"^\[?(.+?)\]?:(\d+)$", s)
+    if not m:
+        return None, None
+    a = m.group(1)
+    if a.startswith("::ffff:"):
+        a = a[7:]
+    a = a.split("%")[0]
+    return a, int(m.group(2))
+
+
+def live_connections(p):
+    """[(peer_addr, peer_port, pid)] — TCP connections INTO our port, from ss"""
+    rc, so, _ = run(["ss", "-H", "-t", "-n", "-p", "state", "established", "( sport = :%d )" % p], timeout=5)
+    res = []
+    for line in so.splitlines():
+        cols = line.split()
+        if len(cols) < 4:
+            continue
+        peer = cols[3]
+        a, pp = _addr_port(peer)
+        m = re.search(r"pid=(\d+)", line)
+        if a and m:
+            res.append((a, pp, int(m.group(1))))
+    return res
+
+
+ACCEPT_RE = re.compile(r"Accepted publickey for \S+ from (\S+) port (\d+) \S+: \S+ (SHA256:[A-Za-z0-9+/]+)")
+
+
+def auth_log_lines():
+    if NO_SYSTEMD:
+        try:
+            with open(os.path.join(RUN, "sshd.log"), errors="replace") as f:
+                return f.read().splitlines()[-2000:]
+        except OSError:
+            return []
+    rc, so, _ = run(["journalctl", "--user", "-u", UNIT, "-o", "short-unix", "-n", "2000",
+                     "--no-pager", "--grep", "Accepted publickey"], timeout=8)
+    return so.splitlines()
+
+
+def sessions(p=None):
+    """live sessions: [{id, name, from, since, fingerprint, pid}] — a pairing
+    in flight shows as id "pairing"."""
+    p = p or port()
+    conns = live_connections(p)
+    if not conns:
+        return []
+    by_peer = {}
+    for line in auth_log_lines():
+        m = ACCEPT_RE.search(line)
+        if m:
+            ts = None
+            t = line.split(" ", 1)[0]
+            try:
+                ts = int(float(t))
+            except ValueError:
+                pass
+            a = m.group(1)
+            if a.startswith("::ffff:"):
+                a = a[7:]
+            by_peer[(a, int(m.group(2)))] = (m.group(3), ts)
+    fp_to = {a["fingerprint"]: a for a in allowed()}
+    pair_fp = fingerprint(PAIRING_PUBLIC.split()[1])
+    res = []
+    for a, pp, pid in conns:
+        fp, ts = by_peer.get((a, pp), (None, None))
+        who = fp_to.get(fp)
+        if fp == pair_fp:
+            res.append({"id": "pairing", "name": "pairing", "from": a, "since": ts, "fingerprint": fp, "pid": pid})
+        elif who:
+            res.append({"id": who["id"], "name": who["name"], "from": a, "since": ts, "fingerprint": fp, "pid": pid})
+        elif fp:
+            res.append({"id": None, "name": "unknown key", "from": a, "since": ts, "fingerprint": fp, "pid": pid})
+    return res
+
+
+def end_sessions(cid, targets=None):
+    """SIGTERM the sshd-session of every live session of `cid`. Pass
+    `targets` (from sessions()) when the key is about to disappear from
+    authorized_keys — afterwards the fingerprint no longer names anyone."""
+    n = 0
+    for s in (targets if targets is not None else sessions()):
+        if s["id"] == cid:
+            try:
+                os.kill(s["pid"], signal.SIGTERM)
+                n += 1
+            except OSError:
+                pass
+    return n
+
+
+# ── addresses + Tailscale ────────────────────────────────────────────────────
+
+_SKIP_IF = ("lo", "tailscale", "docker", "br-", "virbr", "veth", "ppp", "tun", "wg", "zt", "vnet", "podman", "cni")
+
+
+def tailscale_info():
+    rc, so, _ = run([TAILSCALE_BIN, "status", "--json"], timeout=4)
+    if rc == 127:
+        return {"installed": False, "running": False, "state": None, "self": None, "peers": []}
+    try:
+        st = json.loads(so)
+    except ValueError:
+        return {"installed": True, "running": False, "state": "Stopped", "self": None, "peers": []}
+    me = st.get("Self") or {}
+    peers = []
+    for p in (st.get("Peer") or {}).values():
+        peers.append({"ips": p.get("TailscaleIPs") or [], "online": bool(p.get("Online")),
+                      "dns": (p.get("DNSName") or "").rstrip("."), "name": p.get("HostName") or ""})
+    state = st.get("BackendState")
+    return {"installed": True, "running": state == "Running", "state": state,
+            "self": {"ips": me.get("TailscaleIPs") or [], "dns": (me.get("DNSName") or "").rstrip(".")},
+            "peers": peers}
+
+
+def lan_addresses():
+    rc, so, _ = run(["ip", "-j", "addr", "show", "up"], timeout=4)
+    res = []
+    try:
+        ifs = json.loads(so)
+    except ValueError:
+        return res
+    for i in ifs:
+        name = i.get("ifname", "")
+        if any(name == s or name.startswith(s) for s in _SKIP_IF):
+            continue
+        for a in i.get("addr_info", []):
+            if a.get("scope") != "global":
+                continue
+            ip = a.get("local")
+            try:
+                ipo = ipaddress.ip_address(ip)
+            except ValueError:
+                continue
+            if ipo.version == 6 and (ipo.is_private or a.get("temporary")):
+                continue
+            res.append({"ip": ip, "prefix": a.get("prefixlen")})
+    return res
+
+
+def my_addresses(ts=None):
+    ts = ts if ts is not None else tailscale_info()
+    out_ = {"tailscale": [], "dns": "", "lan": []}
+    if ts.get("running") and ts.get("self"):
+        out_["tailscale"] = ts["self"]["ips"]
+        out_["dns"] = ts["self"]["dns"]
+    out_["lan"] = ["%s/%s" % (a["ip"], a["prefix"]) for a in lan_addresses()]
+    return out_
+
+
+def candidates(addrs, ts=None):
+    """where to try a computer, best first: Tailscale (when it runs here), a
+    LAN address on one of our own subnets, then the rest."""
+    ts = ts if ts is not None else tailscale_info()
+    res = []
+    if ts.get("running"):
+        t4 = [a for a in addrs.get("tailscale", []) if ":" not in a]
+        t6 = [a for a in addrs.get("tailscale", []) if ":" in a]
+        res += t4 + t6
+    mine = []
+    for a in lan_addresses():
+        try:
+            mine.append(ipaddress.ip_interface("%s/%s" % (a["ip"], a["prefix"])).network)
+        except ValueError:
+            pass
+    same, other = [], []
+    for a in addrs.get("lan", []):
+        ip = a.split("/")[0]
+        try:
+            ipo = ipaddress.ip_address(ip)
+        except ValueError:
+            continue
+        (same if any(ipo in n for n in mine) else other).append(ip)
+    res += same + other
+    for extra in addrs.get("extra", []):          # user@host given by hand
+        res.append(extra)
+    seen, uniq = set(), []
+    for a in res:
+        if a not in seen:
+            seen.add(a)
+            uniq.append(a)
+    return uniq
+
+
+def probe(addrs, p, timeout=3.0):
+    """the first address (in order) that answers TCP on port p, probing in parallel"""
+    results = {}
+
+    def one(a):
+        try:
+            with socket.create_connection((a, p), timeout=timeout):
+                results[a] = True
+        except OSError:
+            results[a] = False
+
+    th = [threading.Thread(target=one, args=(a,), daemon=True) for a in addrs]
+    for t in th:
+        t.start()
+    for t in th:
+        t.join(timeout + 0.5)
+    for a in addrs:
+        if results.get(a):
+            return a
+    return None
+
+
+# ── the account (discovery only) ─────────────────────────────────────────────
+
+def account():
+    rc, so, _ = run(["ewe-cloud", "token", "--json"], timeout=15)
+    try:
+        t = json.loads(so)
+    except ValueError:
+        return None
+    if not t.get("ok") or not t.get("server") or not t.get("user") or not t.get("token"):
+        return None
+    folder = conf_get("sync.folder")
+    folder = str(folder).strip("/") if isinstance(folder, str) and folder.strip("/") else "ewe"
+    q = urllib.parse.quote
+    base = "%s/remote.php/dav/files/%s/%s/remote/" % (t["server"].rstrip("/"), q(t["user"]), q(folder))
+    auth = "Basic " + b64e(("%s:%s" % (t["user"], t["token"])).encode())
+    return {"base": base, "auth": auth}
+
+
+def http(method, url, auth, data=None, headers=None, timeout=HTTP_TIMEOUT):
+    h = {"Authorization": auth, "User-Agent": "ewe-remote (%s)" % this_name()}
+    h.update(headers or {})
+    req = urllib.request.Request(url, data=data, method=method, headers=h)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return r.status, r.read()
+    except urllib.error.HTTPError as e:
+        return e.code, e.read() if e.fp else b""
+    except (urllib.error.URLError, OSError, ValueError) as e:
+        return 0, str(e).encode()
+
+
+def record(sharing=None):
+    ts = tailscale_info()
+    t, b = parse_pub(host_pub())
+    return {
+        "v": 1, "id": this_id(), "name": this_name(), "user": this_user(),
+        "sharing": sharing_active() if sharing is None else bool(sharing),
+        "port": port(), "host_key": "%s %s" % (t, b),
+        "addresses": my_addresses(ts), "ewe_version": ewe_version(),
+        "last_seen": int(time.time()),
+    }
+
+
+def publish(sharing=None):
+    acc = account()
+    if not acc:
+        return {"ok": False, "error": "not-signed-in", "message": "sign in to your ewe account to be found by your other computers"}
+    rec = record(sharing)
+    # 201 created / 405 exists; the sync folder first — a MKCOL under a
+    # missing parent is a 409 on Nextcloud
+    http("MKCOL", acc["base"].rstrip("/").rsplit("/", 1)[0] + "/", acc["auth"])
+    http("MKCOL", acc["base"], acc["auth"])
+    st, body = http("PUT", acc["base"] + rec["id"] + ".json", acc["auth"],
+                    data=json.dumps(rec).encode(), headers={"Content-Type": "application/json"})
+    if st in (200, 201, 204):
+        write_json(PUBLISHED, {"at": rec["last_seen"], "sharing": rec["sharing"]})
+        return {"ok": True, "record": rec}
+    return {"ok": False, "error": "publish", "message": "the account said %s" % (st or body.decode(errors="replace")[:120])}
+
+
+def fetch_registry():
+    acc = account()
+    if not acc:
+        return None, "not-signed-in"
+    st, body = http("PROPFIND", acc["base"], acc["auth"], headers={"Depth": "1"})
+    if st == 404:
+        return [], "ok"
+    if st not in (200, 207):
+        return None, "offline"
+    names = re.findall(r"<(?:[a-zA-Z]+:)?href>([^<]*?)([0-9a-f]{16})\.json</(?:[a-zA-Z]+:)?href>", body.decode(errors="replace"))
+    recs = []
+    for _, rid in names:
+        st, b = http("GET", acc["base"] + rid + ".json", acc["auth"])
+        if st == 200:
+            try:
+                r = json.loads(b)
+            except ValueError:
+                continue
+            if isinstance(r, dict) and r.get("id") == rid:
+                recs.append(r)
+    return recs, "ok"
+
+
+def registry(refresh=False, offline=False):
+    cache = read_json(REGISTRY_CACHE, {})
+    fresh = time.time() - cache.get("at", 0) < REGISTRY_TTL
+    if offline or (fresh and not refresh):
+        return cache.get("records", []), cache.get("state", "cached")
+    recs, state = fetch_registry()
+    if recs is None:
+        return cache.get("records", []), state
+    write_json(REGISTRY_CACHE, {"at": time.time(), "records": recs, "state": state})
+    return recs, state
+
+
+# ── computers we paired with ─────────────────────────────────────────────────
+
+def computers():
+    c = read_json(COMPUTERS, {})
+    return c if isinstance(c, dict) else {}
+
+
+def save_computers(c):
+    write_json(COMPUTERS, c)
+    write_ssh_config(c)
+
+
+def write_ssh_config(c):
+    names = {}
+    for cid, comp in c.items():
+        names.setdefault(safe_name(comp.get("name")), []).append(cid)
+    cm = os.path.join(RUN, "cm-%C")
+    out_ = ["# generated by ewe-remote (RFC-009): your paired computers — edits are lost",
+            "# use: ssh -F %s <name>" % SSH_CONFIG, ""]
+    for cid, comp in sorted(c.items()):
+        alias = "ewe-%s" % cid
+        n = safe_name(comp.get("name"))
+        if len(names.get(n, [])) == 1 and n != "computer":
+            alias += " " + n
+        out_ += [
+            "Host %s" % alias,
+            "    HostName %s" % (comp.get("last_address") or (candidates(comp.get("addresses") or {}, {"running": True}) or ["0.0.0.0"])[0]),
+            "    Port %d" % int(comp.get("port") or PORT_DEFAULT),
+            "    User %s" % comp.get("user"),
+            "    IdentityFile %s" % CLIENT_KEY,
+            "    IdentitiesOnly yes",
+            "    IdentityAgent none",
+            "    HostKeyAlias ewe-%s" % cid,
+            "    UserKnownHostsFile %s" % KNOWN_HOSTS,
+            "    GlobalKnownHostsFile /dev/null",
+            "    StrictHostKeyChecking yes",
+            "    UpdateHostKeys no",
+            "    ServerAliveInterval 30",
+            "    ServerAliveCountMax 4",
+            "    ConnectTimeout 8",
+            "    ControlMaster auto",
+            "    ControlPath %s" % cm,
+            "    ControlPersist 10m",
+            "",
+        ]
+    write_file(SSH_CONFIG, "\n".join(out_), 0o600)
+
+
+def pin_host_key(cid, pub):
+    t, b = parse_pub(pub)
+    try:
+        with open(KNOWN_HOSTS) as f:
+            lines = [l.rstrip("\n") for l in f if not l.startswith("ewe-%s " % cid)]
+    except OSError:
+        lines = []
+    lines.append("ewe-%s %s %s" % (cid, t, b))
+    write_file(KNOWN_HOSTS, "\n".join(lines) + "\n", 0o600)
+
+
+def unpin_host_key(cid):
+    try:
+        with open(KNOWN_HOSTS) as f:
+            lines = [l.rstrip("\n") for l in f if not l.startswith("ewe-%s " % cid)]
+        write_file(KNOWN_HOSTS, "\n".join(lines) + ("\n" if lines else ""), 0o600)
+    except OSError:
+        pass
+
+
+def resolve(target, recs=None):
+    """a computer from an id, a name, or user@host[:port] → dict"""
+    t = str(target or "").strip()
+    m = re.fullmatch(r"([A-Za-z0-9._-]+)@(\[[0-9a-fA-F:]+\]|[A-Za-z0-9._-]+)(?::(\d+))?", t)
+    if m:
+        host = m.group(2).strip("[]")
+        return {"id": None, "name": host, "user": m.group(1), "port": int(m.group(3) or PORT_DEFAULT),
+                "addresses": {"extra": [host]}}
+    mine = computers()
+    if valid_id(t) and t in mine:
+        return dict(mine[t], id=t)
+    recs = recs if recs is not None else registry()[0]
+    by_id = {r.get("id"): r for r in recs}
+    if valid_id(t) and t in by_id:
+        return by_id[t]
+    hits = [r for r in recs if str(r.get("name", "")).lower() == t.lower() and r.get("id") != this_id()]
+    hits += [dict(c, id=cid) for cid, c in mine.items()
+             if str(c.get("name", "")).lower() == t.lower() and cid not in {h.get("id") for h in hits}]
+    if len(hits) == 1:
+        return hits[0]
+    if len(hits) > 1:
+        fail("ambiguous", "more than one computer is called %s — use its id" % t,
+             ids=[h.get("id") for h in hits])
+    fail("unknown", "no computer called %s on your account" % t)
+
+
+# ── pairing: SPAKE2 over the forced command ──────────────────────────────────
+
+def _mac(K, label, *parts):
+    msg = b"ewe-remote/1 " + label + b"\0" + b"\0".join(p.encode() if isinstance(p, str) else p for p in parts)
+    return b64e(hmac.new(K, msg, hashlib.sha256).digest())
+
+
+def _spake():
+    try:
+        from spake2 import SPAKE2_A, SPAKE2_B  # python-spake2 (Arch [extra])
+        return SPAKE2_A, SPAKE2_B
+    except ImportError:
+        fail("missing-dep", "python-spake2 is not installed (pacman -S python-spake2)")
+
+
+class Lines:
+    """JSON lines over a pipe with a deadline; non-JSON lines (a chatty
+    ~/.zshenv on the far side) are skipped."""
+
+    def __init__(self, rfile, wfile):
+        self.r, self.w, self.buf = rfile, wfile, b""
+
+    def send(self, obj):
+        self.w.write((json.dumps(obj) + "\n").encode())
+        self.w.flush()
+
+    def recv(self, timeout):
+        end = time.time() + timeout
+        fd = self.r.fileno()
+        while True:
+            while b"\n" in self.buf:
+                line, self.buf = self.buf.split(b"\n", 1)
+                try:
+                    v = json.loads(line)
+                    if isinstance(v, dict):
+                        return v
+                except ValueError:
+                    continue
+            left = end - time.time()
+            if left <= 0:
+                return None
+            ready, _, _ = select.select([fd], [], [], left)
+            if not ready:
+                return None
+            chunk = os.read(fd, 65536)
+            if not chunk:
+                return None
+            self.buf += chunk
+            if len(self.buf) > 1 << 20:
+                return None
+
+
+def cmd_pair_serve():
+    """runs as the pairing key's forced command; stdin/stdout are the joiner"""
+    _, SPAKE2_B = _spake()
+    io = Lines(sys.stdin.buffer, sys.stdout.buffer)
+    ensure_dirs()
+    lockf = open(PAIRING_LOCK, "a+")
+    try:
+        fcntl.flock(lockf, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        io.send({"ok": False, "error": "busy", "message": "another pairing is running — try again in a moment"})
+        return
+    st = read_json(PAIRING_STATE, {})
+    now = time.time()
+    if now - float(st.get("last", 0)) < PAIR_MIN_GAP:
+        io.send({"ok": False, "error": "busy", "message": "too quick — try again in a few seconds"})
+        return
+    st["last"] = now
+    write_json(PAIRING_STATE, st)
+    # sshd runs only while sharing is on, so reaching this IS "shared"
+    code = get_code(create=False)
+    if not code:
+        io.send({"ok": False, "error": "not-sharing", "message": "this computer is not shared"})
+        return
+    m1 = io.recv(30)
+    if not m1 or m1.get("op") != "pair" or m1.get("v") != 1:
+        return
+    ok = False
+    try:
+        b = SPAKE2_B(code.encode(), idA=SPAKE_ID_JOINER, idB=SPAKE_ID_HOST)
+        mb = b.start()
+        K = b.finish(b64d(m1.get("spake", "")))
+        hk = parse_pub(host_pub())[1]
+        io.send({"spake": b64e(mb), "host_mac": _mac(K, b"host", fingerprint(hk))})
+        m2 = io.recv(30)
+        if m2 and m2.get("op") == "key":
+            pub, cid, name = str(m2.get("pubkey", "")), str(m2.get("id", "")), str(m2.get("name", ""))
+            want = _mac(K, b"joiner", pub, cid, name)
+            if hmac.compare_digest(want, str(m2.get("mac", ""))):
+                if not parse_pub(pub) or not valid_id(cid) or cid == this_id():
+                    io.send({"ok": False, "error": "bad-request", "message": "that key or id is not acceptable"})
+                    return
+                add_allowed(pub, cid, name)
+                st = read_json(PAIRING_STATE, {})
+                st["fails"] = 0
+                write_json(PAIRING_STATE, st)
+                new_code()                                   # single use
+                ok = True
+                io.send({"ok": True, "id": this_id(), "name": this_name(), "user": this_user(),
+                         "port": port()})
+                notify("%s can now control this computer" % safe_name(name),
+                       "It paired with this computer's code. Remove it in Control Centre → Share this computer.")
+    except Exception:  # a malformed message is a failed attempt, nothing more
+        ok = False
+    if not ok:
+        st = read_json(PAIRING_STATE, {})
+        st["fails"] = int(st.get("fails", 0)) + 1
+        if st["fails"] >= PAIR_MAX_FAILS:
+            st["fails"] = 0
+            new_code()
+            notify("The sharing code changed",
+                   "Someone typed a wrong code %d times. Use the new code shown here." % PAIR_MAX_FAILS)
+        write_json(PAIRING_STATE, st)
+        try:
+            io.send({"ok": False, "error": "wrong-code", "message": "that code is not right"})
+        except OSError:
+            pass
+
+
+def _tmp_known_host(path):
+    try:
+        with open(path) as f:
+            for l in f:
+                parts = l.split()
+                if len(parts) >= 3 and parse_pub("%s %s" % (parts[1], parts[2])):
+                    return "%s %s" % (parts[1], parts[2])
+    except OSError:
+        pass
+    return None
+
+
+def cmd_pair(target, code):
+    SPAKE2_A, _ = _spake()
+    code = re.sub(r"\D", "", str(code or ""))
+    if len(code) != CODE_DIGITS:
+        fail("bad-code", "the code has %d digits" % CODE_DIGITS)
+    comp = resolve(target)
+    if comp.get("id") == this_id():
+        fail("this-computer", "that is this computer")
+    if comp.get("id") and comp.get("sharing") is False:
+        fail("not-sharing", "%s is not shared — turn on Share this computer there" % comp.get("name"))
+    ensure_dirs()
+    my_pub = client_pub()
+    write_pairing_key()
+    p = int(comp.get("port") or PORT_DEFAULT)
+    ts = tailscale_info()
+    addr = probe(candidates(comp.get("addresses") or {}, ts), p)
+    if not addr:
+        hint = "" if ts.get("running") else " — set up Tailscale on both computers to reach it from another network"
+        fail("unreachable", "%s can't be reached from here%s" % (comp.get("name"), hint))
+    kh = tempfile.NamedTemporaryFile(prefix="ewe-remote-pair.", dir=RUN, delete=False)
+    kh.close()
+    argv = [SSH_BIN, "-T", "-F", "/dev/null", "-i", PAIR_KEY,
+            "-o", "IdentitiesOnly=yes", "-o", "IdentityAgent=none", "-o", "BatchMode=yes",
+            "-o", "StrictHostKeyChecking=accept-new", "-o", "UserKnownHostsFile=" + kh.name,
+            "-o", "GlobalKnownHostsFile=/dev/null", "-o", "ConnectTimeout=8",
+            "-o", "ServerAliveInterval=10", "-o", "LogLevel=ERROR",
+            "-p", str(p), "-l", str(comp.get("user")), addr]
+    proc = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    io = Lines(proc.stdout, proc.stdin)
+    result = None
+    try:
+        a = SPAKE2_A(code.encode(), idA=SPAKE_ID_JOINER, idB=SPAKE_ID_HOST)
+        io.send({"v": 1, "op": "pair", "spake": b64e(a.start())})
+        r1 = io.recv(30)
+        if not r1:
+            err = proc.stderr.read1(4096).decode(errors="replace").strip() if proc.poll() is not None else ""
+            result = ("unreachable", "no answer from %s %s" % (comp.get("name"), err[:200]))
+        elif not r1.get("spake"):
+            result = (r1.get("error") or "refused", r1.get("message") or "pairing refused")
+        else:
+            K = a.finish(b64d(r1["spake"]))
+            seen = _tmp_known_host(kh.name)
+            if not seen:
+                result = ("protocol", "could not read the host key")
+            elif not hmac.compare_digest(_mac(K, b"host", fingerprint(parse_pub(seen)[1])), str(r1.get("host_mac", ""))):
+                io.send({"op": "abort"})
+                result = ("wrong-code", "that code is not right (or something sits between the two computers)")
+            else:
+                me, nm = this_id(), this_name()
+                io.send({"op": "key", "pubkey": my_pub, "id": me, "name": nm, "mac": _mac(K, b"joiner", my_pub, me, nm)})
+                r2 = io.recv(30)
+                if r2 and r2.get("ok") and valid_id(r2.get("id")):
+                    cid = r2["id"]
+                    c = computers()
+                    c[cid] = {
+                        "name": str(r2.get("name") or comp.get("name")), "user": str(r2.get("user") or comp.get("user")),
+                        "port": int(r2.get("port") or p), "host_key": seen,
+                        "addresses": comp.get("addresses") or {"extra": [addr]},
+                        "last_address": addr, "paired_at": time.strftime("%Y-%m-%d"),
+                    }
+                    pin_host_key(cid, seen)
+                    save_computers(c)
+                    result = ("ok", c[cid], cid)
+                else:
+                    result = ((r2 or {}).get("error") or "wrong-code", (r2 or {}).get("message") or "pairing refused")
+    except (OSError, ValueError) as e:
+        result = ("protocol", str(e)[:200])
+    finally:
+        try:
+            proc.stdin.close()
+        except OSError:
+            pass
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+        try:
+            os.unlink(kh.name)
+        except OSError:
+            pass
+    if result and result[0] == "ok":
+        out({"ok": True, "computer": dict(result[1], id=result[2])})
+    fail(result[0], result[1])
+
+
+# ── using a paired computer ──────────────────────────────────────────────────
+
+def paired_or_fail(cid):
+    c = computers()
+    if cid not in c:
+        hit = [k for k, v in c.items() if str(v.get("name", "")).lower() == str(cid).lower()]
+        if len(hit) == 1:
+            cid = hit[0]
+        else:
+            fail("not-paired", "not paired with %s — pair with its code first" % cid)
+    return cid, c
+
+
+def refresh_address(cid, c):
+    """re-probe (Tailscale, same LAN, the rest) and write the winner into ssh_config"""
+    comp = c[cid]
+    recs = registry()[0]
+    rec = next((r for r in recs if r.get("id") == cid), None)
+    if rec:
+        comp["addresses"] = rec.get("addresses") or comp.get("addresses")
+        comp["port"] = rec.get("port") or comp.get("port")
+        if rec.get("sharing") is False:
+            fail("not-sharing", "%s is not shared right now" % comp.get("name"))
+    cands = candidates(comp.get("addresses") or {})
+    if comp.get("last_address") and comp["last_address"] not in cands:
+        cands.append(comp["last_address"])
+    addr = probe(cands, int(comp.get("port") or PORT_DEFAULT))
+    if not addr:
+        fail("unreachable", "%s can't be reached right now" % comp.get("name"))
+    if addr != comp.get("last_address"):
+        comp["last_address"] = addr
+        save_computers(c)
+    elif not os.path.exists(SSH_CONFIG):
+        write_ssh_config(c)
+    return addr
+
+
+def cmd_terminal(cid):
+    cid, c = paired_or_fail(cid)
+    refresh_address(cid, c)
+    term = shutil.which("kitty")
+    if not term:
+        fail("no-terminal", "kitty is not installed")
+    subprocess.Popen([term, "--title", c[cid].get("name", "remote"), SSH_BIN, "-F", SSH_CONFIG, "ewe-%s" % cid],
+                     stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                     start_new_session=True)
+    out({"ok": True, "id": cid})
+
+
+def free_port():
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
+def tunnels_live():
+    t = read_json(TUNNELS, {})
+    live = {k: v for k, v in t.items() if pid_alive(v.get("pid")) and port_listening(v.get("port"))}
+    if live != t:
+        write_json(TUNNELS, live)
+    return live
+
+
+def cmd_tunnel(cid, want_port=None):
+    cid, c = paired_or_fail(cid)
+    live = tunnels_live()
+    if cid in live and (not want_port or live[cid]["port"] == want_port):
+        out({"ok": True, "id": cid, "socks": "127.0.0.1:%d" % live[cid]["port"], "pid": live[cid]["pid"], "reused": True})
+    if cid in live:
+        _kill(live[cid]["pid"])
+    refresh_address(cid, c)
+    p = want_port or free_port()
+    log = open(os.path.join(RUN, "tunnel-%s.log" % cid), "w")
+    proc = subprocess.Popen([SSH_BIN, "-F", SSH_CONFIG, "-N", "-D", "127.0.0.1:%d" % p,
+                             "-o", "ExitOnForwardFailure=yes", "-o", "ControlMaster=no", "-o", "ControlPath=none",
+                             "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=3", "-o", "BatchMode=yes",
+                             "ewe-%s" % cid],
+                            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=log, start_new_session=True)
+    if not wait_listening(p, 15, proc):
+        try:
+            proc.kill()
+        except OSError:
+            pass
+        try:
+            with open(os.path.join(RUN, "tunnel-%s.log" % cid), errors="replace") as f:
+                why = f.read().strip()[-300:]
+        except OSError:
+            why = ""
+        if "Permission denied" in why:
+            fail("not-allowed", "%s no longer accepts this computer — pair again" % c[cid].get("name"))
+        fail("tunnel", "the tunnel to %s did not come up %s" % (c[cid].get("name"), why))
+    live = tunnels_live()
+    live[cid] = {"port": p, "pid": proc.pid, "started": int(time.time())}
+    write_json(TUNNELS, live)
+    out({"ok": True, "id": cid, "socks": "127.0.0.1:%d" % p, "pid": proc.pid, "reused": False})
+
+
+def _kill(pid):
+    try:
+        os.killpg(int(pid), signal.SIGTERM)
+    except (OSError, ValueError):
+        try:
+            os.kill(int(pid), signal.SIGTERM)
+        except (OSError, ValueError):
+            pass
+
+
+def cmd_untunnel(cid):
+    live = tunnels_live()
+    if cid in live:
+        _kill(live.pop(cid)["pid"])
+        write_json(TUNNELS, live)
+    out({"ok": True, "id": cid})
+
+
+def cmd_forget(cid):
+    c = computers()
+    if cid not in c:
+        out({"ok": True, "id": cid, "forgotten": False})
+    live = tunnels_live()
+    if cid in live:
+        _kill(live.pop(cid)["pid"])
+        write_json(TUNNELS, live)
+    run([SSH_BIN, "-F", SSH_CONFIG, "-O", "exit", "ewe-%s" % cid], timeout=5)
+    c.pop(cid)
+    unpin_host_key(cid)
+    save_computers(c)
+    out({"ok": True, "id": cid, "forgotten": True})
+
+
+def cmd_revoke(cid):
+    live = sessions()                       # while the key still names them
+    before = auth_lines()
+    after = [l for l in before if not re.search(r" ewe-remote:%s:" % re.escape(cid), l)]
+    if after != before:
+        write_auth(after)
+    n = end_sessions(cid, live)
+    out({"ok": True, "id": cid, "revoked": after != before, "ended": n})
+
+
+def cmd_disconnect(cid):
+    out({"ok": True, "id": cid, "ended": end_sessions(cid)})
+
+
+# ── status ───────────────────────────────────────────────────────────────────
+
+def cmd_status(refresh=False, offline=False):
+    ts = tailscale_info()
+    sharing = sharing_active()
+    p = port()
+    me = this_id()
+    # a sharing computer keeps its record fresh lazily (no timer): whenever
+    # someone looks and it's older than REPUBLISH_AFTER
+    # — in the background: the keyring + the server may take seconds, and the
+    # shell is waiting on this answer
+    if sharing and not offline:
+        pub = read_json(PUBLISHED, {})
+        if time.time() - pub.get("at", 0) > REPUBLISH_AFTER or pub.get("sharing") is not True:
+            write_json(PUBLISHED, {"at": int(time.time()), "sharing": True, "pending": True})
+            try:
+                subprocess.Popen([sys.executable, os.path.realpath(__file__), "publish"],
+                                 stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                 stderr=subprocess.DEVNULL, start_new_session=True)
+            except OSError:
+                pass
+    recs, reg_state = registry(refresh=refresh, offline=offline)
+    mine = computers()
+    allow = {a["id"]: a for a in allowed()}
+    live = tunnels_live()
+    peer_online = {}
+    for pr in ts.get("peers", []):
+        for ip in pr["ips"]:
+            peer_online[ip] = pr["online"]
+    seen_ids = set()
+    comps = []
+    for r in recs:
+        rid = r.get("id")
+        if not valid_id(rid) or rid == me:
+            continue
+        seen_ids.add(rid)
+        addrs = r.get("addresses") or {}
+        online = None
+        for ip in addrs.get("tailscale", []):
+            if ip in peer_online:
+                online = peer_online[ip]
+                break
+        if online is None:
+            online = time.time() - int(r.get("last_seen") or 0) < ONLINE_WINDOW
+        comps.append({
+            "id": rid, "name": r.get("name"), "user": r.get("user"), "sharing": bool(r.get("sharing")),
+            "online": bool(online), "paired": rid in mine, "allowed": rid in allow,
+            "addresses": addrs, "port": r.get("port"), "last_seen": r.get("last_seen"),
+            "ewe_version": r.get("ewe_version"),
+            "tunnel": {"socks": "127.0.0.1:%d" % live[rid]["port"]} if rid in live else None,
+        })
+    for cid, c in mine.items():                      # paired but not (yet) in the listing
+        if cid in seen_ids:
+            continue
+        seen_ids.add(cid)
+        comps.append({"id": cid, "name": c.get("name"), "user": c.get("user"), "sharing": None,
+                      "online": None, "paired": True, "allowed": cid in allow,
+                      "addresses": c.get("addresses") or {}, "port": c.get("port"), "last_seen": None,
+                      "ewe_version": None,
+                      "tunnel": {"socks": "127.0.0.1:%d" % live[cid]["port"]} if cid in live else None})
+    for aid, a in allow.items():                     # paired with us, never published
+        if aid not in seen_ids:
+            comps.append({"id": aid, "name": a["name"], "user": None, "sharing": None, "online": None,
+                          "paired": False, "allowed": True, "addresses": {}, "port": None,
+                          "last_seen": None, "ewe_version": None, "tunnel": None})
+    comps.sort(key=lambda x: (not x["paired"], not x["allowed"], str(x["name"]).lower()))
+    code = get_code(create=False) if sharing else None
+    out({
+        "ok": True,
+        "this": {"id": me, "name": this_name(), "user": this_user(), "sharing": sharing, "port": p,
+                 "code": code, "code_display": show_code(code) if code else None,
+                 "addresses": my_addresses(ts), "sessions": sessions(p) if sharing else [],
+                 "allowed": list(allow.values())},
+        "computers": comps,
+        "registry": reg_state,
+        "ssh_config": SSH_CONFIG,
+        "tailscale": {"installed": ts["installed"], "running": ts["running"], "state": ts["state"],
+                      "self": ts["self"]},
+    })
+
+
+# ── main ─────────────────────────────────────────────────────────────────────
+
+def main(argv):
+    cmd = argv[0] if argv else "status"
+    rest = argv[1:]
+    if cmd in ("-h", "--help", "help"):
+        out({"ok": True, "usage": __doc__.split("\n\n")[2]})
+    if cmd == "status":
+        cmd_status(refresh="--refresh" in rest, offline="--offline" in rest)
+    elif cmd == "share" and rest and rest[0] in ("on", "off"):
+        if rest[0] == "on":
+            p = start_sharing()
+            conf_set("remote.sharing", True)
+            pub = publish(True)
+            c = get_code()
+            out({"ok": True, "sharing": True, "port": p, "code": c, "code_display": show_code(c),
+                 "published": pub.get("ok", False)})
+        stop_sharing()
+        conf_set("remote.sharing", False)
+        pub = publish(False)
+        out({"ok": True, "sharing": False, "published": pub.get("ok", False)})
+    elif cmd == "code":
+        c = new_code() if "--new" in rest else get_code()
+        out({"ok": True, "code": c, "code_display": show_code(c)})
+    elif cmd == "pair" and len(rest) == 2:
+        cmd_pair(rest[0], rest[1])
+    elif cmd == "pair-serve":
+        cmd_pair_serve()
+        sys.exit(0)
+    elif cmd == "forget" and len(rest) == 1:
+        cmd_forget(rest[0])
+    elif cmd == "revoke" and len(rest) == 1:
+        cmd_revoke(rest[0])
+    elif cmd == "disconnect" and len(rest) == 1:
+        cmd_disconnect(rest[0])
+    elif cmd == "terminal" and len(rest) == 1:
+        cmd_terminal(rest[0])
+    elif cmd == "tunnel" and rest:
+        wp = None
+        if "--port" in rest:
+            try:
+                wp = int(rest[rest.index("--port") + 1])
+            except (IndexError, ValueError):
+                fail("usage", "--port needs a number")
+        cmd_tunnel(rest[0], wp)
+    elif cmd == "untunnel" and len(rest) == 1:
+        cmd_untunnel(rest[0])
+    elif cmd == "tunnels":
+        out({"ok": True, "tunnels": [{"id": k, "socks": "127.0.0.1:%d" % v["port"], "pid": v["pid"]}
+                                     for k, v in tunnels_live().items()]})
+    elif cmd == "publish":
+        out(publish())
+    elif cmd == "prepare":
+        out({"ok": True, "port": prepare()})
+    else:
+        fail("usage", "unknown command — see ewe-remote --help")
+
+
+if __name__ == "__main__":
+    try:
+        main(sys.argv[1:])
+    except SystemExit:
+        raise
+    except Exception as e:  # rule 5: JSON and exit 0, even on a bug
+        print(json.dumps({"ok": False, "error": "internal", "message": "%s: %s" % (type(e).__name__, e)}))
+        sys.exit(0)

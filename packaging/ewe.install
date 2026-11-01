@@ -65,8 +65,35 @@ _ewe_refresh_greeter() {
     return 0
 }
 
+# Two machine settings from phases 30/60 that matter too much to wait for a
+# manual `install.sh --no-packages` (2026-11-01 — the owner's work desktop):
+#  * 20-ewe-wired.conf: a plugged-in cable keeps asking for an address instead
+#    of failing into NetworkManager's 5-minute block (refreshed when it
+#    differs — the file is ewe's; read on the next activation, so no reload
+#    and no connection drop during an upgrade);
+#  * zram for every chassis: a desktop with no swap at all was OOM-killed.
+#    Written only when NO zram-generator.conf exists (an admin's own is
+#    never touched); active after the next boot.
+# Same files and contents as the phases — keep the three in step.
+_ewe_network_defaults() {
+    _src=/usr/share/ewe/system/networkmanager/20-ewe-wired.conf
+    _dst=/etc/NetworkManager/conf.d/20-ewe-wired.conf
+    if [ -r "$_src" ] && [ -d /etc/NetworkManager ] && ! cmp -s "$_src" "$_dst"; then
+        install -d /etc/NetworkManager/conf.d \
+            && install -m 644 "$_src" "$_dst" \
+            && echo ":: ewe: a plugged-in cable now keeps asking for an address (NetworkManager, next connection)"
+    fi
+    if [ ! -e /etc/systemd/zram-generator.conf ] \
+       && [ -x /usr/lib/systemd/system-generators/zram-generator ]; then
+        printf '[zram0]\nzram-size = min(ram, 8192)\ncompression-algorithm = zstd\n' > /etc/systemd/zram-generator.conf \
+            && echo ":: ewe: compressed swap in RAM (zram) configured — active after the next boot"
+    fi
+    return 0
+}
+
 post_install() {
     _ewe_ikev1_accept
+    _ewe_network_defaults
     cat <<'EOF'
 :: ewe is installed. Two steps remain:
 ::   1. per user:  ewe-setup            (deploys the dotfiles into your home)
@@ -79,6 +106,7 @@ EOF
 post_upgrade() {
     _ewe_ikev1_accept
     _ewe_refresh_greeter
+    _ewe_network_defaults
     cat <<'EOF'
 :: ewe payload updated. Each user's desktop refreshes itself at next login
 :: (or run `ewe-setup` now and restart the shell).

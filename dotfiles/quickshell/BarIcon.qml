@@ -13,7 +13,9 @@ import QtQuick
 // A bar badge counts to 9, not 99: a 16px pill cannot carry "99+" beside a
 // 20px glyph without swallowing it, and "9+" says all a bar needs to. The
 // exact figure lives in the panel the icon opens. `dotOnly` is the same
-// badge with no number — presence only, as on the phone indicator.
+// badge with no number — presence only, as on the phone indicator. `tone`
+// is the Badge's (accent by default; the network glyph's "no internet" dot
+// is warning).
 Item {
     id: root
 
@@ -23,6 +25,7 @@ Item {
     property int max: 9
     property int pixelSize: Theme.barIcon
     property bool dotOnly: false
+    property string tone: "accent"    // Badge tones: accent · warning · danger · …
     // what the badge is sitting on — the ring colour (Glass drops the ring)
     property color ringColor: Theme.barGround
 
@@ -57,7 +60,7 @@ Item {
         dot: root.dotOnly
         count: root.count
         max: root.max
-        tone: "accent"
+        tone: root.tone
         solid: true
         // the ring is the bar's colour; Glass leaves it out (Bar card)
         ring: !Theme.glass

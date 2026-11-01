@@ -1,0 +1,504 @@
+#!/usr/bin/env python3
+"""ewe-tailscale — Tailscale, built in and set up from ewe.
+
+Tailscale is in every install (packages/common.list) but its daemon is not
+enabled by any install phase: it runs only for someone who pressed "Set up
+Tailscale" in Quick settings. The shell (NetState.qml) and scripts drive it
+through this tool, which prints ONE JSON object per call and exits 0 (errors
+are {"ok": false, "error": "<plain words>", "code": "<machine word>"}) —
+callers never hang on it: every child process has a timeout.
+
+  status                 {ok, installed, enabled, running, state, self:{ip4,
+                         ip6, dns, name}, operator_ok, needs_setup, health:[…],
+                         exit_node: null|{name, ip, online}, peers:{total,
+                         online}, login_server, accept_routes, accept_dns,
+                         relay_only, login_url}
+                         state is tailscaled's BackendState (NeedsLogin ·
+                         Running · Stopped · Starting · NoState · …), or
+                         "NotRunning" when the daemon is not up at all.
+                         Missing binary → {ok: true, installed: false}.
+  setup                  ONE pkexec: `systemctl enable --now tailscaled` +
+                         `tailscale set --operator=<you>` — after it, every
+                         other verb runs as you, without root
+  up [--login-server URL] [--no-open]
+                         `tailscale up --accept-routes=false --accept-dns=true
+                         --json`: when sign-in is needed, returns login_url
+                         (and opens it in the browser unless --no-open); when
+                         already Running, returns the status. Never blocks
+                         past ~25 s.
+  down · logout          `tailscale down` / `tailscale logout`
+  reconnect              down, then up with the same safe flags
+  exit-node off          stop using an exit node (`tailscale set --exit-node=`)
+
+THE SAFE FLAGS. --accept-routes=false: a tailnet subnet router advertising
+the office LAN would otherwise take those routes over the local network's —
+the "Tailscale ruined my other VPN / my LAN" failure. --accept-dns=true:
+MagicDNS goes to systemd-resolved as the tailscale0 link's DNS (phase 30
+makes resolved own /etc/resolv.conf), so it can never take over every lookup.
+
+`tailscale up` refuses to run when the machine has other non-default
+settings that the command does not repeat ("requires mentioning all
+non-default flags") and prints the command that keeps them. That command is
+tailscale's own answer, so it is run as given (with --json), once — never
+--reset, which would drop the operator and every other setting.
+
+No secret ever passes through this tool: sign-in happens in the browser,
+against the login server, and only the URL of that page is printed.
+"""
+
+import json
+import os
+import pwd
+import re
+import selectors
+import shlex
+import shutil
+import subprocess
+import sys
+import time
+
+TS = "tailscale"
+UNIT = "tailscaled.service"
+UP_TIMEOUT = float(os.environ.get("EWE_TS_UP_TIMEOUT") or 25)   # tests shorten it
+SAFE_FLAGS = ["--accept-routes=false", "--accept-dns=true"]
+REVERT_HINT = "mentioning all"     # tailscale's "requires mentioning all non-default flags"
+USER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_.-]*\$?$")
+URL_RE = re.compile(r"^https?://[^\s/]+[^\s]*$")
+
+
+def out(obj):
+    print(json.dumps(obj))
+    sys.exit(0)
+
+
+def fail(msg, code="failed", **extra):
+    d = {"ok": False, "error": msg, "code": code}
+    d.update(extra)
+    out(d)
+
+
+def _text(b):
+    if b is None:
+        return ""
+    if isinstance(b, bytes):
+        return b.decode("utf-8", "replace")
+    return b
+
+
+def run(cmd, timeout=10):
+    """(rc, stdout, stderr). rc None = timed out, 127 = no such binary."""
+    try:
+        p = subprocess.run(cmd, capture_output=True, timeout=timeout, stdin=subprocess.DEVNULL)
+        return p.returncode, _text(p.stdout), _text(p.stderr)
+    except subprocess.TimeoutExpired as e:
+        return None, _text(e.stdout), _text(e.stderr)
+    except FileNotFoundError:
+        return 127, "", "%s: not found" % cmd[0]
+    except OSError as e:
+        return 126, "", str(e)
+
+
+def me():
+    try:
+        return pwd.getpwuid(os.getuid()).pw_name
+    except KeyError:
+        return os.environ.get("USER", "")
+
+
+def first_line(s):
+    for ln in (s or "").splitlines():
+        ln = ln.strip()
+        if ln:
+            return ln
+    return ""
+
+
+def friendly(stderr, fallback="Tailscale did not answer"):
+    """tailscale's stderr → plain words + a machine code."""
+    s = stderr or ""
+    low = s.lower()
+    if "access denied" in low or "permission denied" in low or "checkprefs" in low:
+        return "Tailscale is not set up for you yet — press Set up", "needs-setup"
+    if "failed to connect to local tailscaled" in low or "doesn't appear to be running" in low \
+            or ("tailscaled.sock" in low and "no such file" in low):
+        return "Tailscale is not running — press Set up", "not-running"
+    if "timeout" in low or "timed out" in low:
+        return "Tailscale did not answer in time — try again", "timeout"
+    line = first_line(s)
+    return (line or fallback), "failed"
+
+
+# ── reads ─────────────────────────────────────────────────────────────────────
+
+def systemctl_word(verb):
+    rc, o, _ = run(["systemctl", verb, UNIT], 5)
+    return first_line(o)
+
+
+def ts_json(args, timeout=8):
+    rc, o, e = run([TS] + args, timeout)
+    if rc != 0:
+        return None, e
+    try:
+        return json.loads(o), ""
+    except ValueError:
+        return None, "unreadable answer from tailscale %s" % " ".join(args)
+
+
+def short_name(p):
+    dns = str(p.get("DNSName") or "").rstrip(".")
+    if dns:
+        return dns.split(".")[0]
+    return str(p.get("HostName") or "")
+
+
+def ips(p):
+    v4 = v6 = ""
+    for a in p.get("TailscaleIPs") or []:
+        a = str(a).split("/")[0]
+        if ":" in a:
+            v6 = v6 or a
+        else:
+            v4 = v4 or a
+    return v4, v6
+
+
+def status_obj():
+    if not shutil.which(TS):
+        return {"ok": True, "installed": False}
+    enabled = systemctl_word("is-enabled") == "enabled"
+    active = systemctl_word("is-active") == "active"
+    st, st_err = ts_json(["status", "--json"])
+    prefs, _ = ts_json(["debug", "prefs"], 5) if st is not None else (None, "")
+    running = active or st is not None
+
+    d = {
+        "ok": True, "installed": True, "enabled": enabled, "running": running,
+        "state": "NotRunning", "self": None, "operator_ok": False, "needs_setup": True,
+        "health": [], "exit_node": None, "peers": {"total": 0, "online": 0},
+        "login_server": "", "accept_routes": None, "accept_dns": None,
+        "relay_only": None, "login_url": "",
+    }
+    if st is None:
+        # the daemon is down (never set up, or stopped) — say so, no error:
+        # "not running" is a state the shell shows, not a failure
+        if st_err and not running:
+            d["detail"] = first_line(st_err)
+        return d
+
+    d["state"] = str(st.get("BackendState") or "NoState")
+    d["health"] = [str(h) for h in (st.get("Health") or []) if h]
+    s = st.get("Self") or {}
+    v4, v6 = ips(s)
+    d["self"] = {"ip4": v4, "ip6": v6, "dns": str(s.get("DNSName") or "").rstrip("."),
+                 "name": str(s.get("HostName") or "")}
+    if d["state"] == "NeedsLogin" and st.get("AuthURL"):
+        d["login_url"] = str(st.get("AuthURL"))
+
+    peers = st.get("Peer") or {}
+    d["peers"] = {"total": len(peers), "online": sum(1 for p in peers.values() if p.get("Online"))}
+
+    # Relayed: of the peers we are actually talking to, none has a direct
+    # path (CurAddr is the ip:port of a direct path; empty = through DERP or
+    # a peer relay). No traffic, no verdict.
+    talking = [p for p in peers.values() if p.get("Active") and p.get("Online")]
+    if talking:
+        d["relay_only"] = not any(p.get("CurAddr") for p in talking)
+
+    # the exit node in use: the peer flagged ExitNode, with ExitNodeStatus as
+    # the authority on whether it is up; a chosen exit node that is not even
+    # in the network map is offline by definition
+    ens = st.get("ExitNodeStatus") or None
+    ex = None
+    for p in peers.values():
+        if p.get("ExitNode"):
+            pv4, pv6 = ips(p)
+            ex = {"name": short_name(p), "ip": pv4 or pv6, "online": bool(p.get("Online"))}
+            break
+    if ens is not None:
+        ev4, ev6 = ips(ens)
+        if ex is None:
+            ex = {"name": "", "ip": ev4 or ev6, "online": False}
+            for p in peers.values():
+                if str(p.get("ID") or "") and str(p.get("ID")) == str(ens.get("ID") or ""):
+                    ex["name"] = short_name(p)
+        ex["online"] = bool(ens.get("Online"))
+    if prefs:
+        if ex is None and (prefs.get("ExitNodeID") or prefs.get("ExitNodeIP")):
+            ex = {"name": "", "ip": str(prefs.get("ExitNodeIP") or ""), "online": False}
+        d["login_server"] = str(prefs.get("ControlURL") or "")
+        d["accept_routes"] = bool(prefs.get("RouteAll"))
+        d["accept_dns"] = bool(prefs.get("CorpDNS"))
+        op = str(prefs.get("OperatorUser") or "")
+        d["operator_ok"] = os.getuid() == 0 or (op != "" and op == me())
+    else:
+        d["operator_ok"] = os.getuid() == 0
+    if ex is not None and not ex["name"]:
+        ex["name"] = ex["ip"]
+    d["exit_node"] = ex
+    d["needs_setup"] = not (d["running"] and d["operator_ok"])
+    return d
+
+
+# ── writes ────────────────────────────────────────────────────────────────────
+
+def need_ready():
+    """The status, or a failure the shell can act on (Set up)."""
+    s = status_obj()
+    if not s.get("installed"):
+        fail("Tailscale is not installed", "not-installed", installed=False)
+    if not s.get("running"):
+        fail("Tailscale is not running — press Set up", "not-running", needs_setup=True)
+    if not s.get("operator_ok"):
+        fail("Tailscale is not set up for you yet — press Set up", "needs-setup", needs_setup=True)
+    return s
+
+
+def done(**extra):
+    d = status_obj()
+    d.update(extra)
+    d["ok"] = True
+    out(d)
+
+
+# the root half of `setup`, run by pkexec. Arguments, never interpolation:
+# $1 is the user name, checked against USER_RE before it gets here.
+SETUP_SCRIPT = r'''set -e
+systemctl enable --now tailscaled.service
+i=0
+until tailscale debug prefs >/dev/null 2>&1; do
+    i=$((i + 1))
+    [ "$i" -gt 50 ] && { echo "tailscaled did not start" >&2; exit 3; }
+    sleep 0.2
+done
+tailscale set --operator="$1"
+'''
+
+
+def setup():
+    if not shutil.which(TS):
+        fail("Tailscale is not installed", "not-installed", installed=False)
+    user = me()
+    if not USER_RE.match(user or ""):
+        fail("Cannot set up Tailscale for the user name %r" % user, "bad-user")
+    s = status_obj()
+    if s.get("enabled") and s.get("running") and s.get("operator_ok"):
+        done(setup=True, already=True)      # nothing to do — no password prompt
+    if os.getuid() == 0:
+        rc, o, e = run(["/bin/sh", "-c", SETUP_SCRIPT, "ewe-tailscale-setup", user], 120)
+    else:
+        if not shutil.which("pkexec"):
+            fail("pkexec is missing (polkit) — cannot ask for the admin password", "no-pkexec")
+        # the password prompt waits for a person: a generous timeout, not none
+        rc, o, e = run(["pkexec", "/bin/sh", "-c", SETUP_SCRIPT, "ewe-tailscale-setup", user], 300)
+    if rc == 126:
+        fail("Cancelled", "cancelled")
+    if rc == 127 and "not found" not in (e or ""):
+        fail("Not allowed — the admin password was not accepted", "not-authorized")
+    if rc is None:
+        fail("Setting up Tailscale took too long — try again", "timeout")
+    if rc != 0:
+        msg, code = friendly(e, "Could not set up Tailscale")
+        fail(msg, code)
+    done(setup=True)
+
+
+def _parse_objs(buf):
+    """Every complete JSON object in buf (tailscale up --json prints indented
+    objects, one per event) → (objects, unparsed rest)."""
+    dec = json.JSONDecoder()
+    objs, i = [], 0
+    while True:
+        j = buf.find("{", i)
+        if j < 0:
+            return objs, ""
+        try:
+            obj, end = dec.raw_decode(buf, j)
+        except ValueError:
+            return objs, buf[j:]        # incomplete — wait for more
+        if isinstance(obj, dict):
+            objs.append(obj)
+        i = end
+
+
+def watch_up(cmd, timeout):
+    """Run `tailscale up … --json` until it says Running, hands out a sign-in
+    URL, exits, or the deadline passes. Returns (kind, value, rc, stderr):
+    kind = "running" | "login" | "exited" | "timeout". The process is never
+    left behind: after a sign-in URL tailscaled carries the login on by
+    itself (the CLI only watches), so the watcher is stopped."""
+    try:
+        p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                             stdin=subprocess.DEVNULL, start_new_session=True)
+    except OSError as e:
+        return "exited", None, 127, str(e)
+    sel = selectors.DefaultSelector()
+    sel.register(p.stdout, selectors.EVENT_READ)
+    sel.register(p.stderr, selectors.EVENT_READ)
+    buf, err = "", ""
+    kind, value = None, None
+    end = time.monotonic() + timeout
+    while kind is None and sel.get_map():
+        left = end - time.monotonic()
+        if left <= 0:
+            kind = "timeout"
+            break
+        for key, _ in sel.select(timeout=left):
+            chunk = os.read(key.fd, 65536)
+            if not chunk:
+                sel.unregister(key.fileobj)
+                continue
+            if key.fileobj is p.stdout:
+                buf += chunk.decode("utf-8", "replace")
+                objs, buf = _parse_objs(buf)
+                for o in objs:
+                    if o.get("AuthURL"):
+                        kind, value = "login", str(o["AuthURL"])
+                    elif o.get("BackendState") == "Running" and kind is None:
+                        kind = "running"
+                    elif o.get("Error") and kind is None:
+                        err += str(o["Error"]) + "\n"
+            else:
+                err += chunk.decode("utf-8", "replace")
+    sel.close()
+    if p.poll() is None:
+        try:
+            p.terminate()
+            p.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            p.kill()
+            p.wait()
+    else:
+        p.wait()
+    for f in (p.stdout, p.stderr):
+        try:
+            f.close()
+        except OSError:
+            pass
+    if kind is None:
+        kind = "exited"
+    return kind, value, p.returncode, err
+
+
+def suggested_up(stderr):
+    """The command tailscale prints after "requires mentioning all non-default
+    flags" — the one that keeps every current setting — as argv, or None."""
+    for ln in (stderr or "").splitlines():
+        ln = ln.strip()
+        if ln.startswith("tailscale up"):
+            try:
+                argv = shlex.split(ln)
+            except ValueError:
+                return None
+            if argv[:2] != ["tailscale", "up"] or "--reset" in argv:
+                return None
+            argv[0] = TS
+            if "--json" not in argv:
+                argv.append("--json")
+            return argv
+    return None
+
+
+def up(args):
+    login_server, no_open = "", False
+    i = 0
+    while i < len(args):
+        a = args[i]
+        if a == "--no-open":
+            no_open = True
+        elif a == "--login-server" and i + 1 < len(args):
+            login_server = args[i + 1]
+            i += 1
+        elif a.startswith("--login-server="):
+            login_server = a.split("=", 1)[1]
+        else:
+            fail("unknown argument: %s" % a, "usage")
+        i += 1
+    if login_server and not URL_RE.match(login_server):
+        fail("The login server must be an http(s) address", "bad-login-server")
+
+    need_ready()
+    cmd = [TS, "up"] + SAFE_FLAGS + (["--login-server=" + login_server] if login_server else []) + ["--json"]
+    kind, value, rc, err = watch_up(cmd, UP_TIMEOUT)
+    if kind == "exited" and rc != 0 and REVERT_HINT in err:
+        again = suggested_up(err)
+        if again:
+            kind, value, rc, err = watch_up(again, UP_TIMEOUT)
+
+    if kind == "login":
+        opened = False
+        if not no_open and shutil.which("xdg-open"):
+            try:
+                subprocess.Popen(["xdg-open", value], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                 stderr=subprocess.DEVNULL, start_new_session=True)
+                opened = True
+            except OSError:
+                pass
+        d = status_obj()
+        d.update({"ok": True, "state": "NeedsLogin", "login_url": value, "opened": opened})
+        out(d)
+    if kind == "running" or (kind == "exited" and rc == 0):
+        done()
+    if kind == "timeout":
+        # still starting (a slow login server, a captive portal): not an error
+        # the user can act on — hand back where it is, the shell keeps watching
+        done(pending=True)
+    msg, code = friendly(err, "Tailscale did not start")
+    fail(msg, code)
+
+
+def simple(argv, timeout, what):
+    need_ready()
+    rc, o, e = run([TS] + argv, timeout)
+    if rc is None:
+        fail("%s took too long — try again" % what, "timeout")
+    if rc != 0:
+        msg, code = friendly(e, "%s failed" % what)
+        fail(msg, code)
+    done()
+
+
+def reconnect(args):
+    need_ready()
+    rc, o, e = run([TS, "down"], 15)
+    if rc is None or rc != 0:
+        msg, code = friendly(e, "Could not stop Tailscale")
+        fail(msg, code)
+    up(args)
+
+
+USAGE = ("usage: ewe-tailscale status | setup | up [--login-server URL] [--no-open] | "
+         "down | logout | reconnect | exit-node off")
+
+
+def main(argv):
+    if len(argv) < 2:
+        fail(USAGE, "usage")
+    verb, args = argv[1], argv[2:]
+    if verb == "status" and not args:
+        out(status_obj())
+    if verb in ("up", "down", "logout", "reconnect", "exit-node") and not shutil.which(TS):
+        fail("Tailscale is not installed", "not-installed", installed=False)
+    if verb == "setup" and not args:
+        setup()
+    elif verb == "up":
+        up(args)
+    elif verb == "down" and not args:
+        simple(["down"], 15, "Turning Tailscale off")
+    elif verb == "logout" and not args:
+        simple(["logout"], 20, "Signing out")
+    elif verb == "reconnect":
+        reconnect(args)
+    elif verb == "exit-node" and args == ["off"]:
+        simple(["set", "--exit-node="], 10, "Leaving the exit node")
+    else:
+        fail("unknown verb or arguments: %s — %s" % (" ".join(argv[1:]), USAGE), "usage")
+
+
+if __name__ == "__main__":
+    try:
+        main(sys.argv)
+    except SystemExit:
+        raise
+    except Exception as e:      # the contract: JSON and exit 0, whatever happens
+        fail("ewe-tailscale: %s" % e, "internal")

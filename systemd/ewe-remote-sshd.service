@@ -1,0 +1,22 @@
+# ewe Remote (RFC-009): this computer is shared with your other ewe computers.
+# A per-user sshd — key-only, ewe's own authorized_keys
+# (~/.local/share/ewe/remote/), port 3933 by default (ewe.conf remote.port).
+# `ewe-remote share on|off` enables/disables it; nothing else should.
+# Stopping it ends every remote session (KillMode=control-group).
+[Unit]
+Description=ewe Remote — this computer is shared (SSH, port 3933)
+Documentation=https://github.com/prj786/ewe
+
+[Service]
+Type=simple
+# the tool is /usr/bin/ewe-remote (pacman) or ~/.local/bin/ewe-remote (ewe-setup's
+# link on tarball installs) — the user manager's PATH may not have the latter
+ExecStartPre=/bin/sh -c 'exec "$$(command -v ewe-remote || echo %h/.local/bin/ewe-remote)" prepare'
+ExecStart=/usr/bin/sshd -D -e -f %h/.local/share/ewe/remote/sshd_config
+# the account record says where to find this computer (best effort)
+ExecStartPost=-/bin/sh -c 'sleep 2; exec "$$(command -v ewe-remote || echo %h/.local/bin/ewe-remote)" publish >/dev/null'
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

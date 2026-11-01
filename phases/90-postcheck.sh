@@ -39,6 +39,10 @@ phase_postcheck() {
     _check "audio: a default sink exists"         sh -c 'wpctl status 2>/dev/null | grep -qi sink'
     _check "audio: SOF + UCM firmware present"     sh -c 'pacman -Qq sof-firmware && pacman -Qq alsa-ucm-conf'
     _check "network: NetworkManager active"       systemctl is-active NetworkManager.service
+    # without it a slow DHCP server gets 45 s, then NM blocks the cable ~5 min
+    _check "network: a cable keeps asking for an address" test -r /etc/NetworkManager/conf.d/20-ewe-wired.conf
+    # every chassis since 2026-10-28 (a desktop with no swap ran out of memory)
+    _check "memory: zram swap configured"           test -r /etc/systemd/zram-generator.conf
     # a VPN client (Tailscale) rewriting a plain resolv.conf = no DNS without the VPN
     _check "dns: systemd-resolved owns resolv.conf" sh -c 'systemctl is-active -q systemd-resolved && [ "$(readlink /etc/resolv.conf)" = /run/systemd/resolve/stub-resolv.conf ]'
     # L2TP/IPsec = IKEv1; only libreswan still speaks it (strongSwan 6.1 does not)

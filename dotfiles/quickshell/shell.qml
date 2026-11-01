@@ -21,9 +21,12 @@ ShellRoot {
     // or the first "confirm 123456?" from a phone has nobody to answer it.
     // GlobalShortcuts binds apps' portal shortcuts (1Password Quick Access…)
     // that Hyprland otherwise never fires; armed from login like the rest.
+    // NetState owns the one `nmcli monitor` that bumps Globals.netEpoch —
+    // Quick settings and the plugins re-read on it, so it must run even with
+    // the bar's network glyph hidden (Top bar → Wi-Fi off).
     // PluginHost goes last: third-party entry points are instantiated once
     // every first-party singleton they may touch is already armed.
-    Scope { Component.onCompleted: { HyprMon.start(); Logind.start(); Resume.start(); Lid.start(); Wallpaper.start(); BtAgent.start(); GlobalShortcuts.start(); PluginHost.start() } }
+    Scope { Component.onCompleted: { HyprMon.start(); Logind.start(); Resume.start(); Lid.start(); Wallpaper.start(); BtAgent.start(); GlobalShortcuts.start(); NetState.start(); PluginHost.start() } }
 
     Notifications {}
     // Toast: one overlay window at the bottom of the screen, confirming an

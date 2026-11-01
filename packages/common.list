@@ -18,6 +18,8 @@ accountsservice         # user icon store (greeter avatar; Settings writes it vi
 plocate                 # launcher file search (Super+D); phase 30 enables the updatedb timer
 python-dbus             # logind-bridge.py, bt-agent.py and the phone add-on's kdeconnect-bridge.py (D-Bus side)
 python-gobject          # those two bridges' GLib loop (also the optional EDS helper)
+openssh                 # ssh + a per-user sshd: Remote (RFC-009, ewe-remote) and the SSH plugin
+python-spake2           # Remote pairing: the 8-digit code is checked with SPAKE2 (no offline guessing)
 qt5-wayland
 qt6-wayland
 qt6-svg
@@ -58,6 +60,12 @@ networkmanager-l2tp     # L2TP/IPsec profiles (server + user + password + PSK �
                         # The IPsec half is libreswan (aur.list), NOT strongswan: strongSwan 6.1 (Arch, 2026-09)
                         # dropped IKEv1 at build time and L2TP/IPsec is IKEv1-only — every profile died with
                         # "The VPN service failed to start" (charon: "IKE version 1 not supported").
+tailscale               # built in, set up from ewe: installed everywhere, but tailscaled is NOT enabled by
+                        # any phase — Quick settings → Wi-Fi → "Set up Tailscale" runs `ewe-tailscale setup`
+                        # (one pkexec: enable --now tailscaled + `tailscale set --operator=<you>`), so the
+                        # daemon only runs for someone who asked for it
+ethtool                 # read-only: the NIC's supported link modes, so Quick settings can say "Cable runs at
+                        # 100 Mb/s — the cable or port may be faulty" only when the port can do 1 Gb/s or more
 # Cast to TV (the ewe.cast add-on's "Cast" tile → gnome-network-displays, aur.list; deps stay here, D7):
 iw                      # `iw list` — the add-on's cast-check.sh verifies the Wi-Fi card does Wi-Fi Direct (P2P), which Miracast needs
 avahi                   # mDNS — Chromecast / Google TV discovery (phase 30 enables avahi-daemon)

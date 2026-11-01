@@ -126,71 +126,21 @@ Scope {
         }
     }
 
-    // ── network state: Wi-Fi connected → wifiUp, wired (ethernet) connected →
-    //    wiredUp (shown when no Wi-Fi, e.g. VMs) ──
-    //
-    // This was a 5 s timer firing FOUR processes — ~170k spawns a day, of which
-    // the wifi and wired ones ran the identical nmcli query and the keyboard one
-    // duplicated an event we already receive. `nmcli monitor` is a single
-    // long-lived process that prints a line whenever NetworkManager changes
-    // anything, so we now re-query only when the world actually moves. The
-    // VPN add-on (ewe.vpn) listens to Globals.netEpoch for its own state.
-    property bool wifiUp: false
-    property bool wiredUp: false
-    // one query answers both wifi and wired — they used to be two identical calls
-    Process {
-        id: devProc
-        running: true
-        command: ["sh", "-c", "nmcli -t -f TYPE,STATE device 2>/dev/null | awk -F: '$2==\"connected\"{print $1}'"]
-        stdout: StdioCollector {
-            onStreamFinished: {
-                var t = "\n" + this.text.trim() + "\n"
-                bar.wifiUp = t.indexOf("\nwifi\n") >= 0
-                bar.wiredUp = t.indexOf("\nethernet\n") >= 0
-            }
-        }
-    }
-    function netRefresh() {
-        devProc.running = false; devProc.running = true
-        Globals.netEpoch++                  // Quick Settings re-reads its lists on this
-    }
-    // NM emits a burst of lines per transition — coalesce them into one re-query
-    Timer { id: netDebounce; interval: 400; onTriggered: bar.netRefresh() }
-    Process {
-        id: netMon
-        running: true
-        // --pdeathsig: dies with the shell even on an abrupt exit(255) — see
-        // Screensaver.qml's pactl; nmcli was the other left-over per restart
-        command: ["setpriv", "--pdeathsig", "TERM", "--", "nmcli", "monitor"]
-        stdout: SplitParser { onRead: function (line) { bar._netMonTries = 0; netDebounce.restart() } }
-        // if NetworkManager isn't running, nmcli monitor exits immediately — back
-        // off and stop rather than respawning it forever (the bug the KDE Connect
-        // bridge used to have). Any successful line resets the counter below.
-        onExited: {
-            if (bar._netMonTries >= 5) { Log.warn("bar", "nmcli monitor keeps exiting — network indicators are static"); return }
-            bar._netMonTries++
-            netMonRestart.interval = 5000 * bar._netMonTries
-            netMonRestart.restart()
-        }
-    }
-    property int _netMonTries: 0
-    Timer { id: netMonRestart; interval: 5000; onTriggered: netMon.running = true }
+    // ── network: NetState.qml is the one reading (devices, connectivity, the
+    //    link that carries traffic, the cable's state) — it owns the `nmcli
+    //    monitor` that used to live here and still bumps Globals.netEpoch,
+    //    which Quick settings and the VPN plugin (ewe.vpn) re-read on.
 
     // Driven by the wake sequence in Resume.qml — see the ordering rationale
-    // there. Both timers are re-aimed by assigning `interval` (which restarts a
+    // there. The timer is re-aimed by assigning `interval` (which restarts a
     // running Timer's countdown) rather than restart(), which would assign
-    // `running` imperatively and break its declarative binding.
+    // `running` imperatively and break its declarative binding. (The network
+    // half of the wake — resyncNetwork — is NetState's now.)
     Connections {
         target: Resume
         function onResyncTime() {
             bar.updateClock()
             clockTimer.interval = 60000 - (Date.now() % 60000)
-        }
-        function onResyncNetwork() {
-            // nmcli monitor usually dies with the link it was watching
-            bar._netMonTries = 0
-            if (!netMon.running) netMon.running = true
-            bar.netRefresh()
         }
     }
 
@@ -670,22 +620,37 @@ Scope {
                                 font.family: Theme.fontIcons; font.pixelSize: Theme.barIcon
                                 color: ctlGroup.ink
                             }
-                            // Wired / ethernet (shown when a wired link is up and
-                            // Wi-Fi isn't — the common case in VMs and on docks)
-                            Text {
+                            // Remote (RFC-009): this computer is shared. A security
+                            // indicator, not a bar preference — it shows whenever
+                            // sharing is on; the accent + a count while someone
+                            // is connected. Click → its Control Centre page.
+                            BarIcon {
+                                visible: RemoteState.sharing
                                 anchors.verticalCenter: parent.verticalCenter
-                                text: Theme.icEthernet
-                                font.family: Theme.fontIcons; font.pixelSize: Theme.barIcon
-                                color: ctlGroup.ink
-                                visible: bar.wiredUp && !bar.wifiUp && Globals.barShows("wifi")
+                                glyph: Theme.icShare
+                                color: RemoteState.connectedCount > 0 ? Theme.barAccentText : ctlGroup.ink
+                                count: RemoteState.connectedCount
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: Shell.openQuickSettings("remote")
+                                }
                             }
-                            // Wi-Fi (only when connected)
-                            Text {
+                            // The network — the glyph of the link that carries
+                            // traffic (a cable that is the default route beats
+                            // Wi-Fi). Muted while there is no internet yet: a
+                            // cable still waiting for an address, Wi-Fi still
+                            // joining; muted with a warning dot when the link is
+                            // up but NetworkManager finds no internet behind it
+                            // (or a sign-in page). Nothing when offline.
+                            BarIcon {
                                 anchors.verticalCenter: parent.verticalCenter
-                                text: Theme.icWifi
-                                font.family: Theme.fontIcons; font.pixelSize: Theme.barIcon
-                                color: ctlGroup.ink
-                                visible: bar.wifiUp && Globals.barShows("wifi")
+                                visible: NetState.barGlyph !== "" && Globals.barShows("wifi")
+                                glyph: NetState.barGlyph
+                                color: NetState.barMuted ? Theme.barTextMuted : ctlGroup.ink
+                                dotOnly: true
+                                tone: "warning"
+                                count: NetState.barWarn ? 1 : 0
                             }
                             // Sound — always there, between the radios: the level as
                             // volume waves on the built-in speakers, and the DEVICE when
