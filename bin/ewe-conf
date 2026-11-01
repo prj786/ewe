@@ -1049,13 +1049,58 @@ def parse_ssh_hosts(text):
     return hosts
 
 
+# Host definitions travel between computers (ewe.conf syncs through the
+# account), so what arrives is data, never code: a host or a value that could
+# open a new line in ~/.ssh/config is refused, and options that RUN something
+# or pull in more config never travel (your own lines keep them on the
+# computer where you wrote them — ewe-conf never touches those). 2026-11-01,
+# with Safe's SSH gate (ewe-safe docs/GATE.md); found by its security review.
+SSH_NEVER_SYNC = {
+    "host", "match", "include",                       # structure: a new block or file
+    "proxycommand", "localcommand", "permitlocalcommand", "remotecommand",
+    "knownhostscommand", "pkcs11provider", "securitykeyprovider",
+}
+_SSH_HOST_RE = re.compile(r"^[A-Za-z0-9._@:\[\]-]{1,253}$")
+_SSH_KEY_RE = re.compile(r"^[A-Za-z][A-Za-z0-9]{0,63}$")
+
+
+def _ssh_text_ok(v):
+    """one line of plain text: no control character (a newline is one)"""
+    return isinstance(v, (str, int, float)) and not isinstance(v, bool) and \
+        not any(ord(c) < 32 or ord(c) == 127 for c in str(v)) and len(str(v)) <= 1024
+
+
+def ssh_host_clean(h):
+    """the host definition as it may be written or adopted, or None. A host
+    name is one plain word (no pattern, no space, never an option); each
+    option is a plain keyword + one line of value, and never one of
+    SSH_NEVER_SYNC."""
+    if not isinstance(h, dict):
+        return None
+    name = h.get("host")
+    if not isinstance(name, str) or not _SSH_HOST_RE.match(name) or name.startswith("-"):
+        return None
+    opts = []
+    for kv in h.get("options") or []:
+        if not isinstance(kv, (list, tuple)) or len(kv) != 2:
+            continue
+        k, v = kv
+        if not isinstance(k, str) or not _SSH_KEY_RE.match(k) or k.lower() in SSH_NEVER_SYNC:
+            continue
+        if not _ssh_text_ok(v):
+            continue
+        opts.append([k, str(v).strip()])
+    return {**h, "host": name, "options": opts}
+
+
 def gen_ssh_block(hosts, skip=()):
     lines = [SSH_MARK_A]
-    for h in hosts:
-        if h.get("host") in skip:
+    for raw in hosts:
+        h = ssh_host_clean(raw)
+        if h is None or h["host"] in skip:
             continue
         lines.append("Host %s" % h["host"])
-        for k, v in h.get("options", []):
+        for k, v in h["options"]:
             lines.append("    %s %s" % (k, v))
     lines.append(SSH_MARK_B)
     return "\n".join(lines) + "\n"
@@ -1094,7 +1139,7 @@ def import_ssh(doc):
         text = open(SSH_CONFIG).read()
     except OSError:
         return
-    local = parse_ssh_hosts(text)
+    local = [c for c in (ssh_host_clean(h) for h in parse_ssh_hosts(text)) if c]
     if not local:
         return
     node, last = dig(doc, "network.ssh.hosts", create=True)
@@ -2307,6 +2352,27 @@ def validate(key, value):
     rest alone."""
     if key == "desktop.animations.detail":
         return True, no_overshoot(value)
+    if key == "network.ssh.hosts":
+        # data, never code (ssh_host_clean): a host that could open a new
+        # line or a pattern is refused; options that run something are
+        # dropped (they never travel)
+        if not isinstance(value, list):
+            return False, "network.ssh.hosts must be a list of hosts"
+        out = []
+        for h in value:
+            name = h.get("host") if isinstance(h, dict) else None
+            # an injection attempt is refused out loud …
+            if isinstance(name, str) and not _ssh_text_ok(name):
+                return False, "a host name must be one plain line: %r" % name
+            for kv in (h.get("options") or []) if isinstance(h, dict) else []:
+                if isinstance(kv, (list, tuple)) and len(kv) == 2 and not _ssh_text_ok(kv[1]):
+                    return False, "%s: the value of %s is not one plain line" % (name, kv[0])
+            # … an odd old entry (a pattern, a name ssh can't take) is just
+            # left out: it would never be written anyway
+            c = ssh_host_clean(h)
+            if c is not None:
+                out.append(c)
+        return True, out
     if key in ENUMS:
         allowed = ENUMS[key]
         v = value
