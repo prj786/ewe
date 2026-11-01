@@ -120,4 +120,38 @@ h=$("$EC" get network.ssh.hosts)
 grep -qi 'include\|ewe-safe' <<<"$h" && fail "Safe's Include adopted as a host: $h"
 ok "Safe's two lines stay on top; never adopted as a host"
 
+# 7 · host definitions that arrive from the account are data, never code
+#     (security review of the SSH gate, 2026-11-01): a value with a newline
+#     can't open a new line, ProxyCommand & co. never travel, a pattern or
+#     an option-looking host is never written
+export EWE_CONF_SSH_CONFIG="$WORK/ssh-config-inject"
+"$EC" set network.ssh.hosts '[{"host":"evil\nMatch all","options":[]}]' 2>/dev/null && fail "set took a host with a newline"
+"$EC" set network.ssh.hosts '[{"host":"ok","options":[["User","a\nProxyCommand sh"]]}]' 2>/dev/null && fail "set took a value with a newline"
+"$EC" set network.ssh.hosts '[{"host":"ok","options":[["HostName","10.0.0.9"],["ProxyCommand","sh -c pwned"],["LocalCommand","x"],["Port",2222]]}]' --no-hooks \
+    || fail "set refused a plain host"
+grep -q 'ProxyCommand\|LocalCommand' "$WORK/ssh-config-inject" && fail "a command option was written: $(cat "$WORK/ssh-config-inject")"
+grep -q 'HostName 10.0.0.9' "$WORK/ssh-config-inject" && grep -q 'Port 2222' "$WORK/ssh-config-inject" || fail "the plain options were lost: $(cat "$WORK/ssh-config-inject")"
+"$EC" get network.ssh.hosts | grep -q 'ProxyCommand' && fail "a command option was stored"
+# a synced file that already carries a bad entry (another computer, an old
+# ewe-conf): apply skips it, the good one is written
+python3 - "$EC" <<'PY'
+# write the file the way a sync would bring it: no validate on the way in
+import importlib.machinery, importlib.util, sys
+loader = importlib.machinery.SourceFileLoader("ec", sys.argv[1])
+spec = importlib.util.spec_from_loader("ec", loader)
+ec = importlib.util.module_from_spec(spec); loader.exec_module(ec)
+doc = ec.load()
+node, last = ec.dig(doc, "network.ssh.hosts", create=True)
+node[last] = (node.get(last) or []) + [
+    {"host": 'bad\nMatch exec "sh"', "options": []},
+    {"host": "-oProxyCommand=x", "options": []},
+    {"host": "also-ok", "options": [["User", "me\nLocalCommand x"], ["Port", "22"]]},
+]
+ec.save(doc)
+PY
+"$EC" apply --only network --no-hooks
+grep -q 'Match\|-oProxyCommand\|LocalCommand' "$WORK/ssh-config-inject" && fail "a bad synced entry reached ~/.ssh/config: $(cat "$WORK/ssh-config-inject")"
+grep -q '^Host also-ok' "$WORK/ssh-config-inject" && grep -q 'Port 22' "$WORK/ssh-config-inject" || fail "the good synced entry was lost: $(cat "$WORK/ssh-config-inject")"
+ok "synced host definitions are data: no new lines, no commands, no patterns"
+
 echo "ALL PASS"

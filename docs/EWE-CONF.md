@@ -450,7 +450,15 @@ too?" They do, with a firm line through the middle:
   re-adopts, so hand edits ride along. On restore, `apply` writes them into
   a marker-bounded **managed block** at the end of `~/.ssh/config` — your
   own lines are never touched, and hosts you already define yourself are
-  skipped (first match wins in ssh config). The keys are not here: with
+  skipped (first match wins in ssh config). What travels is **data, never
+  code**: a host name is one plain word (no pattern, no space, no leading
+  `-`), a value is one line, and options that run something or pull in
+  more config — `ProxyCommand`, `LocalCommand`, `PermitLocalCommand`,
+  `RemoteCommand`, `KnownHostsCommand`, `PKCS11Provider`,
+  `SecurityKeyProvider`, `Match`, `Include` — are never adopted, stored or
+  written (your own lines keep them on the computer where you wrote them).
+  A synced file is the account's, so a value arriving from another
+  computer must never become a command here. The keys are not here: with
   **Safe** they live in the safe (synced through the account), a host
   points at one with `IdentityFile ~/.ssh/ewe-safe/key-<tag>.pub` (a
   public key file Safe writes on every computer), and Safe's agent signs —
