@@ -27,7 +27,7 @@ pkgname=ewe
 # <repo>-<tag without the leading v>, so both the source URL and the directory
 # below follow _tag, never pkgver. ewe-repo's publish workflow rewrites both.
 _tag=v0.22.0-beta
-pkgver=0.39.0beta
+pkgver=0.39.1beta
 pkgrel=1
 pkgdesc="ewe — a clean, dark Hyprland + Quickshell desktop environment"
 arch=('any')
