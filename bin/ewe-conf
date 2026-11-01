@@ -2360,13 +2360,18 @@ def validate(key, value):
             return False, "network.ssh.hosts must be a list of hosts"
         out = []
         for h in value:
-            c = ssh_host_clean(h)
-            if c is None:
-                return False, "not a plain host name: %r" % (h.get("host") if isinstance(h, dict) else h)
-            for kv in h.get("options") or []:
+            name = h.get("host") if isinstance(h, dict) else None
+            # an injection attempt is refused out loud …
+            if isinstance(name, str) and not _ssh_text_ok(name):
+                return False, "a host name must be one plain line: %r" % name
+            for kv in (h.get("options") or []) if isinstance(h, dict) else []:
                 if isinstance(kv, (list, tuple)) and len(kv) == 2 and not _ssh_text_ok(kv[1]):
-                    return False, "%s: the value of %s is not one plain line" % (c["host"], kv[0])
-            out.append(c)
+                    return False, "%s: the value of %s is not one plain line" % (name, kv[0])
+            # … an odd old entry (a pattern, a name ssh can't take) is just
+            # left out: it would never be written anyway
+            c = ssh_host_clean(h)
+            if c is not None:
+                out.append(c)
         return True, out
     if key in ENUMS:
         allowed = ENUMS[key]
