@@ -90,7 +90,15 @@ Scope {
         if (!c && tl && tl.wayland && tl.wayland.appId) c = tl.wayland.appId
         return c
     }
-    function titleOf(tl) { return (tl && tl.title) ? tl.title : (root.classOf(tl) || "Window") }
+    // a card's caption: the window's title; without one, the app's own name
+    // (its desktop entry: "ewe Settings"), then the bare class
+    function titleOf(tl) {
+        if (tl && tl.title) return tl.title
+        var c = root.classOf(tl)
+        if (c === "") return "Window"
+        var e = DesktopEntries.heuristicLookup(c)
+        return (e && e.name) ? e.name : c
+    }
     function wsOf(tl) { return (tl && tl.workspace) ? tl.workspace.id : -1 }
     function iconFor(tl) {
         var cls = root.classOf(tl)
