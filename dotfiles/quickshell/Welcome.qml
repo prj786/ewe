@@ -440,14 +440,14 @@ Scope {
                     width: parent.width; spacing: Theme.spaceMd
                     Glyph { anchors.horizontalCenter: parent.horizontalCenter; ic: Theme.icWifi }
                     Title { text: "Connect to the internet" }
-                    Body { text: "The next steps bring the system up to date and sign you in to your Nextcloud, which can bring a backup down to this machine — all of that needs a connection. A cable just works; Wi-Fi is joined right here." }
+                    Body { text: "The next steps bring the system up to date and sign you in to your Nextcloud, which can bring a backup down to this computer — all of that needs a connection. A cable just works; Wi-Fi is joined right here." }
                     WifiPicker {
                         id: wifi
                         width: parent.width
                         active: root.open && root.step === root.stepNetwork
                         onOnlineChanged: if (online && root.open && root.step === root.stepNetwork) autoAdvance.restart()
                     }
-                    Note { visible: !root.online; text: "You can also continue offline — the sign-in and the restore stay available later in Settings → Account." }
+                    Note { visible: !root.online; text: "You can also continue offline — the sign-in and the restore stay available later in ewe Sync." }
                 }
 
                 // ── 3 · updates ──
@@ -524,7 +524,7 @@ Scope {
                     Title { text: Cloud.signedIn ? "Signed in" : "Your account: Nextcloud" }
                     Body {
                         visible: !Cloud.signedIn
-                        text: "ewe keeps your machine in sync as one file, restores your apps through Komble, shows your calendar in Quick settings and keeps your files in ~/Nextcloud — all in YOUR Nextcloud: a server you run, or a hosted account (Murena, Disroot, Infomaniak…). Nothing about it is baked into ewe.\n\nSkip it and nothing changes; you can sign in later in Settings → Account."
+                        text: "ewe keeps your computer in sync as one file, restores your apps through Komble, shows your calendar in Quick settings and keeps your files in ~/Nextcloud — all in YOUR Nextcloud: a server you run, or a hosted account (Murena, Disroot, Infomaniak…). Nothing about it is baked into ewe.\n\nSkip it and nothing changes; you can sign in later in ewe Sync."
                     }
                     // signed in: who, and what just got set up
                     Row {
@@ -563,11 +563,11 @@ Scope {
                     Note { visible: Cloud.signedIn; text: "Your whole account opens as ~/Nextcloud in Files." }
                     // the account app (RFC-006): everything the account keeps,
                     // the folders to keep in it, machines, conflicts
-                    Note { visible: Cloud.signedIn && Globals.syncAppInstalled; text: "Pick the folders to keep in your account — Documents, Desktop, any folder — in ewe-sync." }
+                    Note { visible: Cloud.signedIn && Globals.syncAppInstalled; text: "Pick the folders to keep in your account — Documents, Desktop, any folder — in ewe Sync." }
                     Row {
                         visible: Cloud.signedIn && Globals.syncAppInstalled
                         anchors.horizontalCenter: parent.horizontalCenter; spacing: Theme.spaceMd
-                        LinkBtn { label: "Open ewe-sync"; onGo: Globals.openSync() }
+                        LinkBtn { label: "Open ewe Sync"; onGo: Globals.openSync() }
                     }
                     // the server address — remembered between attempts
                     Rectangle {
@@ -652,9 +652,9 @@ Scope {
                     Glyph { anchors.horizontalCenter: parent.horizontalCenter; ic: Theme.icDownload }
                     Title { text: "Your desktop is in your account" }
                     Body {
-                        text: "A backup from “" + (Cloud.cloudInfo ? Cloud.cloudInfo.device : "another machine") + "”"
+                        text: "A backup from “" + (Cloud.cloudInfo ? Cloud.cloudInfo.device : "another computer") + "”"
                             + (Cloud.cloudInfo && Cloud.cloudInfo.updatedAt ? " (saved " + Qt.formatDateTime(new Date(Cloud.cloudInfo.updatedAt), "d MMMM, h:mm AP") + ")" : "")
-                            + " is waiting. Restore it and your layout, theme, keybinds and network profiles come back to this machine, the folders you sync come down by themselves, your browser brings back its bookmarks and tabs, and your apps line up in Komble, one click from reinstalled."
+                            + " is waiting. Restore it and your layout, theme, keybinds and network profiles come back to this computer, the folders you sync come down by themselves, your browser brings back its bookmarks and tabs, and your apps line up in Komble, one click from reinstalled."
                     }
                     Row {
                         visible: root._restoring
@@ -880,7 +880,7 @@ Scope {
                                 anchors.verticalCenter: parent.verticalCenter
                                 width: parent.width - Theme.iconLg - bkBtn.width - 2 * parent.spacing
                                 wrapMode: Text.Wrap
-                                text: root._backingUp ? "Backing this machine up to your account…" : "This machine is not backed up yet. Nothing is uploaded until you say so."
+                                text: root._backingUp ? "Backing this computer up to your account…" : "This computer is not backed up yet. Nothing is uploaded until you say so."
                                 color: Theme.textPrimary
                                 font.family: Theme.type.label.family; font.pixelSize: Theme.fontSizeS
                             }
@@ -891,7 +891,7 @@ Scope {
                         width: parent.width; spacing: Theme.spaceS + Theme.spaceXs
                         TourRow { ic: Theme.icKeyboard; head: "The Super key"; text: "Tap Super for the Overview of your windows and workspaces. Super+D searches apps and files; Super+Return opens a terminal." }
                         TourRow { ic: Theme.icApps; head: "Plugins"; text: "The dock, music, Places, your phone, mail, Cast to TV and more are plugins: install the ones you want with one click in Komble → Plugins, where each one's settings are too (Options)." }
-                        TourRow { ic: Theme.icCog; head: "Quick settings and Settings"; text: "Super+N (or the clock) opens Quick settings — Wi-Fi, sound, calendar, notifications. Super+, opens Settings." }
+                        TourRow { ic: Theme.icCog; head: "Quick settings and ewe Settings"; text: "Super+N (or the clock) opens Quick settings — Wi-Fi, sound, calendar, notifications. Super+, opens ewe Settings." }
                         TourRow { ic: Theme.icDownload; head: "Komble"; text: "One store for everything: the Arch repositories, the AUR and AppImages, with updates in one place — the download glyph in the bar tells you when." }
                     }
                 }

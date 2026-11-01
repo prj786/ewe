@@ -96,7 +96,7 @@ under desktop.bar.show."plugin:<id>" — toggle false when the plugin's own
 settings place its button. desktop-widget is a card the host draws on the
 desktop; every one can be dragged and pinned (`place`). API 3 adds
 quick-tile (a Quick settings home tile, "quickTile": {span, order}),
-quick-page (a Quick settings page + rail entry, "quickPage": {key, label,
+quick-page (a Quick settings page + its shortcut tile, "quickPage": {key, label,
 icon, order}), bar-status (a glyph inside the bar's Quick settings pill,
 "barStatus": {order}) and dock-item (a static dock button, "dockItem":
 {icon, label, action, order} — no entry point; the dock runs the action).
@@ -123,8 +123,10 @@ V3_KINDS = ("quick-tile", "quick-page", "bar-status", "dock-item")
 # a dock item is static (icon + label + action in the manifest) — no QML
 NO_ENTRY_KINDS = ("dock-item",)
 # Quick settings pages the shell keeps for itself; a plugin page cannot take
-# these keys (vpn/ssh/cast/mobile/mail are NOT here: those pages move out)
-QS_CORE_KEYS = ("home", "wifi", "bt", "audio", "cal", "notifs")
+# these keys (vpn/ssh/cast/mobile/mail are NOT here: those pages move out).
+# remote (0.38) and power (0.39) are the shell's newer pages — before 0.39 a
+# plugin page with one of them validated and was then never shown
+QS_CORE_KEYS = ("home", "wifi", "bt", "audio", "cal", "notifs", "remote", "power")
 # icons are Theme property NAMES ("icMusic"), resolved by the host as Theme[icon]
 ICON_RE = re.compile(r"^ic[A-Z][A-Za-z0-9]*$")
 QS_KEY_RE = re.compile(r"^[a-z][a-z0-9_-]{0,23}$")
@@ -472,6 +474,8 @@ def validate_manifest(d, m, expect_dirname=None, allow_reserved=False):
             p.append("desktopWidget.pinLevel must be one of %s" % ", ".join(PIN_LEVELS))
         if "locked" in dw and not isinstance(dw["locked"], bool):
             p.append("desktopWidget.locked must be true or false")
+        if "visible" in dw and not isinstance(dw["visible"], bool):
+            p.append("desktopWidget.visible must be true or false")
     # ── API 3 fields ──────────────────────────────────────────────────────
     def _int(obj, key, where):
         if key in obj and (not isinstance(obj[key], int) or isinstance(obj[key], bool)):
@@ -696,8 +700,12 @@ def effective_widget(m, pid):
     is remembered while unpinned; `locked` stops dragging."""
     dw = m.get("desktopWidget") if isinstance(m.get("desktopWidget"), dict) else {}
     user = conf_table("plugins.widgets").get(pid) or {}
+    # `visible` (0.39) is the manifest's DEFAULT only: a widget that starts
+    # hidden (ewe.sysmon) never flashes on before the plugin speaks; the
+    # user's `place --visible` wins
     w = {"x": dw.get("x", 48), "y": dw.get("y", 64), "output": dw.get("output", ""),
-         "layer": dw.get("layer", "desktop"), "visible": True,
+         "layer": dw.get("layer", "desktop"),
+         "visible": dw.get("visible") if isinstance(dw.get("visible"), bool) else True,
          "pin_level": dw.get("pinLevel", "top"), "locked": bool(dw.get("locked", False))}
     for k in ("x", "y"):
         if isinstance(user.get(k), (int, float)) and not isinstance(user.get(k), bool):
@@ -787,6 +795,9 @@ def describe(d, dirname=None, enabled=(), sources=None):
         # desktop widgets: where it sits (user placement over the manifest's
         # defaults); settings: the declared schema and the effective values
         "widget": effective_widget(m, pid) if "desktop-widget" in (m.get("kinds") or []) else None,
+        # the manifest's own defaults (0.39) — the shell's fallback before a
+        # placement exists, so `visible: false` holds from the first frame
+        "desktopWidget": m.get("desktopWidget") if isinstance(m.get("desktopWidget"), dict) else None,
         # Show in bar: {shown, toggle}, or null for a plugin with nothing in the bar
         "bar": effective_bar(m, pid),
         "settingsSchema": m.get("settings") if isinstance(m.get("settings"), list) else [],
@@ -795,7 +806,7 @@ def describe(d, dirname=None, enabled=(), sources=None):
         "bundled": bundled,
         "keybinds": [kb for kb in (m.get("keybinds") or []) if isinstance(kb, dict)] if isinstance(m.get("keybinds"), list) else [],
         # API 3 (docs/PLUGINS.md "Kinds"): the host reads these to place the
-        # tile, the page + rail entry, the pill glyph and the dock button
+        # tile, the page + its shortcut tile, the pill glyph and the dock button
         "quickTile": m.get("quickTile") if isinstance(m.get("quickTile"), dict) else None,
         "quickPage": m.get("quickPage") if isinstance(m.get("quickPage"), dict) else None,
         "barStatus": m.get("barStatus") if isinstance(m.get("barStatus"), dict) else None,
@@ -1681,9 +1692,10 @@ Tile {{
     "quick-page": '''import QtQuick
 import qs
 
-// {name} -- a Quick settings page: the rail shows quickPage.icon, the page
-// opens from it, from the tile's details zone, from
-// `qs ipc call quicksettings tab <key>` and from Shell.openQuickSettings(key).
+// {name} -- a Quick settings page, shown in place of home: a shortcut tile
+// with quickPage.icon opens it (or your tile's details zone, when your
+// tile is on home with hasMenu), and so do
+// `qs ipc call quicksettings tab <key>` and Shell.openQuickSettings(key).
 Column {{
     id: root
     property string pluginId: ""
@@ -1721,7 +1733,7 @@ You draw and behave: every `.qml` in this repo is yours. ewe decides where
 it lives and what the user can change about it:
 
 - **bar-widget**: ewe puts it in the top bar (left / centre / right; the
-  user can hide it in Settings -> Top bar). It must be an `Item` with an
+  user can hide it in ewe Settings -> Top bar). It must be an `Item` with an
   implicit size.
 - **desktop-widget**: ewe places it on the desktop; the user drags it
   any time, pins it (above windows, or above everything) from its hover

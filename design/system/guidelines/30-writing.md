@@ -13,7 +13,8 @@ Ewe's words should feel like its design: calm, clear and short. People are in th
 ## Capitalization and punctuation
 
 - Sentence case everywhere: titles, buttons, menu items, tabs, settings ("Reduce transparency", not "Reduce Transparency").
-- Capitalize names of apps and shell places: Komble, ewe-sync, Places, Overview, Quick settings, Welcome.
+- Capitalize names of apps and shell places: Komble, ewe Sync, Places, Overview, Quick settings, Welcome.
+- ewe's own apps are named "ewe + Word" — lower-case ewe, one space, a capital word: ewe Settings, ewe Sync, ewe Browser, ewe Safe, ewe Cast. Komble and Shaun keep their own names. Use the full name wherever the app is referred to from somewhere else ("Open ewe Sync"); inside the app itself a page name is just the page ("Settings → Appearance" in ewe Settings). Commands, packages and file names keep their hyphen: `ewe-sync`, `ewe-safe`.
 - No period after titles, buttons, labels or single-line list items. Descriptions, helper text and sentences end with a period.
 - Use an ellipsis (…) on actions that need more input before they run ("Select a region…") and on progress ("Installing…"). Use the single character, not three dots.
 - Use curly quotes (“ ” and ’). Georgian text uses „ “.

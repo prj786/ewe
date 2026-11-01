@@ -65,6 +65,14 @@ out="$($P validate "$SB/bad.v3" 2>&1 || true)"
 check "v3: unsupported apiVersion reported" "echo '$out' | grep -q 'apiVersion 4 is not supported'"
 check "v3: quickTile span/order checked" "echo '$out' | grep -q 'quickTile.span' && echo '$out' | grep -q 'quickTile.order'"
 check "v3: quickPage reserved key, empty label, bad icon" "echo '$out' | grep -q 'quickPage.key \"wifi\"' && echo '$out' | grep -q 'quickPage.label' && echo '$out' | grep -q 'quickPage.icon'"
+# the shell's newer pages (remote 0.38, power 0.39) are reserved too
+mkdir -p "$SB/qp.keys"; : > "$SB/qp.keys/Page.qml"
+qp_key() { printf '{"schemaVersion":1,"id":"qp.keys","name":"Keys","version":"0.1.0","apiVersion":3,"kinds":["quick-page"],"entryPoints":{"quick-page":"Page.qml"},"quickPage":{"key":"%s","label":"Keys","icon":"icStar"}}\n' "$1" > "$SB/qp.keys/manifest.json"; }
+qp_key remote; qp_remote="$($P validate "$SB/qp.keys" 2>&1 && echo VALID || true)"
+qp_key power;  qp_power="$($P validate "$SB/qp.keys" 2>&1 && echo VALID || true)"
+qp_key weather; qp_free="$($P validate "$SB/qp.keys" 2>&1 && echo VALID || true)"
+check "v3: quickPage keys remote and power are refused like the other built-ins" "! grep -q VALID <<<\"\$qp_remote\" && grep -q 'quickPage.key \"remote\" belongs to the shell' <<<\"\$qp_remote\" && ! grep -q VALID <<<\"\$qp_power\" && grep -q 'quickPage.key \"power\" belongs to the shell' <<<\"\$qp_power\""
+check "v3: the same manifest with a free key validates" "grep -q VALID <<<\"\$qp_free\""
 check "v3: dockItem icon/label/action checked" "echo '$out' | grep -q 'dockItem.icon' && echo '$out' | grep -q 'dockItem.label' && echo '$out' | grep -q 'dockItem.action'"
 check "v3: requires lists + unknown key, icon, category" "echo '$out' | grep -q 'requires.packages' && echo '$out' | grep -q 'requires.things' && echo '$out' | grep -q '^  ! icon must' && echo '$out' | grep -q 'category must'"
 check "v3: ipcAliases refused for a third-party id" "echo '$out' | grep -q 'ipcAliases: only first-party'"
@@ -111,10 +119,11 @@ check "legacy: refused for a third-party plugin" "echo '$out' | grep -q 'setting
 mkdir -p "$SB/bad.w"; cp "$SB/acme.clock/Widget.qml" "$SB/bad.w/"
 cat > "$SB/bad.w/manifest.json" <<'J'
 {"schemaVersion":1,"id":"bad.w","name":"W","version":"0.1.0","apiVersion":3,"kinds":["bar-widget"],"entryPoints":{"bar-widget":"Widget.qml"},
- "barWidget":{"defaultShown":"no","toggle":1},"desktopWidget":{"pinLevel":"middle","locked":"yes"}}
+ "barWidget":{"defaultShown":"no","toggle":1},"desktopWidget":{"pinLevel":"middle","locked":"yes","visible":"no"}}
 J
 out="$($P validate "$SB/bad.w" 2>&1 || true)"
 check "schema: defaultShown/toggle booleans, pinLevel, locked checked" "echo '$out' | grep -q 'barWidget.defaultShown' && echo '$out' | grep -q 'barWidget.toggle' && echo '$out' | grep -q 'desktopWidget.pinLevel' && echo '$out' | grep -q 'desktopWidget.locked'"
+check "schema: desktopWidget.visible must be a bool" "echo '$out' | grep -q 'desktopWidget.visible must be true or false'"
 cp -r "$SB/legacy/ewe.legacy" "$SB/cfg/ewe/plugins/ewe.legacy"
 "$C" set --no-hooks plugins.sources '{"ewe.legacy":"bundled"}' >/dev/null
 "$C" set --no-hooks desktop.dock.autohide true >/dev/null
@@ -144,6 +153,24 @@ $P place acme.clock --visible off >/dev/null
 check "place --visible off keeps x/y" "$P get acme.clock | python3 -c 'import json,sys; w=json.load(sys.stdin)[\"widget\"]; assert w[\"visible\"] is False and w[\"x\"]==420, w'"
 $P place acme.clock --reset >/dev/null
 check "place --reset returns to the manifest defaults" "$P get acme.clock | python3 -c 'import json,sys; w=json.load(sys.stdin)[\"widget\"]; assert w[\"x\"]==48 and w[\"layer\"]==\"desktop\", w'"
+# desktopWidget.visible (0.39): a manifest default that starts the widget hidden;
+# the user's place --visible wins, --reset returns to the default
+python3 - "$SB/acme.clock/manifest.json" <<'PYM'
+import json, sys
+p = sys.argv[1]; m = json.load(open(p)); m["desktopWidget"]["visible"] = False
+json.dump(m, open(p, "w"), indent=2)
+PYM
+check "desktopWidget.visible false: valid, and hidden before the user chooses" "$P validate '$SB/acme.clock' >/dev/null && $P get acme.clock | jq 'w=j[\"widget\"]; assert w[\"visible\"] is False and w[\"x\"]==48, w'"
+check "list --json carries the manifest's desktopWidget defaults" "$P list --json | jq 'p=[x for x in j[\"plugins\"] if x[\"id\"]==\"acme.clock\"][0]; assert p[\"desktopWidget\"][\"visible\"] is False and p[\"widget\"][\"visible\"] is False, p'"
+$P place acme.clock --visible on >/dev/null
+check "place --visible on overrides the manifest's hidden default" "$P get acme.clock | jq 'assert j[\"widget\"][\"visible\"] is True, j'"
+$P place acme.clock --reset >/dev/null
+check "place --reset returns to the manifest's hidden default" "$P get acme.clock | jq 'assert j[\"widget\"][\"visible\"] is False, j'"
+python3 - "$SB/acme.clock/manifest.json" <<'PYM'
+import json, sys
+p = sys.argv[1]; m = json.load(open(p)); del m["desktopWidget"]["visible"]
+json.dump(m, open(p, "w"), indent=2)
+PYM
 # pin + lock: every desktop widget can be pinned (to its level) and locked
 $P place acme.clock --pin-level overlay >/dev/null
 check "place --pin-level on an unpinned widget only remembers the level" "$P get acme.clock | jq 'w=j[\"widget\"]; assert w[\"layer\"]==\"desktop\" and w[\"pin_level\"]==\"overlay\" and not w[\"pinned\"], w'"

@@ -69,6 +69,35 @@ IpcHandler targets exposed by the shell (from `targets`): `settings`, `store`,
 `quicksettings`, `bar`, `applauncher`, `launcher`, `overview`, `clipboard`, `lock`,
 `osd`, `preview` — most take `show`/`hide`/`toggle`.
 
+### Quick settings (the control centre)
+
+Home is one page; every other page opens in its place. Jump to any of them
+by key — the built-ins `home wifi bt audio cal notifs remote power`, or a
+plugin's `quickPage.key` (`ssh vpn mobile mail cast` with `HS_PLUGINS=1`):
+
+```bash
+.claude/skills/run-ewe/driver.sh ipc quicksettings tab wifi   # opens the panel on that page
+.claude/skills/run-ewe/driver.sh shot qs-wifi.png
+WAYLAND_DISPLAY=<NEST_WD from $HS_WORK/state> wtype -k Escape  # back one page, then closes
+```
+
+There is no icon rail (0.39): a plugin page is a small shortcut tile under
+the home tiles, unless the plugin's own tile is on home and opens it from its
+chevron. Home shows the newest notifications inline — to fill them, start the
+nest on its own bus and post into it (never `notify-send` from your shell: the
+host's notification server is your LIVE desktop):
+
+```bash
+HS_PRIVATE_BUS=1 .claude/skills/run-ewe/driver.sh up
+.claude/skills/run-ewe/driver.sh notify -a Komble "12 updates are ready" "136 MB to download."
+```
+
+Normal-urgency banners leave after 5 s; a critical one stays on top of the
+panel until closed (`gdbus call … CloseNotification <id>` on the same bus —
+`notify` prints the id). **Quickshell reloads the config when a QML file
+changes** (`Reloading configuration...` in the log) — the notification server
+starts over empty, so post again after an edit.
+
 ### Hyprland config check
 
 The Hyprland side is Lua (`dotfiles/hypr/hyprland.lua` + `colors.lua`). Static

@@ -2,33 +2,61 @@
   "schemaVersion": 1,
   "id": "ewe.sysmon",
   "name": "System monitor",
-  "version": "1.1.0",
+  "version": "2.0.0",
   "apiVersion": 3,
-  "description": "CPU and memory meters in Quick settings, and a compact readout in the top bar if you want one.",
+  "description": "CPU, memory and internet speed in the bar. Click it for the details, and put the same card on your desktop if you want it.",
   "homepage": "https://github.com/prj786/ewe-plugin-sysmon",
   "author": "prj786",
   "icon": "icCpu",
   "category": "System",
   "kinds": [
-    "quick-tile",
-    "bar-widget"
+    "bar-widget",
+    "panel",
+    "desktop-widget"
   ],
   "entryPoints": {
-    "quick-tile": "Tile.qml",
-    "bar-widget": "Widget.qml"
-  },
-  "quickTile": {
-    "span": 2,
-    "order": 20
+    "bar-widget": "Widget.qml",
+    "panel": "Panel.qml",
+    "desktop-widget": "Desk.qml"
   },
   "barWidget": {
     "defaultSection": "right",
-    "defaultShown": false
+    "defaultShown": true
+  },
+  "desktopWidget": {
+    "x": 48,
+    "y": 64,
+    "layer": "desktop",
+    "visible": false
   },
   "requires": {
     "packages": [],
     "commands": [
       "sh"
     ]
-  }
+  },
+  "settings": [
+    {
+      "key": "bar_shows",
+      "type": "choice",
+      "default": "All three",
+      "choices": [
+        "All three",
+        "CPU + memory",
+        "Speed"
+      ],
+      "label": "In the bar"
+    },
+    {
+      "key": "speed_unit",
+      "type": "choice",
+      "default": "MB/s",
+      "choices": [
+        "MB/s",
+        "Mbit/s"
+      ],
+      "label": "Speed in",
+      "description": "MB/s like downloads, or Mbit/s like speed tests"
+    }
+  ]
 }

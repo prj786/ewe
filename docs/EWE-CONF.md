@@ -338,7 +338,7 @@ first installed of 1Password's `op`, `rbw`, `pass`), `ewe`, `1password`,
 for an app that drops characters). Per-app pins live in
 `passwords-apps.json` next to `ewe.conf`, not in it.
 
-### `[safe]` — Safe, the password manager (RFC-008)
+### `[safe]` — ewe Safe, the password manager (RFC-008)
 
 Read by `ewe-safed` (the `ewe-safe` package); a `set safe.*` is stored and
 applies nothing, like `[companion]`. Non-secret settings only, so a restored
@@ -351,9 +351,9 @@ place (default `ewe/safe/passwords.kdbx`); `webdav_url`, `webdav_user` for
 30); `generator_length` (default 20), `generator_words` (default 5);
 `unlock_at_login` (bool, default `true`) — unlock the safe at login when
 unlock-with-my-login-password is on; `confirm_cards` (bool, default `true`)
-— ask for the password again before Safe fills a card; `ssh_agent` (bool,
-default `false`) — Safe is the SSH gate: its agent answers every `ssh` on
-each computer that has Safe (it adds two lines on top of `~/.ssh/config`;
+— ask for the password again before ewe Safe fills a card; `ssh_agent` (bool,
+default `false`) — ewe Safe is the SSH gate: its agent answers every `ssh` on
+each computer that has ewe Safe (it adds two lines on top of `~/.ssh/config`;
 `ewe-safe ssh enable` / `disable`, ewe-safe `docs/GATE.md`); this key is
 shared, so turning it on once turns it on for every computer of the
 account; `ssh_confirm` — `first-use` (default) | `every-time` | `never`,
@@ -428,12 +428,12 @@ file said.
 
 `provider` (`"nextcloud"` | `"google"`) · `server` · `user` · `folder`
 (default `ewe`) · `enabled` (bool, the auto-sync switch) · `browser` (bool,
-default true: this computer's ewe browser syncs with the account) — this
+default true: this computer's ewe Browser syncs with the account) — this
 machine's own. Identity only, so a restored machine knows where its backup
 lives. `[[sync.folders]]` (`remote`, `local`, `mode` two-way | upload |
 download, `trigger` change | interval | login, `interval`, `exclude`,
-`hidden`) are ewe-sync's folder pairs, **shared** by every machine; each
-machine keeps its own local path override and pause in ewe-sync's state. The app password (or
+`hidden`) are ewe Sync's folder pairs, **shared** by every machine; each
+machine keeps its own local path override and pause in ewe Sync's state. The app password (or
 the Google refresh token) lives in the keyring behind `ewe-cloud` /
 `ewe-auth`, never in this file.
 
@@ -459,13 +459,13 @@ too?" They do, with a firm line through the middle:
   written (your own lines keep them on the computer where you wrote them).
   A synced file is the account's, so a value arriving from another
   computer must never become a command here. The keys are not here: with
-  **Safe** they live in the safe (synced through the account), a host
+  **ewe Safe** they live in the safe (synced through the account), a host
   points at one with `IdentityFile ~/.ssh/ewe-safe/key-<tag>.pub` (a
-  public key file Safe writes on every computer), and Safe's agent signs —
-  so the aliases just work again, keys included. Without Safe, keys are
-  yours to bring. Safe's own two lines sit at the **top** of the file
-  (`Include ~/.ssh/ewe-safe/config`, its agent for every host); ewe-conf
-  never touches them, and Safe changes hosts only through ewe-conf.
+  public key file ewe Safe writes on every computer), and ewe Safe's agent
+  signs — so the aliases just work again, keys included. Without ewe Safe,
+  keys are yours to bring. ewe Safe's own two lines sit at the **top** of the
+  file (`Include ~/.ssh/ewe-safe/config`, its agent for every host); ewe-conf
+  never touches them, and ewe Safe changes hosts only through ewe-conf.
 - `[[network.vpn]]` carries NetworkManager VPN *profile definitions* — name,
   type, service, and the non-secret `vpn.data` property string (OpenVPN's
   remote/port, L2TP/IPsec's gateway/user/ipsec-enabled; the `*-flags`
@@ -502,7 +502,7 @@ document from the live system.
 
 ## desktop.browser — Helium (only while installed)
 
-ewe's browser is ewe browser, which reads `theme-tokens.json` (colours,
+ewe's browser is ewe Browser, which reads `theme-tokens.json` (colours,
 radius, fonts, motion) itself and has no key here. This key only matters on a
 machine that still has Helium, the browser ewe shipped before.
 

@@ -1,1 +1,6 @@
 singleton SysMon 1.0 SysMon.qml
+Card 1.0 Card.qml
+Well 1.0 Well.qml
+Big 1.0 Big.qml
+Level 1.0 Level.qml
+Spark 1.0 Spark.qml

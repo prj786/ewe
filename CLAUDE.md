@@ -72,8 +72,11 @@ the host's real session is untouched:
 .claude/skills/run-ewe/driver.sh down           # tear down
 ```
 
-- **QML has no live reload here** — after editing a `*.qml`, run `down && up`, then
-  `open <surface>`, then **read the PNG** to confirm. A ~15 KB shot = bar only
+- **Edit → `down && up`** — Quickshell 0.3.2 does reload by itself when a
+  `*.qml` changes (`Reloading configuration...` in the log), but the reload
+  drops in-memory state (the notification history, open pages), so a clean
+  `down && up` is the reliable loop; then `open <surface>` (or `ipc
+  quicksettings tab <key>`), then **read the PNG** to confirm. A ~15 KB shot = bar only
   (surface didn't open); a real window is ~40–57 KB.
 - A QML error makes `qs` die on `up`; inspect with the `log` subcommand. Ignore the
   benign "already registered" D-Bus / PolkitAgent / "hyprland-guiutils not
@@ -265,6 +268,22 @@ since Dock 1.1.0 (`desktop.dock.*` is only their `legacy` fallback,
   makes ethernet DHCP never time out — NM's 45 s fail + 5-minute block cost
   the owner two reboots. Tests: `tests/ewe-netstate-test.sh`,
   `tests/ewe-tailscale-test.sh` (fakes only — never touch the live network).
+- **`QuickSettings.qml`** (the control centre, revamped 0.39) — no icon rail:
+  home is the account row (avatar + name + date → ewe Sync; Screenshot ·
+  Settings · Lock · Power), the tiles, a row of small shortcut tiles
+  (Calendar + every plugin quickPage whose plugin has no tile on home that
+  opens it from its chevron — read off the grid by `readTiles()`, since a
+  plugin hides its own slot), volume (chevron → output list) and
+  brightness, the newest two apps' notifications inline (Show all → the
+  `notifs` page), and a foot with the battery and the power mode (each only
+  when present). Every page opens IN PLACE (QsPageHead: back, name over
+  status, switch); the height follows the page up to 80% of the screen; Esc
+  = back one page, then close. Keys: `home wifi bt audio cal notifs remote
+  power` + plugin keys (`quicksettings tab <key>`, `Shell.openQuickSettings`);
+  a plugin page with a built-in key is never shown. Never bind a size to a
+  Row's implicit width that depends on that size — the head's account plate
+  did and the shell spun at 100% CPU. Test notifications go in with
+  `HS_PRIVATE_BUS=1` and `driver.sh notify …` (never the host bus).
 - **`RemoteState.qml` + `RemotePage.qml`** (2026-11, RFC-009) — Share this
   computer: the Control Centre **Sharing** tile + the built-in `remote` tab +
   the bar's share glyph (a SECURITY indicator, not a bar preference: shown

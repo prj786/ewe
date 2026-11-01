@@ -1,6 +1,6 @@
 # App shell
 
-The app shell is the window layout shared by Settings, Komble and ewe-sync: a rail on the left and a content pane on the right.
+The app shell is the window layout shared by ewe Settings, Komble and ewe Sync: a rail on the left and a content pane on the right.
 
 ## Anatomy
 1. Window: `surface-base`, `rounded` radius, the Hyprland border.

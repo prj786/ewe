@@ -17,27 +17,27 @@ otherwise; **Super+A** brings it out. It is one size whatever it says:
   - the agents and their last steps (click one to jump to its terminal);
   - what needs a look (a disk past 85 %, waiting updates, a low battery);
   - what is playing;
-  - one-click actions (Do not disturb, game mode, screenshot, Settings,
-    Komble, lock);
+  - one-click actions (Do not disturb, game mode, screenshot, ewe
+    Settings, Komble, lock);
   - a chat line for questions and commands. It knows ewe (the daemon's
     knowledge pack), and an answer about a place comes with a button that
     opens it. It opens apps the way the launcher does ("open nemo", "open
     kitty in documents"), and it shows a shell command it proposes exactly as
     it will run, with **Run** and **In terminal**: nothing runs without that
     click.
-  - what a command found, as a list under its answer: Safe's logins ("copy
+  - what a command found, as a list under its answer: ewe Safe's logins ("copy
     my GitHub password" when several fit: a click copies that one), files
     and folders ("find my resume": **Open**, and small buttons for **Show in
-    folder**, **Copy path**, **Open terminal here**), ewe browser's history
+    folder**, **Copy path**, **Open terminal here**), ewe Browser's history
     and tabs (**Open**, **Go to**), its bookmarks, downloads (**Open**,
     **Show in folder**) and workspaces (**Switch**), paired Bluetooth
-    devices (**Connect**), and timers (**Cancel**). A locked Safe gets an
-    **Unlock Safe** button that opens Safe's own window for the master
-    password.
+    devices (**Connect**), and timers (**Cancel**). A locked ewe Safe gets
+    an **Unlock ewe Safe** button that opens ewe Safe's own window for the
+    master password.
 
 | kind | file | what |
 |---|---|---|
-| service | `Service.qml` | the daemon's socket (reconnects, starts the daemon on demand), `env`, `settings`, `do` (what only the shell can do: also ewe browser's command line and Safe's unlock prompt), the blur rule, IPC `ewe.companion` |
+| service | `Service.qml` | the daemon's socket (reconnects, starts the daemon on demand), `env`, `settings`, `do` (what only the shell can do: also ewe Browser's command line and ewe Safe's unlock prompt), the blur rule, IPC `ewe.companion` |
 | overlay | `Drop.qml`, `Indicator.qml`, `cards/`, `sections/` | the notch on each screen and everything in it |
 | — | `CompanionState.qml` | the plugin's singleton: what they share |
 
@@ -85,10 +85,10 @@ keyring.
   bar in the right margin, while the line you type in stays pinned at the
   bottom. A new answer scrolls itself into view; a new card scrolls to the
   top.
-- **It never sees a password.** Safe copies it and clears the clipboard
+- **It never sees a password.** ewe Safe copies it and clears the clipboard
   itself; the notch shows a login's title and username only, and *Copy
   path* is the one thing it puts on the clipboard itself (`wl-copy`).
-- **ewe browser's acts run here** (search, open, play, a tab, a
+- **ewe Browser's acts run here** (search, open, play, a tab, a
   workspace, back and forward), as
   `ewe-browser` with arguments, never a shell, so a browser they start
   belongs to your desktop. The notch closes first, as it does for apps.

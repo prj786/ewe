@@ -52,9 +52,15 @@ Scope {
         if (!c && t && t.wayland && t.wayland.appId) c = t.wayland.appId
         return c
     }
+    // The focused app's name: its desktop entry's own Name ("ewe Settings",
+    // "ewe Sync", "Komble", "Firefox") — looked up by the app's id, never the
+    // window title. Only an app without an entry gets the class's first word,
+    // capitalised (that rule alone read "Ewe" for every ewe-* app).
     function appName() {
         var c = bar.appClass()
         if (!c) return ""
+        var e = DesktopEntries.heuristicLookup(c)
+        if (e && e.name) return e.name
         var s = c.split('.').pop().split('-')[0]
         return s.charAt(0).toUpperCase() + s.slice(1)
     }
@@ -334,6 +340,10 @@ Scope {
                         }
                         Text {
                             anchors.verticalCenter: parent.verticalCenter
+                            // a long entry name ("GNU Image Manipulation
+                            // Program") elides at half a panel, Text size included
+                            width: Math.min(implicitWidth, Theme.grow(Theme.panelSm) / 2)
+                            elide: Text.ElideRight
                             text: bar.appName()
                             color: Theme.barAccentText
                             font.family: Theme.type.bodyStrong.family

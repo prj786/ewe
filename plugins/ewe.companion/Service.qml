@@ -238,8 +238,8 @@ Scope {
             // search, play, a tab. Run here, not by the daemon, because it
             // may start the browser, which then belongs to the desktop. Only
             // ewe-browser, only as argv
-            if (String(a.bin || "").split("/").pop() !== "ewe-browser") { root.done(id, false, "Not ewe browser."); break }
-            if (bcli.running) { root.done(id, false, "ewe browser is busy."); break }
+            if (String(a.bin || "").split("/").pop() !== "ewe-browser") { root.done(id, false, "Not ewe Browser."); break }
+            if (bcli.running) { root.done(id, false, "ewe Browser is busy."); break }
             bcli.reqId = id
             bcli.command = [String(a.bin)].concat((a.args || []).map(String))
             bcli.running = true
@@ -249,7 +249,7 @@ Scope {
         case "safe_unlock":
             // Safe's own prompt (`ewe-safe unlock --ask`): the master
             // password is typed there, never into the companion
-            if (String(a.bin || "").split("/").pop() !== "ewe-safe") { root.done(id, false, "Not Safe."); break }
+            if (String(a.bin || "").split("/").pop() !== "ewe-safe") { root.done(id, false, "Not ewe Safe."); break }
             CompanionState.dropOpen = false
             Quickshell.execDetached([String(a.bin), "unlock", "--ask"])
             root.done(id, true)
@@ -353,7 +353,7 @@ Scope {
             var reply = null
             try { reply = JSON.parse(lines[lines.length - 1]) } catch (e) {}
             if (reply) root.done(bcli.reqId, true, "", { reply: reply })
-            else root.done(bcli.reqId, false, "ewe browser did not answer.")
+            else root.done(bcli.reqId, false, "ewe Browser did not answer.")
         }
     }
     // the daemon waits 20 s (its browser.rs ACT); a command line that hangs

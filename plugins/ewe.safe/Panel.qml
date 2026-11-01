@@ -140,7 +140,7 @@ Scope {
                 root.busy = false
                 var d = null
                 try { d = JSON.parse(this.text) } catch (e) { d = null }
-                if (!d) { root.loadError = "Safe gave no answer."; return }
+                if (!d) { root.loadError = "ewe Safe gave no answer."; return }
                 if (!d.ok) {
                     if (d.error === "locked") { root.items = []; return }
                     root.loadError = d.message || d.error || "Couldn't list your items."
@@ -232,7 +232,7 @@ Scope {
                         id: title
                         anchors.left: mark.right; anchors.leftMargin: Theme.spaceS
                         anchors.verticalCenter: parent.verticalCenter
-                        text: "Safe"
+                        text: "ewe Safe"
                     }
                     TextCaption {
                         anchors.left: title.right; anchors.leftMargin: Theme.spaceS
@@ -265,7 +265,7 @@ Scope {
                         selectionColor: Theme.accent; selectedTextColor: Theme.onAccent; selectByMouse: true; clip: true
                         readOnly: !SafeState.unlocked
                         onTextChanged: { root.query = text; root.selected = 0 }
-                        Text { visible: input.text.length === 0; anchors.verticalCenter: parent.verticalCenter; text: "Search Safe"; color: Theme.textMuted; font: input.font }
+                        Text { visible: input.text.length === 0; anchors.verticalCenter: parent.verticalCenter; text: "Search ewe Safe"; color: Theme.textMuted; font: input.font }
                         Keys.onPressed: function (ev) {
                             var ctrl = ev.modifiers & Qt.ControlModifier
                             if (ev.key === Qt.Key_Escape) { root.open = false; ev.accepted = true }
@@ -342,11 +342,11 @@ Scope {
                             visible: !root.busy
                             TextBody {
                                 width: parent.width; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.Wrap
-                                text: SafeState.phase === "missing" ? "Safe isn't installed."
-                                    : SafeState.phase === "down" ? "Safe isn't running."
+                                text: SafeState.phase === "missing" ? "ewe Safe isn't installed."
+                                    : SafeState.phase === "down" ? "ewe Safe isn't running."
                                     : SafeState.offered ? "Your safe is in your ewe account."
                                     : SafeState.phase === "new" ? "No safe on this computer yet."
-                                    : SafeState.locked ? "Safe is locked — press Enter to unlock"
+                                    : SafeState.locked ? "ewe Safe is locked — press Enter to unlock"
                                     : root.loadError !== "" ? root.loadError
                                     : root.items.length === 0 ? "Your safe is empty."
                                     : "Nothing matches “" + root.query + "”."
@@ -355,10 +355,10 @@ Scope {
                             }
                             TextCaption {
                                 width: parent.width; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.Wrap
-                                text: SafeState.phase === "missing" ? "Install Safe from Komble."
+                                text: SafeState.phase === "missing" ? "Install ewe Safe from Komble."
                                     : SafeState.phase === "down" ? "Its service is stopped or not installed."
                                     : SafeState.offered ? "Press Enter and type your master password to open it here."
-                                    : SafeState.phase === "new" ? "Press Enter to set one up in Safe."
+                                    : SafeState.phase === "new" ? "Press Enter to set one up in ewe Safe."
                                     : SafeState.locked && SafeState.state.keyChanged ? "The master password was changed on another computer. Unlock with the new one."
                                     : SafeState.unlocked && root.items.length === 0 && root.loadError === "" ? "Ctrl+N adds a login."
                                     : ""
@@ -375,7 +375,7 @@ Scope {
                     width: parent.width
                     text: SafeState.locked ? "Enter unlock · Esc close"
                         : SafeState.offered ? "Enter open your safe · Esc close"
-                        : SafeState.phase === "new" ? "Enter open Safe · Esc close"
+                        : SafeState.phase === "new" ? "Enter open ewe Safe · Esc close"
                         : !SafeState.unlocked ? "Esc close"
                         : (root.current && root.current.kind === "note")
                           ? "Enter open · Ctrl+N new · Ctrl+L lock · Esc close"

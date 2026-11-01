@@ -90,7 +90,7 @@ QtObject {
         else Quickshell.execDetached(["xdg-open", "mailto:"])
     }
     readonly property string inboxLabel: source === "gmail" ? "Open Gmail" : "Open mail"
-    readonly property string hint: "Add a mail account (Settings → Account → Mail) or connect Google to see mail here."
+    readonly property string hint: "Add a mail account or connect Google in ewe Sync to see mail here."
 
     // the `mail status` snapshot — byte-compatible with the shell's: ewe-settings reads it
     function statusJson() {
@@ -157,7 +157,7 @@ QtObject {
                         ml._notifyNew(ml.imapList, first)
                         ml._saveState()
                     } else if (j.error === "auth-failed" || j.error === "no-password") {
-                        ml.imapState = "auth"; ml.imapError = "The mail server rejected the login — sign in to the mail account again in Settings → Account."
+                        ml.imapState = "auth"; ml.imapError = "The mail server rejected the login — sign in to the mail account again on ewe Sync's Mail page."
                     } else if (j.error === "not-configured") {
                         ml.imapConfigured = false
                     } else {

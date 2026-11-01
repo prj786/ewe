@@ -394,7 +394,7 @@ QtObject {
                     cl._setConflict(j.error, j.remote, j.remote_is_this_machine)
                     cl.checkCloud()
                 } else if (j && (j.error === "unauthorized" || j.error === "not-signed-in")) {
-                    cl.syncState = "error"; cl.syncError = "The account no longer accepts this machine — sign in again (the app password may have been revoked on the server)."
+                    cl.syncState = "error"; cl.syncError = "The account no longer accepts this computer. Sign in again in ewe Sync (the app password may have been revoked on the server)."
                     cl.refresh()
                 } else if (wasAuto && (!j || String(j.error || "").indexOf("network") === 0)) {
                     cl.syncState = "idle"            // offline is normal; the next tick retries
@@ -436,11 +436,11 @@ QtObject {
         cl.syncState = "error"
         cl.syncConflict = true
         if (kind === "remote-exists")
-            cl.syncError = "A backup" + (who ? " from “" + who + "”" : "") + " already exists in your account — restore it first, or push anyway to overwrite it."
+            cl.syncError = "Your account already has settings" + (who ? " from “" + who + "”" : "") + ". Open ewe Sync to use them or keep this computer’s."
         else if (mine === true)
-            cl.syncError = "The copy in your account was saved by this computer but is not the one it last synced — push anyway to replace it, or restore it. Open ewe-sync to decide."
+            cl.syncError = "The settings in your account were saved by this computer, but not the copy it last synced. Open ewe Sync to use the account’s copy or keep this computer’s."
         else
-            cl.syncError = (who ? "Another machine (“" + who + "”)" : "Another machine") + " saved newer settings — restore them, or push anyway to overwrite. Open ewe-sync to decide."
+            cl.syncError = (who ? "“" + who + "”" : "Another computer") + " saved newer settings. Open ewe Sync to use them or keep this computer’s."
     }
 
     property var _statusCb: null
@@ -494,8 +494,8 @@ QtObject {
         cl.pendingRestore = { updatedAt: cl.cloudInfo.updatedAt, device: cl.cloudInfo.device }
         if (!Globals.welcomeOpen)
             Quickshell.execDetached(["notify-send", "-a", "ewe", "-i", "cloud",
-                "Restore this machine?",
-                "A backup from “" + cl.cloudInfo.device + "” is in your account — open Settings → Account to bring your desktop and apps back."])
+                "Restore this computer?",
+                "A backup from “" + cl.cloudInfo.device + "” is in your account. Open ewe Sync to bring everything back."])
     }
 
     // ── auto-sync: NEVER from a never-synced machine, nor while a restore is

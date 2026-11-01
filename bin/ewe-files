@@ -71,7 +71,7 @@ setup)
     fi
     # 1 · the signed-in account: server + login name + app password
     tok="$(ewe_cloud token --json)"
-    echo "$tok" | grep -q '"ok": true' || die "not signed in to a Nextcloud — sign in first (Settings → Account)"
+    echo "$tok" | grep -q '"ok": true' || die "not signed in to a Nextcloud — sign in first in ewe Sync"
     read -r url user pass < <(python3 - "$tok" <<'PY'
 import json, sys, urllib.parse
 j = json.loads(sys.argv[1])

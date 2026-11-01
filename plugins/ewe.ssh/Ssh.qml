@@ -23,6 +23,9 @@ QtObject {
 
     property var hosts: []
     property bool tunnelUp: false       // any background ssh -f -N tunnel is up (the bar glyph)
+    // Safe (ewe-safe) is installed: it holds the SSH keys and answers every
+    // ssh as the agent (ewe-safe docs/GATE.md); the page links to its SSH page
+    property bool safe: false
     property string scriptTarget: ""    // host whose browse-script editor is open
     property string scriptText: ""      // editor prefill (existing script when editing)
 
@@ -100,6 +103,11 @@ QtObject {
         ssh.scriptTarget = ""
         ssh.rescanSoon()
     }
+    // Safe's SSH page: keys, hosts, and Connect (GitHub, Azure, a server…)
+    function openSafe() {
+        Quickshell.execDetached(["ewe-safe-app", "--ssh"])
+        Shell.closeQuickSettings()
+    }
     function stopTunnel(host) {
         Quickshell.execDetached(["sh", "-c", "pkill -f " + ssh.sq("^ssh -f -N .*" + host + "$")])
         ssh.rescanSoon()
@@ -110,15 +118,16 @@ QtObject {
     // background tunnels we start (they all match "^ssh -f -N") and the saved
     // browse scripts (ssh-browse/<host>.sh).
     property Process scanProc: Process {
-        command: ["sh", "-c", "cat \"$HOME/.ssh/config\" \"$HOME/.ssh/config.d\"/* 2>/dev/null; printf '\\n@TUNNELS@\\n'; pgrep -af '^ssh -f -N' 2>/dev/null; printf '@SCRIPTS@\\n'; ls \"" + ssh.scriptDir + "\" 2>/dev/null; true"]
+        command: ["sh", "-c", "cat \"$HOME/.ssh/config\" \"$HOME/.ssh/config.d\"/* 2>/dev/null; printf '\\n@TUNNELS@\\n'; pgrep -af '^ssh -f -N' 2>/dev/null; printf '@SCRIPTS@\\n'; ls \"" + ssh.scriptDir + "\" 2>/dev/null; printf '@SAFE@\\n'; command -v ewe-safe-app 2>/dev/null; true"]
         stdout: StdioCollector {
             onStreamFinished: {
-                var ls = this.text.split("\n"), sec = 0   // 0 config · 1 tunnels · 2 scripts
-                var hosts = [], seen = {}, tunHosts = {}, scripts = {}
+                var ls = this.text.split("\n"), sec = 0   // 0 config · 1 tunnels · 2 scripts · 3 Safe
+                var hosts = [], seen = {}, tunHosts = {}, scripts = {}, safe = false
                 for (var i = 0; i < ls.length; i++) {
                     var ln = ls[i].trim()
                     if (ln === "@TUNNELS@") { sec = 1; continue }
                     if (ln === "@SCRIPTS@") { sec = 2; continue }
+                    if (ln === "@SAFE@") { sec = 3; continue }
                     if (!ln || (sec === 0 && ln.charAt(0) === "#")) continue
                     if (sec === 1) {
                         // "PID ssh -f -N [-o …] [-D …] host" — host is the last token
@@ -128,6 +137,10 @@ QtObject {
                     }
                     if (sec === 2) {
                         if (/\.sh$/.test(ln)) scripts[ln.slice(0, -3)] = true
+                        continue
+                    }
+                    if (sec === 3) {
+                        safe = true
                         continue
                     }
                     var mh = ln.match(/^Host\s+(.+)$/i)
@@ -148,6 +161,7 @@ QtObject {
                 }
                 ssh.hosts = arr
                 ssh.tunnelUp = anyTun
+                ssh.safe = safe
             }
         }
     }

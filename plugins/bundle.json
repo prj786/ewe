@@ -5,8 +5,8 @@
       "repo": "https://github.com/prj786/ewe-plugin-cast",
       "default": false,
       "migrate": true,
-      "commit": "d22a6b612c6f08968524e9ce0eef9e13579043f2",
-      "version": "1.0.1"
+      "commit": "5c1492d30d688f6b352def9d3a8a40aee58312e3",
+      "version": "1.0.2"
     },
     "ewe.clipboard": {
       "repo": "https://github.com/prj786/ewe-plugin-clipboard",
@@ -19,15 +19,15 @@
       "repo": "https://github.com/prj786/ewe-plugin-companion",
       "default": false,
       "migrate": false,
-      "commit": "e0f7da971a3e64471e323ca58f08a234b17c8847",
-      "version": "0.5.0"
+      "commit": "e7b3fd6750c8ac495a77ff028ca73dcca61075da",
+      "version": "0.5.1"
     },
     "ewe.dock": {
       "repo": "https://github.com/prj786/ewe-plugin-dock",
       "default": false,
       "migrate": true,
-      "commit": "c88fdc4e2e49ac4446c2efa5aeff7bdf6171d9ab",
-      "version": "1.3.1"
+      "commit": "5e97e1bcb9af678e8cc5c20ac70d12bfa466b6ed",
+      "version": "1.3.2"
     },
     "ewe.insomnia": {
       "repo": "https://github.com/prj786/ewe-plugin-insomnia",
@@ -40,8 +40,8 @@
       "repo": "https://github.com/prj786/ewe-plugin-mail",
       "default": false,
       "migrate": true,
-      "commit": "675d9443db1260a60947be81a126095ba314019e",
-      "version": "1.1.0"
+      "commit": "36fd90b228c8c8a2261a2b890e16c95051805752",
+      "version": "1.1.1"
     },
     "ewe.media": {
       "repo": "https://github.com/prj786/ewe-plugin-media",
@@ -52,8 +52,8 @@
     },
     "ewe.passwords": {
       "repo": "https://github.com/prj786/ewe-plugin-passwords",
-      "commit": "98d2186585eb99382695476b57052ea5bff4b9e4",
-      "version": "1.3.0",
+      "commit": "a926405dcfdf9e59df0259b6b2e7419b79084e5f",
+      "version": "1.3.1",
       "default": false,
       "migrate": true
     },
@@ -68,15 +68,15 @@
       "repo": "https://github.com/prj786/ewe-plugin-places",
       "default": false,
       "migrate": true,
-      "commit": "66a46c0be47d24c6ad95eaf0c6005f3fc166ce62",
-      "version": "1.0.2"
+      "commit": "fd5a2b41b64e927570892cb2c60c0a00b82dfbd0",
+      "version": "1.0.3"
     },
     "ewe.safe": {
       "repo": "https://github.com/prj786/ewe-plugin-safe",
       "default": false,
       "migrate": false,
-      "commit": "9b776c2a95897ad9f086598e18536f36bf64d32e",
-      "version": "1.1.0"
+      "commit": "e6da90b43d4f0217eafaff7bae47a207d7610309",
+      "version": "1.1.1"
     },
     "ewe.screenshot": {
       "repo": "https://github.com/prj786/ewe-plugin-screenshot",
@@ -96,8 +96,8 @@
       "repo": "https://github.com/prj786/ewe-plugin-ssh",
       "default": false,
       "migrate": true,
-      "commit": "0e6b55ecc2d05fd8dbbb5bb8ba36ad5eaa94c6ae",
-      "version": "1.0.1"
+      "commit": "a9d91ed24535b1577c7977272186fdd7e9e68611",
+      "version": "1.1.0"
     },
     "ewe.switcher": {
       "repo": "https://github.com/prj786/ewe-plugin-switcher",
@@ -110,15 +110,15 @@
       "repo": "https://github.com/prj786/ewe-plugin-sysmon",
       "default": false,
       "migrate": true,
-      "commit": "ff8a4c12a35bf1ba746e19c770b48237a1879aa0",
-      "version": "1.1.0"
+      "commit": "93ef7751cea341462e284aa3a1208af86a4adbab",
+      "version": "2.0.0"
     },
     "ewe.vpn": {
       "repo": "https://github.com/prj786/ewe-plugin-vpn",
       "default": false,
       "migrate": true,
-      "commit": "d3f743d3d037e50e320247d2abf23222c66d575b",
-      "version": "1.0.1"
+      "commit": "50aaa3d55576cae3d24f6f55e5b50dcf867e3a20",
+      "version": "1.0.2"
     }
   }
 }

@@ -5,8 +5,8 @@ you ask for it.
 
 Mirror the screen to a TV from Quick settings: Miracast (Samsung "Screen
 Mirroring", Android TV — over Wi-Fi Direct) and Chromecast / Google TV. The
-protocols live in ewe's headless casting engine
-[`ewe-castd`](https://github.com/prj786/ewe-cast) (RFC-004); this plugin is
+protocols live in **ewe Cast**, ewe's headless casting engine
+([`ewe-castd`](https://github.com/prj786/ewe-cast), RFC-004); this plugin is
 the shell's end of it — the sink list, the tile, the bar glyph, the
 Super+Shift+C bind, and the narrated handshake.
 
@@ -21,7 +21,7 @@ Komble → Plugins → **Cast to TV**, or:
 
 | kind | file | shows |
 |---|---|---|
-| `quick-page` | `Page.qml` | the **Cast** page (rail entry, key `cast`): the displays in range, pick one → the shell's SharePicker → streaming; a switch that hangs up |
+| `quick-page` | `Page.qml` | the **Cast** page (key `cast`; the tile's chevron opens it, so it is not in the shortcut row): the displays in range, pick one → the shell's SharePicker → streaming; a switch that hangs up |
 | `quick-tile` | `Tile.qml` | a **Cast** tile on the Quick settings home: idle it opens the page, while casting it is lit (busy until the picture is on the TV) and a click hangs up |
 | `bar-status` | `Status.qml` | the screencast glyph in the bar's Quick settings pill while a session exists — accent once streaming |
 | `service` | `Service.qml` | the headless client: starts and talks to `ewe-castd`, narrates Wi-Fi Direct from the system journal, owns the legacy path |
@@ -56,7 +56,7 @@ installed user unit.
 ## Requires
 
 Declared in the manifest (`requires`), installed by ewe itself (and reported
-by Komble when missing): `ewe-cast` (the engine), `gnome-network-displays`
+by Komble when missing): `ewe-cast` (ewe Cast, the engine), `gnome-network-displays`
 (the legacy path), `avahi` (Chromecast discovery), `iw`, `wireless-regdb`,
 `gst-plugin-va` (hardware H.264), `gst-plugins-bad`. The system side —
 avahi-daemon, the regulatory domain, the Wi-Fi power-save dispatcher, the
@@ -82,7 +82,7 @@ and prints the fix for each:
   `iw reg get` → `country 00`
 - **No sound on the TV**: `pactl get-default-sink` should name the
   `gnome_network_displays_*` sink while casting
-- **"cast engine not installed"** on the page: the `ewe-cast` package is
+- **"ewe Cast is not installed"** on the page: the `ewe-cast` package is
   missing, or `systemctl --user status ewe-cast.service` says why it won't start
 
 `ewe-diag` (the workspace skill) gathers all of the above in one go.

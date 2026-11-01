@@ -61,14 +61,14 @@ time — it checks all of the above and prints the fix for each.
 
 **Symptom.** The desktop says *"Another machine (“laptop”) saved newer
 settings"* — often naming **this** computer — every automatic push is
-refused, and ewe-sync shows no **Push anyway** or **Restore** to get out of
+refused, and ewe Sync shows no **Push anyway** or **Restore** to get out of
 it.
 
 **Cause (before ewe 0.25.1).** An upload that the server stored but whose
 reply never came back (a lid closed mid-push, a dropped Wi-Fi), or a push
 whose meta stamp (`ewe.conf.meta.json`) the server refused, left
 `~/.local/state/ewe/sync.json` on the old ETag for good: every later push
-read this machine's own upload as somebody else's. ewe-sync's Push anyway /
+read this machine's own upload as somebody else's. ewe Sync's Push anyway /
 Restore banner never appeared because it keyed on `sync-status`'s `error`,
 which only carries transport errors. And the stamp names a machine by
 hostname alone, so when two computers share one the message names this one.
@@ -76,27 +76,27 @@ hostname alone, so when two computers share one the message names this one.
 **Fix.** Update (0.25.1 records the `sha256` of what it pushed and adopts its
 own upload; `sync-status` reports `conflict` and `remote_is_this_machine`;
 a refused stamp is a warning, not a failure — see
-[EWE-CONF](EWE-CONF.md#sync)). Then once: **ewe-sync → This machine → Push
+[EWE-CONF](EWE-CONF.md#sync)). Then once: **ewe Sync → This machine → Push
 anyway** (keep this machine's settings) or **Restore** (take the account's).
 If two machines share a hostname, rename one (`hostnamectl hostname
 desk-laptop`) so backups say who saved them. Check with `ewe-conf
 sync-status`: `conflict` should be `null` and `in_sync` true.
 
-## Settings says the shell isn't running, but it is
+## ewe Settings says the shell isn't running, but it is
 
-**Symptom.** ewe-settings says the shell isn't running (and greys out what
+**Symptom.** ewe Settings says the shell isn't running (and greys out what
 only applies live) while the bar is plainly there.
 
-**Cause (before ewe 0.25.1).** Settings asked the shell once, when it
+**Cause (before ewe 0.25.1).** ewe Settings asked the shell once, when it
 opened. A shell restarting at that moment — login, an update, a plugin
 install — a `qs ipc --pid` call aimed at a pid the restart had just
 replaced, or a call that hung, left the note up for the life of the window.
 
-**Fix.** Update. Settings now asks again whenever its window gets focus and
+**Fix.** Update. ewe Settings now asks again whenever its window gets focus and
 every 10 s while the shell is not answering, waits at most 3 s per call,
 retries a failed `--pid` call once without the pid, and only says "not
 running" after two misses in a row. Meanwhile, closing and reopening
-Settings clears it; `qs ipc call settings ping` from a terminal answers the
+ewe Settings clears it; `qs ipc call settings ping` from a terminal answers the
 same question.
 
 ## Sign-in: no keyring prompt, "keyring not showing up"
@@ -147,7 +147,7 @@ the prompt comes back after every boot. Found on the owner's machine
 crashed (`gkd-secret-unlock.c:244 perform_next_unlock: assertion failed`),
 and the copy D-Bus started next had no password at all.
 
-With Safe installed (0.3.0+), move everything into `login` and keep the old
+With ewe Safe installed (0.3.0+), move everything into `login` and keep the old
 keyring as a backup — it asks for the old keyring's password one last time:
 
 ```sh
@@ -156,25 +156,25 @@ ewe-safe keyring repair --dry-run
 ewe-safe keyring repair          # copies every item into login; default -> login
 ```
 
-Safe → Settings → Keyring has the same as a button ("Fix the keyring password
+ewe Safe → Settings → Keyring has the same as a button ("Fix the keyring password
 prompt"). Nothing is deleted; remove the old keyring later in Seahorse once
-everything works. Without Safe, clear it and let PAM start over:
+everything works. Without ewe Safe, clear it and let PAM start over:
 
 ```sh
 ewe-auth keyring-reset      # or: mv ~/.local/share/keyrings{,.bak}
 # log out and back in — PAM now creates login.keyring with your login
-# password — then sign in again from ewe-sync.
+# password — then sign in again from ewe Sync.
 ```
 
 The old files are kept in `~/.local/share/keyrings.bak.<timestamp>`.
 
-**Safe as your login unlock.** Safe (the password manager, RFC-008) can open
+**ewe Safe as your login unlock.** ewe Safe (the password manager, RFC-008) can open
 with your **login password** instead of its master password: turn it on in
-Safe → Settings → Security, or `ewe-safe login enable`. With it on, Safe on
+ewe Safe → Settings → Security, or `ewe-safe login enable`. With it on, ewe Safe on
 this computer is as strong as your login password; your copy in Nextcloud
 still needs the master password. It rides in the same `login` keyring
 `pam_gnome_keyring` already unlocks at the greeter (above), so when that
-keyring is healthy Safe opens at login with no extra prompt — if the keyring
+keyring is healthy ewe Safe opens at login with no extra prompt — if the keyring
 itself is stuck, fix it first (this section). Turn it back off with
 `ewe-safe login disable`; the master password always works. `[safe]`
 `unlock_at_login` (default true) controls the open-at-login step;
@@ -193,7 +193,7 @@ and takes input only on its own card.
 helper now tries `xdg-open`, then the shipped browser by desktop id, then by
 binary, and reports `browser-failed` instead of waiting five minutes. The
 sign-in page's link is always available — **Open the sign-in page** /
-**Copy the link** in Welcome and in ewe-sync — and is also written to
+**Copy the link** in Welcome and in ewe Sync — and is also written to
 `$XDG_RUNTIME_DIR/ewe-auth-consent-url` for the length of the attempt.
 Command-line tools that open a browser (`gh auth login`, Python's
 `webbrowser`) use `$BROWSER`, which the session sets to `gio launch` of the
@@ -277,7 +277,7 @@ persistent journal in place there is finally something to read.
 ## Bluetooth: pairs from the terminal, not from the desktop
 
 **Symptom.** `bluetoothctl pair XX:XX…` works; tapping the same device in
-Quick Settings or the Settings app does nothing, or connects for a second
+Quick settings or ewe Settings does nothing, or connects for a second
 and drops. Phones never show a "confirm this code" prompt on the PC side.
 
 **Cause.** Pairing needs an `org.bluez.Agent1` in the session to answer

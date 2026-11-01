@@ -14,7 +14,7 @@ QEMU/KVM VM and on Intel Lunar Lake hardware.
 Versioning is **semver** (`MAJOR.MINOR.PATCH`) with an `-alpha`/`-beta`
 pre-release suffix until the first stable cut. The canonical version lives in
 the repo-root **`VERSION`** file; the shell mirrors it in
-`dotfiles/quickshell/Globals.qml` (`Globals.version`, shown in the Settings
+`dotfiles/quickshell/Globals.qml` (`Globals.version`, shown in the ewe Settings
 sidebar). Releases are git tags (`vX.Y.Z`) built by `release.sh`, which produces
 the `ewe-<version>.tar.zst` artefact that `get.sh` installs.
 
@@ -116,13 +116,13 @@ coexist.
 Going all-GTK also fixes default-app management: **one `~/.config/mimeapps.list`**
 is the single source of truth, read natively by **GIO** — "Open With" always
 sees your installed apps, with no KDE `ksycoca` cache to rebuild. Manage it from
-**Settings → Default Apps**. Right-click **Compress… / Extract Here** in Nemo
+**ewe Settings → Default Apps**. Right-click **Compress… / Extract Here** in Nemo
 ship as `system/nemo-actions/*.nemo_action` (calling engrampa).
 
 **Appearance** (a scheme + an accent: Ewe Dark by default; light mode is the
 built-in Ewe Light, an imported light scheme or *From wallpaper (light)*) is
 applied by `dotfiles/quickshell/scripts/colorscheme.sh` and changed live in
-**Settings → Appearance**:
+**ewe Settings → Appearance**:
 
 - **GTK** (primary) — gsettings + `gtk-3.0/4.0/settings.ini` (adw-gtk3[-dark]);
   accent changes recolour GTK apps live.
@@ -131,8 +131,8 @@ applied by `dotfiles/quickshell/scripts/colorscheme.sh` and changed live in
   `kdeglobals` fallback covers any KDE app added later. No `plasma-integration`.
 - **Icons** — **Reversal**, auto-matched to the accent by hue (its light
   variant on a light scheme).
-- **Apps** — kitty, Zathura, Zed, mpv, ewe browser, Helium (while installed)
-  and ewe's own apps (Settings, Komble, ewe-sync) take the scheme too; Zed switches to a light theme with
+- **Apps** — kitty, Zathura, Zed, mpv, ewe Browser, Helium (while installed)
+  and ewe's own apps (ewe Settings, Komble, ewe Sync) take the scheme too; Zed switches to a light theme with
   the scheme's own syntax colours. The lock screen stays Ewe Dark over the
   wallpaper.
 - **Cursor** — **Mocu** (`mocu-xcursor`), forced via `XCURSOR_THEME`,
@@ -185,16 +185,16 @@ ewe's account is **your own Nextcloud** — a server you run, or a hosted
 account from a provider such as Murena, Disroot or Infomaniak
 ([RFC-005](RFC-005-nextcloud-account.md)). Nothing about it is baked into
 ewe: no project client, no vendor console, nobody's verification. One
-sign-in (Welcome on the first login, or ewe-sync afterwards) and the desktop
+sign-in (Welcome on the first login, or ewe Sync afterwards) and the desktop
 lights up around it:
 
 | what | how |
 |---|---|
-| **the one file** | `ewe.conf` syncs to `ewe/` in the account; every change — Settings, Komble, the terminal — pushes ~20 s later once this machine has made its first backup ([EWE-CONF](EWE-CONF.md)) |
+| **the one file** | `ewe.conf` syncs to `ewe/` in the account; every change — ewe Settings, Komble, the terminal — pushes ~20 s later once this machine has made its first backup ([EWE-CONF](EWE-CONF.md)) |
 | **restore** | a machine that signs in and finds a backup is offered it, out loud; your apps line up in Komble → For you |
-| **files** | the account mounted at `~/Nextcloud` (Files → sidebar); full folder sync, your machines and a tray are the account app, ewe-sync (below) |
+| **files** | the account mounted at `~/Nextcloud` (Files → sidebar); full folder sync, your machines and a tray are the account app, ewe Sync (below) |
 | **calendar** | CalDAV — the Control Center's calendar and reminders |
-| **mail** | any IMAP account (ewe-sync → Mail adds it): the **Mail plugin** (`ewe.mail`, Komble → Plugins) shows the unread badge, the latest mail and new-mail notifications (its *Notifications for new mail* option) |
+| **mail** | any IMAP account (ewe Sync → Mail adds it): the **Mail plugin** (`ewe.mail`, Komble → Plugins) shows the unread badge, the latest mail and new-mail notifications (its *Notifications for new mail* option) |
 
 Signing in is Nextcloud's own **Login Flow v2**: the browser opens your
 server's page, you sign in there (password, 2FA, SSO — whatever your server
@@ -203,18 +203,18 @@ uses) and grant access to *ewe (<your computer>)*; the server hands ewe an
 Nextcloud → Settings → Security. Details, the terminal tools and the
 troubleshooting: [NEXTCLOUD.md](NEXTCLOUD.md).
 
-**ewe-sync** ([RFC-006](RFC-006-flock.md)) is the account app that comes
+**ewe Sync** ([RFC-006](RFC-006-flock.md)) is the account app that comes
 with the account: a tray icon that shows the sync state, and a window with
 your account, this machine's backup, **your machines** (every machine that
 backed up to the account, which one saved last) and **folder sync** — pairs
 of a local folder and a folder in the account, two-way through the Nextcloud
 sync engine or one-way copies, on change, on a timer or at login, with
 conflicts resolved in place. It starts with the session (`ewe-sync.service`,
-enabled by `ewe-setup`); Welcome and Settings → Account open it with
-**Open ewe-sync** / **Manage in ewe-sync**. Komble and the Settings app keep
-no sync buttons — they only write the one file, ewe-sync moves it.
+enabled by `ewe-setup`); Welcome and ewe Settings → User open it with
+**Open ewe Sync** / **Manage in ewe Sync**. Komble and ewe Settings keep
+no sync buttons — they only write the one file, ewe Sync moves it.
 
-If the browser never opened, Welcome and ewe-sync offer **Open the sign-in
+If the browser never opened, Welcome and ewe Sync offer **Open the sign-in
 page / Copy the link**. The keyring should never prompt at all — PAM creates
 and unlocks it with your login password — but a machine carrying an older
 "Default keyring" needs one `ewe-auth keyring-reset` and a re-login first
@@ -227,7 +227,7 @@ Center, **Google Drive** as `~/Google Drive`, and **Gmail** for the Mail
 plugin. ewe ships **no Google client** — to use
 it, create your own OAuth client of type *Desktop app* (Gmail + Drive APIs)
 and save it as `~/.config/ewe/oauth-client.json`
-([GOOGLE-CLIENT.md](GOOGLE-CLIENT.md)); **ewe-sync → Google** says whether
+([GOOGLE-CLIENT.md](GOOGLE-CLIENT.md)); **ewe Sync → Google** says whether
 the file parses and connects the account. A personal client needs no Google verification — the
 consent screen shows a warning you click through once. Settings sync never
 uses Google; an IMAP mail account, when set up, takes precedence over Gmail
@@ -243,11 +243,11 @@ L2TP/IPsec *is* IKEv1, and strongSwan 6.1 as Arch ships it no longer speaks
 it — on such a box every L2TP profile fails with "The VPN service failed to
 start" and `journalctl -u NetworkManager` shows "Could not establish IPsec
 connection". Re-running `install.sh` (or `install.sh --check-only` to just
-look) swaps the backend and flips the policy. Add a VPN in **Settings → Network → Add VPN** — an
+look) swaps the backend and flips the policy. Add a VPN in **ewe Settings → Network → Add VPN** — an
 L2TP one from its four facts, an OpenVPN or WireGuard one from its file —
 or import from a terminal (`nmcli connection import type openvpn file
 x.ovpn`). Then toggle it in the **Control Center → VPN** card — the **VPN
-plugin** (`ewe.vpn`, Komble → Plugins; Settings → Network works without it).
+plugin** (`ewe.vpn`, Komble → Plugins; ewe Settings → Network works without it).
 The first connect asks for the credentials once, inline, and keeps them in the
 profile (root-only, under `/etc/NetworkManager`); the one file records the
 definition, never the secrets, so a restored machine asks once again.
@@ -255,16 +255,16 @@ definition, never the secrets, so a restored machine asks once again.
 ## Remote: your other computers, over SSH
 
 Share a computer, then reach it from your other ewe computers: a terminal
-on it, its files (SFTP), and an ewe browser workspace whose web traffic
+on it, its files (SFTP), and an ewe Browser workspace whose web traffic
 leaves from it (RFC-009). Not screen sharing: a full SSH login as you.
 
-1. On the computer to share: **Control Centre → Sharing** (or the rail's
-   share icon) → **Share this computer** on. It shows an **8-digit code**.
+1. On the computer to share: **Control Centre → Sharing** (the tile's
+   arrow, or the bar's share glyph) → **Share this computer** on. It shows an **8-digit code**.
 2. On the other computer: **Control Centre → Sharing → Your computers** →
    the shared one → **Pair** → type the code. Nobody needs to be at the
    shared computer when you do this; it can be locked, across town.
 3. From then on: the row's terminal icon opens kitty on it, the globe opens
-   ewe browser's remote workspace for it. In a terminal:
+   ewe Browser's remote workspace for it. In a terminal:
    `ssh -F ~/.local/share/ewe/remote/ssh_config <name>`.
 
 While a computer is shared the bar shows the share icon; it turns the
@@ -409,7 +409,7 @@ accent '#…'`), and `export` writes your current palette as Base24 for
 another machine or a friend. Schemes sync with `ewe.conf`.
 
 ewe is dark by default; a scheme that declares itself light is honoured
-end to end — GTK, Qt, kitty, icons and the shell. The Settings app's
+end to end — GTK, Qt, kitty, icons and the shell. ewe Settings'
 Appearance pane has the same controls: Accent · Scheme · Wallpaper, an
 Import… button and a small editor for the palette.
 
@@ -426,7 +426,7 @@ error. If Komble is missing, a notification says so instead.
 ## Network: saved networks, the wired switch, X11 apps, JetBrains
 
 **A saved Wi-Fi network never asks for its password again.** The shell and
-the Settings app match networks to saved profiles by SSID (a profile need not
+ewe Settings match networks to saved profiles by SSID (a profile need not
 be named after its network — one on this box is called `786  `, trailing
 spaces included) and join through the profile. You are asked only for a
 network NetworkManager has no profile for, or whose key sits in a secret
@@ -435,7 +435,7 @@ in a duplicate "SSID 1" one. The row keeps its spinner until NetworkManager
 confirms the join, and the panel re-reads on every NetworkManager event, so a
 cable plug or a VPN coming up shows at once.
 
-**Wired has a switch.** Quick Settings → Wi-Fi and Settings → Networking show
+**Wired has a switch.** Quick settings → Wi-Fi and ewe Settings → Networking show
 the ethernet port with its own toggle: off keeps you on Wi-Fi with the cable
 still in (`nmcli device disconnect`, autoconnect resumes on re-plug or when
 you switch it back on). With both links up the tile says so, the link that
@@ -447,7 +447,7 @@ link your traffic actually takes — a cable that is the default route wins
 over Wi-Fi. It is **muted** while there is no internet yet (a cable still
 getting an address, Wi-Fi still joining) and muted **with a warning dot**
 when the link is up but NetworkManager finds no internet behind it. Quick
-Settings → Wi-Fi puts it in words:
+ewe Settings → Wi-Fi puts it in words:
 
 | The wired row says | It means |
 |---|---|

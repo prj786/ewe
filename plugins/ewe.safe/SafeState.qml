@@ -54,7 +54,7 @@ QtObject {
         if (safe.unlocked) safe.lock()
         else if (safe.locked || safe.offered) safe.unlock()
         else if (safe.phase === "new") safe.openApp("")
-        else Shell.toast(safe.phase === "down" ? "Safe isn't running." : "Safe isn't installed.", "warning")
+        else Shell.toast(safe.phase === "down" ? "ewe Safe isn't running." : "ewe Safe isn't installed.", "warning")
     }
     function copy(id, field) {
         if (!id) return
@@ -65,7 +65,7 @@ QtObject {
     // the Safe window: "" opens it, "show" an item, "new" a login
     function openApp(what, id) {
         if (!safe.appInstalled) {
-            Shell.toast("The Safe window isn't installed yet. Use ewe-safe in a terminal for now.", "warning")
+            Shell.toast("The ewe Safe window isn't installed yet. Use ewe-safe in a terminal for now.", "warning")
             safe._probeApp.running = true      // it may have arrived since
             return
         }
@@ -148,7 +148,7 @@ QtObject {
                 safe.unlockFinished(false)
                 if (d && d.error === "cancelled") return
                 if (d) safe._set(Logic.fromStatus(safe.state, d))
-                Shell.toast(d && d.message ? d.message : "Safe is still locked.", "warning")
+                Shell.toast(d && d.message ? d.message : "ewe Safe is still locked.", "warning")
             }
         }
     }
@@ -158,7 +158,7 @@ QtObject {
             onStreamFinished: {
                 var d = null
                 try { d = JSON.parse(this.text) } catch (e) { d = null }
-                if (!d || !d.ok) Shell.toast("Couldn't lock Safe.", "warning")
+                if (!d || !d.ok) Shell.toast("Couldn't lock ewe Safe.", "warning")
             }
         }
     }

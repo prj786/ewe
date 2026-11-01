@@ -79,7 +79,7 @@ cd acme.weather && ewe-plugin dev .        # linked, enabled, shell restarted, l
 
 That is a git repository with a working plugin in it. You own the QML — what
 it draws and does. ewe owns where it lives and what the user may change: a
-tile's place in the home grid, a page's rail entry, a bar widget's section
+tile's place in the home grid, a page's shortcut tile, a bar widget's section
 and visibility, a desktop widget's place on the screen, whether it is
 **pinned** (above the windows, or above everything) or on the desktop (below
 them), whether it is locked in place, whether it is shown, and the values of
@@ -194,13 +194,14 @@ A plugin is a git repository with `manifest.json` at its root:
 | `kinds` | one or more of `service`, `panel`, `overlay`, `menu`, `bar-widget`, `desktop-widget`, `quick-tile`, `quick-page`, `bar-status`, `dock-item` |
 | `entryPoints` | one `.qml` file per kind (none for `dock-item`), relative, inside the plugin (symlinks that resolve outside it are rejected) |
 | `quickTile` | optional: `{ "span": 1 \| 2, "order": int }` — half a row or the whole row of the home grid; whole-row cards (span 2) always come after every half-row tile, then by `order` |
-| `quickPage` | required with `quick-page`: `{ "key", "label", "icon", "order" }`. `key` is lowercase `[a-z0-9_-]`, unique, and not one the shell keeps (`home wifi bt audio cal notifs`); it is what `quicksettings tab <key>` and `Shell.openQuickSettings(key)` route to |
+| `quickPage` | required with `quick-page`: `{ "key", "label", "icon", "order" }`. `key` is lowercase `[a-z0-9_-]`, unique, and not one the shell keeps (`home wifi bt audio cal notifs remote power` — `validate` and install refuse them; `remote` and `power` since 0.39); it is what `quicksettings tab <key>` and `Shell.openQuickSettings(key)` route to |
 | `barStatus` | optional: `{ "order": int, "defaultShown": bool, "toggle": bool }` — `defaultShown` and `toggle` as for `barWidget` |
 | `dockItem` | required with `dock-item`: `{ "icon", "label", "action", "order" }` — static; the dock draws the button and runs `action` (see `Shell.registerAction`), or `qs ipc call <id> toggle` when no action is registered. Hide it at runtime with `Shell.setDockItemShown(id, false)` |
 | `requires` | optional: `{ "packages": [...], "commands": [...] }` — reported by `list --json` (`missing`) and `install`; never installed by the shell |
 | `ipcAliases` | optional, **`ewe.` plugins only**: legacy IPC targets this plugin's QML registers (`["player"]`), so old keybinds and scripts keep working after a feature moved out of the shell |
 | `icon`, `category` | the catalogue card (Komble → Plugins, Welcome). Icons are Theme glyph **names** (`"icMusic"`), resolved by the host as `Theme[icon]` |
-| `desktopWidget` | optional, for `desktop-widget`: `{ "x": 48, "y": 64, "layer": "desktop", "pinLevel": "top", "locked": false }` — the defaults; the user's placement in ewe.conf wins. `layer` is `desktop` (under the windows), `top` (pinned above them) or `overlay` (pinned above everything, fullscreen too); `pinLevel` (`top` \| `overlay`, default `top`) is where pinning puts it; `locked` (default false) starts it undraggable |
+| `desktopWidget` | optional, for `desktop-widget`: `{ "x": 48, "y": 64, "layer": "desktop", "pinLevel": "top", "locked": false, "visible": true }` — the defaults; the user's placement in ewe.conf wins. `layer` is `desktop` (under the windows), `top` (pinned above them) or `overlay` (pinned above everything, fullscreen too); `pinLevel` (`top` \| `overlay`, default `top`) is where pinning puts it; `locked` (default false) starts it undraggable |
+| `desktopWidget.visible` | optional bool, default `true` (0.39, additive — no apiVersion change): whether the widget is shown before the user has chosen. `false` starts it hidden, with no flash on the first login — e.g. a widget that is opt-in from the plugin's own "Show on desktop". The default only: `ewe-plugin place <id> --visible on\|off` (or the plugin calling the host's show/hide) stores the user's choice, which wins from then on; `place --reset` returns to it |
 | `barWidget.defaultSection` | `left`, `center` or `right` (default `right`) — where a bar widget is packed |
 | `barWidget.defaultShown` | optional bool, default `true` — Show in bar before the user picks |
 | `barWidget.toggle` | optional bool, default `true`. `false` = the plugin's own settings place its button (a "bar / dock" choice — Music, Places), so the host offers no Show in bar switch and always loads the widget |
@@ -218,7 +219,7 @@ A plugin is a git repository with `manifest.json` at its root:
 | `bar-widget` | an `Item` with an implicit size, packed into its bar section, once per monitor | + `screen`, `barWindow` |
 | `bar-status` | a glyph **inside the Quick settings pill**, after the shell's own, once per monitor. Root it on `BarStatusGlyph`; set `shown` (not `visible`) to whether it has something to say | + `screen`, `barWindow`, `ink` |
 | `quick-tile` | a `Tile` in the Quick settings home grid after the built-ins; the host sizes it (`span`) | + `panelOpen` |
-| `quick-page` | a `Column` the width of the panel, one rail entry (`quickPage.icon`), shown while its `key` is the tab; start it with a `QsPageHead` | + `panelOpen` |
+| `quick-page` | a `Column` the width of the panel, shown **in place of home** while its `key` is the tab; start it with a `QsPageHead` (back, name over status, switch — Esc goes back too). Home reaches it from a small shortcut tile (`quickPage.icon`, `label` as its tooltip) in the row under the tiles — unless your own `quick-tile` is on home with `hasMenu` and opens the page from its chevron, so a page is never offered twice (hide your tile's slot and the shortcut comes back; 0.39, there is no icon rail any more) | + `panelOpen` |
 | `desktop-widget` | a sized `Item` on the desktop, or pinned above the windows / above everything, on one output; dragged any time | the common set |
 | `dock-item` | **no QML**: a dock button from `dockItem` (icon, label); a click runs `Shell.runAction(action, anchor)` with the button's anchor, lit while `Shell.isActive(action)`, hidden while `Shell.dockItemShown(id)` is false. Without a dock installed the item simply has no host | — |
 
@@ -318,12 +319,12 @@ features, the `_private` plumbing) is internal and may move without notice.
 | component | what it is |
 |---|---|
 | `Tile` | the Quick settings tile (`ic`, `label`, `sub`, `active`, `opened`, `hasMenu`, `busy`, `disabled`; `clicked`, `menu`) — root your `quick-tile` on it |
-| `QsPageHead` | a page's head: back, `title`, `note`, `busy`, optional Switch (`hasSwitch`, `on`, `toggled`), actions as children |
+| `QsPageHead` | a page's head: back, `title` over its `note` (the status line), `busy`, optional Switch (`hasSwitch`, `on`, `toggled`), actions as children |
 | `QsSwitchRow` | glyph + `label` + `desc` + Switch; `toggled` |
 | `QsButton` | Button: `label`, `ic`, `variant` primary/secondary/ghost/danger, `size` sm/md, `busy`, `disabled`; `go` |
 | `QsIconButton` | Icon button: `ic`, `selected`, `danger`, `square`, `size`; `go` |
 | `QsField` + `QsFieldInput` | the text field box (`focused`, `error`) and the input inside it (`placeholder`) |
-| `QsSegmented` | segmented control: `options` `[{label, value, disabled}]`, `value`; `picked(value)` |
+| `QsSegmented` | segmented control: `options` `[{label, value, disabled, icon, tip}]`, `value`, `size` (`md` · `sm`); an option with `icon` and no `label` is an icon-only square segment (`tip` names it; `hoverItem`/`hoverTip` report the hovered one); `picked(value)` |
 | `QsEmpty` | empty state: `ic`, `title`, `desc`, actions as children |
 | `QsNote` | a wrapping caption under a list; `tone` danger/warning |
 | `QsMsgRow` | a two-line message row: `title`, `line`, `time`, `unread`; `clicked` |
@@ -422,7 +423,7 @@ loads it beside the first-party plugins without touching your session:
 
 ```sh
 HS_WORK=/tmp/hs-me HS_PLUGINS=1 HS_PLUGIN_DIRS=$PWD/my-plugin .claude/skills/run-ewe/driver.sh up
-.claude/skills/run-ewe/driver.sh open quicksettings      # the tile, the rail entry
+.claude/skills/run-ewe/driver.sh open quicksettings      # the tile, the page's shortcut tile
 .claude/skills/run-ewe/driver.sh ipc quicksettings tab weather
 .claude/skills/run-ewe/driver.sh down
 ```

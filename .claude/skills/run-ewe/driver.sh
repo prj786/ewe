@@ -17,6 +17,7 @@
 #   driver.sh ipc <tgt> <fn> ..  # call a shell IpcHandler (settings|store|quicksettings|...)
 #   driver.sh open <tgt> [png]   # toggle a surface, screenshot it (default: <tgt>.png)
 #   driver.sh shot [png]         # screenshot current nested output (default: shell.png)
+#   driver.sh notify <notify-send args>  # post a notification INTO the nest (needs HS_PRIVATE_BUS=1)
 #   driver.sh targets            # list all IpcHandler targets/functions
 #   driver.sh log                # tail the shell's qs log
 #   driver.sh check              # luac -p the Hyprland Lua config (static syntax check)
@@ -35,6 +36,8 @@
 #   HS_PAYLOAD=<dir>             # that payload (default $EWE_PAYLOAD_PLUGINS, else this checkout's plugins/)
 #   HS_PLUGIN_DIRS=a:b           # add + enable these plugin directories too (fixtures)
 #   HS_NO_APPS=1                 # hide Komble/ewe-settings/ewe-sync: the in-shell fallbacks open
+#   HS_PRIVATE_BUS=1             # the shell on its OWN session D-Bus: no host tray/MPRIS/calendar, its own
+#                                # notification server (the only way `notify` can reach it)
 #   HS_NO_SYSTEMCTL=1            # the nested shell sees a no-op systemctl (logged to $HS_WORK/systemctl.log):
 #                                # a flow that restarts ewe.service (Welcome's add-ons step) cannot reach the host's
 #   HS_SANDBOX=0                 # old behaviour: the live HOME and config
@@ -298,6 +301,16 @@ cmd_spawn()   {
   local cmd="$*"; cmd="${cmd//\\/\\\\}"; cmd="${cmd//\"/\\\"}"
   HYPRLAND_INSTANCE_SIGNATURE="$NEST_SIG" hyprctl dispatch "hl.dsp.exec_cmd(\"$cmd\")" >/dev/null && echo "spawned: $*"
 }
+# A notification for the NESTED shell only. Without HS_PRIVATE_BUS the nest
+# shares the host's session bus, whose notification server is the LIVE
+# shell — a test notification would land on the real desktop — so refuse.
+cmd_notify()  {
+  load
+  [ -n "${QS_WRAP_PID:-}" ] || die "notify needs HS_PRIVATE_BUS=1 on up (otherwise it would reach the host's shell)"
+  local addr; addr="$(tr '\0' '\n' < "/proc/$QS_PID/environ" 2>/dev/null | sed -n 's/^DBUS_SESSION_BUS_ADDRESS=//p')"
+  [ -n "$addr" ] || die "could not read the nested shell's bus address"
+  DBUS_SESSION_BUS_ADDRESS="$addr" notify-send -p "$@"
+}
 cmd_check()   { command -v luac >/dev/null || die "luac not found"; ( cd "$REPO/dotfiles/hypr" && luac -p hyprland.lua colors.lua workspaces.lua && echo "lua config: syntax OK" ); }
 
 cmd_open() {
@@ -333,6 +346,7 @@ case "${1:-}" in
   targets) cmd_targets ;;
   hc)      shift; cmd_hc "$@" ;;
   spawn)   shift; cmd_spawn "$@" ;;
+  notify)  shift; cmd_notify "$@" ;;
   log)     shift; cmd_log "$@" ;;
   check)   cmd_check ;;
   down)    cmd_down ;;

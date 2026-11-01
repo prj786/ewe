@@ -181,7 +181,7 @@ Scope {
     // survives solely for a machine where the app is absent and the in-shell
     // fallback panel is the only Settings there is.
     readonly property var actions: Globals.settingsAppInstalled ? [] : [
-        { name: "Settings", sub: "System preferences", ic: "preferences-system", run: function () { Quickshell.execDetached(["qs", "ipc", "call", "settings", "toggle"]) } }
+        { name: "ewe Settings", sub: "System preferences", ic: "preferences-system", run: function () { Quickshell.execDetached(["qs", "ipc", "call", "settings", "toggle"]) } }
     ]
     function matchActions(q) {
         if (q === "") return []

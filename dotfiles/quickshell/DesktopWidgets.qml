@@ -122,10 +122,22 @@ Scope {
     }
 
     // 48/64 is a stored placement default shared with bin/ewe-plugin (a
-    // position in ewe.conf, not a look), so it stays as it is written there
+    // position in ewe.conf, not a look), so it stays as it is written there.
+    // No placement yet: the manifest's defaults, desktopWidget.visible
+    // included — a widget that starts hidden (ewe.sysmon) never flashes on
     function _place(id) {
-        return PluginHost.placement[id] || ({ x: 48, y: 64, output: "", layer: "desktop", visible: true,
-                                              pinned: false, pin_level: "top", locked: false })
+        if (PluginHost.placement[id]) return PluginHost.placement[id]
+        var dw = root._manifestWidget(id)
+        return ({ x: typeof dw.x === "number" ? dw.x : 48, y: typeof dw.y === "number" ? dw.y : 64,
+                  output: typeof dw.output === "string" ? dw.output : "",
+                  layer: dw.layer || "desktop", visible: dw.visible !== false,
+                  pinned: !!dw.layer && dw.layer !== "desktop", pin_level: dw.pinLevel || "top", locked: dw.locked === true })
+    }
+    function _manifestWidget(id) {
+        var ps = PluginHost.plugins || []
+        for (var i = 0; i < ps.length; i++)
+            if (ps[i].id === id && ps[i].desktopWidget) return ps[i].desktopWidget
+        return ({})
     }
     function _layerOf(p) { var l = p.layer || "desktop"; return (l === "top" || l === "overlay") ? l : "desktop" }
     function _onScreen(w, screen, index) {

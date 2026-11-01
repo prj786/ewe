@@ -32,7 +32,7 @@ A small, centred dock at the bottom of the main screen:
   dock on screen captures the picture (1.3.1): the other displays' docks
   are hidden windows, where a grab has no scene and the capture was a GPU
   copy for nothing.
-- **Downloads** (1.2.0) — the ewe browser's downloads: a progress ring round
+- **Downloads** (1.2.0) — ewe Browser's downloads: a progress ring round
   the glyph while one runs; a click lists the running ones and the day's
   finished ones (open the file, show it in its folder, Clear). Shown only
   while there is something to list. It reads the browser's own record,
@@ -62,7 +62,7 @@ Its own, since 1.1.0 — Komble → Plugins → Dock → Options, or
 stored in ewe.conf `[plugins.settings]."ewe.dock"`. Until one is set, the old
 `[desktop.dock]` value stands (the settings' `legacy` keys), so an upgrade
 changes nobody's dock. Turning the dock off is the plugin's own switch in
-Komble (`ewe-plugin disable ewe.dock`); Settings no longer has a Dock section.
+Komble (`ewe-plugin disable ewe.dock`); ewe Settings no longer has a Dock section.
 
 ## What it tells the shell
 

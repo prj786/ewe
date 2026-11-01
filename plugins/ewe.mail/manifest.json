@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "ewe.mail",
   "name": "Mail",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "apiVersion": 3,
   "description": "Unread mail from your IMAP account or Gmail: an Inbox page in Quick settings, an envelope with the count in the bar, and a notification for new mail.",
   "homepage": "https://github.com/prj786/ewe-plugin-mail",

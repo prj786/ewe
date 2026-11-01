@@ -119,8 +119,8 @@ function syncLine(s, now) {
     if (s.phase === "down") return ""
     var y = s.sync
     if (!y) return ""
-    if (y.warning === "rollback") return "Your server gave an older copy. Safe kept yours."
-    if (y.state === "error") return y.message || "Safe can't reach your safe's place."
+    if (y.warning === "rollback") return "Your server gave an older copy. ewe Safe kept yours."
+    if (y.state === "error") return y.message || "ewe Safe can't reach your safe's place."
     if (y.state === "offline") return "Offline — changes are saved on this computer."
     if (y.pending || y.state === "pending") return "Not uploaded yet."
     if (y.state === "local") return "On this computer only."

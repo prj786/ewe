@@ -1,6 +1,6 @@
 # Side navigation
 
-Side navigation is the rail on the left of Settings, Komble and ewe-sync. It lists the app's main sections.
+Side navigation is the rail on the left of ewe Settings, Komble and ewe Sync. It lists the app's main sections.
 
 ## Anatomy
 1. Rail: 196px wide, on the window's `surface-base`, 12px × 8px padding, 16px between groups.
