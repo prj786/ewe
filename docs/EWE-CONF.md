@@ -351,10 +351,18 @@ place (default `ewe/safe/passwords.kdbx`); `webdav_url`, `webdav_user` for
 30); `generator_length` (default 20), `generator_words` (default 5);
 `unlock_at_login` (bool, default `true`) — unlock the safe at login when
 unlock-with-my-login-password is on; `confirm_cards` (bool, default `true`)
-— ask for the password again before Safe fills a card. The safe is an
-encrypted KeePass file in the place; the WebDAV password and the login-unlock
-key live in the keyring (service `ewe-safe`), the Nextcloud app password
-behind `ewe-cloud` — never in this file.
+— ask for the password again before Safe fills a card; `ssh_agent` (bool,
+default `false`) — Safe is the SSH gate: its agent answers every `ssh` on
+each computer that has Safe (it adds two lines on top of `~/.ssh/config`;
+`ewe-safe ssh enable` / `disable`, ewe-safe `docs/GATE.md`); this key is
+shared, so turning it on once turns it on for every computer of the
+account; `ssh_confirm` — `first-use` (default) | `every-time` | `never`,
+when the agent asks before a key is used; `git_sign` — the fingerprint
+(`SHA256:…`) of the SSH key that signs Git commits (`ewe-safe ssh
+sign-commits`), empty for none; each computer sets its own git config from
+it. The safe is an encrypted KeePass file in the place; the WebDAV password
+and the login-unlock key live in the keyring (service `ewe-safe`), the
+Nextcloud app password behind `ewe-cloud` — never in this file.
 
 ### `[apps]`
 
@@ -442,8 +450,14 @@ too?" They do, with a firm line through the middle:
   re-adopts, so hand edits ride along. On restore, `apply` writes them into
   a marker-bounded **managed block** at the end of `~/.ssh/config` — your
   own lines are never touched, and hosts you already define yourself are
-  skipped (first match wins in ssh config). Keys are yours to bring; the
-  aliases just work again.
+  skipped (first match wins in ssh config). The keys are not here: with
+  **Safe** they live in the safe (synced through the account), a host
+  points at one with `IdentityFile ~/.ssh/ewe-safe/key-<tag>.pub` (a
+  public key file Safe writes on every computer), and Safe's agent signs —
+  so the aliases just work again, keys included. Without Safe, keys are
+  yours to bring. Safe's own two lines sit at the **top** of the file
+  (`Include ~/.ssh/ewe-safe/config`, its agent for every host); ewe-conf
+  never touches them, and Safe changes hosts only through ewe-conf.
 - `[[network.vpn]]` carries NetworkManager VPN *profile definitions* — name,
   type, service, and the non-secret `vpn.data` property string (OpenVPN's
   remote/port, L2TP/IPsec's gateway/user/ipsec-enabled; the `*-flags`

@@ -105,4 +105,19 @@ before=$(cat "$WORK/ssh-config-fresh")
 [ "$before" = "$(cat "$WORK/ssh-config-fresh")" ] || fail "re-apply churned the file"
 ok "re-apply is a no-op"
 
+# 6 · Safe's gate (ewe-safe docs/GATE.md): two lines Safe owns at the very
+#     TOP of ~/.ssh/config. apply keeps them first and untouched, and import
+#     never adopts the Include as a host.
+gate='# Safe (ewe): every ssh asks Safe for keys. `ewe-safe ssh disable` removes these two lines.
+Include ~/.ssh/ewe-safe/config'
+printf '%s\n%s\n' "$gate" "$(cat "$WORK/ssh-config-fresh")" > "$WORK/ssh-config-fresh.new"
+mv "$WORK/ssh-config-fresh.new" "$WORK/ssh-config-fresh"
+"$EC" apply --only network --no-hooks
+[ "$(head -n 2 "$WORK/ssh-config-fresh")" = "$gate" ] || fail "Safe's lines moved or changed: $(head -n 3 "$WORK/ssh-config-fresh")"
+[ "$(grep -c 'Include ~/.ssh/ewe-safe/config' "$WORK/ssh-config-fresh")" = 1 ] || fail "Safe's Include duplicated"
+"$EC" import >/dev/null
+h=$("$EC" get network.ssh.hosts)
+grep -qi 'include\|ewe-safe' <<<"$h" && fail "Safe's Include adopted as a host: $h"
+ok "Safe's two lines stay on top; never adopted as a host"
+
 echo "ALL PASS"
