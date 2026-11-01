@@ -14,7 +14,7 @@ Column {
         { ic: Theme.icDnd, label: "Do not disturb", on: Shell.dnd, cmd: "dnd", args: { on: !Shell.dnd } },
         { ic: Theme.icGamepad, label: "Game mode", on: CompanionState.gameMode, cmd: "game_mode", args: { on: !CompanionState.gameMode } },
         { ic: Theme.icCamera, label: "Screenshot", on: false, cmd: "screenshot", args: { mode: "region" } },
-        { ic: Theme.icCog, label: "Settings", on: false, cmd: "open", args: { what: "settings" } },
+        { ic: Theme.icCog, label: "ewe Settings", on: false, cmd: "open", args: { what: "settings" } },
         { ic: Theme.icStore, label: "Komble", on: false, cmd: "open", args: { what: "komble" } },
         { ic: Theme.icLock, label: "Lock", on: false, cmd: "lock", args: {} }
     ]

@@ -115,7 +115,7 @@ TestCase {
         s.sync = { state: "in-sync", last: "2026-10-14T16:00:00Z", warning: "single-writer" }
         compare(Logic.syncLine(s, now), "In sync · 2 min ago · one computer at a time")
         s.sync = { state: "in-sync", warning: "rollback" }
-        compare(Logic.syncLine(s, now), "Your server gave an older copy. Safe kept yours.")
+        compare(Logic.syncLine(s, now), "Your server gave an older copy. ewe Safe kept yours.")
         compare(Logic.syncLine(Logic.fromStatus(Logic.blank(), { ok: false, error: "daemon-unavailable", message: "x" }), now), "")
         compare(Logic.ago("2026-09-12T08:00:00Z", now), "12 Sep")
         compare(Logic.ago("2026-10-14T13:00:00Z", now), "3 h ago")

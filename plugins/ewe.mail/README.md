@@ -15,10 +15,10 @@ for mail that was already there).
 
 Two sources, one inbox — IMAP wins when both are set up:
 
-- **any IMAP account** — added in ewe-sync → Mail (the core `ewe-mail` tool
+- **any IMAP account** — added in ewe Sync → Mail (the core `ewe-mail` tool
   keeps the account in `ewe.conf` and the password in the keyring; this
   plugin only runs `ewe-mail status` and `ewe-mail unseen`).
-- **Gmail** — through your own Google client connected in ewe-sync (ewe ships
+- **Gmail** — through your own Google client connected in ewe Sync (ewe ships
   no Google client). The plugin asks the core broker `ewe-auth token` for a
   short-lived access token; the refresh token never leaves the keyring and
   no token is ever written to disk. Read-only scope; the Gmail History API
@@ -33,8 +33,8 @@ inbox, and after a suspend (`Shell.resumed`).
 Plugins → Mail → Options, the bell on the Inbox page, `qs ipc call mail
 setNotify false` or `ewe-plugin set ewe.mail notify false` all change the
 same setting (ewe.conf `[plugins.settings]."ewe.mail"`). 1.0 kept it in
-`mail-state.json`; an "off" there is carried over once. Settings → User no
-longer has a Mail section.
+`mail-state.json`; an "off" there is carried over once. ewe Settings →
+User no longer has a Mail section.
 
 ## IPC
 

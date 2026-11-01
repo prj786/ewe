@@ -16,6 +16,19 @@ Column {
     spacing: Theme.spaceS
 
     QsPageHead { title: "SSH"; note: "~/.ssh/config" }
+    // Safe installed: it holds the keys and answers every ssh (the SSH
+    // gate). One row opens its SSH page: keys, hosts, Connect.
+    ListWell {
+        flush: true
+        visible: Ssh.safe
+        ListRow {
+            glyph: Theme.icLock
+            label: "Keys come from ewe Safe"
+            desc: "Connect GitHub, Azure or a server there"
+            kind: "Open ewe Safe"
+            onClicked: Ssh.openSafe()
+        }
+    }
     Column {
         visible: Ssh.hosts.length === 0
         width: parent.width; spacing: Theme.spaceS

@@ -18,6 +18,12 @@ page lists them:
 A square-terminal glyph sits in the bar's Quick settings pill while a tunnel
 is up.
 
+With **ewe Safe** installed (`ewe-safe`), the page starts with a row "Keys
+come from ewe Safe": ewe Safe holds the SSH keys and answers every `ssh` as the agent (the
+SSH gate, ewe-safe `docs/GATE.md`). The row opens ewe Safe's SSH page
+(`ewe-safe-app --ssh`), where you connect GitHub, Azure, a server and the
+rest. The hosts here still come from `~/.ssh/config`.
+
 ## Install
 
 Komble → Plugins, or:
@@ -26,7 +32,7 @@ Komble → Plugins, or:
     ewe-plugin remove ewe.ssh          # gone until you add it back
 
 Needs `ssh` (openssh) and `kitty` — both ewe dependencies. Hosts are added
-to `~/.ssh/config` by hand or from Settings → Network → SSH (`ewe-conf`'s
+to `~/.ssh/config` by hand or from ewe Settings → Network → SSH (`ewe-conf`'s
 `[network.ssh]` managed block); this plugin only reads them.
 
 ## Files

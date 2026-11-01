@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "ewe.places",
   "name": "Places",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "apiVersion": 3,
   "description": "A compact file browser above the dock or under the bar: your home, pinned folders, drag any file out into another app.",
   "homepage": "https://github.com/prj786/ewe-plugin-places",

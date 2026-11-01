@@ -12,7 +12,7 @@ Tile {
     property bool panelOpen: false
 
     ic: SafeState.unlocked ? Theme.icLockOpen : Theme.icLock
-    label: "Safe"
+    label: "ewe Safe"
     sub: SafeState.tileSub
     active: SafeState.unlocked
     hasMenu: SafeState.appInstalled

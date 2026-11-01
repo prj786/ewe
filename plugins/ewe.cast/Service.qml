@@ -126,7 +126,7 @@ Scope {
             if (ctl.connected) { stop(); return }
             if (++tries > 10) {          // ~8 s of nothing: the engine isn't there
                 stop()
-                CastState.detail = "cast engine not installed (ewe-cast package)"
+                CastState.detail = "ewe Cast is not installed (package ewe-cast)"
                 return
             }
             ctl.connected = true

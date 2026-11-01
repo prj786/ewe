@@ -32,15 +32,15 @@ Komble → Plugins, or:
 Needs `nmcli` (networkmanager, an ewe dependency). The VPN types come from
 their NetworkManager plugins — `networkmanager-openvpn`,
 `networkmanager-l2tp` (+ `libreswan` for IPsec) — which ewe installs;
-profiles are created in Settings → Network → VPN (`ewe-conf`'s
+profiles are created in ewe Settings → Network → VPN (`ewe-conf`'s
 `[network.vpn]`), by import, or with `nmcli`. This plugin lists and toggles
 them; it never creates one.
 
 ## How it stays fresh
 
 One `nmcli monitor` process (dies with the shell) re-reads the state when
-NetworkManager changes anything, so a VPN brought up from Settings or a
-script shows at once; plus one read at start, after wake, and whenever the
+NetworkManager changes anything, so a VPN brought up from ewe Settings or
+a script shows at once; plus one read at start, after wake, and whenever the
 tile or the page appears.
 
 ## Settings, IPC
