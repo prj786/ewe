@@ -6,7 +6,9 @@ import QtQuick
 //
 //   tile     control2xl + spaceS (56) tall, surfaceOverlay with a
 //            borderWidth1 borderSubtle outline and the radiusRounded corner;
-//            `small` is the control2xl (48), icon-only form
+//            `small` is the control2xl (48), icon-only form — Quick
+//            settings' shortcut row (a page to open, not a feature to
+//            switch); its circle is transparent, its glyph accentText on
 //   icon     a controlLg circle — surfaceHover off, accent with an onAccent
 //            glyph on; a Spinner takes its place while a change applies
 //   text     title (body-strong) over the status (caption): the connected
@@ -90,14 +92,17 @@ Rectangle {
 
         Row {
             anchors.fill: parent
-            anchors.leftMargin: Theme.spaceS; anchors.rightMargin: Theme.spaceS
+            // the small form centres its lone circle
+            anchors.leftMargin: tile.small ? Math.max(0, (body.width - Theme.controlLg) / 2) : Theme.spaceS
+            anchors.rightMargin: tile.small ? 0 : Theme.spaceS
             spacing: Theme.spaceS
             Rectangle {
                 id: circle
                 width: Theme.controlLg; height: Theme.controlLg
                 radius: Theme.radiusFull
                 anchors.verticalCenter: parent.verticalCenter
-                color: tile.disabled ? Theme.surfaceHover
+                color: tile.small ? "transparent"
+                     : tile.disabled ? Theme.surfaceHover
                      : tile.active ? Theme.accent : Theme.surfaceHover
                 antialiasing: true
                 Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
@@ -107,6 +112,7 @@ Rectangle {
                     text: tile.ic
                     font.family: Theme.fontIcons; font.pixelSize: Theme.iconMd
                     color: tile.disabled ? Theme.textDisabled
+                         : tile.small ? (tile.active ? Theme.accentText : Theme.textPrimary)
                          : tile.active ? Theme.onAccent : Theme.textPrimary
                 }
                 // busy: the circle carries the spinner, so the tile keeps its shape
@@ -114,7 +120,7 @@ Rectangle {
                     anchors.centerIn: parent
                     visible: tile.busy
                     size: Theme.iconMd
-                    tone: tile.active ? "on-accent" : "accent"
+                    tone: (tile.active && !tile.small) ? "on-accent" : "accent"
                 }
             }
             Column {

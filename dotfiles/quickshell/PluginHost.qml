@@ -67,7 +67,7 @@ QtObject {
     property var desktopWidgets: []
     // API 3 registries, each sorted by manifest `order` then id:
     //   quickTiles  [{ id, name, entry, span, order }]        Quick settings home grid
-    //   quickPages  [{ id, name, entry, key, label, icon, order }]   rail + page stack
+    //   quickPages  [{ id, name, entry, key, label, icon, order }]   a shortcut tile (or a tile's chevron) + page stack
     //   barStatus   [{ id, name, entry, order }]              glyphs in the bar's pill
     //   dockItems   [{ id, name, icon, label, action, order }]  static dock buttons
     property var quickTiles: []

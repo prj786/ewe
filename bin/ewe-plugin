@@ -96,7 +96,7 @@ under desktop.bar.show."plugin:<id>" — toggle false when the plugin's own
 settings place its button. desktop-widget is a card the host draws on the
 desktop; every one can be dragged and pinned (`place`). API 3 adds
 quick-tile (a Quick settings home tile, "quickTile": {span, order}),
-quick-page (a Quick settings page + rail entry, "quickPage": {key, label,
+quick-page (a Quick settings page + its shortcut tile, "quickPage": {key, label,
 icon, order}), bar-status (a glyph inside the bar's Quick settings pill,
 "barStatus": {order}) and dock-item (a static dock button, "dockItem":
 {icon, label, action, order} — no entry point; the dock runs the action).
@@ -795,7 +795,7 @@ def describe(d, dirname=None, enabled=(), sources=None):
         "bundled": bundled,
         "keybinds": [kb for kb in (m.get("keybinds") or []) if isinstance(kb, dict)] if isinstance(m.get("keybinds"), list) else [],
         # API 3 (docs/PLUGINS.md "Kinds"): the host reads these to place the
-        # tile, the page + rail entry, the pill glyph and the dock button
+        # tile, the page + its shortcut tile, the pill glyph and the dock button
         "quickTile": m.get("quickTile") if isinstance(m.get("quickTile"), dict) else None,
         "quickPage": m.get("quickPage") if isinstance(m.get("quickPage"), dict) else None,
         "barStatus": m.get("barStatus") if isinstance(m.get("barStatus"), dict) else None,
@@ -1681,9 +1681,10 @@ Tile {{
     "quick-page": '''import QtQuick
 import qs
 
-// {name} -- a Quick settings page: the rail shows quickPage.icon, the page
-// opens from it, from the tile's details zone, from
-// `qs ipc call quicksettings tab <key>` and from Shell.openQuickSettings(key).
+// {name} -- a Quick settings page, shown in place of home: a shortcut tile
+// with quickPage.icon opens it (or your tile's details zone, when your
+// tile is on home with hasMenu), and so do
+// `qs ipc call quicksettings tab <key>` and Shell.openQuickSettings(key).
 Column {{
     id: root
     property string pluginId: ""

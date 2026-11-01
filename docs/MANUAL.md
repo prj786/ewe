@@ -258,8 +258,8 @@ Share a computer, then reach it from your other ewe computers: a terminal
 on it, its files (SFTP), and an ewe browser workspace whose web traffic
 leaves from it (RFC-009). Not screen sharing: a full SSH login as you.
 
-1. On the computer to share: **Control Centre → Sharing** (or the rail's
-   share icon) → **Share this computer** on. It shows an **8-digit code**.
+1. On the computer to share: **Control Centre → Sharing** (the tile's
+   arrow, or the bar's share glyph) → **Share this computer** on. It shows an **8-digit code**.
 2. On the other computer: **Control Centre → Sharing → Your computers** →
    the shared one → **Pair** → type the code. Nobody needs to be at the
    shared computer when you do this; it can be locked, across town.
