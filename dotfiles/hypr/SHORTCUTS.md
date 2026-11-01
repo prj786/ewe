@@ -20,9 +20,9 @@ while that plugin is on. Your own launch keys live in ewe.conf
 | `Super` + `D` | **Launcher**: fuzzy app and file search (press again to close) | Quickshell |
 | `Super` + `Return` | Terminal | `kitty` |
 | `Super` + `E` | File manager | `nemo` |
-| `Super` + `B` | Web browser | default browser (Settings → Default apps), else ewe browser |
+| `Super` + `B` | Web browser | default browser (ewe Settings → Default apps), else ewe Browser |
 | `Super` + `C` | Calendar: GNOME Calendar when installed, else this month as a notification | `calendar.sh` |
-| `Super` + `,` | **Settings** | `ewe-settings` |
+| `Super` + `,` | **ewe Settings** | `ewe-settings` |
 | `Super` + `N` | Quick settings | Quickshell |
 | `Super` + `Shift` + `W` | Arrange desktop widgets (drag, pin, lock, hide; Esc ends it) | Quickshell |
 
@@ -84,8 +84,8 @@ across all displays instead: switching one switches every display
 | 3-finger swipe left / right | Switch workspaces |
 | 3-finger swipe up | Overview |
 | 3-finger swipe down | A new empty workspace on this display (never piles up empty ones) |
-| 4-finger swipe left / right | In ewe browser: its next / previous workspace (nothing elsewhere) |
-| 2-finger swipe right / left | In ewe browser: back / forward (the browser's own gesture; with natural scrolling, the default — the other way round without it) |
+| 4-finger swipe left / right | In ewe Browser: its next / previous workspace (nothing elsewhere) |
+| 2-finger swipe right / left | In ewe Browser: back / forward (the browser's own gesture; with natural scrolling, the default — the other way round without it) |
 
 ## Session
 

@@ -53,7 +53,7 @@ The DE is a normal package in a normal pacman repository. Add `[ewe]` to
 `/etc/pacman.conf` (see [ewe-repo](https://github.com/prj786/ewe-repo)), then:
 
 ```sh
-sudo pacman -S ewe        # the desktop, Komble, ewe-settings and dependencies
+sudo pacman -S ewe        # the desktop, Komble, ewe Settings and dependencies
 ```
 
 Per-user deployment is `ewe-setup`; system setup (greeter, plymouth, hibernate)
@@ -82,7 +82,7 @@ them. Details in the [manual](docs/MANUAL.md).
 </details>
 
 Then reboot, pick **Ewe** at the greeter, and you're in —
-`Super+Return` terminal · `Super+D` apps · `Super+P` fill a login · `Super+,` Settings
+`Super+Return` terminal · `Super+D` apps · `Super+P` fill a login · `Super+,` ewe Settings
 (full keymap: `dotfiles/hypr/SHORTCUTS.md`).
 
 ## What you get
@@ -91,7 +91,7 @@ Then reboot, pick **Ewe** at the greeter, and you're in —
   end to end, working out of the box.
 - **Dark by default, light when you want it** — Ewe Dark out of the box, in
   two looks (`flock` neutral greys, `blacksheep` absolute black for OLED),
-  and Ewe Light or any light scheme in Settings → Appearance. Every app
+  and Ewe Light or any light scheme in ewe Settings → Appearance. Every app
   follows: the shell, ewe's own apps, GTK and Qt, kitty, Zed, the browser.
 - **One theme, one icon language** — the look carries across the shell, GTK apps,
   Qt strays, icons and cursor; the accent applies live, with no relogin.
@@ -99,7 +99,7 @@ Then reboot, pick **Ewe** at the greeter, and you're in —
   every runtime file is generated from it ([RFC-001](docs/RFC-001-one-config.md)).
 - **Curated GTK app set** — Nemo, Engrampa, imv, Zathura, mpv, kitty, Zed:
   borderless under Hyprland, defaults managed in one `mimeapps.list`.
-- **Komble + ewe-settings** — first-party software manager and settings app.
+- **Komble + ewe Settings** — first-party software manager and settings app.
 - **Plugins** — `ewe-plugin add <git-url>` drops third-party bar
   widgets, panels and services into the shell; ewe's own extras are
   **plugins that ship with ewe**, installed in one click from Komble → Plugins
@@ -144,7 +144,7 @@ token lives only in the keyring — `ewe-auth` is the single thing that touches 
 | ewe | this — the desktop environment + the `ewe` package |
 | [ewe-repo](https://github.com/prj786/ewe-repo) | the `[ewe]` pacman repository |
 | [komble-arch](https://github.com/prj786/komble-arch) | Komble — the software manager |
-| [ewe-settings](https://github.com/prj786/ewe-settings) | the Settings app |
+| [ewe-settings](https://github.com/prj786/ewe-settings) | ewe Settings, the settings app |
 | [ewe-cast](https://github.com/prj786/ewe-cast) | `ewe-castd` — the headless casting daemon |
 | [prj786.github.io](https://github.com/prj786/prj786.github.io) | the website |
 
@@ -157,7 +157,7 @@ token lives only in the keyring — `ewe-auth` is the single thing that touches 
 | [Shortcuts](dotfiles/hypr/SHORTCUTS.md) | the full keymap |
 | [RFC-001](docs/RFC-001-one-config.md) | one file: `ewe.conf` |
 | [RFC-002](docs/RFC-002-broker-and-sync.md) | the auth broker and the sync of that file |
-| [Settings backend](docs/SETTINGS-BACKEND.md) | how Settings writes Hyprland config |
+| [Settings backend](docs/SETTINGS-BACKEND.md) | how ewe Settings writes Hyprland config |
 | [Plugins](docs/PLUGINS.md) | `ewe-plugin`: the manifest, the kinds, the bar-widget contract, the public API, safe mode |
 | [Troubleshooting](docs/TROUBLESHOOTING.md) | post-freeze playbook and friends |
 

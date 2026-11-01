@@ -447,7 +447,7 @@ Scope {
                         active: root.open && root.step === root.stepNetwork
                         onOnlineChanged: if (online && root.open && root.step === root.stepNetwork) autoAdvance.restart()
                     }
-                    Note { visible: !root.online; text: "You can also continue offline — the sign-in and the restore stay available later in Settings → Account." }
+                    Note { visible: !root.online; text: "You can also continue offline — the sign-in and the restore stay available later in ewe Settings → Account." }
                 }
 
                 // ── 3 · updates ──
@@ -524,7 +524,7 @@ Scope {
                     Title { text: Cloud.signedIn ? "Signed in" : "Your account: Nextcloud" }
                     Body {
                         visible: !Cloud.signedIn
-                        text: "ewe keeps your machine in sync as one file, restores your apps through Komble, shows your calendar in Quick settings and keeps your files in ~/Nextcloud — all in YOUR Nextcloud: a server you run, or a hosted account (Murena, Disroot, Infomaniak…). Nothing about it is baked into ewe.\n\nSkip it and nothing changes; you can sign in later in Settings → Account."
+                        text: "ewe keeps your machine in sync as one file, restores your apps through Komble, shows your calendar in Quick settings and keeps your files in ~/Nextcloud — all in YOUR Nextcloud: a server you run, or a hosted account (Murena, Disroot, Infomaniak…). Nothing about it is baked into ewe.\n\nSkip it and nothing changes; you can sign in later in ewe Settings → Account."
                     }
                     // signed in: who, and what just got set up
                     Row {
@@ -563,11 +563,11 @@ Scope {
                     Note { visible: Cloud.signedIn; text: "Your whole account opens as ~/Nextcloud in Files." }
                     // the account app (RFC-006): everything the account keeps,
                     // the folders to keep in it, machines, conflicts
-                    Note { visible: Cloud.signedIn && Globals.syncAppInstalled; text: "Pick the folders to keep in your account — Documents, Desktop, any folder — in ewe-sync." }
+                    Note { visible: Cloud.signedIn && Globals.syncAppInstalled; text: "Pick the folders to keep in your account — Documents, Desktop, any folder — in ewe Sync." }
                     Row {
                         visible: Cloud.signedIn && Globals.syncAppInstalled
                         anchors.horizontalCenter: parent.horizontalCenter; spacing: Theme.spaceMd
-                        LinkBtn { label: "Open ewe-sync"; onGo: Globals.openSync() }
+                        LinkBtn { label: "Open ewe Sync"; onGo: Globals.openSync() }
                     }
                     // the server address — remembered between attempts
                     Rectangle {
@@ -891,7 +891,7 @@ Scope {
                         width: parent.width; spacing: Theme.spaceS + Theme.spaceXs
                         TourRow { ic: Theme.icKeyboard; head: "The Super key"; text: "Tap Super for the Overview of your windows and workspaces. Super+D searches apps and files; Super+Return opens a terminal." }
                         TourRow { ic: Theme.icApps; head: "Plugins"; text: "The dock, music, Places, your phone, mail, Cast to TV and more are plugins: install the ones you want with one click in Komble → Plugins, where each one's settings are too (Options)." }
-                        TourRow { ic: Theme.icCog; head: "Quick settings and Settings"; text: "Super+N (or the clock) opens Quick settings — Wi-Fi, sound, calendar, notifications. Super+, opens Settings." }
+                        TourRow { ic: Theme.icCog; head: "Quick settings and ewe Settings"; text: "Super+N (or the clock) opens Quick settings — Wi-Fi, sound, calendar, notifications. Super+, opens ewe Settings." }
                         TourRow { ic: Theme.icDownload; head: "Komble"; text: "One store for everything: the Arch repositories, the AUR and AppImages, with updates in one place — the download glyph in the bar tells you when." }
                     }
                 }

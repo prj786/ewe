@@ -41,5 +41,5 @@ for f in quickshell/theme-tokens.json quickshell/user-theme.json hypr/generated/
   [ -e "$S/cfg/$f" ] && no "a safe set regenerated $f" || ok "nothing regenerated: $f"
 done
 grep -q "hyprctl reload" "$S/calls.log" 2>/dev/null && no "a safe set reloaded Hyprland" || ok "Hyprland not reloaded"
-grep -q "^# Safe, the password manager" "$S/cfg/ewe/ewe.conf" && ok "the section explains itself" || no "no SECTION_NOTES comment above [safe]"
+grep -q "^# ewe Safe, the password manager" "$S/cfg/ewe/ewe.conf" && ok "the section explains itself" || no "no SECTION_NOTES comment above [safe]"
 exit $fail

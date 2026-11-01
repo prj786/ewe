@@ -183,7 +183,7 @@ phase_userconfig() {
         run sh -c "printf '%s\n' '[Desktop Entry]' 'Type=Application' 'Name=Nextcloud' 'Hidden=true' \
 '# ewe: the Nextcloud desktop client is not part of ewe (ewe-sync syncs)' \
 > '$HOME/.config/autostart/Nextcloud.desktop'"
-        ok "nextcloud desktop client neutralised (nextcloudcmd kept for ewe-sync)"
+        ok "nextcloud desktop client neutralised (nextcloudcmd kept for ewe Sync)"
     fi
 
     # (Reversal icon theme + Mocu cursor are installed system-wide in phase 20.)

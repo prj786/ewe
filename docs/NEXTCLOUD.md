@@ -18,7 +18,7 @@ through the optional Google client (`docs/GOOGLE-CLIENT.md`).
 
 ## Signing in
 
-Welcome (first login) and ewe-sync, the account app, both ask for the server
+Welcome (first login) and ewe Sync, the account app, both ask for the server
 address and open the browser. That is Nextcloud's own **Login Flow v2**:
 you sign in on your server's page (with your password, 2FA, SSO — whatever
 your server uses), the page asks whether to grant access to *"ewe
@@ -30,7 +30,7 @@ From a terminal:
 ```sh
 ewe-cloud login cloud.example.org      # opens the browser; prints JSON when done
 ewe-cloud status                       # {signed_in, server, user, display_name, email, quota, keyring…}
-ewe-conf push                          # first backup (or: ewe-sync → Back up this machine)
+ewe-conf push                          # first backup (or: ewe Sync → Back up this machine)
 ewe-files setup                        # mount the account at ~/Nextcloud
 ```
 
@@ -78,7 +78,7 @@ ago"*.
   root. Use the address you open in the browser, without `/index.php/…`.
 - *No browser tab opened* — the login link is printed on stderr
   (`login-url: …`) and written to `$XDG_RUNTIME_DIR/ewe-cloud-login-url`;
-  Welcome and Settings offer **Open the sign-in page / Copy the link**.
+  Welcome and ewe Settings offer **Open the sign-in page / Copy the link**.
 - *keyring-* errors* — the same keyring playbook as for any sign-in:
   `docs/TROUBLESHOOTING.md` → Google sign-in / keyring.
 - *`unauthorized` on push/pull* — the app password was revoked on the

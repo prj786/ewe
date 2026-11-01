@@ -338,7 +338,7 @@ first installed of 1Password's `op`, `rbw`, `pass`), `ewe`, `1password`,
 for an app that drops characters). Per-app pins live in
 `passwords-apps.json` next to `ewe.conf`, not in it.
 
-### `[safe]` — Safe, the password manager (RFC-008)
+### `[safe]` — ewe Safe, the password manager (RFC-008)
 
 Read by `ewe-safed` (the `ewe-safe` package); a `set safe.*` is stored and
 applies nothing, like `[companion]`. Non-secret settings only, so a restored
@@ -351,7 +351,7 @@ place (default `ewe/safe/passwords.kdbx`); `webdav_url`, `webdav_user` for
 30); `generator_length` (default 20), `generator_words` (default 5);
 `unlock_at_login` (bool, default `true`) — unlock the safe at login when
 unlock-with-my-login-password is on; `confirm_cards` (bool, default `true`)
-— ask for the password again before Safe fills a card. The safe is an
+— ask for the password again before ewe Safe fills a card. The safe is an
 encrypted KeePass file in the place; the WebDAV password and the login-unlock
 key live in the keyring (service `ewe-safe`), the Nextcloud app password
 behind `ewe-cloud` — never in this file.
@@ -420,12 +420,12 @@ file said.
 
 `provider` (`"nextcloud"` | `"google"`) · `server` · `user` · `folder`
 (default `ewe`) · `enabled` (bool, the auto-sync switch) · `browser` (bool,
-default true: this computer's ewe browser syncs with the account) — this
+default true: this computer's ewe Browser syncs with the account) — this
 machine's own. Identity only, so a restored machine knows where its backup
 lives. `[[sync.folders]]` (`remote`, `local`, `mode` two-way | upload |
 download, `trigger` change | interval | login, `interval`, `exclude`,
-`hidden`) are ewe-sync's folder pairs, **shared** by every machine; each
-machine keeps its own local path override and pause in ewe-sync's state. The app password (or
+`hidden`) are ewe Sync's folder pairs, **shared** by every machine; each
+machine keeps its own local path override and pause in ewe Sync's state. The app password (or
 the Google refresh token) lives in the keyring behind `ewe-cloud` /
 `ewe-auth`, never in this file.
 
@@ -480,7 +480,7 @@ document from the live system.
 
 ## desktop.browser — Helium (only while installed)
 
-ewe's browser is ewe browser, which reads `theme-tokens.json` (colours,
+ewe's browser is ewe Browser, which reads `theme-tokens.json` (colours,
 radius, fonts, motion) itself and has no key here. This key only matters on a
 machine that still has Helium, the browser ewe shipped before.
 

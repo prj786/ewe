@@ -281,7 +281,7 @@ def cmd_unseen(argv):
         i += 1
     acc = account()
     if not acc:
-        fail("not-configured", "No mail account — Settings → Account → Mail.")
+        fail("not-configured", "No mail account — ewe Settings → Account → Mail.")
     password = keyring_get(acc["host"], acc["user"])
     if not password:
         fail("no-password", "The mail password is not in the keyring — sign in to the mail account again.")

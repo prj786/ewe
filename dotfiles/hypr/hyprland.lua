@@ -691,10 +691,12 @@ hl.window_rule({
 })
 
 -- The shell's Settings app is a real toplevel (so portals/DnD work) — float and
--- centre it so it still opens like the old overlay.
+-- centre it so it still opens like the old overlay. The title is "ewe Settings"
+-- since 0.39 (app names "ewe + Word"); "ewe settings" is an older ewe-settings
+-- or shell still running, so both spellings match.
 hl.window_rule({
     name   = "settings-window",
-    match  = { title = "^ewe settings$" },
+    match  = { title = "^ewe [Ss]ettings$" },
     float  = true,
     center = true,
     size   = { 880, 620 },

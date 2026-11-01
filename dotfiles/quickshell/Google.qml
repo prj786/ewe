@@ -307,7 +307,7 @@ QtObject {
                         goo.signedIn = false
                         goo.profile = null
                         if (/^(deleted_client|invalid_client|unauthorized_client)$/.test(j.reason || "")) {
-                            goo.error = "Google signed out: the OAuth client no longer exists (" + j.reason + ") — create one and set it up again in Settings → User"
+                            goo.error = "Google signed out: the OAuth client no longer exists (" + j.reason + ") — create one and set it up again in ewe Settings → User"
                             Log.warn("google", "signed out — OAuth client gone:", j.reason)
                         }
                         goo.sessionClosed()

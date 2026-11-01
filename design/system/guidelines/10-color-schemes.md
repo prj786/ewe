@@ -121,4 +121,4 @@ A scheme can look like anything, but it can't make the desktop unusable. After d
 
 ## Where the scheme reaches
 
-The shell, ewe-settings, Komble and ewe-sync; Hyprland's window borders (`accent` for the active window, `border-subtle` for the rest); GTK and Qt apps; the icon theme's hue; kitty's sixteen colors (from `base08`–`base0F` and `base12`–`base17`); Zathura and mpv.
+The shell, ewe Settings, Komble and ewe Sync; Hyprland's window borders (`accent` for the active window, `border-subtle` for the rest); GTK and Qt apps; the icon theme's hue; kitty's sixteen colors (from `base08`–`base0F` and `base12`–`base17`); Zathura and mpv.

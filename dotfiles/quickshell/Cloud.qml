@@ -438,9 +438,9 @@ QtObject {
         if (kind === "remote-exists")
             cl.syncError = "A backup" + (who ? " from “" + who + "”" : "") + " already exists in your account — restore it first, or push anyway to overwrite it."
         else if (mine === true)
-            cl.syncError = "The copy in your account was saved by this computer but is not the one it last synced — push anyway to replace it, or restore it. Open ewe-sync to decide."
+            cl.syncError = "The copy in your account was saved by this computer but is not the one it last synced — push anyway to replace it, or restore it. Open ewe Sync to decide."
         else
-            cl.syncError = (who ? "Another machine (“" + who + "”)" : "Another machine") + " saved newer settings — restore them, or push anyway to overwrite. Open ewe-sync to decide."
+            cl.syncError = (who ? "Another machine (“" + who + "”)" : "Another machine") + " saved newer settings — restore them, or push anyway to overwrite. Open ewe Sync to decide."
     }
 
     property var _statusCb: null
@@ -495,7 +495,7 @@ QtObject {
         if (!Globals.welcomeOpen)
             Quickshell.execDetached(["notify-send", "-a", "ewe", "-i", "cloud",
                 "Restore this machine?",
-                "A backup from “" + cl.cloudInfo.device + "” is in your account — open Settings → Account to bring your desktop and apps back."])
+                "A backup from “" + cl.cloudInfo.device + "” is in your account — open ewe Settings → Account to bring your desktop and apps back."])
     }
 
     // ── auto-sync: NEVER from a never-synced machine, nor while a restore is

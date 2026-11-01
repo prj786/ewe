@@ -1722,7 +1722,7 @@ You draw and behave: every `.qml` in this repo is yours. ewe decides where
 it lives and what the user can change about it:
 
 - **bar-widget**: ewe puts it in the top bar (left / centre / right; the
-  user can hide it in Settings -> Top bar). It must be an `Item` with an
+  user can hide it in ewe Settings -> Top bar). It must be an `Item` with an
   implicit size.
 - **desktop-widget**: ewe places it on the desktop; the user drags it
   any time, pins it (above windows, or above everything) from its hover

@@ -1239,7 +1239,7 @@ Scope {
         // lazy-loaded: created AFTER settingsOpen flipped true, so the change
         // signal below already fired — sync the level at birth
         Component.onCompleted: if (Globals.settingsOpen) visible = true
-        title: "ewe settings"
+        title: "ewe Settings"
         // the size hyprland.lua's window rule opens it at; the floor is two
         // panels wide, so the rail never has to collapse (Side navigation)
         implicitWidth: Theme.panelLg + Theme.panelSm - Theme.spaceLg - Theme.spaceS
@@ -1655,7 +1655,7 @@ Scope {
                         }
                         Text {
                             anchors.verticalCenter: parent.verticalCenter
-                            text: "Settings"; color: Theme.textPrimary
+                            text: "ewe Settings"; color: Theme.textPrimary
                             font.family: Theme.type.h4.family; font.pixelSize: Theme.type.h4.size; font.weight: Theme.type.h4.weight
                         }
                     }
@@ -3249,7 +3249,7 @@ Scope {
                         KV { k: "Files"; v: Cloud.filesMounted ? "In " + Cloud.filesPath : "Not connected"; dot: Cloud.filesMounted ? "ok" : "info"; action: !Cloud.filesMounted; actionLabel: "Connect files"; onAct: Cloud.mountFiles() }
                         KV { k: "Calendar"; v: Cloud.calState === "offline" ? "Offline, showing events from the last sync" : (Cloud.events.length + " upcoming in Quick settings"); dot: Cloud.calState === "offline" ? "info" : "ok" }
                         // the account app (RFC-006) — the in-shell cards stay as the fallback
-                        KV { visible: Globals.syncAppInstalled; k: "Your machines, folders and conflicts"; dot: "ok"; action: true; actionLabel: "Open ewe-sync"; onAct: Globals.openSync() }
+                        KV { visible: Globals.syncAppInstalled; k: "Your machines, folders and conflicts"; dot: "ok"; action: true; actionLabel: "Open ewe Sync"; onAct: Globals.openSync() }
                     }
                     Alert { visible: Cloud.error !== ""; tone: "danger"; text: Cloud.error }
                     // the keyring rejects the login password → replace it (PAM
