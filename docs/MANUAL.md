@@ -267,6 +267,19 @@ leaves from it (RFC-009). Not screen sharing: a full SSH login as you.
    ewe Browser's remote workspace for it. In a terminal:
    `ssh -F ~/.local/share/ewe/remote/ssh_config <name>`.
 
+Nothing on the shared computer asks you anything. `git` and `ssh` in a remote
+session use ewe Safe there without a question on its screen. If that computer
+restarted and its Safe is locked, the terminal asks for the master password
+right there, once. A short Wi-Fi drop only freezes the terminal; it carries on
+when the network is back (up to about 15 minutes), and after a longer one the
+window reconnects by itself. Programs from the old session are gone then: start
+long jobs in `tmux` if they must survive that.
+
+Sharing runs as your user, so it starts when you log in. If the computer
+restarts and nobody logs in, the Sharing page says it can't be reached. A plain
+SSH login still works when `sshd` is on (`ssh <host>`), and that login starts
+sharing again for as long as it lasts.
+
 While a computer is shared the bar shows the share icon; it turns the
 accent colour with a count while someone is connected, and its page lists
 who, with **Disconnect** and **Remove**. Turning sharing off ends every
@@ -465,7 +478,9 @@ When a VPN is up and the internet is not, the page says *No internet through
 <the VPN>*. A cable never "gives up" any more: phase 30 installs
 `/etc/NetworkManager/conf.d/20-ewe-wired.conf` (no DHCP timeout on ethernet),
 so a slow DHCP server no longer gets the port blocked for five minutes —
-the lease lands the moment the server answers, no reboot needed.
+the lease lands the moment the server answers, no reboot needed. Wi-Fi keeps
+its radio awake while connected (`30-ewe-wifi.conf`), so an SSH session from a
+laptop doesn't feel sticky; this costs a little battery.
 
 **Tailscale is built in.** Every install has the `tailscale` package, but its
 daemon only runs once you press **Set up Tailscale** (Quick Settings →

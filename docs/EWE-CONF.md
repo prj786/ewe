@@ -346,8 +346,9 @@ machine knows where its safe lives and only asks for the master password:
 `place` — `local` | `nextcloud` | `webdav` | `folder` | `sftp` | `dropbox`
 | `gdrive` (anything else is refused); `location` — the file's path in that
 place (default `ewe/safe/passwords.kdbx`); `webdav_url`, `webdav_user` for
-`place = "webdav"`; `lock_after_minutes` (default 30), `lock_on_screen_lock`,
-`lock_on_sleep` (bools, default `true`); `clipboard_clear_seconds` (default
+`place = "webdav"`; `lock_after_minutes` (default 0: never), `lock_on_screen_lock`,
+`lock_on_sleep` (bools, default `false`: the safe stays open until the computer
+turns off or you press Lock); `clipboard_clear_seconds` (default
 30); `generator_length` (default 20), `generator_words` (default 5);
 `unlock_at_login` (bool, default `true`) — unlock the safe at login when
 unlock-with-my-login-password is on; `confirm_cards` (bool, default `true`)
@@ -356,8 +357,9 @@ default `false`) — ewe Safe is the SSH gate: its agent answers every `ssh` on
 each computer that has ewe Safe (it adds two lines on top of `~/.ssh/config`;
 `ewe-safe ssh enable` / `disable`, ewe-safe `docs/GATE.md`); this key is
 shared, so turning it on once turns it on for every computer of the
-account; `ssh_confirm` — `first-use` (default) | `every-time` | `never`,
-when the agent asks before a key is used; `git_sign` — the fingerprint
+account; `ssh_confirm` — `once` (default: one question per power-on, for every
+app and key) | `first-use` | `every-time` | `never`, when the agent asks before
+a key is used; `git_sign` — the fingerprint
 (`SHA256:…`) of the SSH key that signs Git commits (`ewe-safe ssh
 sign-commits`), empty for none; each computer sets its own git config from
 it. The safe is an encrypted KeePass file in the place; the WebDAV password
