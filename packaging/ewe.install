@@ -65,12 +65,14 @@ _ewe_refresh_greeter() {
     return 0
 }
 
-# Two machine settings from phases 30/60 that matter too much to wait for a
+# Machine settings from phases 30/60 that matter too much to wait for a
 # manual `install.sh --no-packages` (2026-11-01 — the owner's work desktop):
 #  * 20-ewe-wired.conf: a plugged-in cable keeps asking for an address instead
 #    of failing into NetworkManager's 5-minute block (refreshed when it
 #    differs — the file is ewe's; read on the next activation, so no reload
 #    and no connection drop during an upgrade);
+#  * 30-ewe-wifi.conf: Wi-Fi keeps its radio awake, so an SSH session from a
+#    laptop isn't sticky (2026-11-04; applies when a network next connects);
 #  * zram for every chassis: a desktop with no swap at all was OOM-killed.
 #    Written only when NO zram-generator.conf exists (an admin's own is
 #    never touched); active after the next boot.
@@ -82,6 +84,14 @@ _ewe_network_defaults() {
         install -d /etc/NetworkManager/conf.d \
             && install -m 644 "$_src" "$_dst" \
             && echo ":: ewe: a plugged-in cable now keeps asking for an address (NetworkManager, next connection)"
+    fi
+    _src=/usr/share/ewe/system/networkmanager/30-ewe-wifi.conf
+    _dst=/etc/NetworkManager/conf.d/30-ewe-wifi.conf
+    if [ -r "$_src" ] && [ -d /etc/NetworkManager ] && ! cmp -s "$_src" "$_dst"; then
+        install -d /etc/NetworkManager/conf.d \
+            && install -m 644 "$_src" "$_dst" \
+            && { nmcli general reload conf >/dev/null 2>&1 || true; } \
+            && echo ":: ewe: Wi-Fi now keeps its radio awake while connected (from the next connection)"
     fi
     if [ ! -e /etc/systemd/zram-generator.conf ] \
        && [ -x /usr/lib/systemd/system-generators/zram-generator ]; then

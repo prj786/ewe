@@ -41,6 +41,7 @@ phase_postcheck() {
     _check "network: NetworkManager active"       systemctl is-active NetworkManager.service
     # without it a slow DHCP server gets 45 s, then NM blocks the cable ~5 min
     _check "network: a cable keeps asking for an address" test -r /etc/NetworkManager/conf.d/20-ewe-wired.conf
+    _check "network: Wi-Fi keeps its radio awake" test -r /etc/NetworkManager/conf.d/30-ewe-wifi.conf
     # every chassis since 2026-10-28 (a desktop with no swap ran out of memory)
     _check "memory: zram swap configured"           test -r /etc/systemd/zram-generator.conf
     # a VPN client (Tailscale) rewriting a plain resolv.conf = no DNS without the VPN

@@ -331,6 +331,10 @@ phase_services() {
         sudo_run install -m 644 "$DOTREPO/system/networkmanager/20-ewe-wired.conf" \
             /etc/NetworkManager/conf.d/20-ewe-wired.conf \
             && ok "network: a cable keeps asking for an address (no 5-minute DHCP give-up)"
+        # power saving makes an SSH session from a laptop sticky (2026-11-04)
+        sudo_run install -m 644 "$DOTREPO/system/networkmanager/30-ewe-wifi.conf" \
+            /etc/NetworkManager/conf.d/30-ewe-wifi.conf \
+            && ok "network: Wi-Fi keeps its radio awake while connected"
         sudo_run systemctl enable --now systemd-resolved.service || warn "could not start systemd-resolved"
         if [ "$(readlink /etc/resolv.conf 2>/dev/null)" = /run/systemd/resolve/stub-resolv.conf ]; then
             ok "dns: /etc/resolv.conf already follows systemd-resolved"

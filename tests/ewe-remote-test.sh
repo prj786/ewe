@@ -10,7 +10,8 @@
 # counted and refused, right code accepted, the host key pinned —, the
 # 5-second gap, ssh through the generated ssh_config (with the desktop's
 # XDG_RUNTIME_DIR), a SOCKS tunnel that resolves names on the far side,
-# who-is-connected, revoke (ends the tunnel, refuses the next one), forget,
+# the terminal window (reconnects after a lost connection), who-is-connected,
+# revoke (ends the tunnel, refuses the next one), forget,
 # and JSON + exit 0 for every verb.
 #
 # Needs: openssh (ssh, sshd), python-spake2, curl. EWE_REMOTE_PYTHON picks the
@@ -157,6 +158,74 @@ R=$(B status --offline)
 check "joiner status: A is paired, with its tunnel" "echo '$R' | j 'c=[c for c in j[\"computers\"] if c[\"id\"]==\"$ID_A\"][0]; assert c[\"paired\"] and c[\"tunnel\"]'"
 
 # ── revoke / forget / off ────────────────────────────────────────────────────
+# the terminal window: a stand-in kitty runs what it's given, stdin closed
+printf '#!/bin/sh\nshift 2\n"$@" > "$KITTY_OUT" 2>&1\necho $? > "$KITTY_RC"\n' > "$SB/bin/kitty"
+chmod +x "$SB/bin/kitty"
+wait_file() { for _ in $(seq 100); do [ -s "$1" ] && return 0; sleep 0.1; done; return 1; }
+export KITTY_OUT="$SB/kitty.out" KITTY_RC="$SB/kitty.rc"
+R=$(B terminal "$ID_A")
+check "terminal: opens" "echo '$R' | j 'assert j[\"ok\"], j'"
+check "terminal: logged in and left cleanly (window closes)" "wait_file '$KITTY_RC' && [ \"\$(cat '$KITTY_RC')\" = 0 ]"
+check "keepalive: both ends wait 15 minutes" "grep -q 'ServerAliveCountMax 30' '$SB/b/data/ssh_config' && grep -q 'ClientAliveCountMax 30' '$SB/a/data/sshd_config'"
+# a lost connection (ssh exit 255) comes back; leaving (any other exit) ends it
+rm -f "$KITTY_RC" "$SB/ssh.count"
+cat > "$SB/bin/flaky-ssh" <<EOF
+#!/bin/sh
+n=\$(cat "$SB/ssh.count" 2>/dev/null || echo 0); echo \$((n+1)) > "$SB/ssh.count"
+[ "\$n" = 0 ] && exit 255
+exit 7
+EOF
+chmod +x "$SB/bin/flaky-ssh"
+R=$(EWE_REMOTE_SSH="$SB/bin/flaky-ssh" B terminal "$ID_A")
+check "terminal: a lost connection tries again, then ends with the session" "wait_file '$KITTY_RC' && [ \"\$(cat '$KITTY_RC')\" = 7 ] && [ \"\$(cat '$SB/ssh.count')\" = 2 ] && grep -q 'Trying again' '$KITTY_OUT'"
+# what the far side runs: one `sh -c` word (its login shell may not be POSIX),
+# which offers to unlock a locked Safe and only a locked one
+rm -f "$KITTY_RC"
+printf '#!/bin/sh\nfor a; do last=$a; done\nprintf %%s "$last" > "%s/far.cmd"\nexit 0\n' "$SB" > "$SB/bin/capture-ssh"
+chmod +x "$SB/bin/capture-ssh"
+R=$(EWE_REMOTE_SSH="$SB/bin/capture-ssh" B terminal "$ID_A")
+wait_file "$KITTY_RC"
+FAR=$("$PY" -c "import shlex; a=shlex.split(open('$SB/far.cmd').read()); assert a[:2]==['sh','-c'] and len(a)==3, a; print(a[2])")
+check "terminal: the far script is one quoted sh -c word" "[ -n \"\$FAR\" ]"
+mkdir -p "$SB/far-bin"
+cat > "$SB/far-bin/ewe-safe" <<EOF
+#!/bin/sh
+case "\$1" in
+    status) cat "$SB/far.status" ;;
+    unlock) echo asked >> "$SB/far.unlock" ;;
+esac
+EOF
+chmod +x "$SB/far-bin/ewe-safe"
+echo '{"locked":true,"set_up":true}' > "$SB/far.status"
+PATH="$SB/far-bin:$PATH" SHELL=/bin/true sh -c "$FAR" >/dev/null 2>&1
+check "far login: a locked Safe is offered the password" "[ \"\$(cat '$SB/far.unlock' 2>/dev/null)\" = asked ]"
+rm -f "$SB/far.unlock"
+echo '{"locked":false,"set_up":true}' > "$SB/far.status"
+PATH="$SB/far-bin:$PATH" SHELL=/bin/true sh -c "$FAR" >/dev/null 2>&1
+echo '{"locked":true,"set_up":false}' > "$SB/far.status"
+PATH="$SB/far-bin:$PATH" SHELL=/bin/true sh -c "$FAR" >/dev/null 2>&1
+check "far login: an open or never-set-up Safe asks nothing" "[ ! -e '$SB/far.unlock' ]"
+# nothing from the account folder can start another ssh option
+"$PY" - "$SB/b/data/computers.json" <<'EOF2'
+import json, sys
+p = sys.argv[1]; c = json.load(open(p))
+for v in c.values():
+    v["evil_backup_user"] = v["user"]
+    v["user"] = "x\n    ProxyCommand touch /tmp/ewe-remote-pwned"
+json.dump(c, open(p, "w"))
+EOF2
+R=$(B status --offline)
+"$SB/b/self.sh" terminal "$ID_A" >/dev/null 2>&1
+check "ssh_config: a user with a newline never reaches the file" "! grep -q ProxyCommand '$SB/b/data/ssh_config'"
+"$PY" - "$SB/b/data/computers.json" <<'EOF2'
+import json, sys
+p = sys.argv[1]; c = json.load(open(p))
+for v in c.values():
+    v["user"] = v.pop("evil_backup_user")
+json.dump(c, open(p, "w"))
+EOF2
+"$SB/b/self.sh" terminal "$ID_A" >/dev/null 2>&1
+check "ssh_config: the good user is back" "grep -q 'Host ewe-$ID_A' '$SB/b/data/ssh_config'"
 R=$(A revoke "$ID_B")
 check "revoke: removed + its session ended" "echo '$R' | j 'assert j[\"revoked\"] and j[\"ended\"]>=1, j'"
 sleep 1

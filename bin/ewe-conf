@@ -110,7 +110,7 @@ SECTION_NOTES = {
     "plugins": "third-party shell plugins (ewe-plugin): which ids are on, and where each came from",
     "plugins.sources": "id → git URL, so a fresh machine can `ewe-plugin add` what this one has",
     "companion": "the desktop companion's brain (ewe-companiond, RFC-007): proactive, quiet hours, providers; API keys live in the keyring, never here",
-    "safe": "ewe Safe, the password manager (ewe-safed, RFC-008): place = local | nextcloud | webdav | folder | sftp | dropbox | gdrive; location; webdav_url, webdav_user; lock_after_minutes, lock_on_screen_lock, lock_on_sleep; clipboard_clear_seconds; generator_length, generator_words; ssh_agent (ewe Safe answers ssh and git), ssh_confirm = first-use | every-time | never; unlock_at_login (unlock the safe at login), confirm_cards (ask for the password before filling a card) — both bools, default true. The safe itself and every password live elsewhere, never here",
+    "safe": "ewe Safe, the password manager (ewe-safed, RFC-008): place = local | nextcloud | webdav | folder | sftp | dropbox | gdrive; location; webdav_url, webdav_user; lock_after_minutes, lock_on_screen_lock, lock_on_sleep; clipboard_clear_seconds; generator_length, generator_words; ssh_agent (ewe Safe answers ssh and git), ssh_confirm = once | first-use | every-time | never; unlock_at_login (unlock the safe at login), confirm_cards (ask for the password before filling a card) — both bools, default true. The safe itself and every password live elsewhere, never here",
     "remote": "Remote (RFC-009, ewe-remote): THIS computer only — sharing (bool: Share this computer), port (int, default 3933). Keys, the code and who may log in live in ~/.local/share/ewe/remote, never here",
 }
 
@@ -2342,7 +2342,7 @@ ENUMS = {
     "desktop.accessibility.text_scale": (100, 115, 130),
     "desktop.workspaces.mode": ("separate", "shared"),
     "safe.place": ("local", "nextcloud", "webdav", "folder", "sftp", "dropbox", "gdrive"),
-    "safe.ssh_confirm": ("first-use", "every-time", "never"),
+    "safe.ssh_confirm": ("once", "first-use", "every-time", "never"),
 }
 THEME_DEFAULTS = {ck: dflt for ck, _jk, dflt in THEME_MAP}
 
