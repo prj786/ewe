@@ -37,6 +37,8 @@ for v in json.load(open('$d/run/tunnels.json')).values():
     except OSError: pass" 2>/dev/null
     done
     for p in "${PIDS[@]}"; do kill "$p" 2>/dev/null; done
+    # terminals that never logged in keep retrying: the stand-in kitty has no window to close
+    pkill -f -- "$SB/" 2>/dev/null
     rm -rf "$SB"
 }
 trap cleanup EXIT
@@ -167,6 +169,26 @@ R=$(B terminal "$ID_A")
 check "terminal: opens" "echo '$R' | j 'assert j[\"ok\"], j'"
 check "terminal: logged in and left cleanly (window closes)" "wait_file '$KITTY_RC' && [ \"\$(cat '$KITTY_RC')\" = 0 ]"
 check "keepalive: both ends wait 15 minutes" "grep -q 'ServerAliveCountMax 30' '$SB/b/data/ssh_config' && grep -q 'ClientAliveCountMax 30' '$SB/a/data/sshd_config'"
+# a reboot empties the runtime directory, and a computer that only joins others
+# never runs the commands that make it: ssh exits 255 after logging in and the
+# tunnel can't open its log (owner's laptop, 2026-11-05: "emoh can't be reached")
+reboot_b() {
+    B untunnel "$ID_A" >/dev/null
+    ssh -F "$SB/b/data/ssh_config" -O exit "ewe-$ID_A" >/dev/null 2>&1
+    rm -rf "$SB/b/run"
+}
+reboot_b
+OUT=$(timeout 15 ssh -F "$SB/b/data/ssh_config" "ewe-$ID_A" 'echo AFTER_REBOOT' </dev/null 2>&1)
+check "after a reboot: the generated ssh_config logs in" "echo '$OUT' | grep -qx AFTER_REBOOT"
+reboot_b
+rm -f "$KITTY_RC"
+R=$(B terminal "$ID_A")
+check "after a reboot: the terminal connects" "wait_file '$KITTY_RC' && [ \"\$(cat '$KITTY_RC')\" = 0 ]"
+reboot_b
+R=$(B tunnel "$ID_A")
+check "after a reboot: the tunnel comes up" "echo '$R' | j 'assert j[\"ok\"], j'"
+SOCKS=$(echo "$R" | j 'print(j.get("socks", ""))')
+check "after a reboot: a page through the tunnel" "[ \"\$(curl -s --max-time 8 --socks5-hostname $SOCKS http://localhost:$WEBP/x.txt)\" = far-side ]"
 # a lost connection (ssh exit 255) comes back; leaving (any other exit) ends it
 rm -f "$KITTY_RC" "$SB/ssh.count"
 cat > "$SB/bin/flaky-ssh" <<EOF
