@@ -186,6 +186,11 @@ xmlstarlet               # cursor hotspot extraction for the Mocu build
 noto-fonts               # includes Noto Sans Georgian — the Georgian fallback of both
                          # design-system stacks (Geist and Geist Mono have no Georgian)
 noto-fonts-emoji
+adobe-source-han-sans-otc-fonts  # Chinese, Japanese and Korean (2026-11-08: no CJK font
+                         # shipped, so those scripts drew as boxes everywhere). The
+                         # same design as Noto Sans CJK at 112 MB instead of 299 MB
+                         # (no serif); fontconfig picks the right regional variant
+                         # (dotfiles/fontconfig/fonts.conf)
 ttf-jetbrains-mono-nerd
 ttf-nerd-fonts-symbols-mono  # Nerd glyphs for the prompt, now that kitty sets Geist Mono
 # The DE faces, Geist and Geist Mono (OFL), are NOT in the Arch repos: the
