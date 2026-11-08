@@ -14,7 +14,11 @@
 # CPU: `total`/`idle` are the raw jiffies to hand back next time; `cpu` is the
 # busy fraction over that interval and `null` without a usable baseline
 # (first tick, or no jiffies passed); `cores` counts the cpuN lines.
-# Memory: `mem` is (MemTotal - MemAvailable) / MemTotal; the four sizes are kB.
+# Memory: `mem` is (MemTotal - available) / MemTotal; the four sizes are kB.
+# available = MemAvailable + GPUReclaim: the GPU driver's pool of freed
+# buffers (kernel 6.18+, xe/amdgpu via TTM) is handed back under pressure like
+# page cache, but MemAvailable leaves it out — on an Intel iGPU laptop that
+# showed 4.5 GB of "used" RAM that no program held.
 # Fractions are clamped to 0..1.
 #
 # Internet: `net` is the interface of the default route — the lowest-metric
@@ -48,6 +52,13 @@ prev_tx="${5:-}"
 prev_t="${6:-}"
 
 fail() { printf '{"ok":false,"error":"%s"}\n' "$1"; exit 0; }
+# a 0..1000 per-mille as "0.123" in $R — a function, not $(printf …): every
+# command substitution is a fork, and this runs every few seconds all day
+permille() {
+    _f=$(( $1 % 1000 ))
+    case "$_f" in ?) _f="00$_f" ;; ??) _f="0$_f" ;; esac
+    R="$(( $1 / 1000 )).$_f"
+}
 # a non-negative decimal integer (no sign, no hex, no leading garbage)
 isnum() { case "$1" in ""|*[!0-9]*) return 1 ;; *) return 0 ;; esac; }
 
@@ -78,24 +89,29 @@ if isnum "$prev_total" && isnum "$prev_idle"; then
         busy=$(( (dt - di) * 1000 / dt ))
         [ "$busy" -lt 0 ] && busy=0
         [ "$busy" -gt 1000 ] && busy=1000
-        cpu=$(printf '%d.%03d' $(( busy / 1000 )) $(( busy % 1000 )))
+        permille "$busy"; cpu=$R
     fi
 fi
 
 # ── memory (the loop's own status must not decide anything: a file without
 #    a key simply leaves it at 0)
 [ -r "$meminfo" ] || fail "cannot read $meminfo"
-mt=0; ma=0; swt=0; swf=0; seen=0
+mt=0; ma=0; swt=0; swf=0; gr=0; seen=0
+# GPUReclaim sits near the end of the file and older kernels have no such
+# line, so this reads the whole file (~60 short lines, still no fork)
 while read -r key val _unit; do
     case "$key" in
         MemTotal:)     mt=$val;  seen=$((seen + 1)) ;;
         MemAvailable:) ma=$val;  seen=$((seen + 1)) ;;
         SwapTotal:)    swt=$val; seen=$((seen + 1)) ;;
         SwapFree:)     swf=$val; seen=$((seen + 1)) ;;
+        GPUReclaim:)   gr=$val;  seen=$((seen + 1)) ;;
     esac
-    [ "$seen" -ge 4 ] && break
+    [ "$seen" -ge 5 ] && break
 done < "$meminfo"
 isnum "$mt" || mt=0; isnum "$ma" || ma=0; isnum "$swt" || swt=0; isnum "$swf" || swf=0
+isnum "$gr" || gr=0
+ma=$(( ma + gr ))
 mem=null
 mused=0
 if [ "$mt" -gt 0 ]; then
@@ -103,7 +119,7 @@ if [ "$mt" -gt 0 ]; then
     [ "$mused" -lt 0 ] && mused=0
     used=$(( mused * 1000 / mt ))
     [ "$used" -gt 1000 ] && { used=1000; mused=$mt; }
-    mem=$(printf '%d.%03d' $(( used / 1000 )) $(( used % 1000 )))
+    permille "$used"; mem=$R
 fi
 swused=$(( swt - swf ))
 [ "$swused" -lt 0 ] && swused=0
@@ -174,8 +190,7 @@ if [ -n "$ifc" ] && isnum "$rx" && isnum "$tx" && isnum "$t"; then
             upr=$(( (tx - prev_tx) * 100 / dts ))
         fi
     fi
-    net=$(printf '{"if":"%s","kind":"%s","rx":%s,"tx":%s,"t":%s,"down":%s,"up":%s}' \
-        "$ifj" "$kind" "$rx" "$tx" "$t" "$down" "$upr")
+    net="{\"if\":\"$ifj\",\"kind\":\"$kind\",\"rx\":$rx,\"tx\":$tx,\"t\":$t,\"down\":$down,\"up\":$upr}"
 fi
 
 printf '{"ok":true,"total":%d,"idle":%d,"cpu":%s,"cores":%d,"mem":%s,"memTotal":%d,"memUsed":%d,"swapTotal":%d,"swapUsed":%d,"net":%s}\n' \

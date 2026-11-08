@@ -320,6 +320,10 @@ phase_userconfig() {
                 | sudo_run tee /etc/systemd/zram-generator.conf >/dev/null && ok "zram configured (active after the next boot)"
         fi
     fi
+    # memory/journal/file-index tuning to match (2026-11-08): zswap off and
+    # swappiness 180 with zram, THP madvise, 1 GB journal, no plocate scan at
+    # boot. One script for this phase, the package and uninstall --purge.
+    sudo_run sh "$DOTREPO/system/tuning/apply.sh" || true
 
     ok "user config done"
 }

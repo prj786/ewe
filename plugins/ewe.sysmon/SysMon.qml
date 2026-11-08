@@ -16,7 +16,8 @@ import qs
 // widget while it is shown (the host loads it only then) — and the timer runs
 // while anyone holds. One process per tick (sample.sh, plain sh) reads
 // /proc/stat, /proc/meminfo, the default route, its byte counters and the
-// clock; the interval follows Shell.lowPower (1.5 s → 3 s on battery).
+// clock; every 1.5 s while the card or the desktop widget is up, every 3 s
+// for the bar readout alone, both doubled on battery (Shell.lowPower).
 //
 // The last minute of samples is kept for the sparklines. When nobody holds
 // any more, the baselines and the history are dropped, so the first tick
@@ -67,10 +68,19 @@ QtObject {
     // never counted twice
     property var _holders: []
     readonly property int wanted: sm._holders.length
-    function hold(who, on) {
+    // the holders that draw the last minute (the card, the desktop widget):
+    // they get a sample every 1.5 s; the bar readout alone, every 3 s — it was
+    // 40 forks and two blurred bar repaints a minute, all day, for a number
+    // that "barely moves" by design
+    property var _live: []
+    readonly property bool _detail: sm._live.length > 0
+    function hold(who, on, live) {
         var h = sm._holders.filter(function (x) { return x !== who })
         if (on) h.push(who)
         sm._holders = h
+        var l = sm._live.filter(function (x) { return x !== who })
+        if (on && live) l.push(who)
+        sm._live = l
     }
     onWantedChanged: if (sm.wanted === 0) {
         sm._prev = null
@@ -130,7 +140,7 @@ QtObject {
     }
     // a poll rate, not a motion duration
     property Timer _timer: Timer {
-        interval: Shell.lowPower ? 3000 : 1500
+        interval: sm._detail ? (Shell.lowPower ? 3000 : 1500) : (Shell.lowPower ? 6000 : 3000)
         running: sm.wanted > 0
         repeat: true; triggeredOnStart: true
         onTriggered: if (!sm._proc.running) sm._proc.running = true

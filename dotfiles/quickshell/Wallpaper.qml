@@ -95,8 +95,11 @@ QtObject {
     // arrive AFTER the window cards. These Images have no visual parent and
     // are never drawn: they hold a reference to the decoded pixmap in Qt's
     // cache from shell start, so the surfaces that DO draw it get a cache hit
-    // and are ready on their first frame. The key is (url, sourceSize) —
-    // keep it byte-identical to Overview.qml's Image.
+    // and are ready on their first frame. The key is (url, sourceSize,
+    // fillMode) — Qt's pixmap cache keys on the provider options too, and
+    // fillMode puts PreserveAspectCrop in them: until 0.41 this Image was
+    // Stretch, so it decoded a second copy nobody drew and the Overview
+    // still missed the cache. Keep all three byte-identical to Overview.qml.
     property Instantiator _warm: Instantiator {
         model: Quickshell.screens
         delegate: Image {
@@ -104,6 +107,7 @@ QtObject {
             readonly property string path: wp.pathFor(modelData.name)
             source: path ? "file://" + path : ""
             sourceSize: Qt.size(modelData.width, modelData.height)
+            fillMode: Image.PreserveAspectCrop
             asynchronous: true
             cache: true
             visible: false

@@ -17,6 +17,9 @@ jobs:
       - name: ShellCheck
         uses: ludeeus/action-shellcheck@master
         with:
+          # pinned: the floating "stable" download answered 504 (2026-11-08)
+          # and the job failed on "not a tar archive" before checking a line
+          version: v0.11.0
           severity: error          # only hard errors fail the build (not style nits)
           # shellcheck has no zsh dialect: ewe.zsh's glob qualifiers are a parse
           # error to it. zsh -n covers that file (the `zsh` job below).

@@ -6,10 +6,14 @@ the whole keyboard. This daemon remembers the chosen layout per window address a
 restores it on focus, so e.g. a terminal can stay on Georgian while the browser
 stays on US.
 
-No external deps: it talks to Hyprland's event socket (.socket2.sock) directly via
-the stdlib `socket` module and drives `hyprctl` for queries/switches. Layouts come
-from kb_layout = "us,ge" (index 0 = us, 1 = ge); the name→index map below covers
-that pair and degrades gracefully to 0 for anything unrecognised.
+No external deps: it reads Hyprland's event socket (.socket2.sock) and sends its
+queries and switches to the request socket (.socket.sock) with the stdlib
+`socket` module — no process per event. Until 0.40 every focus change spawned
+one `hyprctl switchxkblayout` per "keyboard" (power button, video bus, mice …:
+11 processes, ~27 ms); now it is one `switchxkblayout all N` (~0.2 ms), and
+nothing at all when the layout already matches. Layouts come from kb_layout =
+"us,ge" (index 0 = us, 1 = ge); the name→index map below covers that pair and
+degrades gracefully to 0 for anything unrecognised.
 """
 
 import json
@@ -21,6 +25,7 @@ import sys
 RUNTIME = os.environ.get("XDG_RUNTIME_DIR", "")
 SIG = os.environ.get("HYPRLAND_INSTANCE_SIGNATURE", "")
 SOCK = f"{RUNTIME}/hypr/{SIG}/.socket2.sock"
+REQ = f"{RUNTIME}/hypr/{SIG}/.socket.sock"
 
 # layout code (as configured in input.kb_layout) → prefixes of the keymap name
 # Hyprland reports in `activelayout` events. Covers the codes the Settings app
@@ -43,16 +48,37 @@ CODE_HINTS = {
 }
 
 
-def layout_map() -> dict:
-    """keymap-name prefix → index, built from the live kb_layout list."""
+def hypr(request: str) -> str:
+    """One request on Hyprland's request socket (what hyprctl does, minus the
+    process). Falls back to hyprctl if the socket is unusable."""
     try:
-        out = subprocess.run(
-            ["hyprctl", "getoption", "input:kb_layout", "-j"],
-            capture_output=True, text=True, check=True,
-        ).stdout
-        codes = [c.strip() for c in json.loads(out).get("str", "us").split(",") if c.strip()]
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as c:
+            c.settimeout(2)
+            c.connect(REQ)
+            c.sendall(request.encode())
+            out = b""
+            while True:
+                b = c.recv(65536)
+                if not b:
+                    break
+                out += b
+        return out.decode("utf-8", "replace")
+    except OSError:
+        flags, _, rest = request.rpartition("/") if request.startswith("j/") else ("", "", request)
+        args = rest.split() + (["-j"] if flags else [])
+        return subprocess.run(["hyprctl", *args], capture_output=True, text=True).stdout
+
+
+def layout_codes() -> list:
+    try:
+        raw = json.loads(hypr("j/getoption input:kb_layout")).get("str", "us")
+        return [c.strip() for c in raw.split(",") if c.strip()] or ["us"]
     except Exception:
-        codes = ["us"]
+        return ["us"]
+
+
+def layout_map(codes: list) -> dict:
+    """keymap-name prefix → index, built from the live kb_layout list."""
     m = {}
     for idx, code in enumerate(codes):
         for hint in CODE_HINTS.get(code, (code,)):
@@ -60,7 +86,8 @@ def layout_map() -> dict:
     return m
 
 
-LAYOUTS = layout_map()
+CODES = layout_codes()
+LAYOUTS = layout_map(CODES)
 
 
 def name_to_index(name: str) -> int:
@@ -73,25 +100,19 @@ def name_to_index(name: str) -> int:
     return 0  # the default layout for anything unrecognised
 
 
-def keyboards() -> list:
-    """Names of all physical keyboards, so every device tracks the same layout."""
+def active_index() -> int | None:
+    """Layout index the main keyboard is on now (None if unknown)."""
     try:
-        out = subprocess.run(
-            ["hyprctl", "devices", "-j"],
-            capture_output=True, text=True, check=True,
-        ).stdout
-        data = json.loads(out)
-        return [k["name"] for k in data.get("keyboards", [])]
+        kbds = json.loads(hypr("j/devices")).get("keyboards", [])
+        main = next((k for k in kbds if k.get("main")), kbds[0] if kbds else None)
+        return name_to_index(main["active_keymap"]) if main else None
     except Exception:
-        return []
+        return None
 
 
-def apply_layout(kbds: list, index: int) -> None:
-    for name in kbds:
-        subprocess.run(
-            ["hyprctl", "switchxkblayout", name, str(index)],
-            capture_output=True,
-        )
+def apply_layout(index: int) -> None:
+    # `all` = every keyboard device, including ones plugged in later
+    hypr(f"switchxkblayout all {index}")
 
 
 def main() -> int:
@@ -99,9 +120,10 @@ def main() -> int:
         print(f"kb-per-window: event socket not found: {SOCK}", file=sys.stderr)
         return 1
 
-    kbds = keyboards()
+    global CODES, LAYOUTS
     mem: dict[str, int] = {}   # window address → layout index
     current = ""               # focused window address
+    active = active_index()    # layout the keyboards are on (None = unknown)
 
     s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     s.connect(SOCK)
@@ -125,23 +147,27 @@ def main() -> int:
             if name == "activewindowv2":
                 # payload = window address (hex, no 0x). Restore its layout.
                 current = payload.strip()
-                apply_layout(kbds, mem.get(current, 0))
+                want = mem.get(current, 0)
+                if len(CODES) > 1 and want != active:
+                    apply_layout(want)
+                    active = want
 
             elif name == "activelayout":
                 # payload = "keyboardname,LayoutName". Record what the focused
                 # window is now using (covers manual switches: shortcut/bar/click).
                 layout = payload.rsplit(",", 1)[-1]
+                active = name_to_index(layout)
                 if current:
-                    mem[current] = name_to_index(layout)
+                    mem[current] = active
 
             elif name == "closewindow":
                 mem.pop(payload.strip(), None)
 
             elif name in ("configreloaded", "monitoradded", "monitorremoved"):
-                # keyboard set and layout list can change on reload / hotplug
-                global LAYOUTS
-                kbds = keyboards()
-                LAYOUTS = layout_map()
+                # the layout list can change on reload / hotplug
+                CODES = layout_codes()
+                LAYOUTS = layout_map(CODES)
+                active = active_index()
 
     return 0
 

@@ -12,11 +12,11 @@ import qs
 // shell did; the NetworkManager secret prompt itself stays in the shell
 // (Auth.qml) — this plugin only writes secrets INTO a profile on request.
 //
-// Freshness: one `nmcli monitor` (a single long-lived process that prints a
-// line whenever NetworkManager changes anything) drives the re-reads, so a
-// VPN coming up from Settings, a script or a cable plug shows at once
-// without a timer. Plus one read at start, one after wake, and one whenever
-// the tile or the page appears.
+// Freshness: the shell's own `nmcli monitor` (NetState — it bumps
+// Globals.netEpoch whenever NetworkManager changes anything) drives the
+// re-reads, so a VPN coming up from Settings, a script or a cable plug
+// shows at once without a timer or a process of its own. Plus one read at
+// start, one after wake, and one whenever the tile or the page appears.
 QtObject {
     id: vpn
 
@@ -121,32 +121,20 @@ QtObject {
     }
     // NM emits a burst of lines per transition — coalesce them into one re-read
     property Timer debounce: Timer { interval: 400; onTriggered: vpn.refresh() }
-    property int _monTries: 0
-    property Process monitor: Process {
-        running: true
-        // --pdeathsig: dies with the shell even on an abrupt exit
-        command: ["setpriv", "--pdeathsig", "TERM", "--", "nmcli", "monitor"]
-        stdout: SplitParser { onRead: function (line) { vpn._monTries = 0; debounce.restart() } }
-        // if NetworkManager isn't running, nmcli monitor exits immediately — back
-        // off and stop rather than respawning it forever
-        onExited: {
-            if (vpn._monTries >= 5) { Log.warn("ewe.vpn", "nmcli monitor keeps exiting — the VPN state is read only when the panel opens"); return }
-            vpn._monTries++
-            monRestart.interval = 5000 * vpn._monTries
-            monRestart.restart()
-        }
+    // the shell's NetState already runs `nmcli monitor` and bumps
+    // Globals.netEpoch on every NetworkManager event — re-read on that. This
+    // plugin ran a second monitor of its own until 1.0.3 (10.7 MB, and every
+    // event woke both).
+    property Connections netEvents: Connections {
+        target: Globals
+        function onNetEpochChanged() { debounce.restart() }
     }
-    property Timer monRestart: Timer { interval: 5000; onTriggered: monitor.running = true }
     // after a toggle: nmcli returns before the list says so
     property Timer rescan: Timer { interval: 2000; onTriggered: vpn.refresh() }
-    // after wake: nmcli monitor usually dies with the link it was watching
+    // after wake: re-read once, whatever the monitor saw
     property Connections wake: Connections {
         target: Shell
-        function onResumed() {
-            vpn._monTries = 0
-            if (!monitor.running) monitor.running = true
-            vpn.refresh()
-        }
+        function onResumed() { vpn.refresh() }
     }
     Component.onCompleted: vpn.refresh()
 

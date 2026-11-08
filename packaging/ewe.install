@@ -101,9 +101,19 @@ _ewe_network_defaults() {
     return 0
 }
 
+# Memory/journal/file-index tuning (2026-11-08): zswap off + swappiness 180
+# next to zram, transparent huge pages on request only, a 1 GB journal, no
+# plocate scan while the desktop starts. The same script phase 60 runs; it
+# changes only what differs and never fails the transaction.
+_ewe_tuning() {
+    [ -r /usr/share/ewe/system/tuning/apply.sh ] && sh /usr/share/ewe/system/tuning/apply.sh
+    return 0
+}
+
 post_install() {
     _ewe_ikev1_accept
     _ewe_network_defaults
+    _ewe_tuning
     cat <<'EOF'
 :: ewe is installed. Two steps remain:
 ::   1. per user:  ewe-setup            (deploys the dotfiles into your home)
@@ -117,8 +127,15 @@ post_upgrade() {
     _ewe_ikev1_accept
     _ewe_refresh_greeter
     _ewe_network_defaults
+    _ewe_tuning
     cat <<'EOF'
 :: ewe payload updated. Each user's desktop refreshes itself at next login
 :: (or run `ewe-setup` now and restart the shell).
 EOF
+}
+
+pre_remove() {
+    # the payload (and apply.sh with it) is gone by post_remove
+    [ -r /usr/share/ewe/system/tuning/apply.sh ] && sh /usr/share/ewe/system/tuning/apply.sh --remove
+    return 0
 }
