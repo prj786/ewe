@@ -344,3 +344,41 @@ To see it yourself, per program (proportional, so shared pages count once):
 for p in /proc/[0-9]*; do s=$(awk '/^Pss:/{print $2}' $p/smaps_rollup 2>/dev/null) && echo "$s $(cat $p/comm)"; done \
   | awk '{a[$2]+=$1} END{for(k in a) printf "%6.0f MB  %s\n", a[k]/1024, k}' | sort -rn | head
 ```
+
+## Chinese, Japanese or Korean text shows as boxes
+
+Before 0.42 ewe installed no CJK font at all, so every such character drew as
+a box (tofu). 0.42 depends on `adobe-source-han-sans-otc-fonts` (Source Han
+Sans) and its fontconfig rules pick the Japanese, Korean or Traditional
+Chinese shapes when the text says its language (Simplified Chinese otherwise).
+Check:
+
+```sh
+pacman -Q adobe-source-han-sans-otc-fonts
+fc-match 'sans-serif:lang=ja'   # → Source Han Sans
+fc-match 'sans-serif:lang=ko'   # → Source Han Sans K
+```
+
+Apps that were open keep their old font list until restarted. In a terminal
+a few characters shared between the languages keep their Chinese shape in
+Japanese text (fontconfig's monospace rule); kana and Hangul are always right.
+
+## Game mode does nothing
+
+Two causes before 0.42, both fixed by the package upgrade:
+
+- **GameMode's boost was never allowed.** Its polkit rule only trusts the
+  `gamemode` group, which nobody is in, so every request ended "Not
+  authorized" (`journalctl --user -u gamemoded | grep -i authoriz`). 0.42
+  installs `/etc/polkit-1/rules.d/70-ewe-gamemode.rules` (administrators —
+  the `wheel` group — may use it).
+- **On integrated graphics a pinned CPU costs frames.** The CPU and the GPU
+  share one power budget; GameMode's default (performance governor) starves
+  the GPU. `ewe-game setup` writes `~/.config/gamemode.ini` that leaves the
+  governor alone when only an integrated GPU is present, and Ultra raises the
+  power profile to Performance instead.
+
+Check what ran: `ewe-game status` lists every step of the current session,
+with the reason a step was skipped, and `ready` says whether GameMode is
+installed, allowed and configured. Ultra puts everything back when it turns
+off; a game closing never turns off a game mode you turned on yourself.
