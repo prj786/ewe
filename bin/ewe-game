@@ -1,0 +1,640 @@
+#!/usr/bin/env python3
+"""ewe-game — Game mode: what gets in a game's way, out of it until it ends.
+
+Prints ONE JSON object per call and exits 0 (errors are {"ok": false,
+"error": "<plain words>", "code": "<machine word>"}); every child process has
+a timeout, so callers never hang on it. The Quick settings tile, ewe Settings
+→ Power → Gaming, Shaun ("game mode on") and GameMode's own start/end hooks
+all come through here, so there is one game mode with one state.
+
+  status                     {ok, on, level, reasons, since, steps, auto,
+                             close_apps, ready}
+  on  [--level ultra|balanced] [--by manual|window|gamemode]
+  off [--by manual|window|gamemode]
+                             --by says who asks. A manual `off` ends game
+                             mode whatever started it; window/gamemode take
+                             away only their own reason, so a game closing
+                             never ends a game mode you turned on yourself.
+  toggle                     manual on/off
+  scan                       the shell calls this when a window opens or
+                             closes: a game window on screen (a Steam game —
+                             its process carries SteamAppId — or gamescope)
+                             adds the `window` reason, none takes it away.
+                             Does nothing while [desktop.game] auto is off.
+  setup [--force]            write ~/.config/gamemode.ini: GameMode's start/end
+                             hooks call this tool, and on a computer whose
+                             only GPU is the processor's own it leaves the CPU
+                             governor alone (see ini_text). Only rewrites a
+                             file that ewe wrote, unless --force.
+
+THE TWO LEVELS ([desktop.game] level, default ultra):
+
+  balanced  · banners quiet (the shell reads the state file)
+            · Hyprland: no animations, blur or shadows
+            · GameMode held: the CPU boost and split-lock mitigation off
+              (Feral GameMode, when installed)
+  ultra     everything above, and
+            · the power profile on Performance (power-profiles-daemon) — on
+              a laptop this raises the processor's power limit, the one knob
+              that feeds an integrated GPU
+            · direct scanout: a fullscreen game goes to the display without
+              the compositor drawing it again (render.direct_scanout)
+            · ewe's own background apps closed (close_apps, default on):
+              ewe Sync's background service and ewe Browser's background
+              process when it has no window. They open again when game mode
+              ends.
+            · the shell hides desktop widgets and freezes a video wallpaper
+
+Everything is put back by `off`: Hyprland reloads its config, the power
+profile returns to what it was (unless you changed it meanwhile), the closed
+apps start again. The state lives in $XDG_RUNTIME_DIR/ewe/game.json — a
+reboot ends game mode with everything it changed.
+
+Tests: EWE_GAME_STATE (the state file), EWE_GAME_CONF (the ewe.conf
+tool, default `ewe-conf`), EWE_GAME_PROC (/proc), EWE_GAME_SYS (/sys) and
+the usual PATH shims for hyprctl, busctl, systemctl, gamemoded.
+"""
+
+import fcntl
+import json
+import os
+import re
+import shutil
+import signal
+import subprocess
+import sys
+import time
+
+RUNTIME = os.environ.get("XDG_RUNTIME_DIR") or "/tmp"
+STATE = os.environ.get("EWE_GAME_STATE") or os.path.join(RUNTIME, "ewe", "game.json")
+LOCK = STATE + ".lock"
+PROC = os.environ.get("EWE_GAME_PROC") or "/proc"
+SYS = os.environ.get("EWE_GAME_SYS") or "/sys"
+CFG = os.environ.get("XDG_CONFIG_HOME") or os.path.join(os.path.expanduser("~"), ".config")
+GAMEMODE_INI = os.path.join(CFG, "gamemode.ini")
+INI_MARK = "; ewe-game setup"          # first line of a gamemode.ini ewe wrote
+
+LEVELS = ("balanced", "ultra")
+REASONS = ("manual", "window", "gamemode")
+PPD = ["--system", "net.hadess.PowerProfiles", "/net/hadess/PowerProfiles",
+       "net.hadess.PowerProfiles"]
+GM = ["--user", "com.feralinteractive.GameMode", "/com/feralinteractive/GameMode",
+      "com.feralinteractive.GameMode"]
+SYNC_UNIT = "ewe-sync.service"
+GAME_CLASS = re.compile(r"^(steam_app_\d+|gamescope)$")
+
+# Hyprland at runtime only; `reload config-only` puts the user's config back
+QUIET_LUA = ("hl.config({ animations = { enabled = false }, decoration = { "
+             "blur = { enabled = false }, shadow = { enabled = false } } })")
+SCANOUT_LUA = "hl.config({ render = { direct_scanout = 1 } })"
+
+
+# ── plumbing ────────────────────────────────────────────────────────────────
+
+def out(obj):
+    print(json.dumps(obj))
+    sys.exit(0)
+
+
+def fail(msg, code="failed"):
+    out({"ok": False, "error": msg, "code": code})
+
+
+def run(argv, timeout=8, env=None):
+    """(ok, stdout) — never raises, never hangs past `timeout`."""
+    try:
+        r = subprocess.run(argv, capture_output=True, text=True, timeout=timeout,
+                           stdin=subprocess.DEVNULL, env=env)
+        return r.returncode == 0, r.stdout.strip()
+    except (OSError, subprocess.TimeoutExpired):
+        return False, ""
+
+
+def spawn(argv, env=None):
+    """a detached child that outlives this tool; its pid or None. In a scope
+    of its own (`systemd-run --scope` execs the command, so the pid is the
+    command's): a process started here would otherwise join the caller's
+    cgroup and die with it — GameMode's hook runs us inside gamemoded.service,
+    the tile inside ewe.service (EWE_GAME_NO_SCOPE=1 for tests)."""
+    if os.environ.get("EWE_GAME_NO_SCOPE") != "1" and shutil.which("systemd-run"):
+        argv = ["systemd-run", "--user", "--scope", "--quiet", "--collect", "--"] + list(argv)
+    try:
+        p = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL, start_new_session=True, env=env)
+        return p.pid
+    except OSError:
+        return None
+
+
+PREF_DEFAULTS = {"level": "ultra", "auto": True, "close_apps": True}
+_prefs = None
+
+
+def prefs():
+    """[desktop.game] in ewe.conf, read once per call with its defaults"""
+    global _prefs
+    if _prefs is None:
+        getter = os.environ.get("EWE_GAME_CONF") or shutil.which("ewe-conf") \
+            or os.path.join(CFG, "quickshell", "..", "..", "bin", "ewe-conf")
+        ok, v = run([getter, "get", "desktop.game"], timeout=5)
+        d = {}
+        if ok:
+            try:
+                d = json.loads(v)
+            except ValueError:
+                d = {}
+        p = dict(PREF_DEFAULTS)
+        if isinstance(d, dict):
+            if d.get("level") in LEVELS:
+                p["level"] = d["level"]
+            for k in ("auto", "close_apps"):
+                if isinstance(d.get(k), bool):
+                    p[k] = d[k]
+        _prefs = p
+    return _prefs
+
+
+def load():
+    try:
+        with open(STATE) as f:
+            d = json.load(f)
+        return d if isinstance(d, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def save(d):
+    os.makedirs(os.path.dirname(STATE), exist_ok=True)
+    tmp = STATE + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(d, f, indent=1)
+        f.write("\n")
+    os.replace(tmp, STATE)       # the shell watches the file: one atomic change
+
+
+class Locked:
+    """one game-mode change at a time: the shell's scan, GameMode's hook and
+    a click can arrive together. Waits up to 9 s (GameMode gives its hooks
+    10), then goes ahead rather than hang."""
+
+    def __enter__(self):
+        os.makedirs(os.path.dirname(LOCK), exist_ok=True)
+        self.f = open(LOCK, "w")
+        end = time.monotonic() + 9
+        while True:
+            try:
+                fcntl.flock(self.f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                return self
+            except OSError:
+                if time.monotonic() > end:
+                    return self
+                time.sleep(0.1)
+
+    def __exit__(self, *a):
+        try:
+            fcntl.flock(self.f, fcntl.LOCK_UN)
+        finally:
+            self.f.close()
+
+
+def hypr_env():
+    """the environment hyprctl needs. GameMode runs its hooks from the user
+    manager, which has HYPRLAND_INSTANCE_SIGNATURE only when the session put
+    it there — otherwise take the newest live instance."""
+    env = dict(os.environ)
+    if env.get("HYPRLAND_INSTANCE_SIGNATURE"):
+        return env
+    base = os.path.join(RUNTIME, "hypr")
+    try:
+        cands = [d for d in os.listdir(base)
+                 if os.path.exists(os.path.join(base, d, ".socket.sock"))]
+    except OSError:
+        cands = []
+    if cands:
+        cands.sort(key=lambda d: os.path.getmtime(os.path.join(base, d)), reverse=True)
+        env["HYPRLAND_INSTANCE_SIGNATURE"] = cands[0]
+    return env
+
+
+def hyprctl(*args):
+    return run(["hyprctl", *args], timeout=5, env=hypr_env())
+
+
+def alive(pid):
+    try:
+        os.kill(int(pid), 0)
+        return True
+    except (OSError, ValueError, TypeError):
+        return False
+
+
+def cmdline(pid, proc=None):
+    try:
+        with open(os.path.join(proc or PROC, str(pid), "cmdline"), "rb") as f:
+            return [a.decode(errors="replace") for a in f.read().split(b"\0") if a]
+    except OSError:
+        return []
+
+
+def environ_has(pid, name):
+    try:
+        with open(os.path.join(PROC, str(pid), "environ"), "rb") as f:
+            for kv in f.read().split(b"\0"):
+                k, _, v = kv.partition(b"=")
+                if k == name.encode() and v not in (b"", b"0"):
+                    return True
+    except OSError:
+        pass
+    return False
+
+
+def ppid(pid):
+    try:
+        with open(os.path.join(PROC, str(pid), "stat")) as f:
+            return int(f.read().rsplit(")", 1)[1].split()[1])
+    except (OSError, ValueError, IndexError):
+        return 0
+
+
+def clients():
+    ok, txt = hyprctl("clients", "-j")
+    if not ok:
+        return []
+    try:
+        c = json.loads(txt)
+        return c if isinstance(c, list) else []
+    except ValueError:
+        return []
+
+
+def is_game(c):
+    if GAME_CLASS.match(str(c.get("class") or "")):
+        return True
+    pid = c.get("pid")
+    # a Steam game, native or through Proton, carries SteamAppId (the Steam
+    # client itself does not); a launcher script may sit between, so look one
+    # parent up too
+    return bool(pid) and (environ_has(pid, "SteamAppId") or environ_has(ppid(pid), "SteamAppId"))
+
+
+# ── the steps ───────────────────────────────────────────────────────────────
+
+def ppd_get():
+    ok, v = run(["busctl", "get-property", *PPD, "ActiveProfile"], timeout=5)
+    m = re.match(r'^s "([^"]+)"$', v) if ok else None
+    return m.group(1) if m else None
+
+
+def ppd_set(profile):
+    return run(["busctl", "set-property", *PPD, "ActiveProfile", "s", profile], timeout=5)[0]
+
+
+def gm_clients():
+    """pids GameMode is boosting now (ListGames → a(io)), or None"""
+    ok, v = run(["busctl", "call", *GM, "ListGames"], timeout=5)
+    if not ok:
+        return None
+    return [int(n) for n in re.findall(r"\b(\d+) \"", v)]
+
+
+def browser_background():
+    """ewe Browser's background process when it has no window: [(pid, argv)]"""
+    if any(str(c.get("class") or "").lower().startswith("ewe-browser") for c in clients()):
+        return []
+    found = []
+    try:
+        pids = [p for p in os.listdir(PROC) if p.isdigit()]
+    except OSError:
+        return []
+    uid = os.getuid()
+    for p in pids:
+        try:
+            if os.stat(os.path.join(PROC, p)).st_uid != uid:
+                continue
+        except OSError:
+            continue
+        a = cmdline(p)
+        if a and os.path.basename(a[0]) == "ewe-browser" and "--background" in a \
+                and not any(x.startswith("--type=") for x in a):
+            found.append((int(p), a))
+    return found
+
+
+def turn_on(level, by, close_apps):
+    st = {"on": True, "level": level, "reasons": [by], "since": int(time.time()),
+          "steps": [], "undo": {}}
+    steps, undo = st["steps"], st["undo"]
+
+    def step(sid, ok, note):
+        steps.append({"id": sid, "ok": bool(ok), "note": note})
+
+    step("quiet", True, "Banners wait in the notification list")
+    lua = QUIET_LUA + (" " + SCANOUT_LUA if level == "ultra" else "")
+    ok, _ = hyprctl("eval", lua)
+    undo["hypr"] = ok
+    step("effects", ok, ("No animations, blur or shadows"
+                         + (", and a fullscreen game goes straight to the display" if level == "ultra" else ""))
+         if ok else "Hyprland did not answer")
+
+    # GameMode: hold it ourselves unless a game already asked for it
+    if by == "gamemode":
+        step("boost", True, "GameMode is on for the game")
+    elif shutil.which("gamemoded"):
+        pid = spawn(["gamemoded", "-r"])
+        undo["hold"] = pid
+        step("boost", pid is not None,
+             "GameMode on: CPU boost, split-lock mitigation off" if pid else "GameMode did not start")
+    else:
+        step("boost", False, "GameMode is not installed (Komble → gamemode)")
+
+    if level == "ultra":
+        prev = ppd_get()
+        if prev is None:
+            step("power", False, "No power profiles on this computer (power-profiles-daemon)")
+        elif prev == "performance":
+            step("power", True, "Power profile already on Performance")
+        elif ppd_set("performance"):
+            undo["power"] = prev
+            step("power", True, "Power profile: Performance (was " + prev.replace("-", " ").capitalize() + ")")
+        else:
+            step("power", False, "This computer has no Performance profile")
+
+        if close_apps:
+            closed = []
+            # ewe Sync only while it runs in the background: an open window
+            # is someone using it
+            sync_shown = any(str(c.get("class") or "").lower().startswith("ewe-sync") for c in clients())
+            _, v = run(["systemctl", "--user", "is-active", SYNC_UNIT], timeout=5)
+            if v == "active" and not sync_shown \
+                    and run(["systemctl", "--user", "stop", SYNC_UNIT], timeout=10)[0]:
+                undo["unit"] = SYNC_UNIT
+                closed.append("ewe Sync")
+            for pid, argv in browser_background():
+                try:
+                    os.kill(pid, signal.SIGTERM)
+                    undo["browser"] = argv
+                    closed.append("ewe Browser")
+                except OSError:
+                    pass
+            step("apps", True, ("Closed until game mode ends: " + ", ".join(dict.fromkeys(closed)))
+                 if closed else "No background apps to close")
+        step("shell", True, "Desktop widgets hidden, video wallpaper still")
+    return st
+
+
+def turn_off(st):
+    undo = st.get("undo") or {}
+    pid = undo.get("hold")
+    # our own child, so the real /proc: never kill a pid that was reused
+    # (`systemd-run --scope` execs gamemoded, so the pid is the hold's)
+    if pid and alive(pid) and "gamemoded" in " ".join(cmdline(pid, "/proc")):
+        try:
+            os.kill(int(pid), signal.SIGTERM)
+        except OSError:
+            pass
+    if undo.get("hypr"):
+        hyprctl("reload", "config-only")
+    prev = undo.get("power")
+    # put the profile back only when it is still the one we set: a change
+    # made meanwhile (Quick settings, Settings) is the user's and stays
+    if prev and ppd_get() == "performance":
+        ppd_set(prev)
+    if undo.get("unit"):
+        run(["systemctl", "--user", "start", undo["unit"]], timeout=10)
+    if undo.get("browser"):
+        spawn(undo["browser"])
+    return {"on": False, "level": st.get("level"), "reasons": [], "since": None,
+            "steps": [], "ended": int(time.time())}
+
+
+def boost_allowed():
+    """GameMode's helpers need root through polkit: ewe's rule (system
+    tuning, 0.42) or membership of the `gamemode` group — without either,
+    every boost is refused and game mode "does nothing" (2026-11-08)."""
+    if os.path.exists("/etc/polkit-1/rules.d/70-ewe-gamemode.rules"):
+        return True
+    try:
+        import grp
+        import pwd
+        me = pwd.getpwuid(os.getuid()).pw_name
+        g = grp.getgrnam("gamemode")
+        return me in g.gr_mem or os.getgid() == g.gr_gid
+    except (KeyError, ImportError):
+        return False
+
+
+def status(st=None):
+    st = load() if st is None else st
+    on = bool(st.get("on"))
+    return {
+        "ok": True,
+        "on": on,
+        "level": st.get("level") if on else prefs()["level"],
+        "reasons": st.get("reasons") or [],
+        "since": st.get("since"),
+        "steps": st.get("steps") or [],
+        "auto": prefs()["auto"],
+        "close_apps": prefs()["close_apps"],
+        "ready": {
+            "gamemode": bool(shutil.which("gamemoded")),
+            "boost_allowed": boost_allowed(),
+            "gamemode_ini": os.path.exists(GAMEMODE_INI),
+        },
+    }
+
+
+# ── setup: GameMode's own config ────────────────────────────────────────────
+
+def gpus():
+    """[(driver, pci slot, vram bytes or None)] for every display GPU"""
+    res = []
+    base = os.path.join(SYS, "class", "drm")
+    try:
+        names = sorted(n for n in os.listdir(base) if re.fullmatch(r"card\d+", n))
+    except OSError:
+        return res
+    for n in names:
+        dev = os.path.join(base, n, "device")
+        try:
+            drv = os.path.basename(os.readlink(os.path.join(dev, "driver")))
+            slot = os.path.basename(os.path.realpath(dev))
+        except OSError:
+            continue
+        vram = None
+        try:
+            with open(os.path.join(dev, "mem_info_vram_total")) as f:
+                vram = int(f.read().strip())
+        except (OSError, ValueError):
+            pass
+        res.append((drv, slot, vram))
+    return res
+
+
+def integrated_only():
+    """True when every GPU is part of the processor: Intel at 00:02.0, an
+    AMD APU (amdgpu with at most 4 GiB set aside). Unknown → False, which
+    keeps GameMode's own defaults."""
+    g = gpus()
+    if not g:
+        return False
+    for drv, slot, vram in g:
+        if drv in ("i915", "xe") and slot.endswith(":00:02.0"):
+            continue
+        if drv == "amdgpu" and vram is not None and vram <= 4 << 30:
+            continue
+        return False
+    return True
+
+
+def cpu_governor():
+    try:
+        with open(os.path.join(SYS, "devices/system/cpu/cpu0/cpufreq/scaling_governor")) as f:
+            return f.read().strip()
+    except OSError:
+        return ""
+
+
+def ini_text():
+    tool = shutil.which("ewe-game") or os.path.realpath(sys.argv[0])
+    lines = [INI_MARK + " — GameMode's config, written by ewe. ewe rewrites it while",
+             "; this first line is here; delete the line to keep your own edits.",
+             "", "[general]"]
+    if integrated_only():
+        gov = cpu_governor() or "powersave"
+        lines += ["; The only GPU here is the processor's own: CPU and GPU share one power",
+                  "; budget, so pinning the CPU at full speed (GameMode's default) takes",
+                  "; watts from the GPU and costs frames. Keep the governor as it is; ewe's",
+                  "; Ultra game mode raises the platform power profile instead.",
+                  "desiredgov=" + gov, "igpu_desiredgov=" + gov]
+    lines += ["inhibit_screensaver=1", "", "[custom]",
+              "; a game that asks GameMode for a boost turns ewe's game mode on too",
+              "start=" + tool + " on --by gamemode",
+              "end=" + tool + " off --by gamemode",
+              "script_timeout=10", ""]
+    return "\n".join(lines)
+
+
+def setup(force):
+    try:
+        with open(GAMEMODE_INI) as f:
+            cur = f.read()
+    except OSError:
+        cur = None
+    if cur is not None and not cur.startswith(INI_MARK) and not force:
+        return {"ok": True, "written": False, "path": GAMEMODE_INI,
+                "note": "Your own gamemode.ini is left as it is (--force replaces it)"}
+    new = ini_text()
+    if cur == new:
+        return {"ok": True, "written": False, "path": GAMEMODE_INI, "note": "Up to date"}
+    os.makedirs(os.path.dirname(GAMEMODE_INI), exist_ok=True)
+    tmp = GAMEMODE_INI + ".tmp"
+    with open(tmp, "w") as f:
+        f.write(new)
+    os.replace(tmp, GAMEMODE_INI)
+    return {"ok": True, "written": True, "path": GAMEMODE_INI,
+            "integrated_only": integrated_only()}
+
+
+# ── verbs ───────────────────────────────────────────────────────────────────
+
+def opt(args, name, allowed, default):
+    if name in args:
+        i = args.index(name)
+        v = args[i + 1] if i + 1 < len(args) else ""
+        if v not in allowed:
+            fail("%s must be one of %s" % (name, ", ".join(allowed)), "bad-arg")
+        return v
+    return default
+
+
+def foreign_gamemode(st):
+    """GameMode runs its start hook for our own hold too: a `gamemode`
+    reason counts only when some other process (a game) asked"""
+    hold = (st.get("undo") or {}).get("hold")
+    pids = gm_clients()
+    if pids is None:
+        return True     # cannot tell: trust the hook
+    return any(p != hold for p in pids)
+
+
+def do_on(args):
+    by = opt(args, "--by", REASONS, "manual")
+    level = opt(args, "--level", LEVELS, None)
+    with Locked():
+        st = load()
+        if by == "gamemode" and not foreign_gamemode(st):
+            return status(st)           # only our own hold asked: not a game
+        if st.get("on"):
+            if by not in st.get("reasons", []):
+                st.setdefault("reasons", []).append(by)
+                save(st)
+            return status(st)
+        level = level or prefs()["level"]
+        st = turn_on(level, by, prefs()["close_apps"])
+        save(st)
+        return status(st)
+
+
+def do_off(args):
+    by = opt(args, "--by", REASONS, "manual")
+    with Locked():
+        st = load()
+        if not st.get("on"):
+            return status(st)
+        if by != "manual":
+            st["reasons"] = [r for r in st.get("reasons", []) if r != by]
+            if st["reasons"]:
+                save(st)
+                return status(st)
+        st = turn_off(st)
+        save(st)
+        return status(st)
+
+
+def do_scan():
+    if not prefs()["auto"]:
+        return status()
+    games = [c for c in clients() if is_game(c)]
+    st = load()
+    has = st.get("on") and "window" in (st.get("reasons") or [])
+    if games and not has:
+        return do_on(["--by", "window"])
+    if not games and has:
+        return do_off(["--by", "window"])
+    return status(st)
+
+
+def main(argv):
+    if not argv or argv[0] in ("-h", "--help", "help"):
+        print(__doc__.strip())
+        return
+    verb, args = argv[0], argv[1:]
+    # the shell watches the state file: it must exist before anything
+    # changes, or the first change goes unseen
+    if not os.path.exists(STATE):
+        try:
+            save({"on": False, "reasons": [], "steps": []})
+        except OSError:
+            pass
+    if verb == "status":
+        out(status())
+    if verb == "on":
+        out(do_on(args))
+    if verb == "off":
+        out(do_off(args))
+    if verb == "toggle":
+        out(do_off([]) if load().get("on") else do_on([]))
+    if verb == "scan":
+        out(do_scan())
+    if verb == "setup":
+        out(setup("--force" in args))
+    fail("unknown verb: " + verb, "bad-verb")
+
+
+if __name__ == "__main__":
+    try:
+        main(sys.argv[1:])
+    except SystemExit:
+        raise
+    except Exception as e:      # the contract: JSON, exit 0
+        fail("ewe-game: %s" % e, "internal")

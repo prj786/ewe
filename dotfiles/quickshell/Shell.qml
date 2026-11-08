@@ -41,6 +41,10 @@ QtObject {
     readonly property bool onBattery: Globals.onBattery
     readonly property bool locked: Globals.locked
     readonly property bool dnd: Globals.dnd
+    // Game mode is on (0.42, either level) — a plugin that polls or animates
+    // may rest while it is; `gameUltra` = the Ultra level
+    readonly property bool gameMode: GameMode.on
+    readonly property bool gameUltra: GameMode.ultra
     // The primary output's name — a shell concept (Wayland has none): the
     // output HyprMon's display profile marks primary, else the first one.
     // A dock pins itself to this screen.

@@ -278,6 +278,13 @@ phase_userconfig() {
         warn "shell-setup.sh not found — shell config not wired into the rc files."
     fi
 
+    # Game mode (0.42): GameMode's config (ewe-game setup — the start/end
+    # hooks, and no pinned CPU governor on an integrated-GPU-only machine);
+    # a gamemode.ini the user wrote is left alone. ewe-setup does the same.
+    if [ -x "$DOTREPO/bin/ewe-game" ]; then
+        run "$DOTREPO/bin/ewe-game" setup || true
+    fi
+
     # ── First-party plugins (0.25, plan D1–D3) — the same two steps
     # packaging/ewe-setup runs, for the git/tarball path that never seeded
     # anything before: `seed` puts in the bundle's default plugins (none

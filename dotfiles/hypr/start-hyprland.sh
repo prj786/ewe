@@ -148,9 +148,23 @@ export QT_QPA_PLATFORMTHEME=qt6ct
 export QT_STYLE_OVERRIDE=Fusion
 export QT_WAYLAND_DISABLE_WINDOWDECORATION=1
 export QT_AUTO_SCREEN_SCALE_FACTOR=1
-export XCURSOR_THEME=Mocu-White-Right      # one cursor everywhere (XWayland + every toolkit)
-export XCURSOR_SIZE=24
-export HYPRCURSOR_SIZE=24
+# One cursor everywhere (XWayland + every toolkit). colorscheme.sh decides it
+# — [desktop.cursor] size + colour, auto = white on dark, black on light —
+# and writes it to gtk-3.0/settings.ini; read it back here so the session
+# starts with the same pointer (it used to be white/24 even on a light scheme
+# or after Settings → Cursor). Unknown values fall back to the default.
+_cur="Mocu-White-Right"; _cursz=24
+_gtkini="${XDG_CONFIG_HOME:-$HOME/.config}/gtk-3.0/settings.ini"
+if [ -r "$_gtkini" ]; then
+    _v="$(sed -n 's/^gtk-cursor-theme-name=\(Mocu-[A-Za-z-]*\)$/\1/p' "$_gtkini" | head -n1)"
+    [ -n "$_v" ] && _cur="$_v"
+    _v="$(sed -n 's/^gtk-cursor-theme-size=\([0-9][0-9]*\)$/\1/p' "$_gtkini" | head -n1)"
+    case "$_v" in 24|36|48|60|72|96) _cursz="$_v" ;; esac
+fi
+export XCURSOR_THEME="$_cur"
+export XCURSOR_SIZE="$_cursz"
+export HYPRCURSOR_SIZE="$_cursz"
+unset _cur _cursz _gtkini _v
 export GDK_BACKEND="wayland,x11"
 export SDL_VIDEODRIVER=wayland
 export CLUTTER_BACKEND=wayland

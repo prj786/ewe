@@ -97,6 +97,20 @@ if [ "$VARIANT" = "light" ]; then
     S_FG2="$(tok text-secondary 423f3a)"; S_DANGER="$(tok danger a04038)"
     S_WARN="$(tok warning 964d09)"; S_OK="$(tok success 047554)"
 fi
+# ── the pointer: [desktop.cursor] in ewe.conf, carried here by
+# user-theme.json (ewe-conf THEME_MAP): a size in px and a colour, auto |
+# white | black. auto is the line above — white on a dark scheme, black on a
+# light one. Only sizes Mocu draws (24 36 48 60 72 96), so the pointer is
+# never scaled and blurry. start-hyprland.sh reads the result back from
+# gtk-3.0/settings.ini at login, so this is the one place it is decided.
+UT="$CFG/quickshell/user-theme.json"
+_cs="$(sed -n 's/.*"cursorSize": *\([0-9][0-9]*\).*/\1/p' "$UT" 2>/dev/null | head -n1)"
+case "$_cs" in 24|36|48|60|72|96) CURSOR_SIZE="$_cs" ;; esac
+_cc="$(sed -n 's/.*"cursorColor": *"\([a-z]*\)".*/\1/p' "$UT" 2>/dev/null | head -n1)"
+case "$_cc" in
+    white) CURSOR="Mocu-White-Right" ;;
+    black) CURSOR="Mocu-Black-Right" ;;
+esac
 # the active scheme's palette (base00…base0F), for the terminal's sixteen
 # colours — absent in accent mode, where kitty keeps its defaults
 SCH_BASE00="$(tok base00 "")"
@@ -418,6 +432,11 @@ if command -v gsettings >/dev/null 2>&1; then
     # windows close via Super+Q; GTK3 reads gtk-decoration-layout from
     # settings.ini, GTK4/libadwaita follows this key
     gsettings set org.gnome.desktop.wm.preferences button-layout ':' 2>/dev/null || true
+fi
+# the live pointer — Hyprland's own and XWayland's; GTK follows gsettings
+# above. Only inside a session (phase 60 runs this without one).
+if [ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ] && command -v hyprctl >/dev/null 2>&1; then
+    hyprctl setcursor "$CURSOR" "$CURSOR_SIZE" >/dev/null 2>&1 || true
 fi
 
 # ── Qt (qt6ct + qt5ct) — the scheme's Fusion palette for any stray Qt app ──

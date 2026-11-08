@@ -23,7 +23,8 @@ import Quickshell.Io
 QtObject {
     id: wp
 
-    readonly property bool shouldPause: Globals.lowPower || Globals.locked || Globals.saverActive
+    // Ultra game mode too (GameMode.qml): a windowed game shares the GPU
+    readonly property bool shouldPause: Globals.lowPower || Globals.locked || Globals.saverActive || GameMode.ultra
     property bool paused: false
 
     readonly property string script: Quickshell.env("HOME") + "/.config/hypr/scripts/wallpaper.sh"
@@ -34,7 +35,7 @@ QtObject {
         if (wp.shouldPause === wp.paused) return
         wp.paused = wp.shouldPause
         Log.info("wallpaper", wp.paused ? "freezing video wallpaper" : "resuming video wallpaper",
-                 "(battery:" + Globals.lowPower + " locked:" + Globals.locked + " saver:" + Globals.saverActive + ")")
+                 "(battery:" + Globals.lowPower + " locked:" + Globals.locked + " saver:" + Globals.saverActive + " game:" + GameMode.ultra + ")")
         Quickshell.execDetached([wp.script, wp.paused ? "--pause" : "--resume"])
     }
 

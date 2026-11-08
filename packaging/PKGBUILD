@@ -107,4 +107,7 @@ package() {
     install -Dm755 bin/ewe-plugin "$pkgdir/usr/bin/ewe-plugin"
     # the fill picker (Super+P) and the portal global-shortcut binder (docs/MANUAL.md "Passwords")
     install -Dm755 bin/ewe-globalshortcuts "$pkgdir/usr/bin/ewe-globalshortcuts"
+    # Game mode, balanced or Ultra (0.42): the tile, Settings, Shaun and
+    # GameMode's own hooks all come through it
+    install -Dm755 bin/ewe-game "$pkgdir/usr/bin/ewe-game"
 }

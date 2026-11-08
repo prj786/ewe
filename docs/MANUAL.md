@@ -426,6 +426,43 @@ end to end — GTK, Qt, kitty, icons and the shell. ewe Settings'
 Appearance pane has the same controls: Accent · Scheme · Wallpaper, an
 Import… button and a small editor for the palette.
 
+### Text in every language, and the cursor
+
+Chinese, Japanese and Korean come from **Source Han Sans**
+(`adobe-source-han-sans-otc-fonts`, a dependency since 0.42); the fallback
+picks the Japanese, Korean or Traditional Chinese cut when the text says its
+language, Simplified Chinese otherwise. Georgian comes from Noto Sans
+Georgian.
+
+The pointer's **size** (24, 36, 48 or 72 px) and **colour** (automatic —
+white on a dark scheme, black on a light one —, white or black) are in ewe
+Settings → Keyboard and mouse → Cursor, or `ewe-conf set desktop.cursor.size
+48`. Apps that were already open keep the old pointer until they restart.
+
+## Game mode
+
+The **Game mode** tile in Quick settings (also ewe Settings → Power → Gaming,
+"game mode on" to Shaun, `ewe-game on`, or `qs ipc call game toggle` for a
+keybind of your own) clears the way for a game, and puts everything back when
+it ends. Two levels:
+
+- **Balanced** — banners wait in the notification list, window animations,
+  blur and shadows are off, and Feral GameMode boosts the CPU (when the
+  gaming stack is installed).
+- **Ultra** (the default) — all of that, and the **Performance** power
+  profile (on a laptop this raises the processor's power limit: the one knob
+  that feeds an integrated GPU), a fullscreen game goes straight to the
+  display without the compositor drawing it again, ewe Sync and ewe Browser's
+  background process close until the game ends, desktop widgets hide and a
+  video wallpaper stands still.
+
+It turns on **by itself** while a Steam game (native or Proton), gamescope,
+or a game started with `gamemoderun` runs, and off when it ends — unless you
+turned it on yourself. `ewe-game status` says what it did and what it could
+not. On a computer whose only GPU is the processor's own, ewe never pins the
+CPU at full speed: the CPU and GPU share one power budget, and a pinned CPU
+costs the game frames.
+
 ## "No application found" — and where the store button goes
 
 When nothing can open a link or file (a `claude://` link before Claude

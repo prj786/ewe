@@ -626,5 +626,22 @@ bin/ewe-conf set --no-hooks desktop.theme.bar_opacity 80 >/dev/null
 bin/ewe-conf set --no-hooks desktop.theme.corner '"round"' >/dev/null
 check "ewe-conf: the pre-v3 corner value still passes and reads as large" "[ \"$($T show | inp corner)\" = large ]"
 
+# 15. the pointer: [desktop.cursor] → colorscheme.sh → every toolkit + the live one
+printf '#!/bin/sh\necho "$*" >> "%s/hyprctl.log"\n' "$SB" > "$SB/bin/hyprctl"; chmod +x "$SB/bin/hyprctl"
+bin/ewe-conf set --no-hooks desktop.theme.scheme '"ewe-light"' >/dev/null
+sh dotfiles/quickshell/scripts/colorscheme.sh dark eeb407 >/dev/null 2>&1 || true
+check "cursor auto on a light scheme: the black Mocu at 24, in GTK and ~/.icons/default" "grep -q 'gtk-cursor-theme-name=Mocu-Black-Right' '$SB/cfg/gtk-3.0/settings.ini' && grep -q 'gtk-cursor-theme-size=24' '$SB/cfg/gtk-4.0/settings.ini' && grep -q 'Inherits=Mocu-Black-Right' '$SB/home/.icons/default/index.theme'"
+bin/ewe-conf set --no-hooks desktop.cursor.size 48 >/dev/null
+bin/ewe-conf set --no-hooks desktop.cursor.color '"white"' >/dev/null
+check "ewe-conf: cursor size + colour reach user-theme.json" "grep -q '\"cursorSize\": 48' '$SB/cfg/quickshell/user-theme.json' && grep -q '\"cursorColor\": \"white\"' '$SB/cfg/quickshell/user-theme.json'"
+rm -f "$SB/hyprctl.log"
+HYPRLAND_INSTANCE_SIGNATURE="sig-test" sh dotfiles/quickshell/scripts/colorscheme.sh dark eeb407 >/dev/null 2>&1 || true
+check "cursor white/48 wins over the light scheme's black, and moves the live pointer" "grep -q 'gtk-cursor-theme-name=Mocu-White-Right' '$SB/cfg/gtk-3.0/settings.ini' && grep -q 'gtk-cursor-theme-size=48' '$SB/cfg/gtk-3.0/settings.ini' && grep -qx 'setcursor Mocu-White-Right 48' '$SB/hyprctl.log'"
+r="$(bin/ewe-conf set --no-hooks desktop.cursor.size 50 2>&1 || true)"
+check "ewe-conf set: a cursor size Mocu does not draw is refused" "echo '$r' | grep -q 'bad-value' && [ \"\$(bin/ewe-conf get desktop.cursor.size)\" = 48 ]"
+r="$(bin/ewe-conf set --no-hooks desktop.game.level '"turbo"' 2>&1 || true)"
+check "ewe-conf set: game level must be balanced or ultra; unset it reads ultra" "echo '$r' | grep -q 'bad-value' && [ \"\$(bin/ewe-conf get desktop.game.level)\" = ultra ] && [ \"\$(bin/ewe-conf get desktop.game.auto)\" = true ]"
+bin/ewe-conf set --no-hooks desktop.theme.scheme '"ewe-dark"' >/dev/null
+
 echo "ewe-theme: $pass passed, $failn failed"
 [ "$failn" = 0 ]
