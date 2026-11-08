@@ -311,3 +311,36 @@ the shell re-registers by itself.
   sets `JustWorksRepairing = always` so this re-pairs on the next attempt.
 - *no matching profile* (audio) — `systemctl --user status wireplumber`;
   PipeWire's bluez plugin is what provides A2DP/HFP.
+
+## "ewe uses too much RAM" / an app opens slowly
+
+Measured on the owner's laptop (Intel Core Ultra, 30 GB, xe graphics) on
+2026-11-08 — three causes, all fixed in 0.41 / Komble 0.22:
+
+- **The meter counted the graphics driver's cache.** Kernel 6.18+ lists the
+  pool of freed GPU buffers as `GPUReclaim` in `/proc/meminfo`; the driver
+  hands it back the moment memory is needed (it went from 4.5 GB to 60 MB on
+  its own that afternoon), but `MemAvailable` leaves it out, so every meter
+  read it as used. System monitor 2.0.1 counts it as free. Check:
+  `grep -E 'MemAvailable|GPU' /proc/meminfo`.
+- **AppImages unpacked on every launch.** Google Chrome installed by Komble
+  as an AppImage took 1.1-1.3 s to its first window, 0.5 s unpacked. Komble
+  0.22 keeps an unpacked copy in `~/.local/share/appimages/.komble-run/` and
+  converts existing installs the first time it starts — **open Komble once**
+  after upgrading.
+- **Memory tuning that did not match zram.** `system/tuning/apply.sh` (run by
+  the package upgrade) turns zswap off (zram already compresses), sets
+  swappiness 180 / page-cluster 0, huge pages to `madvise`, caps the journal
+  at 1 GB and moves the file-index scan out of boot. Check:
+  `sysctl vm.swappiness vm.page-cluster; cat /sys/module/zswap/parameters/enabled`.
+
+What is left is what you run. Biggest on that laptop: Steam (~1.4 GB), ewe
+browser started at sign-in in the background (~700 MB with no window — its
+own settings, Start → **Open when I sign in** and **Keep running after the
+last window closes**; off = a slower first window), 1Password (~320 MB).
+To see it yourself, per program (proportional, so shared pages count once):
+
+```sh
+for p in /proc/[0-9]*; do s=$(awk '/^Pss:/{print $2}' $p/smaps_rollup 2>/dev/null) && echo "$s $(cat $p/comm)"; done \
+  | awk '{a[$2]+=$1} END{for(k in a) printf "%6.0f MB  %s\n", a[k]/1024, k}' | sort -rn | head
+```

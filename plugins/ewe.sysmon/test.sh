@@ -109,6 +109,13 @@ check "memory used kB"           "$(field "$out" memUsed)" 10000000
 check "swap total kB"            "$(field "$out" swapTotal)" 8000000
 check "swap used kB"             "$(field "$out" swapUsed)" 500000
 
+# the GPU driver's reclaimable buffer pool (kernel 6.18+ GPUReclaim) is
+# available memory, not "used" — 4.5 GB of it showed as used on an xe laptop
+printf 'MemTotal: 16000000 kB\nMemAvailable: 6000000 kB\nSwapTotal: 0 kB\nSwapFree: 0 kB\nGPUActive: 900000 kB\nGPUReclaim: 2000000 kB\n' > "$SB/memgpu"
+out="$(run "$SB/stat1" "$SB/memgpu" "$SB/route" "$SB/dev1" "$SB/up1")"
+check "GPUReclaim counts as available (16G, 6G+2G)" "$(field "$out" mem)" 0.5
+check "memUsed leaves the GPU pool out" "$(field "$out" memUsed)" 8000000
+
 out="$(run "$SB/stat2" "$SB/mem" "$SB/route" "$SB/dev1" "$SB/up1" 1000 400)"
 check "cpu delta: 700 busy of 1000" "$(field "$out" cpu)" 0.7
 check "new total"                "$(field "$out" total)" 2000

@@ -16,7 +16,9 @@ Install: Komble → Plugins, or
   speed (then download and upload). *Show in the bar* is ewe's own switch
   (Komble → Plugins → System monitor, or `ewe-plugin bar ewe.sysmon off`).
 - **The card** — click the readout: CPU with the last minute as a line,
-  memory ("6.1 GB of 15.5 GB", how much is in swap), and the internet:
+  memory ("6.1 GB of 15.5 GB", how much is in swap — since 2.0.1 the graphics
+  driver's reclaimable cache counts as free, as it is: on an Intel laptop it
+  made 4.5 GB look used that no program held), and the internet:
   download, upload and the connection they go through ("Wi-Fi · home",
   "Ethernet", "VPN", "Offline"). The cog opens the plugin in Komble.
 - **On the desktop** — the same numbers as a desktop widget. Off until you
@@ -38,7 +40,8 @@ tile is gone); the readout opens its own card instead.
 
 Nothing is sampled unless something shows it: the readout while its bar is
 up, the card while it is open, the widget while it is on the desktop. Then
-every 1.5 s, or every 3 s on battery, one `sh` process (`sample.sh`) reads
+every 1.5 s while the card or the widget is up (3 s with the bar readout
+alone; both doubled on battery), one `sh` process (`sample.sh`) reads
 `/proc/stat`, `/proc/meminfo`, the default route (`/proc/net/route`, lowest
 metric), that interface's byte counters (`/proc/net/dev`) and the clock
 (`/proc/uptime`), and prints one JSON object. The speed is the change in

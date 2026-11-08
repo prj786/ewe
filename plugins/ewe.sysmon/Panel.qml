@@ -41,7 +41,7 @@ Scope {
         readonly property int pad: Theme.spaceS + Theme.spaceXs
         implicitWidth: Theme.grow(Theme.panelSm)
         implicitHeight: card.implicitHeight + 2 * pop.pad
-        onOpenChanged: SysMon.hold(root, pop.open)
+        onOpenChanged: SysMon.hold(root, pop.open, true)
 
         Card {
             id: card

@@ -58,6 +58,8 @@ if [ "$PURGE" = "1" ]; then
         sudo_run rm -f /etc/fonts/conf.d/60-ewe-geist.conf
         command -v fc-cache >/dev/null 2>&1 && { sudo_run fc-cache -f || true; }
     fi
+    # the memory/journal/file-index drop-ins (system/tuning, phase 60)
+    sudo_run sh "$DOTREPO/system/tuning/apply.sh" --remove || true
 fi
 
 ok "uninstall done (packages left installed; use your package manager to remove them)"

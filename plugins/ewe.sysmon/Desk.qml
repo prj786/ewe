@@ -25,7 +25,7 @@ Item {
     implicitWidth: Theme.grow(Theme.panelSm) - Theme.spaceXl - 2 * Theme.spaceMd
     implicitHeight: col.implicitHeight
 
-    Component.onCompleted: { SysMon.hold(w, true); SysMon.settleDefault() }
+    Component.onCompleted: { SysMon.hold(w, true, true); SysMon.settleDefault() }
     Component.onDestruction: SysMon.hold(w, false)
 
     component Speed: Row {

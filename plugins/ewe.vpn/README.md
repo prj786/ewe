@@ -38,10 +38,11 @@ them; it never creates one.
 
 ## How it stays fresh
 
-One `nmcli monitor` process (dies with the shell) re-reads the state when
-NetworkManager changes anything, so a VPN brought up from ewe Settings or
-a script shows at once; plus one read at start, after wake, and whenever the
-tile or the page appears.
+The shell's own `nmcli monitor` (it bumps `Globals.netEpoch` on every
+NetworkManager event) re-reads the state, so a VPN brought up from ewe
+Settings or a script shows at once (since 1.0.3 the plugin no longer runs
+a second monitor of its own); plus one read at start, after wake, and
+whenever the tile or the page appears.
 
 ## Settings, IPC
 

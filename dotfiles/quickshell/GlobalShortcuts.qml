@@ -27,7 +27,9 @@ QtObject {
     function sync() { if (!_proc.running) _proc.running = true; else gs._dirty = true }
 
     property Timer _boot: Timer { interval: 4000; onTriggered: gs.sync() }
-    property Timer _beat: Timer { interval: 30000; repeat: true; onTriggered: gs.sync() }
+    // a safety net only — a new window already triggers a sync (below); every
+    // 30 s this was 2880 python starts and 5760 `hyprctl … -j` dumps a day
+    property Timer _beat: Timer { interval: 300000; repeat: true; onTriggered: gs.sync() }
     // a new window: its app may have just registered shortcuts — look shortly after
     property Timer _debounce: Timer { interval: 1500; onTriggered: gs.sync() }
     property Connections _events: Connections {

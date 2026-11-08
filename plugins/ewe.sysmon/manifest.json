@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "ewe.sysmon",
   "name": "System monitor",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "apiVersion": 3,
   "description": "CPU, memory and internet speed in the bar. Click it for the details, and put the same card on your desktop if you want it.",
   "homepage": "https://github.com/prj786/ewe-plugin-sysmon",

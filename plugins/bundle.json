@@ -110,15 +110,15 @@
       "repo": "https://github.com/prj786/ewe-plugin-sysmon",
       "default": false,
       "migrate": true,
-      "commit": "93ef7751cea341462e284aa3a1208af86a4adbab",
-      "version": "2.0.0"
+      "commit": "c0724a5d8972b1fb020e7ae8aa2337049e502a7d",
+      "version": "2.0.1"
     },
     "ewe.vpn": {
       "repo": "https://github.com/prj786/ewe-plugin-vpn",
       "default": false,
       "migrate": true,
-      "commit": "50aaa3d55576cae3d24f6f55e5b50dcf867e3a20",
-      "version": "1.0.2"
+      "commit": "fe3b34ec35984742ef800cfa5dbbce390ffe32e1",
+      "version": "1.0.3"
     }
   }
 }
