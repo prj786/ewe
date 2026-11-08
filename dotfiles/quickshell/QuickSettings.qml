@@ -1155,6 +1155,16 @@ Scope {
                                     sub: Globals.dnd ? "On" : "Off"
                                     onClicked: Globals.dnd = !Globals.dnd
                                 }
+                                // Game mode (0.42): bin/ewe-game, at the level ewe
+                                // Settings → Power → Gaming chose (Ultra by default)
+                                Tile {
+                                    ic: Theme.icGamepad; label: "Game mode"
+                                    active: GameMode.on
+                                    busy: GameMode.busy
+                                    sub: GameMode.on ? GameMode.label
+                                       : (Globals.gameLevel === "balanced" ? "Off · Balanced" : "Off · Ultra")
+                                    onClicked: GameMode.toggle()
+                                }
                                 // Remote (RFC-009). Turning sharing ON is never one
                                 // stray click: off → the page (switch + what it means);
                                 // on → off in one click (the safe direction)

@@ -297,6 +297,25 @@ since Dock 1.1.0 (`desktop.dock.*` is only their `legacy` fallback,
   `[remote]` in ewe.conf is LOCAL_ONLY. Test: `tests/ewe-remote-test.sh`
   (two sandboxed computers, a real sshd on loopback — `EWE_REMOTE_NO_SYSTEMD`
   keeps it off the user manager).
+- **`GameMode.qml`** (0.42) — the shell's half of game mode; `bin/ewe-game`
+  (JSON, exit 0) owns the rest and its state file
+  `$XDG_RUNTIME_DIR/ewe/game.json`, which this watches (the tile, ewe
+  Settings, Shaun and GameMode's `[custom]` hooks all change it). Levels
+  `balanced` (banners held — never by flipping `Globals.dnd` —, Hyprland
+  animations/blur/shadows off, `gamemoded -r` held) and `ultra` (+ the
+  Performance power profile, `render.direct_scanout = 1`, ewe Sync's service
+  and ewe Browser's windowless `--background` process closed and reopened,
+  desktop widgets hidden, video wallpaper frozen). Reasons `manual` /
+  `window` / `gamemode`: an automatic off removes only its own. Automatic:
+  `ewe-game scan` on `openwindow` (SteamAppId in the window's process or its
+  parent, `steam_app_N`, `gamescope`). `system/tuning/70-ewe-gamemode.rules`
+  lets `wheel` use GameMode's helpers (its own rule wants the `gamemode`
+  group, which nobody is in — every boost was refused); `ewe-game setup`
+  writes `~/.config/gamemode.ini` without a pinned governor on an
+  integrated-only machine. Test: `tests/ewe-game-test.sh`; in the nest set
+  `EWE_GAME_TOOL` to a wrapper with fake busctl/systemctl/gamemoded and
+  `EWE_GAME_NO_SCOPE=1` — a real toggle there changes the LIVE power
+  profile and closes the LIVE ewe Sync and browser.
 - **`HyprMon.qml`** — display manager: per-monitor-set profiles
   (`display-profiles.json` → `hypr/generated/monitors.lua`), live apply via
   `hyprctl eval 'hl.monitor{…}'`, re-assert on hotplug/AC events. The Settings
@@ -316,7 +335,7 @@ writes the same generated files as the in-shell panel (see
 External control (keybinds, scripts) uses **`qs ipc call <target> <fn>`** against an
 `IpcHandler { target: "<name>" }` in a component — core targets: `bar picker quicksettings
 lock osd overview settings applauncher store updates plugins widgets sync cloud google
-display power saver welcome toast` (plus each plugin's own, `ewe.clipboard ewe.screenshot
+display power saver welcome toast game` (plus each plugin's own, `ewe.clipboard ewe.screenshot
 ewe.passwords ewe.safe ewe.companion ewe.slack`…; the legacy targets `cast launcher places player mail` are the first-party
 plugins' `ipcAliases` now — present only while that plugin is installed). Most expose
 `toggle`/`show`/`hide`. Gotcha: `qs ipc call <t> show` collides with the `qs ipc
@@ -378,7 +397,9 @@ pick from overriding a scheme. `wallpaper.sh` re-derives when scheme =
 and **Geist Mono** (OFL, not in the Arch repos): the variable woff2 files
 ship in `dotfiles/quickshell/fonts/geist/` and `dotfiles/fontconfig/fonts.conf`
 adds that folder with a relative `<dir>` (no installer change) and prefers
-**Noto Sans Georgian** (noto-fonts) next in every stack — Geist has no
+**Noto Sans Georgian** (noto-fonts) next in every stack, then **Source Han
+Sans SC** (adobe-source-han-sans-otc-fonts, 0.42 — CJK drew as boxes before)
+with `lang` rules for the JP (`Source Han Sans`), `K`, `TC` and `HC` cuts — Geist has no
 Georgian glyphs, and Georgian is NEVER uppercased (small headers are the
 `overline` style, which spaces letters and never changes case). GTK, kitty (with the Nerd PUA mapped to Symbols Nerd
 Font Mono), Zed, mpv, the groupbar, ewe browser (theme-tokens.json) and Helium (when installed) follow; the greeter (another user, reads no dotfiles) gets them system-wide: phase 30 copies

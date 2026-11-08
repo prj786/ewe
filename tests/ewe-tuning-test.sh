@@ -22,6 +22,7 @@ check "no zram: no sysctl file" "[ ! -e $R/etc/sysctl.d/70-ewe-memory.conf ]"
 check "no zram: no tmpfiles file" "[ ! -e $R/etc/tmpfiles.d/70-ewe-memory.conf ]"
 check "journald cap installed" "cmp -s system/tuning/70-ewe-journald.conf $R/etc/systemd/journald.conf.d/70-ewe.conf"
 check "plocate drop-in installed" "cmp -s system/tuning/plocate-updatedb.timer.conf $R/etc/systemd/system/plocate-updatedb.timer.d/70-ewe.conf"
+check "GameMode polkit rule installed (wheel, the four helpers)" "cmp -s system/tuning/70-ewe-gamemode.rules $R/etc/polkit-1/rules.d/70-ewe-gamemode.rules && grep -q 'isInGroup(\"wheel\")' system/tuning/70-ewe-gamemode.rules && [ \$(grep -c 'com.feralinteractive.GameMode.[a-z-]*-helper' system/tuning/70-ewe-gamemode.rules) = 4 ]"
 check "says what it changed" "printf '%s' \"\$out\" | grep -q 'journal is capped'"
 
 # zram configured → the memory pair too; second run is silent
@@ -52,6 +53,7 @@ check "--remove keeps an edited file" "[ -e $R/etc/sysctl.d/70-ewe-memory.conf ]
 check "--remove deletes our tmpfiles file" "[ ! -e $R/etc/tmpfiles.d/70-ewe-memory.conf ]"
 check "--remove deletes the journald cap" "[ ! -e $R/etc/systemd/journald.conf.d/70-ewe.conf ]"
 check "--remove deletes the plocate drop-in and its dir" "[ ! -e $R/etc/systemd/system/plocate-updatedb.timer.d ]"
+check "--remove deletes the GameMode rule" "[ ! -e $R/etc/polkit-1/rules.d/70-ewe-gamemode.rules ]"
 sh $A --remove >/dev/null; rc=$?
 check "--remove twice: exit 0" "[ $rc = 0 ]"
 

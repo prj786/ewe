@@ -83,6 +83,11 @@ if [ -x "$DEST/bin/ewe-conf" ]; then
     [ -x "$DEST/bin/ewe-remote" ] && ln -sf "$DEST/bin/ewe-remote" "$HOME/.local/bin/ewe-remote"
     rm -f "$HOME/.local/bin/ewe-pass" 2>/dev/null || true   # 0.21: ewe-pass lives inside the ewe.passwords plugin
     [ -x "$DEST/bin/ewe-globalshortcuts" ] && ln -sf "$DEST/bin/ewe-globalshortcuts" "$HOME/.local/bin/ewe-globalshortcuts"
+    [ -x "$DEST/bin/ewe-game" ] && ln -sf "$DEST/bin/ewe-game" "$HOME/.local/bin/ewe-game"
+    # Game mode (0.42): GameMode's config — its start/end hooks call
+    # ewe-game, and on an integrated-GPU-only machine the CPU governor is
+    # left alone. Rewrites only a gamemode.ini ewe wrote itself.
+    [ -x "$DEST/bin/ewe-game" ] && "$DEST/bin/ewe-game" setup >/dev/null 2>&1 || true
     # First-party plugins (0.25, plan D1–D3): every one ships in the
     # payload (plugins/ + bundle.json). `seed` installs the ids bundle.json
     # marks default (none today) and refreshes the bundled copies this

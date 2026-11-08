@@ -176,7 +176,8 @@ Scope {
                         return root._onScreen(w, perScreen.modelData, perScreen.index)
                             && root._layerOf(p) === win.layerName && p.visible !== false
                     })
-                    visible: mine.length > 0
+                    // Ultra game mode hides them (GameMode.qml): nothing drawn beside a game
+                    visible: mine.length > 0 && !GameMode.ultra
                     // Input only where widgets are — everywhere else clicks
                     // fall through to the desktop and the windows. While
                     // arranging, the chip rows too. (It used to be an EMPTY

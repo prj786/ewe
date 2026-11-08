@@ -30,12 +30,17 @@ QtObject {
     // Project version — the shell's runtime copy. Keep in sync with the repo-root
     // VERSION file (the canonical source used for git tags / releases). Semver, with
     // an -alpha/-beta pre-release suffix until the first stable cut.
-    readonly property string version: "0.41.0-beta"
+    readonly property string version: "0.42.0-beta"
 
     // ── event sounds (GNOME-style; the freedesktop sound theme, one toggle) ──
     // playSound("message-new-instant") etc — names are theme event ids from
     // /usr/share/sounds/freedesktop/stereo. Missing theme = silent no-op.
     property bool eventSounds: true
+    // Game mode (0.42, [desktop.game] via user-theme.json): the level a
+    // manual or automatic start uses, and whether a game window starts it
+    // (GameMode.qml; bin/ewe-game does the work)
+    property string gameLevel: "ultra"
+    property bool gameAuto: true
     function playSound(name) {
         if (!g.eventSounds) return
         Quickshell.execDetached(["sh", "-c",
@@ -660,6 +665,8 @@ QtObject {
                     if (j && j.tilingEnabled !== undefined) g.tilingEnabled = j.tilingEnabled
                     if (j && (j.workspacesMode === "separate" || j.workspacesMode === "shared")) g.workspacesMode = j.workspacesMode
                     if (j && j.eventSounds !== undefined) g.eventSounds = j.eventSounds
+                    if (j && (j.gameLevel === "ultra" || j.gameLevel === "balanced")) g.gameLevel = j.gameLevel
+                    if (j && j.gameAuto !== undefined) g.gameAuto = j.gameAuto !== false
                     if (j && j.saver) {
                         if (j.saver.enabled !== undefined) g.saverEnabled = j.saver.enabled
                         if (j.saver.min !== undefined) g.saverMin = j.saver.min

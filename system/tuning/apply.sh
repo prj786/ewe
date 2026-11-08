@@ -12,6 +12,10 @@
 #   70-ewe-memory.tmpfiles.conf → /etc/tmpfiles.d/70-ewe-memory.conf    (zram only)
 #   70-ewe-journald.conf        → /etc/systemd/journald.conf.d/70-ewe.conf
 #   plocate-updatedb.timer.conf → /etc/systemd/system/plocate-updatedb.timer.d/70-ewe.conf
+#   70-ewe-gamemode.rules       → /etc/polkit-1/rules.d/70-ewe-gamemode.rules
+#                                 (2026-11-08: GameMode's boosts for wheel —
+#                                 its own rule wants a group nobody is in;
+#                                 harmless while GameMode is not installed)
 # The memory pair is written only when zram is configured
 # (/etc/systemd/zram-generator.conf) — the values are zram's, and zswap is
 # worth keeping on a machine whose only swap is a disk.
@@ -32,6 +36,7 @@ SYSCTL="$R/etc/sysctl.d/70-ewe-memory.conf"
 TMPF="$R/etc/tmpfiles.d/70-ewe-memory.conf"
 JOURNAL="$R/etc/systemd/journald.conf.d/70-ewe.conf"
 PLOCATE="$R/etc/systemd/system/plocate-updatedb.timer.d/70-ewe.conf"
+POLKIT="$R/etc/polkit-1/rules.d/70-ewe-gamemode.rules"
 
 say() { echo ":: ewe: $*"; }
 
@@ -60,6 +65,7 @@ if [ "$REMOVE" = 1 ]; then
     drop "$SRC/70-ewe-memory.tmpfiles.conf" "$TMPF" && say "removed the zswap/huge-page switches (kernel defaults after the next boot)"
     drop "$SRC/70-ewe-journald.conf" "$JOURNAL" && say "removed the journal size cap"
     drop "$SRC/plocate-updatedb.timer.conf" "$PLOCATE" && { live systemctl daemon-reload; say "removed the file-index boot delay"; }
+    drop "$SRC/70-ewe-gamemode.rules" "$POLKIT" && say "removed the GameMode permission"
     exit 0
 fi
 
@@ -79,5 +85,9 @@ fi
 if put "$SRC/plocate-updatedb.timer.conf" "$PLOCATE"; then
     live systemctl daemon-reload
     say "file index: no disk scan while the desktop starts (10 min after boot)"
+fi
+# polkit watches its rules folder: no reload needed
+if put "$SRC/70-ewe-gamemode.rules" "$POLKIT"; then
+    say "games: GameMode may boost the CPU and turn split-lock mitigation off for wheel users"
 fi
 exit 0

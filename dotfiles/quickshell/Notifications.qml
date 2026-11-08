@@ -92,14 +92,15 @@ Scope {
             // toast outlived the notification and sat there until its own
             // timer, or forever when it was replaced in place every second.
             n.closed.connect(function () { root.removePopup(n) })
-            if (!Globals.dnd) Globals.playSound("message-new-instant")
-            if (!Globals.dnd) root.pushPopup(n)
+            // game mode keeps banners in the list too, without flipping DND
+            if (!Globals.dnd && !GameMode.on) Globals.playSound("message-new-instant")
+            if (!Globals.dnd && !GameMode.on) root.pushPopup(n)
         }
     }
 
     // ── the grouped banner stack, top-right, below the bar ────────────────
     PanelWindow {
-        visible: root.groups.length > 0 && !Globals.dnd
+        visible: root.groups.length > 0 && !Globals.dnd && !GameMode.on
         color: "transparent"
         exclusiveZone: 0
         WlrLayershell.namespace: "quickshell:notifications"

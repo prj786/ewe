@@ -1,0 +1,20 @@
+// ewe — Feral GameMode's helpers for the people who own this computer.
+//
+// GameMode boosts a game through four small root helpers (the CPU governor,
+// GPU clocks, CPU core parking, and kernel.split_lock_mitigate), started
+// with pkexec. Its own rule allows only members of the `gamemode` group,
+// which no installer adds anyone to — so on an ewe machine every boost was
+// refused ("Not authorized") and game mode changed nothing but the
+// animations (2026-11-08). This allows the same four helpers to anyone in
+// `wheel`, the people who may administer the machine anyway. GameMode runs
+// as a user service outside any login session, so the rule cannot ask for
+// an active session. Installed by system/tuning/apply.sh.
+polkit.addRule(function (action, subject) {
+    if ((action.id == "com.feralinteractive.GameMode.governor-helper" ||
+         action.id == "com.feralinteractive.GameMode.gpu-helper" ||
+         action.id == "com.feralinteractive.GameMode.cpu-helper" ||
+         action.id == "com.feralinteractive.GameMode.procsys-helper") &&
+        subject.isInGroup("wheel")) {
+        return polkit.Result.YES;
+    }
+});

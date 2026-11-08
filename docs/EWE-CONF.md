@@ -280,6 +280,22 @@ duration, curve per animation) exactly as the Animations pane writes them.
 `false` keeps working on external monitors when the lid closes) · `saver`
 (the screensaver stage: `enabled`, `lock`, `lockAfterMin`, `min`, `style`).
 
+### `[desktop.cursor]`
+
+`size` (px, default `24`; Mocu draws 24 36 48 60 72 96) · `color` (`auto` —
+white on a dark scheme, black on a light one — `white` or `black`). Settings
+→ Keyboard & Mouse → Cursor. `colorscheme.sh` writes it to every toolkit and
+moves the live pointer (`hyprctl setcursor`); X11 and Qt apps started before
+the change keep the old one until they restart.
+
+### `[desktop.game]`
+
+Game mode (`ewe-game`, 0.42): `level` (`ultra`, default, or `balanced`) ·
+`auto` (bool, default `true` — on while a Steam game, gamescope, or anything
+that asks GameMode runs) · `close_apps` (bool, default `true` — Ultra closes
+ewe's own background apps and opens them again afterwards). What each level
+does is in `ewe-game --help`.
+
 ### `[desktop.displays]`
 
 Per-monitor-set profiles, verbatim from Settings → Displays. Keyed by the

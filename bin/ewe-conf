@@ -97,6 +97,8 @@ SECTION_NOTES = {
     "desktop.input": "keyboard layouts + mouse/touchpad; devices = per-device overrides",
     "desktop.layout": "gaps/border/corner radius — user.lua is generated from these + theme",
     "desktop.keybinds": "your own launch bindings: {combo, exec} records",
+    "desktop.cursor": "the pointer: size = 24 | 36 | 48 | 60 | 72 | 96 (px); color = auto (white on dark, black on light) | white | black",
+    "desktop.game": "Game mode (ewe-game): level = ultra | balanced; auto = on while a game runs; close_apps = Ultra closes ewe's background apps until it ends",
     "passwords": "the fill picker (Super+P): provider = auto | ewe | 1password | bitwarden | pass; press_enter; type_delay_ms",
     "desktop.wallpapers": "per-output wallpaper map (image/GIF/video)",
     "desktop.power": "lid/idle/screensaver behaviour",
@@ -343,6 +345,20 @@ THEME_MAP = [  # ewe.conf key ↔ user-theme.json key (with defaults)
     ("desktop.power.lid_docked_suspend", "lidDockedSuspend", False),
     ("desktop.power.saver", "saver",
      {"enabled": True, "lock": False, "lockAfterMin": 5, "min": 5, "style": "clock"}),
+    # the pointer (Settings → Keyboard & Mouse → Cursor, 0.42): size in px —
+    # one the Mocu theme draws (24 36 48 60 72 96) — and colour: auto (white
+    # on a dark scheme, black on a light one) | white | black. colorscheme.sh
+    # is the one writer of every toolkit's cursor; start-hyprland.sh reads
+    # its result at login.
+    ("desktop.cursor.size", "cursorSize", 24),
+    ("desktop.cursor.color", "cursorColor", "auto"),
+    # Game mode (bin/ewe-game, 0.42): level balanced | ultra, `auto` turns it
+    # on while a game runs, `close_apps` lets Ultra close ewe's own
+    # background apps (they come back when it ends). The shell reads them
+    # for its tile and its game watcher.
+    ("desktop.game.level", "gameLevel", "ultra"),
+    ("desktop.game.auto", "gameAuto", True),
+    ("desktop.game.close_apps", "gameCloseApps", True),
 ]
 
 
@@ -2341,6 +2357,9 @@ ENUMS = {
     "desktop.dock.icon_size": ("small", "medium", "large"),
     "desktop.accessibility.text_scale": (100, 115, 130),
     "desktop.workspaces.mode": ("separate", "shared"),
+    "desktop.cursor.size": (24, 36, 48, 60, 72, 96),     # the sizes Mocu draws
+    "desktop.cursor.color": ("auto", "white", "black"),
+    "desktop.game.level": ("balanced", "ultra"),
     "safe.place": ("local", "nextcloud", "webdav", "folder", "sftp", "dropbox", "gdrive"),
     "safe.ssh_confirm": ("once", "first-use", "every-time", "never"),
 }
@@ -2542,6 +2561,9 @@ def _domain(dotted):
                 "wallpapers": "wallpapers", "input": "input",
                 "layout": "layout", "keybinds": "keybinds",
                 "workspaces": "workspaces",
+                # cursor: the theme hook runs colorscheme.sh, its one writer;
+                # game: user-theme.json carries it to the shell
+                "cursor": "theme", "game": "theme",
                 }.get(parts[1], None)
     if parts[0] == "apps":
         return "apps"
