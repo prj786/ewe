@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "ewe.switcher",
   "name": "Window switcher",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "apiVersion": 3,
   "description": "Alt+Tab: the open windows as icons while Alt is held, most recent first; let go to switch. This workspace, this display, or everywhere.",
   "homepage": "https://github.com/prj786/ewe-plugin-switcher",

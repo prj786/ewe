@@ -96,16 +96,13 @@ Scope {
         if (tl && tl.title) return tl.title
         var c = root.classOf(tl)
         if (c === "") return "Window"
-        var e = DesktopEntries.heuristicLookup(c)
+        var e = Globals.entryForClass(c)
         return (e && e.name) ? e.name : c
     }
     function wsOf(tl) { return (tl && tl.workspace) ? tl.workspace.id : -1 }
-    function iconFor(tl) {
-        var cls = root.classOf(tl)
-        if (cls === "") return Quickshell.iconPath("application-x-executable")
-        var e = DesktopEntries.heuristicLookup(cls)
-        return Quickshell.iconPath(e && e.icon ? e.icon : cls, "application-x-executable")
-    }
+    // the shell's one class → app answer (Globals.entryForClass): Komble
+    // AppImages and Steam games get their own icon here too
+    function iconFor(tl) { return Globals.iconForClass(root.classOf(tl)) }
     function addrOf(tl) {
         var a = (tl && tl.address) ? String(tl.address) : ""
         if (a !== "" && a.indexOf("0x") !== 0) a = "0x" + a   // Hyprland events sometimes omit the 0x
@@ -257,6 +254,39 @@ Scope {
     function killWin(tl) {
         var a = root.addrOf(tl)
         if (a !== "") Hyprland.dispatch('hl.dsp.window.close({window="address:' + a + '"})')
+    }
+    function toggleFloat(tl) {
+        var a = root.addrOf(tl)
+        if (a !== "") Hyprland.dispatch('hl.dsp.window.float({action="toggle", window="address:' + a + '"})')
+    }
+    function toggleFullscreen(tl) {
+        var a = root.addrOf(tl)
+        if (a !== "") Hyprland.dispatch('hl.dsp.window.fullscreen({mode=0, window="address:' + a + '"})')
+    }
+    // ── a card's right-click menu (ContextMenu): Move to workspace ▸ (this
+    //    display's workspaces, a check on the current one, then a new one),
+    //    Float / Tile, Fullscreen, and Close window last. The Overview holds
+    //    the keyboard exclusively, so its key handler forwards to the menu.
+    //    A middle click or Delete on the hovered / selected card closes it. ──
+    ContextMenu { id: cardMenu; name: "overview-menu"; takesKeyboard: false }
+    Connections { target: Globals; function onOverviewOpenChanged() { if (!Globals.overviewOpen) cardMenu.close() } }
+    function menuFor(tl, shownWs, ids) {
+        var o = tl ? tl.lastIpcObject : null
+        var floating = !!(o && o.floating), full = !!(o && o.fullscreen)
+        var here = root.wsOf(tl), ws = []
+        for (var i = 0; i < ids.length; i++) (function (id) {
+            ws.push({ label: "Workspace " + Globals.wsNumber(id), checked: id === here, action: function () { root.moveWin(tl, id) } })
+        })(ids[i])
+        ws.push({ separator: true })
+        ws.push({ label: "New workspace", icon: Theme.icPlus, action: function () { root.moveToNew(tl, shownWs, ids) } })
+        return [
+            { header: root.titleOf(tl) },
+            { label: "Move to workspace", icon: Theme.icStack, submenu: ws },
+            { label: floating ? "Tile" : "Float", icon: floating ? Theme.icTiling : Theme.icFloating, action: function () { root.toggleFloat(tl) } },
+            { label: full ? "Exit fullscreen" : "Fullscreen", action: function () { root.toggleFullscreen(tl); root.close() } },
+            { separator: true },
+            { label: "Close window", icon: Theme.icClose, danger: true, action: function () { root.killWin(tl) } }
+        ]
     }
     function gotoWs(ws) {
         // another workspace: its windows are not under these cards, so the
@@ -493,7 +523,14 @@ Scope {
             focus: true
             Keys.onPressed: function (ev) {
                 var n = win.winWins.length
+                // an open card menu takes the keys first
+                if (cardMenu.handleKey(ev)) { ev.accepted = true; return }
                 if (ev.key === Qt.Key_Escape) { root.close(); ev.accepted = true }
+                else if (ev.key === Qt.Key_Delete) {
+                    // Delete closes the hovered / selected card
+                    if (n > 0 && root.sel >= 0 && root.sel < n) root.killWin(win.winWins[root.sel])
+                    ev.accepted = true
+                }
                 else if (ev.key === Qt.Key_Return || ev.key === Qt.Key_Enter) {
                     if (n > 0) root.jump(win.winWins[Math.max(0, Math.min(root.sel, n - 1))])
                     else root.close()
@@ -684,11 +721,14 @@ Scope {
                             anchors.fill: parent
                             enabled: Globals.overviewOpen
                             hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
+                            // a closed hand while the card is dragged (like a desktop widget)
+                            cursorShape: drag.active ? Qt.ClosedHandCursor : Qt.PointingHandCursor
                             drag.target: content
                             drag.smoothed: false
                             property bool didDrag: false
-                            onPressed: didDrag = false
+                            acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
+                            // only the left button drags a card
+                            onPressed: function (mouse) { didDrag = false; cardMa.drag.target = mouse.button === Qt.LeftButton ? content : null }
                             // the highlight follows the pointer (and the arrows)
                             onContainsMouseChanged: {
                                 if (!win.isFocused) return
@@ -696,7 +736,15 @@ Scope {
                                 else if (root.sel === card.index) root.sel = -1
                             }
                             onPositionChanged: if (drag.active) { didDrag = true; root.dragActive = true }
-                            onClicked: if (!didDrag) root.jump(card.modelData)
+                            onClicked: function (mouse) {
+                                if (didDrag) return
+                                if (mouse.button === Qt.RightButton) {
+                                    root.sel = card.index
+                                    cardMenu.items = root.menuFor(card.modelData, win.shownWs, win.wsIds)
+                                    cardMenu.openAt(cardMa, mouse.x, mouse.y)
+                                } else if (mouse.button === Qt.MiddleButton) { card.closing = true; closeLater.restart() }
+                                else root.jump(card.modelData)
+                            }
                             // the drop is hit-tested against the strip (the
                             // ParentChange snaps the content back the instant
                             // the drag ends, racing a DropArea's drop event)

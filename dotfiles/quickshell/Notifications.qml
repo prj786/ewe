@@ -43,9 +43,38 @@ Scope {
         return mins < 1 ? "now" : mins + " min ago"
     }
 
+    // the card's 5 s, when the app states no preference
+    readonly property int defaultTimeout: 5000
+    // How long each banner has left, keyed by notification id, kept HERE: a
+    // group leaving rebuilds `groups`, which recreates every remaining
+    // banner's delegate — a countdown living in the delegate restarted from
+    // the top each time (a 10 s banner outlived a 5 s neighbour by 15 s).
+    property var leftMs: ({})
+    function totalFor(n) { return n.expireTimeout > 0 ? Math.round(n.expireTimeout) : root.defaultTimeout }
+
+    // The app's actions as buttons: everything but "default" (which the
+    // card's click runs), the first two — the Notification card's limit. A
+    // NotificationAction carries `identifier`, `text` and `invoke()`.
+    function buttonActions(n) {
+        var out = []
+        try {
+            var acts = n && n.actions ? n.actions : []
+            for (var i = 0; i < acts.length && out.length < 2; i++)
+                if (acts[i].identifier !== "default") out.push(acts[i])
+        } catch (e) {}
+        return out
+    }
+    // run one and dismiss the banner (invoke() closes the notification itself
+    // unless the app asked for it to stay resident; the group leaves either way)
+    function runAction(a, grp) {
+        try { a.invoke() } catch (e) {}
+        root.removeGroup(grp)
+    }
+
     function pushPopup(n) {
         var a = root.popups.slice(); a.push(n); root.popups = a
         root.arrived[n.id] = Date.now()
+        root.leftMs[n.id] = root.totalFor(n)
         root.rebuild()
     }
     function removePopup(n) { root.popups = root.popups.filter(function (x) { return x !== n }); root.rebuild() }
@@ -63,19 +92,9 @@ Scope {
         root.groups = gs
     }
 
-    // Focus the window a notification came from: SWITCH to its workspace and raise
-    // it. `hyprctl dispatch focuswindow` follows the match to whatever workspace the
-    // window lives on, so this lands you on the right desktop with the window focused.
-    function focusFrom(n) {
-        // the most recent window of the app, on whatever workspace it is
-        Globals.focusAppWindow([n.desktopEntry, n.appName])
-        // Also fire the app's "default" action (opens the relevant message/thread)
-        // — after the focus dispatch, so the app acts on the now-current window.
-        try {
-            if (n.actions) for (var i = 0; i < n.actions.length; i++)
-                if (n.actions[i].identifier === "default") { n.actions[i].invoke(); break }
-        } catch (e) {}
-    }
+    // A click on a banner: go to the app's window (its workspace comes with
+    // it), or open the app when it has none (Globals.openNotification).
+    function focusFrom(n) { Globals.openNotification(n) }
 
     NotificationServer {
         id: server
@@ -139,10 +158,52 @@ Scope {
                     width: Theme.panelSm
                     height: card.height + (count > 1 ? Theme.spaceS + Theme.spaceXs + more.height + Theme.spaceXs : 0)
 
-                    // expire the whole group together (latest notification's timeout)
+                    // the actions the app offers, as buttons (the card: up to
+                    // two, secondary then ghost); "default" is the click on
+                    // the card itself, so it is not one of them
+                    readonly property var actions: root.buttonActions(groupItem.latest)
+
+                    // Expire the whole group together, on the latest
+                    // notification's timeout. Quickshell 0.3.2 hands
+                    // `expireTimeout` over in MILLISECONDS, as the protocol
+                    // sends it (probed in the nest: notify-send -t 10000 → 10000;
+                    // its docs say seconds — do not "fix" this to × 1000): -1
+                    // = no preference → the card's 5 s, 0 = never → stays.
+                    // A critical banner stays until dismissed (Notification
+                    // card). Hovering the banner pauses the countdown, as the
+                    // Toast's does — the old one-shot Timer ran on regardless.
+                    readonly property bool stays: groupItem.critical || groupItem.latest.expireTimeout === 0
+                    // ONE wake-up per banner, not a 20 Hz tick (a timer that
+                    // wakes for nothing costs battery on panel-self-refresh
+                    // hardware, Globals.lowPower): a single shot for what is
+                    // left; hovering stops it and keeps the remainder in
+                    // root.leftMs (by id — delegates are rebuilt when a group
+                    // leaves, so a rebuild saves it too and the new delegate
+                    // carries on from there).
                     Timer {
-                        running: true
-                        interval: groupItem.latest.expireTimeout > 0 ? groupItem.latest.expireTimeout : 5000
+                        id: expire
+                        property double startedAt: 0
+                        readonly property bool live: !groupItem.stays && !cardHover.hovered
+                        readonly property var nid: groupItem.latest ? groupItem.latest.id : -1
+                        function left() {
+                            return root.leftMs[expire.nid] !== undefined ? root.leftMs[expire.nid] : root.totalFor(groupItem.latest)
+                        }
+                        function arm() {
+                            expire.stop()
+                            if (!expire.live) return
+                            expire.interval = Math.max(1, expire.left())
+                            expire.startedAt = Date.now()
+                            expire.start()
+                        }
+                        function pause() {
+                            if (!expire.running) return
+                            root.leftMs[expire.nid] = Math.max(1, expire.interval - (Date.now() - expire.startedAt))
+                            expire.stop()
+                        }
+                        onLiveChanged: expire.live ? expire.arm() : expire.pause()
+                        onNidChanged: expire.arm()
+                        Component.onCompleted: expire.arm()
+                        Component.onDestruction: expire.pause()
                         onTriggered: root.removeGroup(groupItem.modelData)
                     }
 
@@ -180,6 +241,9 @@ Scope {
                         border.width: Theme.borderWidth1
                         layer.enabled: true
                         layer.effect: Elevation {}
+                        // hover over ANY part of the card (its buttons included)
+                        // pauses the countdown
+                        HoverHandler { id: cardHover }
 
                         Column {
                             id: col
@@ -324,9 +388,32 @@ Scope {
                                     }
                                 }
                             }
+
+                            // ── the app's actions: up to two sm buttons sharing
+                            //    the width, secondary first, then ghost ──
+                            Row {
+                                id: actRow
+                                visible: groupItem.actions.length > 0
+                                width: parent.width
+                                spacing: Theme.spaceS
+                                Repeater {
+                                    model: groupItem.actions
+                                    delegate: QsButton {
+                                        required property var modelData
+                                        required property int index
+                                        width: (actRow.width - (groupItem.actions.length - 1) * actRow.spacing) / groupItem.actions.length
+                                        variant: index === 0 ? "secondary" : "ghost"
+                                        label: modelData.text || modelData.identifier || ""
+                                        onGo: root.runAction(modelData, groupItem.modelData)
+                                    }
+                                }
+                            }
                         }
                         MouseArea {
                             id: cardMa
+                            // under the column: the close button and the action
+                            // buttons (its children) take their own clicks
+                            z: -1
                             anchors.fill: parent
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor

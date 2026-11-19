@@ -437,6 +437,11 @@ fi
 # above. Only inside a session (phase 60 runs this without one).
 if [ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ] && command -v hyprctl >/dev/null 2>&1; then
     hyprctl setcursor "$CURSOR" "$CURSOR_SIZE" >/dev/null 2>&1 || true
+    # apps the session starts from now on (systemd / D-Bus activation): the
+    # theme is "default" = ~/.icons/default above, which follows the choice;
+    # the SIZE has to be the number itself (start-hyprland.sh, 0.43)
+    systemctl --user set-environment XCURSOR_THEME=default XCURSOR_SIZE="$CURSOR_SIZE" HYPRCURSOR_SIZE="$CURSOR_SIZE" >/dev/null 2>&1 || true
+    dbus-update-activation-environment XCURSOR_THEME=default XCURSOR_SIZE="$CURSOR_SIZE" HYPRCURSOR_SIZE="$CURSOR_SIZE" >/dev/null 2>&1 || true
 fi
 
 # ── Qt (qt6ct + qt5ct) — the scheme's Fusion palette for any stray Qt app ──

@@ -10,6 +10,7 @@ Rectangle {
     property bool danger: false          // the glyph turns danger on hover
     property bool square: false
     property string size: "sm"           // sm · md
+    property string tip: ""              // its Tooltip (every icon button names its action)
     property color glyph: Theme.textSecondary
     readonly property alias hovered: ibMa.containsMouse
     signal go()
@@ -35,4 +36,5 @@ Rectangle {
         color: ib._ink
     }
     MouseArea { id: ibMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: ib.go() }
+    Tooltip { text: ib.tip }
 }

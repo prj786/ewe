@@ -100,11 +100,8 @@ Scope {
         }
         return out
     }
-    function iconFor(cls) {
-        if (!cls) return Quickshell.iconPath("application-x-executable")
-        var e = DesktopEntries.heuristicLookup(cls)
-        return Quickshell.iconPath(e && e.icon ? e.icon : cls, "application-x-executable")
-    }
+    // the shell's one class → app answer (Globals.entryForClass)
+    function iconFor(cls) { return Globals.iconForClass(cls) }
     function screenLabel(s) {
         if (!s) return ""
         if (/^(eDP|LVDS|DSI)/.test(s.name)) return "Built-in display"

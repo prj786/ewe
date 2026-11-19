@@ -4,6 +4,8 @@
 Name=Compress…
 Comment=Create an archive from the selected items
 Exec=engrampa --add %F
-Icon-Name=package-x-generic
+# archive-insert: a box with a + (pairs with Extract's box with an arrow out);
+# package-x-generic drew a full-colour software-package box (0.43)
+Icon-Name=archive-insert
 Selection=NotNone
 Extensions=any;

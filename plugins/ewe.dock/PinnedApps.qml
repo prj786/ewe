@@ -43,6 +43,32 @@ Scope {
     // click) forces a new instance anyway
     function launch(e, fresh) { Globals.launchEntry(e, fresh); root.host.launcherOpen = false }
 
+    // ── a tile's right-click menu (ContextMenu, Dock 1.4): Open, New
+    //    window, the entry's desktop actions, Pin / Unpin, Show in Komble
+    //    (`komble --search=<name>`). The search field keeps the keyboard and
+    //    forwards keys while the menu is open ──
+    ContextMenu { id: tileMenu; name: "dock-apps-menu"; takesKeyboard: false }
+    Connections { target: root.host; function onLauncherOpenChanged() { if (!root.host.launcherOpen) tileMenu.close() } }
+    function tileMenu(e, did) {
+        var pinned = root.host.isPinned(did)
+        var out = [{ header: e.name || "" },
+                   { label: "Open", action: function () { root.launch(e, false) } },
+                   { label: "New window", icon: Theme.icPlus, action: function () { root.launch(e, true) } }]
+        var acts = e.actions || []
+        if (acts.length > 0) {
+            out.push({ separator: true })
+            for (var i = 0; i < acts.length; i++) (function (a) {
+                out.push({ label: a.name || "", action: function () { a.execute(); root.host.launcherOpen = false } })
+            })(acts[i])
+        }
+        out.push({ separator: true })
+        out.push({ label: pinned ? "Unpin from dock" : "Pin to dock", icon: pinned ? Theme.icPinOff : Theme.icPin,
+                   action: function () { root.host.setPinned(did, !pinned) } })
+        out.push({ label: "Show in Komble", icon: Theme.icStore,
+                   action: function () { root.host.launcherOpen = false; Shell.openStore("search=" + (e.name || "")) } })
+        return out
+    }
+
     // Latch the monitor when opening — binding `screen` to focusedMonitor makes it
     // churn under focus-follows-mouse (surface remaps → visible blink).
     property var openScreen: null
@@ -141,7 +167,10 @@ Scope {
                         selectionColor: Theme.accent
                         onTextChanged: root.query = text
                         // Esc clears the query, a second Esc closes the panel
-                        Keys.onEscapePressed: { if (searchIn.text !== "") searchIn.text = ""; else root.host.launcherOpen = false }
+                        Keys.onPressed: function (ev) {
+                            if (tileMenu.handleKey(ev)) { ev.accepted = true; return }      // an open tile menu takes the keys first
+                            if (ev.key === Qt.Key_Escape) { if (searchIn.text !== "") searchIn.text = ""; else root.host.launcherOpen = false; ev.accepted = true }
+                        }
                         onAccepted: { var a = root.shownApps(); if (a.length > 0) root.launch(a[0]) }
                         Text {
                             anchors.verticalCenter: parent.verticalCenter
@@ -252,7 +281,7 @@ Scope {
                                         width: Theme.controlXl; height: Theme.controlXl
                                         sourceSize.width: 2 * Theme.controlXl; sourceSize.height: 2 * Theme.controlXl
                                         mipmap: true
-                                        source: modelData.icon ? Quickshell.iconPath(modelData.icon, "application-x-executable") : ""
+                                        source: Quickshell.iconPath(modelData.icon || "application-x-executable", "application-x-executable")   // a generic app icon when the entry names none
                                     }
                                     Text {
                                         width: tile.width - 2 * Theme.spaceS
@@ -264,7 +293,14 @@ Scope {
                                         elide: Text.ElideRight; maximumLineCount: 1
                                     }
                                 }
-                                MouseArea { id: tMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; acceptedButtons: Qt.LeftButton | Qt.MiddleButton; onClicked: function (mouse) { root.launch(tile.modelData, mouse.button === Qt.MiddleButton) } }
+                                MouseArea {
+                                    id: tMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                                    acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
+                                    onClicked: function (mouse) {
+                                        if (mouse.button === Qt.RightButton) { tileMenu.items = root.tileMenu(tile.modelData, tile.did); tileMenu.openAt(tMa, mouse.x, mouse.y) }
+                                        else root.launch(tile.modelData, mouse.button === Qt.MiddleButton)
+                                    }
+                                }
                                 // pin badge — top right, on hover; always on (and
                                 // accent) for a pinned app only while searching,
                                 // since every tile of the Pinned view is pinned

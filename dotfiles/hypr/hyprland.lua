@@ -167,6 +167,13 @@ hl.config({
         preserve_split = true,
     },
 
+    -- The hidden stash of minimized windows (special:minimized, Super+Z)
+    -- never stays open over a workspace you switch to: once open, every new
+    -- window landed inside it.
+    binds = {
+        hide_special_on_workspace_change = true,
+    },
+
     misc = {
         disable_hyprland_logo   = true,
         force_default_wallpaper = 0,
@@ -180,6 +187,13 @@ hl.config({
         -- systemd/DBus activation env in scripts/autostart.sh, so Hyprland's own
         -- start-hyprland watchdog wrapper isn't used — by design, not a mistake.
         disable_watchdog_warning = true,
+        -- An app may come forward when YOU asked for it: Hyprland honours the
+        -- request only with a valid activation token (the click on a link in
+        -- kitty or Slack hands one to the browser), so a link now brings the
+        -- browser window to you instead of opening silently on another
+        -- workspace. Token-less requests and every X11 app only mark the
+        -- window urgent (the x11-activate-urgent-only rule below). 0.43.
+        focus_on_activate = true,
     },
 
     -- Cursor on Lunar Lake / Arc 140V (`xe` driver). Two failure modes exist:
@@ -194,6 +208,11 @@ hl.config({
         no_hardware_cursors = false,
         use_cpu_buffer      = true,
         inactive_timeout    = 5,   -- hide the pointer after 5s idle
+        -- colorscheme.sh owns the gsettings cursor keys (Settings → Cursor);
+        -- Hyprland's default sync wrote ITS startup theme back over them,
+        -- and with XCURSOR_THEME=default (start-hyprland.sh) it would write
+        -- the word "default" there
+        sync_gsettings_theme = false,
     },
 })
 
@@ -414,14 +433,42 @@ hl.gesture({
 -- ╰───────────────────────────────────────────────────────────────╯
 
 -- Launchers ------------------------------------------------------------------
-hl.bind(mainMod .. " + Return", hl.dsp.exec_cmd(terminal))
+-- ws.launch: a window you start from a key follows its workspace rule and
+-- takes you along; one an app opens on its own goes there quietly
+-- (workspaces.lua, "Launches you asked for").
+hl.bind(mainMod .. " + Return", ws.launch(terminal))
 hl.bind(mainMod .. " + D",      hl.dsp.global("ewe:launcher"))  -- Launcher (Launcher.qml)
 -- Super+Space switches keyboard layout (cycles input sources). No-op with a single
 -- layout; add a second to input.kb_layout above to make it useful.
 hl.bind(mainMod .. " + Space",  hl.dsp.exec_cmd("hyprctl switchxkblayout current next"))
-hl.bind(mainMod .. " + E",      hl.dsp.exec_cmd(fileManager))
-hl.bind(mainMod .. " + B",      hl.dsp.exec_cmd(browser))
-hl.bind(mainMod .. " + C",      hl.dsp.exec_cmd(scripts .. "/calendar.sh"))
+hl.bind(mainMod .. " + E",      ws.launch(fileManager))
+-- Super+B: the browser you have open comes forward (its workspace with it,
+-- out of the minimized stash if need be); with none open, the default one
+-- starts. Hyprland's exec hands a running browser no activation token, so a
+-- second launch only marked it urgent — the key looked dead whenever the
+-- browser sat on another workspace. (0.43)
+local browser_classes = {
+    ["ewe-browser"] = true, zen = true, firefox = true, librewolf = true, helium = true,
+    ["brave-browser"] = true, chromium = true, ["google-chrome"] = true, ["vivaldi-stable"] = true,
+}
+local function browser_forward_or_launch()
+    local best
+    for _, w in ipairs(hl.get_windows() or {}) do
+        if browser_classes[tostring(w.class or ""):lower()]
+           and (not best or (w.focus_history_id or 1e9) < (best.focus_history_id or 1e9)) then
+            best = w
+        end
+    end
+    if not best then return ws.launch(browser, "")() end
+    local addr = "address:" .. best.address
+    if best.workspace and best.workspace.special then
+        local here = hl.get_active_workspace()
+        if here then hl.dispatch(hl.dsp.window.move({ workspace = here.id, window = addr, follow = false })) end
+    end
+    hl.dispatch(hl.dsp.focus({ window = addr }))
+end
+hl.bind(mainMod .. " + B",      browser_forward_or_launch)
+hl.bind(mainMod .. " + C",      ws.launch(scripts .. "/calendar.sh"))
 hl.bind(mainMod .. " + N",      hl.dsp.global("ewe:quicksettings"))  -- Quick Settings
 hl.bind(mainMod .. " + comma",  hl.dsp.global("ewe:settings"))       -- Super+, Settings
 -- Super+P (fill a login) is the ewe.passwords plugin's keybind since 0.21;
@@ -539,7 +586,13 @@ hl.bind(mainMod .. " + SHIFT + Tab", cycle_windows(true))
 
 -- Session --------------------------------------------------------------------
 hl.bind(mainMod .. " + CTRL + R", hl.dsp.exec_cmd("hyprctl reload"))     -- reload config
-hl.bind(mainMod .. " + CTRL + Q", hl.dsp.exit())                         -- quit / log out
+-- quit / log out — asks first (QuickSettings.qml "logout"): one stray chord
+-- used to end the session and every unsaved window with it
+hl.bind(mainMod .. " + CTRL + Q", hl.dsp.global("ewe:logout"))
+-- the keys an Ubuntu (and Windows) hand reaches for first
+hl.bind("ALT + F4",              hl.dsp.window.close())             -- close the window
+hl.bind("CTRL + ALT + T",        ws.launch(terminal))               -- a terminal
+hl.bind("CTRL + ALT + Delete",   hl.dsp.global("ewe:logout"))       -- sign out (asks first)
 hl.bind(mainMod .. " + SHIFT + B", hl.dsp.global("ewe:bar"))   -- toggle bar
 hl.bind(mainMod .. " + ALT + L",   hl.dsp.global("ewe:lock"))  -- lock (Quickshell session lock)
 
@@ -637,11 +690,38 @@ hl.bind("XF86AudioPrev",  hl.dsp.exec_cmd("playerctl previous"),   { locked = tr
 -- ╭───────────────────────────────────────────────────────────────╮
 -- │ WINDOW RULES — https://wiki.hypr.land/Configuring/Basics/...    │
 -- ╰───────────────────────────────────────────────────────────────╯
--- Ignore maximize requests from all apps (keeps the tiling layout sane).
+-- Ignore maximize requests from TILED apps (keeps the tiling layout sane). A
+-- floating window — Slack, Steam, Office by your own rules — may maximize
+-- itself like anywhere else (0.43; it was refused for every window).
 hl.window_rule({
     name           = "suppress-maximize",
-    match          = { class = ".*" },
+    match          = { class = ".*", float = false },
     suppress_event = "maximize",
+})
+
+-- X11 apps (Steam, Wine/Office, older toolkits) cannot prove a request to
+-- come forward came from you — Hyprland checks no token for them — so they
+-- only mark the window urgent (the dock and bar show a dot), never switch
+-- your workspace. Wayland apps with a valid token (a link you clicked) do
+-- come forward: misc.focus_on_activate below.
+hl.window_rule({
+    name              = "x11-activate-urgent-only",
+    match             = { xwayland = true },
+    focus_on_activate = false,
+})
+
+-- Steam's own toasts (friend online, download done): XWayland windows of
+-- class steam titled notificationtoasts_N_desktop. Shown where you are, on
+-- top of every workspace, and never take the keyboard — not even when the
+-- pointer passes over them (focus follows the mouse here). workspaces.lua
+-- leaves them out of a "Steam → workspace N" rule.
+hl.window_rule({
+    name             = "steam-toasts",
+    match            = { class = "^steam$", title = "^notificationtoasts_[0-9]+_desktop$" },
+    float            = true,
+    pin              = true,
+    no_initial_focus = true,
+    no_follow_mouse  = true,
 })
 
 -- Float + centre the usual transient/utility windows.
@@ -655,22 +735,23 @@ for _, klass in ipairs({
     hl.window_rule({ name = "float-" .. klass, match = { class = klass }, float = true, center = true })
 end
 
--- Anything that opens floating spawns centred — floaters that place themselves
--- at 0,0 or off-screen (JetBrains Toolbox and friends) are otherwise easy to
--- lose. Applies at open only; moving a window afterwards works normally.
--- class = ".+" keeps the classless XWayland drag ghosts (rule below) out.
-hl.window_rule({
-    name   = "center-floating",
-    match  = { float = true, class = ".+" },
-    center = true,
-})
+-- (0.43) No blanket "centre every floating window" rule any more: it threw
+-- Save As, Properties and Open With dialogs into the middle of the SCREEN,
+-- away from the window that opened them. Hyprland already centres a dialog
+-- over its parent (portal pickers too, through xdg-foreign), centres X11
+-- windows that ask for 0,0, and pulls off-screen floaters back
+-- (misc.new_float_force_onscreen). The utility windows above keep `center`.
 
--- Firefox / browser picture-in-picture: small floating, pinned across spaces.
+-- Picture-in-picture (Firefox "Picture-in-Picture"; Chromium, Brave and the
+-- ewe browser "Picture in picture"): floating, pinned across workspaces,
+-- keeps its shape, and does not take the keyboard from what you were doing.
 hl.window_rule({
-    name  = "pip-float",
-    match = { title = "Picture-in-Picture" },
-    float = true,
-    pin   = true,
+    name              = "pip-float",
+    match             = { title = "^(Picture[- ]in[- ][Pp]icture)$" },
+    float             = true,
+    pin               = true,
+    keep_aspect_ratio = true,
+    no_initial_focus  = true,
 })
 
 -- App popups that must NOT be tiled — forced into a layout slot they draw
@@ -682,12 +763,12 @@ hl.window_rule({
     match = { class = "slack", title = "[Hh]uddle" },
     float = true,
 })
--- portal file choosers (GTK portal opens them as plain toplevels)
+-- portal file choosers (GTK portal opens them as plain toplevels): floating;
+-- Hyprland places them over the app that asked (xdg-foreign)
 hl.window_rule({
     name   = "portal-file-chooser",
     match  = { class = "xdg-desktop-portal-gtk" },
     float  = true,
-    center = true,
 })
 
 -- The shell's Settings app is a real toplevel (so portals/DnD work) — float and
@@ -804,6 +885,15 @@ pcall(dofile, home .. "/.config/hypr/generated/user.lua")
 pcall(dofile, home .. "/.config/hypr/generated/input.lua")
 pcall(dofile, home .. "/.config/hypr/generated/monitors.lua")
 pcall(dofile, home .. "/.config/hypr/generated/windowrules.lua")
+-- Window Rules' "open on workspace N" tags a window `ewe-ws-N`. Such a window
+-- opens WITHOUT taking focus, so an app that opens one by itself — Steam's
+-- toasts — never drags you to its workspace; workspaces.lua focuses the one
+-- you launched (and one opening on the workspace you are on). After the
+-- generated rules: a rule matches the tags the rules before it set. The tag
+-- match is exact (a pattern does not match), hence one rule per number.
+for n = 1, 10 do
+    hl.window_rule({ name = "ewe-ws-quiet-" .. n, match = { tag = "ewe-ws-" .. n }, no_initial_focus = true })
+end
 pcall(dofile, home .. "/.config/hypr/generated/animations.lua")
 -- user keybinds from ewe.conf's [[desktop.keybinds]] (ewe-conf generates;
 -- exec binds only — they sync with the machine file like everything else)

@@ -158,6 +158,70 @@ W[2].windows = { "b" }
 ws.new_workspace()
 check(active("eDP-1") == 3, "new workspace: otherwise the next number")
 
+-- 0.43 — launches you asked for. A rule-placed window moves WITHOUT taking
+-- you along (Steam's toasts); hyprland.lua's quiet rules keep its initial
+-- focus off, and workspaces.lua focuses it on `window.open` only when you
+-- launched it or it opens on the workspace you are on.
+local focusedWin = nil
+_G.hl.dsp.focus = (function(orig) return function(a)
+  if a.window then return { fn = function() focusedWin = a.window:gsub("^address:", ""); log[#log + 1] = "focus win " .. focusedWin end } end
+  return orig(a)
+end end)(_G.hl.dsp.focus)
+local follows = {}
+_G.hl.dsp.window.move = (function(orig) return function(a)
+  follows[#follows + 1] = a.follow
+  return orig(a)
+end end)(_G.hl.dsp.window.move)
+reset({ { "eDP-1", 1 } }, { { 1, "eDP-1", { "me" } } })
+RELOAD()
+opened("toast", 1, "eDP-1", { "ewe-ws-4*" })
+ON["window.open"]({ address = "toast" })
+check(W[4] and W[4].windows[1] == "toast" and active("eDP-1") == 1, "a window the app opened itself: to workspace 4, you stay on 1")
+check(follows[#follows] == false and focusedWin == nil, "…moved with follow = false and not focused")
+_G.ewe_launched()
+opened("steam", 1, "eDP-1", { "ewe-ws-4*" })
+ON["window.open"]({ address = "steam" })
+check(focusedWin == "steam", "a window you launched: focused once it maps (the view goes with it)")
+focusedWin = nil
+opened("toast2", 1, "eDP-1", { "ewe-ws-4*" })
+ON["window.open"]({ address = "toast2" })
+check(focusedWin == nil, "the launch is spent on the first window after it")
+_G.ewe_launched()
+opened("plain", 1, "eDP-1")
+opened("toast3", 1, "eDP-1", { "ewe-ws-4*" })
+ON["window.open"]({ address = "toast3" })
+check(focusedWin == nil, "a launch with no rule spends it too — a toast right after stays quiet")
+D[1].active = 4
+opened("dialog", 4, "eDP-1", { "ewe-ws-4*" })
+ON["window.open"]({ address = "dialog" })
+check(focusedWin == "dialog", "a dialog on the workspace you are on is focused as usual")
+check(type(_G.ewe_launch("kitty")) == "function", "ewe_launch(cmd) gives a bind a function")
+-- a launch names its app: only that app's window spends it
+local function op(addr, wsid, class, tags)
+  local w = W[wsid] or { id = wsid, monitor = "eDP-1", windows = {} }
+  W[wsid] = w; table.insert(w.windows, addr)
+  ON["window.open_early"]({ address = addr, class = class, tags = tags, monitor = { name = "eDP-1" },
+                            workspace = { id = wsid, special = false } })
+  ON["window.open"]({ address = addr })
+end
+D[1].active = 1; focusedWin = nil
+_G.ewe_launched("ewe-browser")                 -- Super+B, the browser already open: no new window
+op("toast4", 1, "steam", { "ewe-ws-4*" })
+check(focusedWin == nil and active("eDP-1") == 1, "a launch that opened nothing never hands 'you asked' to a Steam toast")
+_G.ewe_launched("steam")
+op("slackwin", 1, "Slack", { "ewe-ws-2*" })
+check(focusedWin == nil, "another app's window does not spend a Steam launch")
+op("steammain", 1, "steam", { "ewe-ws-4*" })
+check(focusedWin == "steammain", "Steam's own window spends it and is focused")
+focusedWin = nil
+_G.ewe_launched("komble-google-chrome")
+op("chrome", 1, "google-chrome", { "ewe-ws-5*" })
+check(focusedWin == "chrome", "a Komble AppImage launch matches the app's own class")
+check(ws.launch_matches("dev.zed.Zed", "dev.zed.Zed") and ws.launch_matches("Slack", "slack")
+      and ws.launch_matches("jetbrains-rustrover", "jetbrains-rustrover-207232cb")
+      and not ws.launch_matches("steam", "ewe-browser") and not ws.launch_matches("kitty", "calendar.sh"),
+      "launch_matches: ids, case, AppImage/JetBrains prefixes; unrelated apps never")
+
 os.exit(FAILED and 1 or 0)
 EOF
 "$LUA" "$S/fake.lua" || fail=1
@@ -196,5 +260,18 @@ m = SourceFileLoader('ewe_conf', 'bin/ewe-conf').load_module()
 print(m.gen_windowrules_lua([{'class': 'kitty', 'workspace': 3}]))")
 grep -q 'tag   = "+ewe-ws-3"' <<<"$rules" && ok "a window rule tags ewe-ws-3" || no "no ewe-ws tag in the window rule"
 grep -q 'workspace = ' <<<"$rules" && no "a window rule still names a raw workspace id" || ok "no raw workspace id in the window rules"
+
+# ── 4. your own keybinds mark the launch (0.43), and old files still parse ──
+kb=$(python3 -c "
+from importlib.machinery import SourceFileLoader
+m = SourceFileLoader('ewe_conf', 'bin/ewe-conf').load_module()
+out = m.gen_keybinds_lua([{'combo': 'SUPER + T', 'exec': 'kitty'}])
+print(out)
+old = 'hl.bind(\"SUPER + Y\", hl.dsp.exec_cmd(\"nemo\"))\n'
+print('PARSE', m.parse_keybinds_lua(out + old))")
+grep -q 'hl.bind("SUPER + T", (ewe_launch or hl.dsp.exec_cmd)("kitty"))' <<<"$kb" \
+  && ok "a keybind launches through ewe_launch" || no "keybind not generated through ewe_launch"
+grep -q "PARSE \[{'combo': 'SUPER + T', 'exec': 'kitty'}, {'combo': 'SUPER + Y', 'exec': 'nemo'}\]" <<<"$kb" \
+  && ok "both keybind forms parse back" || no "keybind parse lost a form: $kb"
 
 exit $fail

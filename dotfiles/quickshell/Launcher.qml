@@ -100,6 +100,46 @@ Scope {
 
     Timer { id: fileDebounce; interval: 140; onTriggered: root.runFileSearch() }
 
+    // A file result's icon from its name: the extension gives a MIME type,
+    // the theme's icon for that type is tried first and the type's family
+    // (image-x-generic, video-x-generic …) is the fallback — the same walk
+    // the dock's Downloads panel does with the browser's MIME type. Every
+    // file used to show the one text-page icon.
+    readonly property var extMime: ({
+        png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp",
+        svg: "image/svg+xml", bmp: "image/bmp", tif: "image/tiff", tiff: "image/tiff", heic: "image/heif", avif: "image/avif",
+        mp4: "video/mp4", mkv: "video/x-matroska", webm: "video/webm", mov: "video/quicktime", avi: "video/x-msvideo",
+        mp3: "audio/mpeg", flac: "audio/flac", ogg: "audio/ogg", opus: "audio/ogg", wav: "audio/x-wav", m4a: "audio/mp4",
+        pdf: "application/pdf", epub: "application/epub+zip",
+        zip: "application/zip", tar: "application/x-tar", gz: "application/gzip", xz: "application/x-xz",
+        zst: "application/zstd", "7z": "application/x-7z-compressed", rar: "application/vnd.rar",
+        doc: "application/msword", docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        odt: "application/vnd.oasis.opendocument.text", xls: "application/vnd.ms-excel",
+        xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        ods: "application/vnd.oasis.opendocument.spreadsheet", csv: "text/csv",
+        ppt: "application/vnd.ms-powerpoint", pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        odp: "application/vnd.oasis.opendocument.presentation",
+        txt: "text/plain", md: "text/markdown", html: "text/html", htm: "text/html", json: "application/json",
+        xml: "application/xml", yaml: "application/x-yaml", yml: "application/x-yaml", toml: "application/toml",
+        sh: "application/x-shellscript", py: "text/x-python", js: "text/javascript", ts: "text/x-typescript",
+        rs: "text/rust", c: "text/x-csrc", h: "text/x-chdr", cpp: "text/x-c++src", go: "text/x-go", lua: "text/x-lua",
+        qml: "text/x-qml", css: "text/css", ttf: "font/ttf", otf: "font/otf", woff2: "font/woff2",
+        iso: "application/x-cd-image", appimage: "application/vnd.appimage", deb: "application/vnd.debian.binary-package",
+        exe: "application/x-ms-dos-executable", desktop: "application/x-desktop"
+    })
+    function fileIcon(name) {
+        var dot = name.lastIndexOf(".")
+        var ext = dot > 0 ? name.slice(dot + 1).toLowerCase() : ""
+        var mime = root.extMime[ext] || ""
+        var p = mime !== "" ? Quickshell.iconPath(mime.replace("/", "-"), true) : ""
+        if (p === "") {
+            var major = mime.split("/")[0]
+            p = Quickshell.iconPath(["audio", "video", "image", "text", "font"].indexOf(major) >= 0
+                                    ? major + "-x-generic" : "text-x-generic", "text-x-generic")
+        }
+        return p
+    }
+
     Process {
         id: fileProc
         stdout: StdioCollector {
@@ -120,7 +160,7 @@ Scope {
                     var dir = path.slice(0, slash)
                     var disp = (root.home && dir.indexOf(root.home) === 0) ? "~" + dir.slice(root.home.length) : dir
                     arr.push({ type: "file", isDir: isDir, path: path, name: nm, sub: disp,
-                               iconSource: Quickshell.iconPath(isDir ? "folder" : "text-x-generic", isDir ? "folder" : "application-x-zerosize") })
+                               iconSource: isDir ? Quickshell.iconPath("folder", "folder") : root.fileIcon(nm) })
                 }
                 // basename-prefix matches first, then shortest name
                 arr.sort(function (a, b) {
@@ -225,6 +265,48 @@ Scope {
         else if (item.type === "action") { if (item.run) item.run() }
         else Quickshell.execDetached(["xdg-open", item.path])
         root.hide()
+    }
+
+    // ── the result's right-click menu (ContextMenu): an app — Open, New
+    //    window, its desktop actions, Pin / Unpin; a file — Open, Open
+    //    with… (the file selected in Files, where Open with lives), its
+    //    folder, Copy path. The launcher keeps the keyboard (its field),
+    //    so it forwards keys to the menu while one is open ──
+    ContextMenu { id: rowMenu; name: "launcher-menu"; takesKeyboard: false }
+    Connections { target: root; function onOpenedChanged() { if (!root.opened) rowMenu.close() } }
+    function pinIdOf(e) { return e && e.id ? String(e.id).replace(/\.desktop$/, "") + ".desktop" : "" }
+    function menuFor(item) {
+        if (!item) return []
+        var out = [{ header: item.name || "" }]
+        if (item.type === "app") {
+            var e = item.entry, pid = root.pinIdOf(e)
+            out.push({ label: "Open", action: function () { root.launch(item, false) } })
+            out.push({ label: "New window", icon: Theme.icPlus, action: function () { root.launch(item, true) } })
+            var acts = (e && e.actions) ? e.actions : []
+            if (acts.length > 0) {
+                out.push({ separator: true })
+                for (var i = 0; i < acts.length; i++) (function (a) {
+                    out.push({ label: a.name || "", action: function () { a.execute(); root.hide() } })
+                })(acts[i])
+            }
+            out.push({ separator: true })
+            var pinned = Globals.isPinned(pid)
+            out.push({ label: pinned ? "Unpin from dock" : "Pin to dock", icon: pinned ? Theme.icPinOff : Theme.icPin,
+                       disabled: pid === "", action: function () { Globals.setPinned(pid, !pinned) } })
+        } else if (item.type === "file") {
+            var dir = item.isDir ? item.path : (item.path.slice(0, Math.max(0, item.path.lastIndexOf("/"))) || "/")
+            out.push({ label: "Open", action: function () { root.launch(item, false) } })
+            out.push({ label: "Open with…", action: function () { Quickshell.execDetached(["nemo", item.path]); root.hide() } })
+            out.push({ label: "Open containing folder", icon: Theme.icFolder, action: function () { Quickshell.execDetached(["nemo", dir]); root.hide() } })
+            out.push({ separator: true })
+            out.push({ label: "Copy path", icon: Theme.icClipboard, action: function () { Quickshell.execDetached(["wl-copy", "--", item.path]); Shell.toast("Path copied") } })
+        } else return []
+        return out
+    }
+    function openMenuFor(index, item, x, y) {
+        root.selected = index
+        rowMenu.items = root.menuFor(root.results[index])
+        rowMenu.openAt(item, x, y)
     }
 
     // ── the overlay window ────────────────────────────────────────────────
@@ -336,6 +418,14 @@ Scope {
                                     font: input.font
                                 }
                                 Keys.onPressed: function (ev) {
+                                    // an open result menu takes the keys first
+                                    if (rowMenu.handleKey(ev)) { ev.accepted = true; return }
+                                    // the Menu key (or Shift+F10) opens the selected result's menu
+                                    if (ev.key === Qt.Key_Menu || (ev.key === Qt.Key_F10 && (ev.modifiers & Qt.ShiftModifier))) {
+                                        var it = list.itemAtIndex(root.selected)
+                                        if (it) root.openMenuFor(root.selected, it, it.width / 2, it.height / 2)
+                                        ev.accepted = true; return
+                                    }
                                     // Esc clears the query, a second Esc closes
                                     if (ev.key === Qt.Key_Escape) {
                                         if (input.text !== "") input.text = ""; else root.hide()
@@ -440,10 +530,14 @@ Scope {
                             MouseArea {
                                 id: rowMa
                                 anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
                                 hoverEnabled: true
-                                acceptedButtons: Qt.LeftButton | Qt.MiddleButton
+                                acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
                                 onPositionChanged: root.selected = row.index
-                                onClicked: function (mouse) { root.launch(row.modelData, mouse.button === Qt.MiddleButton) }
+                                onClicked: function (mouse) {
+                                    if (mouse.button === Qt.RightButton) root.openMenuFor(row.index, rowMa, mouse.x, mouse.y)
+                                    else root.launch(row.modelData, mouse.button === Qt.MiddleButton)
+                                }
                             }
                         }
                     }

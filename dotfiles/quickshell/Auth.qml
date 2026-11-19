@@ -146,7 +146,7 @@ Scope {
                         antialiasing: true
                         Text {
                             anchors.centerIn: parent
-                            text: Theme.icVpn                       // shield-check
+                            text: Theme.icLock                      // lock — a password is asked for (the shield is the VPN)
                             font.family: Theme.fontIcons; font.pixelSize: Theme.iconMd
                             color: Theme.accentText
                         }
@@ -230,7 +230,7 @@ Scope {
                                     : pwField.activeFocus ? Theme.focusRing
                                     : fieldMa.containsMouse ? Theme.textMuted : Theme.borderStrong
                         Behavior on border.color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
-                        MouseArea { id: fieldMa; anchors.fill: parent; hoverEnabled: true; onClicked: pwField.forceActiveFocus() }
+                        MouseArea { id: fieldMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.IBeamCursor; onClicked: pwField.forceActiveFocus() }
 
                         Text {
                             id: lockIcon

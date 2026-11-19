@@ -275,7 +275,7 @@ QtObject {
                 var kind = p.kinds[k]
                 if (kind === "dock-item") {
                     var di = p.dockItem || {}
-                    dock.push({ id: p.id, name: p.name, icon: di.icon || "icApps", label: di.label || p.name || p.id,
+                    dock.push({ id: p.id, name: p.name, icon: di.icon || "icPuzzle", label: di.label || p.name || p.id,
                                 action: di.action || "", order: host._ord(di) })
                     continue
                 }
@@ -303,7 +303,7 @@ QtObject {
                     }
                     pageKeys[qp.key] = p.id
                     pages.push({ id: p.id, name: p.name, entry: path, key: qp.key, label: qp.label || p.name || qp.key,
-                                 icon: qp.icon || "icApps", order: host._ord(qp) })
+                                 icon: qp.icon || "icPuzzle", order: host._ord(qp) })
                     continue
                 }
                 if (kind === "bar-status") {

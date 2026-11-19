@@ -28,8 +28,8 @@ Column {
         title: Inbox.available ? "Inbox" : "Mail"
         note: Inbox.available && Inbox.unread > 0 ? Inbox.unread + " unread" : ""
         // new-mail notifications on or off
-        QsIconButton { visible: Inbox.available; anchors.verticalCenter: parent.verticalCenter; ic: Theme.icBellRing; selected: Inbox.notify; onGo: Inbox.setNotify(!Inbox.notify) }
-        QsIconButton { visible: Inbox.available; anchors.verticalCenter: parent.verticalCenter; ic: Theme.icRefresh; onGo: Inbox.fetch() }
+        QsIconButton { visible: Inbox.available; anchors.verticalCenter: parent.verticalCenter; ic: Theme.icBellRing; selected: Inbox.notify; tip: Inbox.notify ? "New-mail notifications on" : "New-mail notifications off"; onGo: Inbox.setNotify(!Inbox.notify) }
+        QsIconButton { visible: Inbox.available; anchors.verticalCenter: parent.verticalCenter; ic: Theme.icRefresh; tip: "Check now"; onGo: Inbox.fetch() }
         QsButton { anchors.verticalCenter: parent.verticalCenter; label: Inbox.inboxLabel; onGo: Inbox.openInbox() }
     }
     QsNote { visible: !Inbox.available; text: Inbox.hint }

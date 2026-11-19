@@ -1,0 +1,9 @@
+[Nemo Action]
+# Right-click an archive → "Extract To…" — engrampa asks where, then
+# extracts there (Ubuntu's Files has both; 0.43). Same archives as Extract Here.
+Name=Extract To…
+Comment=Choose a folder and extract the selected archive there
+Exec=engrampa --extract %F
+Icon-Name=archive-extract
+Selection=NotNone
+Extensions=zip;tar;gz;tgz;bz2;tbz2;xz;txz;7z;rar;zst;tzst;lzma;Z;iso;

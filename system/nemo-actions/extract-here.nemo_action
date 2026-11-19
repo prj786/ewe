@@ -6,4 +6,6 @@ Comment=Extract the selected archive into this folder
 Exec=engrampa --extract-here %F
 Icon-Name=archive-extract
 Selection=NotNone
-Extensions=zip;tar;gz;tgz;bz2;tbz2;xz;txz;7z;rar;zst;tzst;lz;lzma;Z;
+# rar extracts through unar (packages: unarchiver, 0.43); no .lz — lzip is
+# not installed, so the item only failed there
+Extensions=zip;tar;gz;tgz;bz2;tbz2;xz;txz;7z;rar;zst;tzst;lzma;Z;iso;

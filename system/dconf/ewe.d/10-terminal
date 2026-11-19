@@ -2,8 +2,10 @@
 #
 # WHY A SYSTEM DB. Nemo's "Open in Terminal" spawns whatever
 # org.cinnamon.desktop.default-applications.terminal names, and Cinnamon's
-# SCHEMA DEFAULT is gnome-terminal, which ewe does not install — so the menu
-# item was present and silently did nothing.
+# SCHEMA DEFAULT is a terminal ewe does not install (gnome-terminal; since
+# cinnamon-desktop 6.8 `velocitty`) — so the menu item was present and
+# silently did nothing. Until 0.43 only install.sh (phase 30) installed this
+# db; the pacman package's own hook does it now too.
 #
 # Phase 60 used to fix that with `gsettings set`, which has two faults: it
 # only runs at a login that reaches phase 60 (a machine that never re-logged

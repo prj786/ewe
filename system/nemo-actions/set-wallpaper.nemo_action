@@ -1,0 +1,11 @@
+[Nemo Action]
+# Right-click a picture (or a video) → "Set as Wallpaper" — every display's
+# wallpaper, through ewe.conf like Settings → Wallpaper (0.43). Cinnamon's own
+# "Set as Wallpaper…" only exists inside Cinnamon. The script sits beside
+# this file (Nemo runs <…> relative to the actions folder).
+Name=Set as Wallpaper
+Comment=Use this picture as the desktop background
+Exec=<ewe-set-wallpaper.sh %F>
+Icon-Name=preferences-desktop-wallpaper
+Selection=s
+Mimetypes=image/png;image/jpeg;image/webp;image/gif;image/bmp;image/tiff;video/mp4;video/webm;video/x-matroska;video/quicktime;

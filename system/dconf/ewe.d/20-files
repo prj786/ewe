@@ -1,0 +1,21 @@
+# ewe system defaults for Files (Nemo) and the archive manager (Engrampa).
+# Same system db as 10-terminal: below any choice the user makes, above the
+# schema defaults (0.43 — the Ubuntu-parity pass).
+
+[org/nemo/preferences]
+# "Move to Trash" alone in the menu, like Ubuntu's Files; Shift+Delete still
+# deletes for good. Both items side by side cost files.
+enable-delete=false
+# Nemo's default skips images over 1 MiB, so every photo and wallpaper
+# showed a generic icon. 50 MiB, as GNOME's Files does for local files.
+thumbnail-limit=uint64 52428800
+
+[org/nemo/plugins]
+# Cinnamon's "Mount archive" calls gnome-disk-image-mounter, which ewe does
+# not install: the item sat on every archive and did nothing.
+disabled-actions=['mount-archive.nemo_action']
+
+[org/mate/engrampa/dialogs/batch-add]
+# Compress… makes a .zip (opens anywhere — Windows, macOS, phones), not
+# Engrampa's own default .tar.gz
+default-extension='.zip'

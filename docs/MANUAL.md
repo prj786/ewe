@@ -116,8 +116,11 @@ coexist.
 Going all-GTK also fixes default-app management: **one `~/.config/mimeapps.list`**
 is the single source of truth, read natively by **GIO** — "Open With" always
 sees your installed apps, with no KDE `ksycoca` cache to rebuild. Manage it from
-**ewe Settings → Default Apps**. Right-click **Compress… / Extract Here** in Nemo
-ship as `system/nemo-actions/*.nemo_action` (calling engrampa).
+**ewe Settings → Default Apps**. Right-click **Compress… / Extract Here / Extract To…**
+(engrampa; Compress makes a .zip) and **Set as Wallpaper** in Nemo ship as
+`system/nemo-actions/*` (copied per user by phase 60 and `ewe-setup`); Files' defaults —
+Open in Terminal = kitty, no Delete beside Move to Trash, thumbnails up to 50 MB —
+are the dconf system db `system/dconf/ewe.d/` (phase 30 and the package hook).
 
 **Appearance** (a scheme + an accent: Ewe Dark by default; light mode is the
 built-in Ewe Light, an imported light scheme or *From wallpaper (light)*) is

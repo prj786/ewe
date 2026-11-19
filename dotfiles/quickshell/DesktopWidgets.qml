@@ -121,6 +121,22 @@ Scope {
         }
     }
 
+    // ── the desktop's right-click menu (ContextMenu, 0.43): Change
+    //    wallpaper… and Display settings (ewe Settings pages), Open terminal
+    //    here (kitty in $HOME), Arrange widgets (checked while arranging) ──
+    ContextMenu { id: deskMenu; name: "desktop-menu" }
+    function desktopMenu() {
+        return [
+            { label: "Change wallpaper…", icon: Theme.icImage, action: function () { Shell.openSettings("wallpaper") } },
+            { label: "Display settings", icon: Theme.icComputer, action: function () { Shell.openSettings("displays") } },
+            { separator: true },
+            { label: "Open terminal here", action: function () { Quickshell.execDetached(["kitty", "--directory", Quickshell.env("HOME") || "/"]) } },
+            { separator: true },
+            { label: "Arrange widgets", icon: Theme.icGrip, shortcut: "Super+Shift+W", checked: Globals.widgetsArrange,
+              action: function () { Globals.widgetsArrange = !Globals.widgetsArrange } }
+        ]
+    }
+
     // 48/64 is a stored placement default shared with bin/ewe-plugin (a
     // position in ewe.conf, not a look), so it stays as it is written there.
     // No placement yet: the manifest's defaults, desktopWidget.visible
@@ -176,16 +192,23 @@ Scope {
                         return root._onScreen(w, perScreen.modelData, perScreen.index)
                             && root._layerOf(p) === win.layerName && p.visible !== false
                     })
-                    // Ultra game mode hides them (GameMode.qml): nothing drawn beside a game
-                    visible: mine.length > 0 && !GameMode.ultra
-                    // Input only where widgets are — everywhere else clicks
-                    // fall through to the desktop and the windows. While
+                    // Ultra game mode hides them (GameMode.qml): nothing drawn beside a game.
+                    // The desktop layer stays mapped without widgets: it is
+                    // the desktop's right-click menu too (0.43)
+                    visible: (win.layerName === "desktop" || mine.length > 0) && !GameMode.ultra
+                    // The pinned layers take input only where widgets are —
+                    // everywhere else clicks fall through to the windows. While
                     // arranging, the chip rows too. (It used to be an EMPTY
                     // region while arranging, which Quickshell reads as
                     // "transparent for input": the drag, the chips and Esc
-                    // never arrived.)
+                    // never arrived.) The DESKTOP layer takes the pointer
+                    // everywhere: it sits under every window, where only the
+                    // wallpaper was — a right-click opens the desktop menu,
+                    // a left click does what it did (nothing), and the layer
+                    // never takes the keyboard, so no window loses focus.
                     property list<Region> regions
-                    mask: Region { regions: win.regions }
+                    mask: win.layerName === "desktop" ? null : widgetMask
+                    Region { id: widgetMask; regions: win.regions }
                     function rebuildMask() {
                         var rs = []
                         for (var i = 0; i < rep.count; i++) {
@@ -197,6 +220,16 @@ Scope {
                         win.regions = rs
                     }
                     Connections { target: Globals; function onWidgetsArrangeChanged() { win.rebuildMask() } }
+
+                    // the empty desktop's right-click (desktop layer only; the
+                    // widgets sit on top and take their own presses)
+                    MouseArea {
+                        id: deskMa
+                        anchors.fill: parent
+                        visible: win.layerName === "desktop"
+                        acceptedButtons: Qt.RightButton
+                        onClicked: function (m) { deskMenu.items = root.desktopMenu(); deskMenu.openAt(deskMa, m.x, m.y) }
+                    }
 
                     Item {
                         id: stageRoot
@@ -295,7 +328,8 @@ Scope {
                                     drag.target: slot
                                     drag.minimumX: 0; drag.maximumX: win.width - slot.width
                                     drag.minimumY: 0; drag.maximumY: win.height - slot.height
-                                    cursorShape: drag.active ? Qt.ClosedHandCursor : Qt.ArrowCursor
+                                    // an open hand says "you can move this"; closed while it moves
+                                    cursorShape: drag.active ? Qt.ClosedHandCursor : Qt.OpenHandCursor
                                     property bool moved: false
                                     onPressed: { cardDrag.moved = false; stageRoot.focusIndex = slot.index }
                                     onPositionChanged: if (drag.active) cardDrag.moved = true

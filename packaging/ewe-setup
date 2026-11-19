@@ -149,6 +149,15 @@ if [ -d "$DEST/system/applications" ]; then
     done
     unset _d
 fi
+# Nemo's right-click actions (Compress…, Extract Here, Extract To…, Set as
+# Wallpaper + its script): the files phase 60 copies. Until 0.43 only
+# install.sh did, so a pacman/ISO install had no Compress at all; a refresh
+# also carries a changed action (the Compress icon) to every account.
+if [ -d "$DEST/system/nemo-actions" ]; then
+    mkdir -p "$HOME/.local/share/nemo/actions"
+    cp -f "$DEST/system/nemo-actions/"*.nemo_action "$DEST/system/nemo-actions/"*.sh \
+        "$HOME/.local/share/nemo/actions/" 2>/dev/null || true
+fi
 # what the user EXPLICITLY chose in ~/.config/mimeapps.list — never the
 # mimeinfo-cache fallback `xdg-mime query default` would report
 _user_default() {

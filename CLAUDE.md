@@ -160,6 +160,17 @@ since Dock 1.1.0 (`desktop.dock.*` is only their `legacy` fallback,
 - **`Globals.qml`** — shared mutable shell state (`quickSettingsOpen`, `settingsOpen`,
   `accentColor`, `version`, pinned lists, the live `NotificationServer`, …).
   In-shell toggles flip a `Globals` bool directly (no IPC round-trip).
+  **Which app is this window (0.43):** `Globals.entryForClass(cls)` /
+  `iconForClass(cls, fallback)` (plugins: `Shell.entryForClass` /
+  `Shell.iconForClass`) is the ONE class → desktop-entry answer — id,
+  `StartupWMClass`, reverse-DNS tail, Komble's AppImages (`komble-<id>`,
+  no StartupWMClass, window class `google-chrome`) and Steam games
+  (`steam_app_N` → the entry with `rungameid/N`); cached, emptied when
+  `DesktopEntries.applications` changes. The dock, Overview, switcher, share
+  picker, bar and `focusAppWindow` (so a launch focuses the running game or
+  AppImage instead of starting a second copy) all go through it — never add
+  another `heuristicLookup(class)` beside them. In the nest `HS_DATA=<dir>`
+  drops test `.desktop` files + icons into the sandbox.
 - **`Theme.qml`** — the palette/metrics; `accent` binds to `Globals.accentColor`
   so changing the accent recolours the whole shell live. Values come from
   `bin/ewe-theme` (scheme + accent in `ewe.conf` → every token of the Ewe
@@ -502,6 +513,35 @@ written. Called live by Settings → Theme, at shell startup, and by phase 60.
   config is first parsed (`Hyprland --verify-config` segfaulted). Test:
   `tests/ewe-workspaces-test.sh`; a second display in the nested harness is
   `hyprctl output create headless`.
+- **Who may move you (0.43, 2026-11-19 polish pass):** a window that a
+  Window Rules "open on workspace N" places (tag `ewe-ws-N`) opens WITHOUT
+  focus — hyprland.lua's `ewe-ws-quiet-1..10` static rules, defined AFTER
+  the generated windowrules.lua (a rule matches tags earlier rules set;
+  exact tag only, a pattern does not match; a tag added at `open_early`
+  comes too late) — and `workspaces.lua` focuses it on `window.open` only
+  when the user launched that app (or it opens on the workspace they are
+  on). A launch is marked with a class hint: `ws.launch(cmd[, hint])` in
+  binds and ewe-conf's generated keybinds (`(ewe_launch or
+  hl.dsp.exec_cmd)("…")`), `Globals.markLaunch(hint)` in the shell (a Lua
+  FUNCTION through `Hyprland.dispatch` — `hl.dispatch` accepts one; hint
+  sanitised to `[A-Za-z0-9._-]`); only a window of that app spends it
+  (30 s). Before, every Steam toast (`steam` class) dragged the user to
+  Steam's workspace; `follow = false` alone did not help — Hyprland focuses
+  a new window at map and switches to it. `misc.focus_on_activate = true`
+  (token-checked Wayland activation: a clicked link brings the browser
+  forward) with `x11-activate-urgent-only` for XWayland. Steam's toasts
+  (`notificationtoasts_N_desktop`) are pinned, no focus, no follow-mouse,
+  and `M.place` leaves them (and any pinned window) alone. Focusing a
+  window on `special:minimized` restores it to the current workspace
+  (`Globals.focusToplevel`); `binds.hide_special_on_workspace_change`.
+  A notification click with no window and no default action launches the
+  sender's desktop-entry hint (`Globals.openNotification`).
+- **Cursor env (0.43):** the session exports `XCURSOR_THEME=default`
+  (`~/.icons/default/index.theme`, which colorscheme.sh points at the
+  chosen Mocu) so apps started after Settings → Cursor follow it; the
+  size stays a number, refreshed in the systemd/D-Bus env by colorscheme.sh.
+  `cursor.sync_gsettings_theme = false` (also in the nest: it shares the
+  host's session bus and once turned the owner's black cursor white).
 - **Tiling styles (0.36, 2026-10-27):** `[desktop.layout] mode` = `dwindle`
   (default, emits nothing) · `master` · `scrolling` · `monocle` (Hyprland
   ≥ 0.54, one window at a time); ewe-conf writes `general.layout` into

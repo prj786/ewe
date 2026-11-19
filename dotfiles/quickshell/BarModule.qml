@@ -28,6 +28,8 @@ Item {
     property string a11yName: ""
     Accessible.role: Accessible.Button
     Accessible.name: si.a11yName
+    // its Tooltip: the module's name and state (the a11y name unless told otherwise)
+    property string tip: si.a11yName
     signal activated()
     signal secondary()
     signal tertiary()
@@ -84,4 +86,5 @@ Item {
         }
         onWheel: function (w) { si.scrolled(w.angleDelta.y) }
     }
+    Tooltip { text: si.tip }
 }

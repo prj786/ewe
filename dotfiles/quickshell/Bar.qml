@@ -39,7 +39,7 @@ Scope {
     // instance, whose raise request Hyprland ignores on another workspace.
     function openUpdates() {
         if (!Globals.kombleInstalled) { Globals.openStore(); return }
-        Globals.focusAppWindow(["komble"])
+        if (!Globals.focusAppWindow(["komble"])) Globals.markLaunch("komble")
         Quickshell.execDetached(["komble", "--updates"])
     }
 
@@ -59,7 +59,8 @@ Scope {
     function appName() {
         var c = bar.appClass()
         if (!c) return ""
-        var e = DesktopEntries.heuristicLookup(c)
+        // the shell's one class → app answer (Komble AppImages, Steam games…)
+        var e = Globals.entryForClass(c)
         if (e && e.name) return e.name
         var s = c.split('.').pop().split('-')[0]
         return s.charAt(0).toUpperCase() + s.slice(1)
@@ -67,7 +68,7 @@ Scope {
     // Icon of the focused app's desktop entry — "" when there is none, so the
     // bar can fall back to the bold name text (icon-instead-of-name design).
     function appIcon() {
-        var e = DesktopEntries.heuristicLookup(bar.appClass())
+        var e = Globals.entryForClass(bar.appClass())
         return (e && e.icon) ? Quickshell.iconPath(e.icon, true) : ""
     }
     // ── calendar "something is near": a timed event starts within the hour
@@ -192,10 +193,25 @@ Scope {
             }
         }
     }
+    // Windows that want attention, by address — Hyprland's `urgent` event
+    // (a token-less activation request, an X11 app's attention hint; cleared
+    // when the window is focused or closes). Quickshell 0.3.2 declares
+    // HyprlandToplevel.urgent but never raises it (probed in the nest), so
+    // the raw event is the source. The dock keeps its own copy of this.
+    property var urgentAddrs: ({})
+    function setUrgent(addr, on) {
+        var a = String(addr || ""); if (a === "") return
+        if (!!bar.urgentAddrs[a] === on) return
+        var m = Object.assign({}, bar.urgentAddrs)
+        if (on) m[a] = true; else delete m[a]
+        bar.urgentAddrs = m
+    }
     // live update: Hyprland emits `activelayout>>keyboard,LayoutName` on every switch
     Connections {
         target: Hyprland
         function onRawEvent(event) {
+            if (event.name === "urgent") bar.setUrgent(event.data, true)
+            else if (event.name === "activewindowv2" || event.name === "closewindow") bar.setUrgent(event.data, false)
             if (event.name === "activelayout") {
                 // data = "keyboard,Layout name" — the name may hold commas
                 // ("English (US, intl.)"), the keyboard never does
@@ -310,16 +326,33 @@ Scope {
                         readonly property var hyMon: Hyprland.monitorFor(win.screen)
                         readonly property int wsNum: Globals.wsNumber(hyMon && hyMon.activeWorkspace ? hyMon.activeWorkspace.id
                                                                       : Hyprland.focusedWorkspace ? Hyprland.focusedWorkspace.id : 1)
-                        a11yName: "Workspace " + wsChip.wsNum + ", open Overview"
+                        // a window somewhere wants attention (Hyprland's urgent
+                        // state: a token-less activation request, an X11 app
+                        // such as Steam raising a toast) — the chip carries the
+                        // Badge card's dot until that window is focused
+                        readonly property bool anyUrgent: Object.keys(bar.urgentAddrs).length > 0
+                        a11yName: "Workspace " + wsChip.wsNum + (wsChip.anyUrgent ? ", a window wants attention" : "") + ", open Overview"
                         onActivated: Globals.overviewOpen = !Globals.overviewOpen
-                        Text {
+                        // one Row member: the number, with the dot over its corner
+                        Item {
                             anchors.verticalCenter: parent.verticalCenter
-                            text: wsChip.wsNum
-                            color: Theme.textPrimary
-                            font.family: Theme.type.bodyStrong.family
-                            font.pixelSize: Theme.barLarge ? Theme.fontSizeLg : Theme.fontSizeMd
-                            font.weight: Theme.fontWeightSemibold
-                            font.features: ({ "tnum": 1 })
+                            width: wsNumText.implicitWidth; height: wsNumText.implicitHeight
+                            Text {
+                                id: wsNumText
+                                text: wsChip.wsNum
+                                color: Theme.textPrimary
+                                font.family: Theme.type.bodyStrong.family
+                                font.pixelSize: Theme.barLarge ? Theme.fontSizeLg : Theme.fontSizeMd
+                                font.weight: Theme.fontWeightSemibold
+                                font.features: ({ "tnum": 1 })
+                            }
+                            Badge {
+                                visible: wsChip.anyUrgent
+                                dot: true; ring: true; ringColor: Theme.barGround
+                                // spaceXxs past the number's top-right corner (Badge card)
+                                x: wsNumText.width - width + Theme.spaceXxs
+                                y: -Theme.spaceXxs
+                            }
                         }
                     }
 
@@ -409,6 +442,8 @@ Scope {
                                     px: Theme.barIcon
                                     source: modelData.icon
                                 }
+                                // the app's own tooltip title, else its name (Tooltip card)
+                                Tooltip { text: trayDelegate.modelData.tooltipTitle || trayDelegate.modelData.title || "" }
                                 // Open the app's context menu (SNI DBusMenu) in our own
                                 // themed popup (TrayMenu.qml), anchored under the icon.
                                 function openMenu() {
@@ -427,7 +462,7 @@ Scope {
                                         if (m.button === Qt.RightButton) {
                                             if (it.hasMenu) trayDelegate.openMenu()
                                         } else if (m.button === Qt.MiddleButton) {
-                                            it.activate()   // the app's own Activate (window), for menu-on-left apps
+                                            it.secondaryActivate()   // SNI SecondaryActivate — the item's own middle-click (menu-on-left apps: their window)
                                         } else {
                                             // left-click: primary activate; menu-only items
                                             // (Steam, 1Password) have no activate → show menu.
@@ -464,19 +499,22 @@ Scope {
                         onActivated: Globals.setTiling(!Globals.tilingEnabled)
                     }
 
-                    // ── Komble — ALWAYS present, whether or not the app has ever
-                    // run: the glyph IS the state. Check = everything current,
-                    // accent download + count = updates pending, spinning
-                    // arrows-clockwise = an upgrade is running (db.lck held, or
-                    // Komble asserting `updates working` through its AUR
-                    // builds). Click opens Komble on its Updates page;
-                    // middle-click re-checks.
+                    // ── Komble — shown while there is something to say, whether
+                    // or not the app has ever run: accent arrow-up-circle + count
+                    // = updates pending, spinning arrows-clockwise = an upgrade
+                    // is running (db.lck held, or Komble asserting `updates
+                    // working` through its AUR builds). Up to date = nothing
+                    // (the old permanent ✓ read as a status nobody asked for,
+                    // and the download arrow was the dock's Downloads glyph).
+                    // Click opens Komble on its Updates page; middle-click
+                    // re-checks.
                     BarModule {
                         id: updItem
                         padH: 0            // an icon module (.ewe-barmod--icon)
                         a11yName: updItem.updating ? "Updates, updating"
                                 : Globals.updatesTotal > 0 ? "Updates, " + Globals.updatesTotal + " available" : "Updates, up to date"
                         readonly property bool updating: Globals.updatesBusy || Globals.updatesWorking
+                        visible: updItem.updating || Globals.updatesTotal > 0
                         anchors.verticalCenter: parent.verticalCenter
                         onActivated: bar.openUpdates()
                         onTertiary: Globals.checkUpdates()
@@ -497,10 +535,9 @@ Scope {
                         BarIcon {
                             visible: !updItem.updating
                             anchors.verticalCenter: parent.verticalCenter
-                            // `download` + a count while updates wait, `check`
-                            // in textMuted once everything is current
-                            glyph: Globals.updatesTotal > 0 ? Theme.icDownload : Theme.icCheck
-                            color: Globals.updatesTotal > 0 ? Theme.barAccentText : Theme.barTextMuted
+                            // `arrow-up-circle` + a count while updates wait
+                            glyph: Theme.icUpgrade
+                            color: Theme.barAccentText
                             count: Globals.updatesTotal
                             centered: true
                         }

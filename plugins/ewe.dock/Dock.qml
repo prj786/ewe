@@ -170,7 +170,14 @@ Scope {
 
     // ── windows ─────────────────────────────────────────────────────────────
     function clsOf(t) { return (t && t.lastIpcObject && t.lastIpcObject.class) ? t.lastIpcObject.class : (t && t.wayland ? (t.wayland.appId || "") : "") }
-    function iconFor(t) { var e = DesktopEntries.heuristicLookup(root.clsOf(t)); return Quickshell.iconPath(e && e.icon ? e.icon : root.clsOf(t), "application-x-executable") }
+    // the shell's one class → app answer (Komble AppImages, Steam games…);
+    // the local lookup only on a shell older than 0.43
+    function iconFor(t) {
+        var c = root.clsOf(t)
+        if ("iconForClass" in Shell) return Shell.iconForClass(c)
+        var e = DesktopEntries.heuristicLookup(c)
+        return Quickshell.iconPath(e && e.icon ? e.icon : c, "application-x-executable")
+    }
     function goWorkspace(id) { Hyprland.dispatch("hl.dsp.focus({workspace=" + id + "})") }
     // Focus one window by ADDRESS, so Hyprland switches to its workspace; the
     // foreign-toplevel activate is only the fallback for a toplevel whose
@@ -193,6 +200,50 @@ Scope {
         return a
     }
     function titleOf(t) { return (t && t.title) ? t.title : (root.clsOf(t) || "Window") }
+
+    // ── a window tile's right-click menu (ContextMenu, Dock 1.4): the app's
+    //    name, New window, Pin / Unpin, Move to workspace ▸ (this display's
+    //    workspaces, a check on the window's own, then a new one), Minimize,
+    //    and Close window last; a middle click on the tile closes the window ──
+    ContextMenu { id: tileMenu; name: "dock-menu" }
+    function entryOf(t) { var c = root.clsOf(t); return c ? DesktopEntries.heuristicLookup(c) : null }
+    function dispatchWin(t, verb) { var a = root.addrOf(t); if (a !== "") Hyprland.dispatch(verb.replace("%a", a)) }
+    function closeWin(t) { root.dispatchWin(t, 'hl.dsp.window.close({ window = "address:%a" })') }
+    function minimizeWin(t) { root.dispatchWin(t, 'hl.dsp.window.move({ workspace = "special:minimized", window = "address:%a", follow = false })') }
+    function moveWinTo(t, ws) { root.dispatchWin(t, 'hl.dsp.window.move({ workspace = ' + ws + ', window = "address:%a", follow = false })') }
+    // a NEW workspace of this display: the number after the last one in use
+    // in its block of ten, the lowest free once 10 is taken (the Overview's rule)
+    function moveWinToNew(t) {
+        var cur = Hyprland.focusedWorkspace ? Hyprland.focusedWorkspace.id : 1
+        var block = root.wsBlock(cur), used = {}, last = 0
+        for (var i = 0; i < root.wsList.length; i++) { var n = root.wsList[i].num; used[n] = true; last = Math.max(last, n) }
+        var target = 0
+        if (last < 10) target = last + 1
+        else for (var k = 1; k <= 10; k++) if (!used[k]) { target = k; break }
+        if (target === 0) { Shell.toast("Every workspace of this display is in use", "warning"); return }
+        root.moveWinTo(t, block * 10 + target)
+    }
+    function tileMenu(t) {
+        var e = root.entryOf(t), did = e ? String(e.id).replace(/\.desktop$/, "") + ".desktop" : ""
+        var pinned = did !== "" && root.isPinned(did)
+        var here = (t && t.workspace) ? t.workspace.id : -1, ws = []
+        for (var i = 0; i < root.wsList.length; i++) (function (w) {
+            ws.push({ label: "Workspace " + w.num, checked: w.id === here, action: function () { root.moveWinTo(t, w.id) } })
+        })(root.wsList[i])
+        ws.push({ separator: true })
+        ws.push({ label: "New workspace", icon: Theme.icPlus, action: function () { root.moveWinToNew(t) } })
+        return [
+            { header: (e && e.name) ? e.name : (root.clsOf(t) || "Window") },
+            { label: "New window", icon: Theme.icPlus, disabled: !e, action: function () { Globals.launchEntry(e, true) } },
+            { label: pinned ? "Unpin from dock" : "Pin to dock", icon: pinned ? Theme.icPinOff : Theme.icPin,
+              disabled: did === "", action: function () { root.setPinned(did, !pinned) } },
+            { separator: true },
+            { label: "Move to workspace", icon: Theme.icStack, submenu: ws },
+            { label: "Minimize", icon: Theme.icMinimized, shortcut: "Super+Z", action: function () { root.minimizeWin(t) } },
+            { separator: true },
+            { label: "Close window", icon: Theme.icClose, danger: true, action: function () { root.closeWin(t) } }
+        ]
+    }
 
     // ── minimized: windows on special:minimized (Super+Z, hyprland.lua) —
     //    and the retired Pen's special:pen, so nothing left there is lost.
@@ -289,10 +340,27 @@ Scope {
     // those live only in lastIpcObject, which Quickshell doesn't refetch on
     // its own for these events. Bump a revision so wsClaimed re-evaluates.
     property int claimRev: 0
+    // Windows that want attention, by address — Hyprland's `urgent` event
+    // (a token-less activation request, an X11 app's attention hint), gone
+    // when the window is focused or closes. Quickshell 0.3.2 declares
+    // HyprlandToplevel.urgent but never raises it (probed in the nest), so
+    // the raw event is the source.
+    property var urgentAddrs: ({})
+    function setUrgent(addr, on) {
+        var a = String(addr || ""); if (a === "") return
+        if (a.indexOf("0x") !== 0) a = "0x" + a
+        if (!!root.urgentAddrs[a] === on) return
+        var m = Object.assign({}, root.urgentAddrs)
+        if (on) m[a] = true; else delete m[a]
+        root.urgentAddrs = m
+    }
+    function isUrgent(t) { return !!root.urgentAddrs[root.addrOf(t)] }
     Connections {
         target: Hyprland
         function onRawEvent(ev) {
             var n = ev.name
+            if (n === "urgent") root.setUrgent(ev.data, true)
+            else if (n === "activewindowv2" || n === "closewindow") root.setUrgent(ev.data, false)
             if (n === "openwindow" || n === "closewindow" || n === "movewindow"
              || n === "changefloatingmode" || n === "fullscreen") {
                 Hyprland.refreshToplevels()
@@ -398,7 +466,8 @@ Scope {
         // the grace period after the pointer leaves (the built-in had a raw
         // 280 ms; a token now — Rule 8)
         Timer { id: closeHold; interval: Math.max(1, Theme.durSlow) }
-        function maybeHide() { if (!edgeHov.hovered && !dockHov.hovered && !root.launcherOpen && !root.storeOpenState && Shell.activeCount === 0) closeHold.restart() }
+        function maybeHide() { if (!edgeHov.hovered && !dockHov.hovered && !root.launcherOpen && !root.storeOpenState && Shell.activeCount === 0 && !tileMenu.open) closeHold.restart() }
+        Connections { target: tileMenu; function onClosed() { win.maybeHide() } }
         Connections { target: edgeHov; function onHoveredChanged() { win.maybeHide() } }
         Connections { target: dockHov; function onHoveredChanged() { win.maybeHide() } }
 
@@ -512,6 +581,8 @@ Scope {
                     Behavior on colorizationColor { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
                 }
                 MouseArea { id: dbMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: db.go() }
+                // every dock button names what it opens (Tooltip card)
+                Tooltip { text: db.a11yName }
             }
 
             Row {
@@ -538,7 +609,7 @@ Scope {
                         required property var modelData
                         visible: Shell.dockItemShown(modelData.id)
                         a11yName: modelData.label
-                        glyph: Theme[modelData.icon] || Theme.icApps
+                        glyph: Theme[modelData.icon] || Theme.icPuzzle
                         activeState: modelData.action !== "" && Shell.isActive(modelData.action)
                         anchors.verticalCenter: parent.verticalCenter
                         onGo: {
@@ -560,6 +631,13 @@ Scope {
                         id: wsBox
                         required property var modelData
                         readonly property bool focused: Hyprland.focusedWorkspace && Hyprland.focusedWorkspace.id === modelData.id
+                        // a window here wants attention (Hyprland's urgent
+                        // state — Quickshell clears it when the window is focused)
+                        readonly property bool urgent: {
+                            var ws = wsBox.modelData.wins
+                            for (var i = 0; i < ws.length; i++) if (root.isUrgent(ws[i])) return true
+                            return false
+                        }
                         anchors.verticalCenter: parent.verticalCenter
                         height: win.cell; radius: Theme.radiusPrimary
                         width: Math.max(win.cell, wsRow.implicitWidth + 2 * Theme.spaceS)
@@ -568,9 +646,22 @@ Scope {
                         border.color: focused ? Theme.accent : Theme.dockOutline
                         border.width: Theme.borderWidth1
                         Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
+                        Accessible.role: Accessible.Button
+                        Accessible.name: "Workspace " + wsBox.modelData.num + ", " + wsBox.modelData.wins.length + " windows"
+                                         + (wsBox.urgent ? ", a window wants attention" : "")
 
                         // background click → switch workspace (window tiles sit on top)
                         MouseArea { id: wsMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.goWorkspace(wsBox.modelData.id) }
+
+                        // the Badge card's dot on the box's top-right corner
+                        // (spaceXxs in from the edge, ringed in the dock's ground)
+                        Badge {
+                            visible: wsBox.urgent
+                            dot: true; ring: true; ringColor: Theme.dockGround
+                            z: 1
+                            x: parent.width - width - Theme.spaceXxs
+                            y: Theme.spaceXxs
+                        }
 
                         Row {
                             id: wsRow
@@ -604,16 +695,32 @@ Scope {
                                          : tileMa.containsMouse ? Theme.barHoverFill : "transparent"
                                     Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
                                     Image {
+                                        id: tileIcon
                                         anchors.centerIn: parent
                                         width: win.appPx; height: win.appPx
                                         sourceSize.width: 2 * win.appPx; sourceSize.height: 2 * win.appPx; mipmap: true
                                         source: root.iconFor(modelData)
                                     }
+                                    // this window wants attention: the dot over
+                                    // the icon's corner, gone once it is focused
+                                    Badge {
+                                        visible: root.isUrgent(modelData)
+                                        dot: true; ring: true; ringColor: Theme.dockGround
+                                        x: tileIcon.x + tileIcon.width - width + Theme.spaceXxs
+                                        y: tileIcon.y - Theme.spaceXxs
+                                    }
                                     MouseArea {
                                         id: tileMa
                                         anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                                        onClicked: root.focusToplevel(modelData)
+                                        acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
+                                        onClicked: function (m) {
+                                            if (m.button === Qt.RightButton) { tileMenu.items = root.tileMenu(modelData); tileMenu.openAt(tileMa, m.x, m.y) }
+                                            else if (m.button === Qt.MiddleButton) root.closeWin(modelData)
+                                            else root.focusToplevel(modelData)
+                                        }
                                     }
+                                    // the window's title (Tooltip card)
+                                    Tooltip { text: root.titleOf(modelData) }
                                 }
                             }
                         }
@@ -657,6 +764,7 @@ Scope {
 
                         anchors.verticalCenter: parent.verticalCenter
                         width: win.cell; height: win.cell
+                        Tooltip { text: root.titleOf(mini.modelData) }
 
                         // the picture's shape, fitted inside the cell
                         readonly property real aspect: {

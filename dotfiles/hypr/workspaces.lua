@@ -210,24 +210,114 @@ function M.new_workspace()
     hl.dispatch(hl.dsp.focus({ workspace = id_for(k, target) }))
 end
 
+-- Launches you asked for (0.43). A window a rule sends to workspace N takes
+-- you along only when you just launched something: a key bound to an app
+-- (hyprland.lua's launch binds, your own keybinds) or a click in the shell
+-- (launcher, dock, the app openers — they dispatch `_G.ewe_launched()`, a
+-- Lua function, no process). Anything an app opens by itself goes to its
+-- workspace quietly: before this every Steam toast — its own `steam`
+-- window — dragged you to Steam's workspace. A launch names the app it
+-- expects (the desktop entry's StartupWMClass or id; a bind's command) and
+-- is spent on the first window of THAT app: a launch that opens nothing new
+-- (Super+B with the browser already open) never hands its "you asked" to
+-- the next toast. 30 s covers a slow start (Steam, JetBrains).
+local LAUNCH_SECS = 30
+local launch = nil   -- { at = os.time(), hint = "steam" } — the pending launch
+local function norm(s)
+    s = tostring(s or ""):lower():gsub("%.desktop$", ""):gsub("%.sh$", "")
+    return s
+end
+local function last(s) return s:match("([^.]+)$") or s end
+-- does a window's class belong to the app a launch named? ("" = any window)
+function M.launch_matches(class, hint)
+    local h = norm(hint)
+    if h == "" then return true end
+    local c = norm(class)
+    if c == "" then return false end
+    if c == h or last(c) == last(h) then return true end
+    -- komble-google-chrome (a Komble AppImage) opens google-chrome;
+    -- jetbrains-rustrover-<id> opens jetbrains-rustrover
+    if #c >= 4 and h:find(c, 1, true) then return true end
+    if #h >= 4 and c:find(h, 1, true) then return true end
+    return false
+end
+function M.launched(hint) launch = { at = os.time(), hint = tostring(hint or "") } end
+_G.ewe_launched = M.launched
+-- launch(cmd[, hint]): the dispatcher for a bind that starts an app; the hint
+-- is the command's program unless given ("" = the next window of any app)
+function M.launch(cmd, hint)
+    if hint == nil then
+        local bin = tostring(cmd):match("^%s*(%S+)") or ""
+        hint = bin:match("([^/]+)$") or bin
+    end
+    return function()
+        M.launched(hint)
+        hl.dispatch(hl.dsp.exec_cmd(cmd))
+    end
+end
+_G.ewe_launch = M.launch
+local function take_launch(win)
+    if not launch then return false end
+    if os.time() - launch.at > LAUNCH_SECS then launch = nil; return false end
+    if not M.launch_matches(win.class or win.initial_class, launch.hint) then return false end
+    launch = nil
+    return true
+end
+
 -- a window opening: Settings → Window Rules tag it `ewe-ws-N` (ewe-conf) —
 -- it goes to workspace N of the display it opens on, like Super+N. A window
 -- that lands in another display's block anyway (a rule from before 0.35.1
 -- that says `workspace = "3"`, a raw id) goes to the same number of the
 -- display it is on: two "Workspace 3" on one display was the 0.35.0 bug.
+--
+-- A tagged window opens WITHOUT focus (hyprland.lua's `ewe-ws-quiet-N`
+-- rules — `follow = false` alone is not enough: Hyprland focuses a new
+-- window when it maps and switches to its workspace to do it; a tag added
+-- here, at open_early, comes too late for a static rule, so the quiet rules
+-- match the rule's own tag). It gets focus back on `window.open` when you
+-- launched it — the view goes with it — or when it opens on the workspace
+-- you are on (a dialog of the app you are using).
+local focus_on_open = {}   -- address -> true: focus it once it has mapped
+-- a window shown on every workspace stays where it opened: a pinned one
+-- (picture-in-picture) and Steam's toasts (hyprland.lua "steam-toasts" pins
+-- them; the title is matched too in case the pin is not applied yet)
+local function shown_everywhere(win)
+    if win.pinned then return true end
+    for _, t in ipairs({ win.title, win.initial_title }) do
+        if tostring(t or ""):match("^notificationtoasts_%d+_desktop$") then return true end
+    end
+    return false
+end
 function M.place(win)
     if not win or not win.monitor or not win.workspace or win.workspace.special then return end
+    if shown_everywhere(win) then return end
+    local asked = take_launch(win)
     if slots[win.monitor.name] == nil then return end   -- a display still settling
     local k = slots[win.monitor.name]
     local n
     for _, t in ipairs(win.tags or {}) do
         n = n or tonumber(tostring(t):match("^ewe%-ws%-(%d+)"))
     end
+    local tagged = n ~= nil
     if not n and win.workspace.id >= 1 and M.block_of(win.workspace.id) ~= k then
         n = M.number(win.workspace.id)
     end
-    if not n or n < 1 or n > SPAN or win.workspace.id == id_for(k, n) then return end
-    hl.dispatch(hl.dsp.window.move({ workspace = id_for(k, n), window = "address:" .. win.address }))
+    if not n or n < 1 or n > SPAN then return end
+    local target = id_for(k, n)
+    if tagged then
+        local here = hl.get_active_workspace()
+        if asked or (here and here.id == target) then focus_on_open[win.address] = true end
+    end
+    if win.workspace.id == target then return end
+    hl.dispatch(hl.dsp.window.move({ workspace = target, window = "address:" .. win.address, follow = not tagged }))
+end
+local function focus_placed(win)
+    if not win or not focus_on_open[win.address] then return end
+    focus_on_open[win.address] = nil
+    hl.dispatch(hl.dsp.focus({ window = "address:" .. win.address }))
+end
+local function forget_placed(win)
+    if win then focus_on_open[win.address] = nil end
 end
 
 -- ── wiring ─────────────────────────────────────────────────────────────────
@@ -249,6 +339,8 @@ function M.setup()
     hl.on("config.reloaded", settle)
     hl.on("workspace.active", function(ws) M.sync(ws) end)
     hl.on("window.open_early", function(win) M.place(win) end)
+    hl.on("window.open", focus_placed)
+    hl.on("window.destroy", forget_placed)
     -- a workspace made by its raw id on the wrong display: re-home it once
     -- Hyprland has finished making it (displays not yet in `slots` are left
     -- to settle())
