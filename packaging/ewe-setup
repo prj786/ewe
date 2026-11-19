@@ -153,7 +153,7 @@ fi
 # Wallpaper + its script): the files phase 60 copies. Until 0.43 only
 # install.sh did, so a pacman/ISO install had no Compress at all; a refresh
 # also carries a changed action (the Compress icon) to every account.
-if [ -d "$DEST/system/nemo-actions" ]; then
+if [ -d "$DEST/system/nemo-actions" ] && command -v nemo >/dev/null 2>&1; then
     mkdir -p "$HOME/.local/share/nemo/actions"
     cp -f "$DEST/system/nemo-actions/"*.nemo_action "$DEST/system/nemo-actions/"*.sh \
         "$HOME/.local/share/nemo/actions/" 2>/dev/null || true
@@ -173,20 +173,56 @@ _mime() {
         xdg-mime default "$d" "$m" >/dev/null 2>&1 || true
     done
 }
+# 0.44: ewe's own apps took over from Nemo, Engrampa, imv, Zathura and mpv. A
+# mime still pointing at one of those RETIRED ewe defaults moves to the new app
+# once (marker below) — any other choice the user made is left alone, and so is
+# picking Nemo again afterwards.
+_mime_take() {
+    local old="$1" new="$2"; shift 2
+    [ -r "/usr/share/applications/$new" ] || [ -r "$HOME/.local/share/applications/$new" ] || return 0
+    local m; for m in "$@"; do
+        [ "$(_user_default "$m")" = "$old" ] && xdg-mime default "$new" "$m" >/dev/null 2>&1 || true
+    done
+}
 if command -v xdg-mime >/dev/null 2>&1; then
     _mime ewe-browser.desktop       x-scheme-handler/http x-scheme-handler/https text/html
     _mime helium.desktop            x-scheme-handler/http x-scheme-handler/https text/html
-    _mime nemo.desktop              inode/directory
+    _mime ewe-files-app.desktop     inode/directory
     _mime dev.zed.Zed.desktop text/plain text/markdown text/css text/javascript \
           application/json application/javascript application/xml text/xml application/x-yaml \
           text/x-python text/x-csrc text/x-chdr text/x-c++src application/x-shellscript \
           text/x-rust text/x-go
-    _mime imv.desktop               image/png image/jpeg image/gif image/webp image/bmp image/tiff
-    _mime org.pwmt.zathura.desktop  application/pdf application/epub+zip
-    _mime mpv.desktop               video/mp4 video/x-matroska video/webm video/quicktime audio/mpeg audio/flac
-    _mime engrampa.desktop          application/zip application/x-tar application/gzip application/x-xz \
-          application/x-bzip2 application/x-7z-compressed application/x-rar application/zstd application/x-compressed-tar
+    _mime ewe-viewer.desktop        application/pdf application/epub+zip application/vnd.comicbook+zip application/vnd.comicbook-rar \
+          application/vnd.openxmlformats-officedocument.wordprocessingml.document \
+          application/vnd.openxmlformats-officedocument.spreadsheetml.sheet application/vnd.oasis.opendocument.spreadsheet \
+          text/csv image/png image/jpeg image/gif image/webp image/bmp image/tiff image/avif image/svg+xml
+    _mime ewe-player.desktop        video/mp4 video/x-matroska video/webm video/quicktime video/x-msvideo video/mpeg video/ogg video/x-flv \
+          video/3gpp video/x-ms-wmv audio/mpeg audio/flac audio/ogg audio/x-vorbis+ogg audio/opus audio/x-opus+ogg \
+          audio/wav audio/x-wav audio/mp4 audio/x-m4a audio/aac audio/x-ms-wma audio/x-ape audio/webm
+    _mime ewe-files-app.desktop     application/zip application/x-tar application/gzip application/x-xz \
+          application/x-bzip2 application/x-7z-compressed application/x-rar application/vnd.rar application/zstd \
+          application/x-compressed-tar application/x-xz-compressed-tar application/x-zstd-compressed-tar
     _mime komble.desktop            application/vnd.appimage application/x-iso9660-appimage application/x-appimage
+    _apps_stamp="${XDG_STATE_HOME:-$HOME/.local/state}/ewe/default-apps-0.44.done"
+    if [ ! -e "$_apps_stamp" ] && [ -r /usr/share/applications/ewe-files-app.desktop ]; then
+        _mime_take nemo.desktop ewe-files-app.desktop inode/directory
+        _mime_take engrampa.desktop ewe-files-app.desktop application/zip application/x-tar application/gzip application/x-xz \
+          application/x-bzip2 application/x-7z-compressed application/x-rar application/vnd.rar application/zstd \
+          application/x-compressed-tar application/x-xz-compressed-tar application/x-zstd-compressed-tar
+        _mime_take imv.desktop ewe-viewer.desktop application/pdf application/epub+zip application/vnd.comicbook+zip application/vnd.comicbook-rar \
+          application/vnd.openxmlformats-officedocument.wordprocessingml.document \
+          application/vnd.openxmlformats-officedocument.spreadsheetml.sheet application/vnd.oasis.opendocument.spreadsheet \
+          text/csv image/png image/jpeg image/gif image/webp image/bmp image/tiff image/avif image/svg+xml
+        _mime_take org.pwmt.zathura.desktop ewe-viewer.desktop application/pdf application/epub+zip application/vnd.comicbook+zip application/vnd.comicbook-rar \
+          application/vnd.openxmlformats-officedocument.wordprocessingml.document \
+          application/vnd.openxmlformats-officedocument.spreadsheetml.sheet application/vnd.oasis.opendocument.spreadsheet \
+          text/csv image/png image/jpeg image/gif image/webp image/bmp image/tiff image/avif image/svg+xml
+        _mime_take mpv.desktop ewe-player.desktop video/mp4 video/x-matroska video/webm video/quicktime video/x-msvideo video/mpeg video/ogg video/x-flv \
+          video/3gpp video/x-ms-wmv audio/mpeg audio/flac audio/ogg audio/x-vorbis+ogg audio/opus audio/x-opus+ogg \
+          audio/wav audio/x-wav audio/mp4 audio/x-m4a audio/aac audio/x-ms-wma audio/x-ape audio/webm
+        mkdir -p "${_apps_stamp%/*}" && touch "$_apps_stamp"
+    fi
+    unset _apps_stamp
 fi
 command -v update-desktop-database >/dev/null 2>&1 \
     && update-desktop-database "$HOME/.local/share/applications" >/dev/null 2>&1 || true

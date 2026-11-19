@@ -670,1530 +670,1555 @@ Scope {
         property bool held: false
         Timer { id: closeTimer; interval: Math.max(1, Theme.durBase); onTriggered: win.held = false }
         Connections { target: Globals; function onQuickSettingsOpenChanged() {
-            if (Globals.quickSettingsOpen) { closeTimer.stop(); win.held = true }
-            else closeTimer.restart()
+            if (Globals.quickSettingsOpen) { closeTimer.stop(); win.held = true; panelLinger.stop() }
+            else { closeTimer.restart(); panelLinger.restart() }
         } }
         MouseArea { anchors.fill: parent; onClicked: Globals.quickSettingsOpen = false }
 
-        Rectangle {
-            id: panel
-            readonly property int pad: Theme.spaceS + Theme.spaceXs
-            readonly property bool onHome: root.tab === "home"
-            // grows with Text size, so two tiles still fit side by side
-            width: Theme.grow(Theme.panelSm)
-            // the layer already sits below the bar's exclusive zone: spaceXs
-            // below it, windowGap in from the right edge
-            y: Theme.spaceXs
-            x: parent.width - width - Theme.windowGap
-            // the page's own height, up to 80% of the screen (a longer page
-            // scrolls inside); never shorter than a confirmation on top of it
-            readonly property real maxH: Math.min((win.screen ? win.screen.height : parent.height) * 0.8,
-                                                  parent.height - Theme.spaceXs - Theme.windowGap)
-            height: Math.min(maxH, Math.max(body.implicitHeight + 2 * pad,
-                                            root.confirmAction !== "" ? cfCard.height + 2 * Theme.spaceMd : 0))
-            // a page change resizes at durFast — not while the panel fades in,
-            // so it opens at its size
-            Behavior on height {
-                enabled: !Theme.reduceMotion && panel.opacity === 1
-                NumberAnimation { duration: Theme.durFast; easing.type: Theme.ease }
-            }
-            radius: Theme.radiusRounded
-            color: Theme.surfaceRaised
-            border.color: Theme.borderSubtle
-            border.width: Theme.borderWidth1
-            clip: true
-            layer.enabled: true
-            layer.effect: Elevation {}
-            // fade plus a slide in from the right edge, where the panel lives
-            // — in at durBase, out at durFast, no overshoot; Reduce motion
-            // keeps the fade only
-            opacity: Globals.quickSettingsOpen ? 1 : 0
-            Behavior on opacity {
-                NumberAnimation { duration: Globals.quickSettingsOpen ? Theme.durBase : Theme.durFast; easing.type: Theme.ease }
-            }
-            transform: Translate {
-                x: (Globals.quickSettingsOpen || Theme.reduceMotion) ? 0 : panel.width + Theme.windowGap
-                Behavior on x { NumberAnimation { duration: Globals.quickSettingsOpen ? Theme.durBase : Theme.durFast; easing.type: Theme.ease } }
-            }
-            MouseArea { anchors.fill: parent }
-
-            // catches Esc: the confirmation first, then back one page, then
-            // the panel (Quick settings is otherwise mouse-driven)
-            Item {
-                id: keyCatcher
-                anchors.fill: parent
-                focus: true
-                Keys.onEscapePressed: {
-                    if (root.confirmAction !== "") root.confirmAction = ""
-                    else if (root.tab !== "home") root.setTab("home")
-                    else Globals.quickSettingsOpen = false
-                }
-            }
-            Connections {
-                target: root
-                function onPageShown() { flick.contentY = 0; panel.hint(null, false, ""); keyCatcher.forceActiveFocus() }
-                // the password row going away hands the keyboard back
-                function onPwTargetChanged() { if (root.pwTarget === "") keyCatcher.forceActiveFocus() }
-            }
-
-            // ══ shared pieces: TextBody/TextStrong/TextCaption/TextMono, Glyph,
-            //    QsNote, QsButton, QsIconButton, QsField(+Input), QsSegmented,
-            //    QsSwitchRow, QsPageHead, QsEmpty, QsMsgRow — promoted to their own
-            //    files in API 3 (public to plugins, docs/PLUGINS.md) ══
-
-            // ── Tooltip: names an icon-only control (the head's buttons, the
-            //    shortcut tiles, the power modes) — the shell's one
-            //    TooltipHost (Tooltip.qml), shared with the bar and the dock,
-            //    carries the delay, the warm period and the placement ──
-            function hint(item, on, text) {
-                if (on && item) TooltipHost.show(item, text)
-                else if (item) TooltipHost.hide(item)
-                else TooltipHost.hide()
-            }
-
-            // ── a page's foot: a borderWidth1 rule, spaceXs, then its actions
-            //    (`start` on the left, the rest on the right) ──
-            component PageFoot: Item {
-                id: pf
-                default property alias end: pfEnd.data
-                property alias start: pfStart.data
-                width: parent ? parent.width : Theme.panelSm
-                height: Theme.borderWidth1 + Theme.spaceXs + Theme.controlSm
-                Rectangle { width: parent.width; height: Theme.borderWidth1; color: Theme.borderSubtle }
-                Row { id: pfStart; anchors.left: parent.left; anchors.bottom: parent.bottom; spacing: Theme.spaceS }
-                Row { id: pfEnd; anchors.right: parent.right; anchors.bottom: parent.bottom; spacing: Theme.spaceS }
-            }
-
-            // ── an app's action buttons under a notification: everything but
-            //    "default" (that is the card's own click), the first two, as
-            //    sm buttons sharing the width — secondary, then ghost. invoke()
-            //    runs the action and closes the notification unless the app
-            //    asked for it to stay (resident). ──
-            component NoteActions: Row {
-                id: na
-                property var note: null
-                readonly property var acts: root.noteActions(na.note)
-                visible: na.acts.length > 0
-                width: parent ? parent.width : Theme.panelSm
-                spacing: Theme.spaceS
-                Repeater {
-                    model: na.acts
-                    delegate: QsButton {
-                        required property var modelData
-                        required property int index
-                        width: (na.width - (na.acts.length - 1) * na.spacing) / na.acts.length
-                        variant: index === 0 ? "secondary" : "ghost"
-                        label: modelData.text || modelData.identifier || ""
-                        onGo: { try { modelData.invoke() } catch (e) {} }
+        // RSS diet (ewe#18): the panel — the home grid, seven more pages,
+        // every plugin's tile and page — is the biggest resident QML tree in
+        // the shell after the fallback apps (~15 MB at idle, measured 2026-11).
+        // It is built when the panel opens (55–75 ms, measured) and released
+        // two minutes after it closes: `held` keeps the window mapped through
+        // the close animation, the linger keeps the tree through it and
+        // through the reopens of a working session. The state lives on root
+        // (tab, Wi-Fi list, notes…) and survives.
+        Loader {
+            id: panelLoader
+            // unsized on purpose: a Loader with a size of its own resizes
+            // what it loads, and the panel sets its own width and height
+            // (it places itself against `win`, not against this Loader)
+            active: win.visible || panelLinger.running
+            sourceComponent: panelComp
+        }
+        Timer { id: panelLinger; interval: 120000 }
+        Component {
+            id: panelComp
+            Rectangle {
+                id: panel
+                // the open animation runs from here, not from Globals: the
+                // tree is built when the panel opens (the Loader above), and
+                // a Behavior never animates a property's initial value — so
+                // `shown` starts false and takes the live binding a beat later
+                property bool shown: false
+                Component.onCompleted: Qt.callLater(function () { panel.shown = Qt.binding(function () { return Globals.quickSettingsOpen }) })
+                // which plugin tiles open their own page (read off the home grid while it
+                // shows — a slot's `visible` is the effective one, so a hidden home says
+                // nothing about the tiles on it)
+                function readTiles() {
+                    if (!homePage.visible) return
+                    var m = {}
+                    for (var i = 0; i < tileRep.count; i++) {
+                        var s = tileRep.itemAt(i)
+                        if (!s) continue
+                        m[s.modelData.id] = s.visible && !!s.item && s.item.hasMenu === true
                     }
+                    if (JSON.stringify(m) !== JSON.stringify(root.tileOpens)) root.tileOpens = m
                 }
-            }
-
-            // ── one app's notifications (Notification, grouped): a flat card
-            //    (surfaceOverlay, no shadow) with the newest on top and two
-            //    spaceXs layers peeking out below it for the rest, "N more from
-            //    App" under them. On the full list a stack opens in place; on
-            //    home it opens the full list with that app open. ──
-            component NoteGroup: Item {
-                id: nGroup
-                property var group: ({ app: "", items: [], latest: null })
-                property bool inline: false
-                readonly property int count: nGroup.group.items.length
-                readonly property bool open: !nGroup.inline && nGroup.count > 1 && root.nExpanded === nGroup.group.app
-                readonly property bool stacked: nGroup.count > 1 && !nGroup.open
-                readonly property var latest: nGroup.group.latest
-                readonly property bool critical: !!nGroup.latest && nGroup.latest.urgency === NotificationUrgency.Critical
-                // the open card lists the newest first
-                readonly property var newestFirst: nGroup.group.items.slice().reverse()
-                width: parent ? parent.width : Theme.panelSm
-                height: nCard.height + (nGroup.stacked ? 2 * Theme.spaceXs + Theme.spaceS + nMore.height : 0)
-
-                // the stack: two spaceXs layers peeking out below the newest card
-                Rectangle {
-                    visible: nGroup.stacked
-                    anchors.top: nCard.bottom; anchors.topMargin: -(Theme.spaceMd - Theme.spaceXs)
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    width: parent.width - 2 * Theme.spaceS; height: Theme.spaceMd
-                    radius: Theme.radiusRounded
-                    color: Theme.surfaceOverlay
-                    border.color: Theme.borderSubtle; border.width: Theme.borderWidth1
-                    z: -1
+                readonly property int pad: Theme.spaceS + Theme.spaceXs
+                readonly property bool onHome: root.tab === "home"
+                // grows with Text size, so two tiles still fit side by side
+                width: Theme.grow(Theme.panelSm)
+                // the layer already sits below the bar's exclusive zone: spaceXs
+                // below it, windowGap in from the right edge
+                y: Theme.spaceXs
+                x: win.width - width - Theme.windowGap
+                // the page's own height, up to 80% of the screen (a longer page
+                // scrolls inside); never shorter than a confirmation on top of it
+                readonly property real maxH: Math.min((win.screen ? win.screen.height : win.height) * 0.8,
+                                                      win.height - Theme.spaceXs - Theme.windowGap)
+                height: Math.min(maxH, Math.max(body.implicitHeight + 2 * pad,
+                                                root.confirmAction !== "" ? cfCard.height + 2 * Theme.spaceMd : 0))
+                // a page change resizes at durFast — not while the panel fades in,
+                // so it opens at its size
+                Behavior on height {
+                    enabled: !Theme.reduceMotion && panel.opacity === 1
+                    NumberAnimation { duration: Theme.durFast; easing.type: Theme.ease }
                 }
-                Rectangle {
-                    visible: nGroup.stacked && nGroup.count > 2
-                    anchors.top: nCard.bottom; anchors.topMargin: -(Theme.spaceMd - 2 * Theme.spaceXs)
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    width: parent.width - 2 * Theme.spaceMd; height: Theme.spaceMd
-                    radius: Theme.radiusRounded
-                    color: Theme.surfaceOverlay
-                    border.color: Theme.borderSubtle; border.width: Theme.borderWidth1
-                    z: -2
+                radius: Theme.radiusRounded
+                color: Theme.surfaceRaised
+                border.color: Theme.borderSubtle
+                border.width: Theme.borderWidth1
+                clip: true
+                layer.enabled: true
+                layer.effect: Elevation {}
+                // fade plus a slide in from the right edge, where the panel lives
+                // — in at durBase, out at durFast, no overshoot; Reduce motion
+                // keeps the fade only
+                opacity: panel.shown ? 1 : 0
+                Behavior on opacity {
+                    NumberAnimation { duration: Globals.quickSettingsOpen ? Theme.durBase : Theme.durFast; easing.type: Theme.ease }
                 }
-
-                Rectangle {
-                    id: nCard
-                    width: parent.width
-                    height: gCol.implicitHeight + Theme.spaceS + Theme.spaceS + Theme.spaceXs
-                    radius: Theme.radiusRounded
-                    color: nCardMa.containsMouse ? Theme.surfaceHover : Theme.surfaceOverlay
-                    Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
-                    border.color: nGroup.critical ? Theme.danger : Theme.borderSubtle
-                    border.width: Theme.borderWidth1
-                    // card click — declared FIRST so the inner rows' and the
-                    // close buttons' MouseAreas (later children) win over it
-                    MouseArea {
-                        id: nCardMa
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            if (nGroup.count > 1 && nGroup.inline) { root.nExpanded = nGroup.group.app; root.setTab("notifs") }
-                            else if (nGroup.count > 1) root.nExpanded = nGroup.open ? "" : nGroup.group.app
-                            else root.noteFocus(nGroup.latest)
-                        }
-                    }
-                    Column {
-                        id: gCol
-                        anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top
-                        anchors.leftMargin: Theme.spaceS + Theme.spaceXs; anchors.rightMargin: Theme.spaceS + Theme.spaceXs
-                        anchors.topMargin: Theme.spaceS
-                        spacing: Theme.spaceXs
-
-                        // head: the app's icon and name · how long ago, a chevron
-                        // on a stack of the full list, close on hover
-                        Item {
-                            width: parent.width; height: Theme.controlSm
-                            Row {
-                                anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter
-                                anchors.right: nClose.left; anchors.rightMargin: Theme.spaceXs
-                                spacing: Theme.spaceXs
-                                Rectangle {
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    width: Theme.iconMd; height: Theme.iconMd
-                                    radius: Theme.radiusSlight
-                                    color: Theme.surfaceHover
-                                    clip: true
-                                    Image {
-                                        anchors.fill: parent
-                                        sourceSize.width: 2 * Theme.iconMd; sourceSize.height: 2 * Theme.iconMd
-                                        mipmap: true
-                                        source: (nGroup.latest && nGroup.latest.appIcon && nGroup.latest.appIcon != "")
-                                                ? Quickshell.iconPath(nGroup.latest.appIcon, "dialog-information")
-                                                : Quickshell.iconPath("dialog-information")
-                                    }
-                                }
-                                TextCaption {
-                                    id: nApp
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    width: Math.min(implicitWidth, parent.width - Theme.iconMd - nWhen.width - 2 * parent.spacing - (nChev.visible ? nChev.width + parent.spacing : 0))
-                                    text: nGroup.group.app
-                                    color: Theme.textSecondary
-                                    font.weight: Theme.fontWeightMedium
-                                }
-                                TextCaption {
-                                    id: nWhen
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    text: nGroup.latest ? "· " + root.noteTime(nGroup.latest) : ""
-                                }
-                                Glyph {
-                                    id: nChev
-                                    visible: nGroup.count > 1 && !nGroup.inline
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    text: Theme.icChevronDown; rotation: nGroup.open ? 180 : 0
-                                    font.pixelSize: Theme.iconSm; color: Theme.textMuted
-                                    Behavior on rotation { NumberAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
-                                }
-                            }
-                            // close dismisses the whole group
-                            QsIconButton {
-                                id: nClose
-                                anchors.right: parent.right; anchors.rightMargin: -Theme.spaceXs
-                                anchors.verticalCenter: parent.verticalCenter
-                                visible: nCardMa.containsMouse || nClose.hovered || nGroup.open
-                                ic: Theme.icClose
-                                onGo: root.dismissAllOf(nGroup.group.items)
-                            }
-                        }
-
-                        // collapsed: the newest one
-                        Row {
-                            visible: !nGroup.open && !!nGroup.latest
-                            width: parent.width
-                            spacing: Theme.spaceS + Theme.spaceXs
-                            Column {
-                                width: parent.width - (nMedia.visible ? nMedia.width + parent.spacing : 0)
-                                spacing: Theme.spaceXxs
-                                Row {
-                                    width: parent.width; spacing: Theme.spaceXs
-                                    Glyph { visible: nGroup.critical; anchors.verticalCenter: parent.verticalCenter; text: Theme.icWarning; color: Theme.danger }
-                                    TextStrong {
-                                        anchors.verticalCenter: parent.verticalCenter
-                                        width: parent.width - (nGroup.critical ? Theme.iconMd + parent.spacing : 0)
-                                        text: nGroup.latest ? (nGroup.latest.summary || "") : ""
-                                        color: nGroup.critical ? Theme.danger : Theme.textPrimary
-                                    }
-                                }
-                                Text {
-                                    visible: text.length > 0
-                                    width: parent.width
-                                    text: nGroup.latest ? (nGroup.latest.body || "") : ""
-                                    color: Theme.textSecondary
-                                    font.family: Theme.type.body.family
-                                    font.pixelSize: Theme.type.body.size
-                                    wrapMode: Text.Wrap; maximumLineCount: nGroup.inline ? 2 : 3; elide: Text.ElideRight
-                                    textFormat: Text.PlainText
-                                }
-                            }
-                            Rectangle {
-                                id: nMedia
-                                visible: !!nGroup.latest && !!nGroup.latest.image && nGroup.latest.image != ""
-                                width: Theme.icon3xl; height: Theme.icon3xl
-                                radius: Theme.radiusPrimary
-                                color: Theme.surfaceHover
-                                clip: true
-                                Image {
-                                    anchors.fill: parent; fillMode: Image.PreserveAspectCrop
-                                    sourceSize.width: 2 * Theme.icon3xl; sourceSize.height: 2 * Theme.icon3xl
-                                    mipmap: true
-                                    source: nMedia.visible ? nGroup.latest.image : ""
-                                }
-                            }
-                        }
-                        // the newest one's actions, under it
-                        NoteActions { visible: !nGroup.open && acts.length > 0; note: nGroup.latest }
-
-                        // open: every notification of the app, newest first, divided
-                        Repeater {
-                            model: nGroup.open ? nGroup.newestFirst : []
-                            delegate: Item {
-                                id: nItem
-                                required property var modelData
-                                required property int index
-                                width: gCol.width
-                                height: iCol.implicitHeight + (nItem.index > 0 ? Theme.spaceS : 0)
-                                Rectangle {
-                                    visible: nItem.index > 0
-                                    width: parent.width; height: Theme.borderWidth1
-                                    color: Theme.borderSubtle
-                                }
-                                MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.noteFocus(nItem.modelData) }
-                                Column {
-                                    id: iCol
-                                    anchors.left: parent.left; anchors.right: iClose.left; anchors.rightMargin: Theme.spaceXs
-                                    anchors.bottom: parent.bottom
-                                    spacing: Theme.spaceXxs
-                                    TextStrong { width: parent.width; text: nItem.modelData.summary || "" }
-                                    Text {
-                                        visible: text.length > 0
-                                        width: parent.width
-                                        text: nItem.modelData.body || ""
-                                        color: Theme.textSecondary
-                                        font.family: Theme.type.body.family
-                                        font.pixelSize: Theme.type.body.size
-                                        wrapMode: Text.Wrap; maximumLineCount: 3; elide: Text.ElideRight
-                                        textFormat: Text.PlainText
-                                    }
-                                    NoteActions { note: nItem.modelData }
-                                }
-                                QsIconButton {
-                                    id: iClose
-                                    anchors.right: parent.right; anchors.rightMargin: -Theme.spaceXs
-                                    anchors.top: iCol.top
-                                    ic: Theme.icClose
-                                    onGo: nItem.modelData.dismiss()
-                                }
-                            }
-                        }
-                    }
+                transform: Translate {
+                    x: (panel.shown || Theme.reduceMotion) ? 0 : panel.width + Theme.windowGap
+                    Behavior on x { NumberAnimation { duration: Globals.quickSettingsOpen ? Theme.durBase : Theme.durFast; easing.type: Theme.ease } }
                 }
+                MouseArea { anchors.fill: parent }
 
-                // "N more from App", below the stack
-                TextCaption {
-                    id: nMore
-                    visible: nGroup.stacked
-                    anchors.top: nCard.bottom; anchors.topMargin: 2 * Theme.spaceXs + Theme.spaceS
-                    anchors.left: parent.left; anchors.leftMargin: Theme.spaceS
-                    text: (nGroup.count - 1) + " more from " + nGroup.group.app
-                }
-            }
-
-            Column {
-                id: body
-                x: panel.pad; y: panel.pad
-                width: panel.width - 2 * panel.pad
-                spacing: panel.pad
-
-                // ══ the head (home): you — the avatar, your name and today's
-                //    date, a door to ewe Sync — then Screenshot · Settings ·
-                //    Lock · Power ══
+                // catches Esc: the confirmation first, then back one page, then
+                // the panel (Quick settings is otherwise mouse-driven)
                 Item {
-                    id: head
-                    visible: panel.onHome
-                    width: parent.width
-                    height: Math.max(Theme.controlLg, whoCol.implicitHeight)
-                    Rectangle {
-                        id: you
-                        // the hover plate reaches spaceXs past the avatar and
-                        // the text; every width here comes from the text's own
-                        // and the buttons' place, never from this plate (a
-                        // cycle through a Row's implicit width spins the shell)
-                        readonly property real textW: Math.max(0, Math.min(Math.max(whoName.implicitWidth, whoDate.implicitWidth),
-                                                                           headActs.x - 3 * Theme.spaceXs - Theme.controlLg - Theme.spaceS))
-                        x: -Theme.spaceXs
-                        width: Theme.controlLg + Theme.spaceS + you.textW + 3 * Theme.spaceXs
-                        height: parent.height + 2 * Theme.spaceXxs
-                        anchors.verticalCenter: parent.verticalCenter
-                        radius: Theme.radiusPrimary
-                        color: youMa.pressed ? Theme.surfacePressed : youMa.containsMouse ? Theme.surfaceHover : "transparent"
-                        Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
-                        Row {
-                            id: youRow
-                            x: Theme.spaceXs
-                            anchors.verticalCenter: parent.verticalCenter
-                            spacing: Theme.spaceS
-                            Avatar {
-                                anchors.verticalCenter: parent.verticalCenter
-                                size: Theme.controlLg
-                                initial: root.userName.length > 0 ? root.userName.charAt(0).toUpperCase() : ""
-                                ringColor: Theme.surfaceRaised
-                            }
-                            Column {
-                                id: whoCol
-                                anchors.verticalCenter: parent.verticalCenter
-                                width: you.textW
-                                TextStrong { id: whoName; width: parent.width; text: root.userName }
-                                // the Writing guide's heading date: "Sunday, 1 November"
-                                TextCaption { id: whoDate; width: parent.width; text: Qt.formatDateTime(root.today, "dddd, d MMMM") }
-                            }
+                    id: keyCatcher
+                    anchors.fill: parent
+                    focus: true
+                    Keys.onEscapePressed: {
+                        if (root.confirmAction !== "") root.confirmAction = ""
+                        else if (root.tab !== "home") root.setTab("home")
+                        else Globals.quickSettingsOpen = false
+                    }
+                }
+                Connections {
+                    target: root
+                    function onPageShown() { flick.contentY = 0; panel.hint(null, false, ""); keyCatcher.forceActiveFocus() }
+                    // the password row going away hands the keyboard back
+                    function onPwTargetChanged() { if (root.pwTarget === "") keyCatcher.forceActiveFocus() }
+                }
+
+                // ══ shared pieces: TextBody/TextStrong/TextCaption/TextMono, Glyph,
+                //    QsNote, QsButton, QsIconButton, QsField(+Input), QsSegmented,
+                //    QsSwitchRow, QsPageHead, QsEmpty, QsMsgRow — promoted to their own
+                //    files in API 3 (public to plugins, docs/PLUGINS.md) ══
+
+                // ── Tooltip: names an icon-only control (the head's buttons, the
+                //    shortcut tiles, the power modes) — the shell's one
+                //    TooltipHost (Tooltip.qml), shared with the bar and the dock,
+                //    carries the delay, the warm period and the placement ──
+                function hint(item, on, text) {
+                    if (on && item) TooltipHost.show(item, text)
+                    else if (item) TooltipHost.hide(item)
+                    else TooltipHost.hide()
+                }
+
+                // ── a page's foot: a borderWidth1 rule, spaceXs, then its actions
+                //    (`start` on the left, the rest on the right) ──
+                component PageFoot: Item {
+                    id: pf
+                    default property alias end: pfEnd.data
+                    property alias start: pfStart.data
+                    width: parent ? parent.width : Theme.panelSm
+                    height: Theme.borderWidth1 + Theme.spaceXs + Theme.controlSm
+                    Rectangle { width: parent.width; height: Theme.borderWidth1; color: Theme.borderSubtle }
+                    Row { id: pfStart; anchors.left: parent.left; anchors.bottom: parent.bottom; spacing: Theme.spaceS }
+                    Row { id: pfEnd; anchors.right: parent.right; anchors.bottom: parent.bottom; spacing: Theme.spaceS }
+                }
+
+                // ── an app's action buttons under a notification: everything but
+                //    "default" (that is the card's own click), the first two, as
+                //    sm buttons sharing the width — secondary, then ghost. invoke()
+                //    runs the action and closes the notification unless the app
+                //    asked for it to stay (resident). ──
+                component NoteActions: Row {
+                    id: na
+                    property var note: null
+                    readonly property var acts: root.noteActions(na.note)
+                    visible: na.acts.length > 0
+                    width: parent ? parent.width : Theme.panelSm
+                    spacing: Theme.spaceS
+                    Repeater {
+                        model: na.acts
+                        delegate: QsButton {
+                            required property var modelData
+                            required property int index
+                            width: (na.width - (na.acts.length - 1) * na.spacing) / na.acts.length
+                            variant: index === 0 ? "secondary" : "ghost"
+                            label: modelData.text || modelData.identifier || ""
+                            onGo: { try { modelData.invoke() } catch (e) {} }
                         }
+                    }
+                }
+
+                // ── one app's notifications (Notification, grouped): a flat card
+                //    (surfaceOverlay, no shadow) with the newest on top and two
+                //    spaceXs layers peeking out below it for the rest, "N more from
+                //    App" under them. On the full list a stack opens in place; on
+                //    home it opens the full list with that app open. ──
+                component NoteGroup: Item {
+                    id: nGroup
+                    property var group: ({ app: "", items: [], latest: null })
+                    property bool inline: false
+                    readonly property int count: nGroup.group.items.length
+                    readonly property bool open: !nGroup.inline && nGroup.count > 1 && root.nExpanded === nGroup.group.app
+                    readonly property bool stacked: nGroup.count > 1 && !nGroup.open
+                    readonly property var latest: nGroup.group.latest
+                    readonly property bool critical: !!nGroup.latest && nGroup.latest.urgency === NotificationUrgency.Critical
+                    // the open card lists the newest first
+                    readonly property var newestFirst: nGroup.group.items.slice().reverse()
+                    width: parent ? parent.width : Theme.panelSm
+                    height: nCard.height + (nGroup.stacked ? 2 * Theme.spaceXs + Theme.spaceS + nMore.height : 0)
+
+                    // the stack: two spaceXs layers peeking out below the newest card
+                    Rectangle {
+                        visible: nGroup.stacked
+                        anchors.top: nCard.bottom; anchors.topMargin: -(Theme.spaceMd - Theme.spaceXs)
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        width: parent.width - 2 * Theme.spaceS; height: Theme.spaceMd
+                        radius: Theme.radiusRounded
+                        color: Theme.surfaceOverlay
+                        border.color: Theme.borderSubtle; border.width: Theme.borderWidth1
+                        z: -1
+                    }
+                    Rectangle {
+                        visible: nGroup.stacked && nGroup.count > 2
+                        anchors.top: nCard.bottom; anchors.topMargin: -(Theme.spaceMd - 2 * Theme.spaceXs)
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        width: parent.width - 2 * Theme.spaceMd; height: Theme.spaceMd
+                        radius: Theme.radiusRounded
+                        color: Theme.surfaceOverlay
+                        border.color: Theme.borderSubtle; border.width: Theme.borderWidth1
+                        z: -2
+                    }
+
+                    Rectangle {
+                        id: nCard
+                        width: parent.width
+                        height: gCol.implicitHeight + Theme.spaceS + Theme.spaceS + Theme.spaceXs
+                        radius: Theme.radiusRounded
+                        color: nCardMa.containsMouse ? Theme.surfaceHover : Theme.surfaceOverlay
+                        Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
+                        border.color: nGroup.critical ? Theme.danger : Theme.borderSubtle
+                        border.width: Theme.borderWidth1
+                        // card click — declared FIRST so the inner rows' and the
+                        // close buttons' MouseAreas (later children) win over it
                         MouseArea {
-                            id: youMa
+                            id: nCardMa
                             anchors.fill: parent
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: root.openAccount()
-                            onContainsMouseChanged: panel.hint(you, containsMouse, Globals.syncAppInstalled ? "Open ewe Sync" : "Open ewe Settings")
+                            onClicked: {
+                                if (nGroup.count > 1 && nGroup.inline) { root.nExpanded = nGroup.group.app; root.setTab("notifs") }
+                                else if (nGroup.count > 1) root.nExpanded = nGroup.open ? "" : nGroup.group.app
+                                else root.noteFocus(nGroup.latest)
+                            }
+                        }
+                        Column {
+                            id: gCol
+                            anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top
+                            anchors.leftMargin: Theme.spaceS + Theme.spaceXs; anchors.rightMargin: Theme.spaceS + Theme.spaceXs
+                            anchors.topMargin: Theme.spaceS
+                            spacing: Theme.spaceXs
+
+                            // head: the app's icon and name · how long ago, a chevron
+                            // on a stack of the full list, close on hover
+                            Item {
+                                width: parent.width; height: Theme.controlSm
+                                Row {
+                                    anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter
+                                    anchors.right: nClose.left; anchors.rightMargin: Theme.spaceXs
+                                    spacing: Theme.spaceXs
+                                    Rectangle {
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        width: Theme.iconMd; height: Theme.iconMd
+                                        radius: Theme.radiusSlight
+                                        color: Theme.surfaceHover
+                                        clip: true
+                                        Image {
+                                            anchors.fill: parent
+                                            sourceSize.width: 2 * Theme.iconMd; sourceSize.height: 2 * Theme.iconMd
+                                            mipmap: true
+                                            source: (nGroup.latest && nGroup.latest.appIcon && nGroup.latest.appIcon != "")
+                                                    ? Quickshell.iconPath(nGroup.latest.appIcon, "dialog-information")
+                                                    : Quickshell.iconPath("dialog-information")
+                                        }
+                                    }
+                                    TextCaption {
+                                        id: nApp
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        width: Math.min(implicitWidth, parent.width - Theme.iconMd - nWhen.width - 2 * parent.spacing - (nChev.visible ? nChev.width + parent.spacing : 0))
+                                        text: nGroup.group.app
+                                        color: Theme.textSecondary
+                                        font.weight: Theme.fontWeightMedium
+                                    }
+                                    TextCaption {
+                                        id: nWhen
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        text: nGroup.latest ? "· " + root.noteTime(nGroup.latest) : ""
+                                    }
+                                    Glyph {
+                                        id: nChev
+                                        visible: nGroup.count > 1 && !nGroup.inline
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        text: Theme.icChevronDown; rotation: nGroup.open ? 180 : 0
+                                        font.pixelSize: Theme.iconSm; color: Theme.textMuted
+                                        Behavior on rotation { NumberAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
+                                    }
+                                }
+                                // close dismisses the whole group
+                                QsIconButton {
+                                    id: nClose
+                                    anchors.right: parent.right; anchors.rightMargin: -Theme.spaceXs
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    visible: nCardMa.containsMouse || nClose.hovered || nGroup.open
+                                    ic: Theme.icClose
+                                    onGo: root.dismissAllOf(nGroup.group.items)
+                                }
+                            }
+
+                            // collapsed: the newest one
+                            Row {
+                                visible: !nGroup.open && !!nGroup.latest
+                                width: parent.width
+                                spacing: Theme.spaceS + Theme.spaceXs
+                                Column {
+                                    width: parent.width - (nMedia.visible ? nMedia.width + parent.spacing : 0)
+                                    spacing: Theme.spaceXxs
+                                    Row {
+                                        width: parent.width; spacing: Theme.spaceXs
+                                        Glyph { visible: nGroup.critical; anchors.verticalCenter: parent.verticalCenter; text: Theme.icWarning; color: Theme.danger }
+                                        TextStrong {
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            width: parent.width - (nGroup.critical ? Theme.iconMd + parent.spacing : 0)
+                                            text: nGroup.latest ? (nGroup.latest.summary || "") : ""
+                                            color: nGroup.critical ? Theme.danger : Theme.textPrimary
+                                        }
+                                    }
+                                    Text {
+                                        visible: text.length > 0
+                                        width: parent.width
+                                        text: nGroup.latest ? (nGroup.latest.body || "") : ""
+                                        color: Theme.textSecondary
+                                        font.family: Theme.type.body.family
+                                        font.pixelSize: Theme.type.body.size
+                                        wrapMode: Text.Wrap; maximumLineCount: nGroup.inline ? 2 : 3; elide: Text.ElideRight
+                                        textFormat: Text.PlainText
+                                    }
+                                }
+                                Rectangle {
+                                    id: nMedia
+                                    visible: !!nGroup.latest && !!nGroup.latest.image && nGroup.latest.image != ""
+                                    width: Theme.icon3xl; height: Theme.icon3xl
+                                    radius: Theme.radiusPrimary
+                                    color: Theme.surfaceHover
+                                    clip: true
+                                    Image {
+                                        anchors.fill: parent; fillMode: Image.PreserveAspectCrop
+                                        sourceSize.width: 2 * Theme.icon3xl; sourceSize.height: 2 * Theme.icon3xl
+                                        mipmap: true
+                                        source: nMedia.visible ? nGroup.latest.image : ""
+                                    }
+                                }
+                            }
+                            // the newest one's actions, under it
+                            NoteActions { visible: !nGroup.open && acts.length > 0; note: nGroup.latest }
+
+                            // open: every notification of the app, newest first, divided
+                            Repeater {
+                                model: nGroup.open ? nGroup.newestFirst : []
+                                delegate: Item {
+                                    id: nItem
+                                    required property var modelData
+                                    required property int index
+                                    width: gCol.width
+                                    height: iCol.implicitHeight + (nItem.index > 0 ? Theme.spaceS : 0)
+                                    Rectangle {
+                                        visible: nItem.index > 0
+                                        width: parent.width; height: Theme.borderWidth1
+                                        color: Theme.borderSubtle
+                                    }
+                                    MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.noteFocus(nItem.modelData) }
+                                    Column {
+                                        id: iCol
+                                        anchors.left: parent.left; anchors.right: iClose.left; anchors.rightMargin: Theme.spaceXs
+                                        anchors.bottom: parent.bottom
+                                        spacing: Theme.spaceXxs
+                                        TextStrong { width: parent.width; text: nItem.modelData.summary || "" }
+                                        Text {
+                                            visible: text.length > 0
+                                            width: parent.width
+                                            text: nItem.modelData.body || ""
+                                            color: Theme.textSecondary
+                                            font.family: Theme.type.body.family
+                                            font.pixelSize: Theme.type.body.size
+                                            wrapMode: Text.Wrap; maximumLineCount: 3; elide: Text.ElideRight
+                                            textFormat: Text.PlainText
+                                        }
+                                        NoteActions { note: nItem.modelData }
+                                    }
+                                    QsIconButton {
+                                        id: iClose
+                                        anchors.right: parent.right; anchors.rightMargin: -Theme.spaceXs
+                                        anchors.top: iCol.top
+                                        ic: Theme.icClose
+                                        onGo: nItem.modelData.dismiss()
+                                    }
+                                }
+                            }
                         }
                     }
-                    Row {
-                        id: headActs
-                        anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
-                        spacing: Theme.spaceXs
-                        QsIconButton {
-                            id: shotBtn
-                            visible: root.shotPlugin !== null
-                            size: "md"; ic: Theme.icCamera
-                            onGo: root.screenshot()
-                            onHoveredChanged: panel.hint(shotBtn, hovered, "Take a screenshot")
-                        }
-                        QsIconButton {
-                            id: setBtn
-                            size: "md"; ic: Theme.icCog
-                            onGo: { Globals.quickSettingsOpen = false; Globals.openSettings() }
-                            onHoveredChanged: panel.hint(setBtn, hovered, "Open ewe Settings")
-                        }
-                        QsIconButton {
-                            id: lockBtn
-                            size: "md"; ic: Theme.icLock
-                            onGo: root.runPower("lock")
-                            onHoveredChanged: panel.hint(lockBtn, hovered, "Lock")
-                        }
-                        QsIconButton {
-                            id: powBtn
-                            size: "md"; ic: Theme.icPower
-                            onGo: root.setTab("power")
-                            onHoveredChanged: panel.hint(powBtn, hovered, "Power")
-                        }
+
+                    // "N more from App", below the stack
+                    TextCaption {
+                        id: nMore
+                        visible: nGroup.stacked
+                        anchors.top: nCard.bottom; anchors.topMargin: 2 * Theme.spaceXs + Theme.spaceS
+                        anchors.left: parent.left; anchors.leftMargin: Theme.spaceS
+                        text: (nGroup.count - 1) + " more from " + nGroup.group.app
                     }
                 }
 
-                Flickable {
-                    id: flick
-                    width: parent.width
-                    // the page's height while it fits; the rest of 80% of the
-                    // screen, scrolling, when it does not
-                    height: Math.min(inner.implicitHeight,
-                                     panel.maxH - 2 * panel.pad
-                                     - (head.visible ? head.height + body.spacing : 0)
-                                     - (foot.visible ? foot.height + body.spacing : 0))
-                    contentHeight: inner.implicitHeight
-                    interactive: contentHeight > height
-                    clip: true
-                    boundsBehavior: Flickable.StopAtBounds
+                Column {
+                    id: body
+                    x: panel.pad; y: panel.pad
+                    width: panel.width - 2 * panel.pad
+                    spacing: panel.pad
 
-                    Column {
-                        id: inner
-                        width: flick.width
-                        spacing: panel.pad
+                    // ══ the head (home): you — the avatar, your name and today's
+                    //    date, a door to ewe Sync — then Screenshot · Settings ·
+                    //    Lock · Power ══
+                    Item {
+                        id: head
+                        visible: panel.onHome
+                        width: parent.width
+                        height: Math.max(Theme.controlLg, whoCol.implicitHeight)
+                        Rectangle {
+                            id: you
+                            // the hover plate reaches spaceXs past the avatar and
+                            // the text; every width here comes from the text's own
+                            // and the buttons' place, never from this plate (a
+                            // cycle through a Row's implicit width spins the shell)
+                            readonly property real textW: Math.max(0, Math.min(Math.max(whoName.implicitWidth, whoDate.implicitWidth),
+                                                                               headActs.x - 3 * Theme.spaceXs - Theme.controlLg - Theme.spaceS))
+                            x: -Theme.spaceXs
+                            width: Theme.controlLg + Theme.spaceS + you.textW + 3 * Theme.spaceXs
+                            height: parent.height + 2 * Theme.spaceXxs
+                            anchors.verticalCenter: parent.verticalCenter
+                            radius: Theme.radiusPrimary
+                            color: youMa.pressed ? Theme.surfacePressed : youMa.containsMouse ? Theme.surfaceHover : "transparent"
+                            Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
+                            Row {
+                                id: youRow
+                                x: Theme.spaceXs
+                                anchors.verticalCenter: parent.verticalCenter
+                                spacing: Theme.spaceS
+                                Avatar {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    size: Theme.controlLg
+                                    initial: root.userName.length > 0 ? root.userName.charAt(0).toUpperCase() : ""
+                                    ringColor: Theme.surfaceRaised
+                                }
+                                Column {
+                                    id: whoCol
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    width: you.textW
+                                    TextStrong { id: whoName; width: parent.width; text: root.userName }
+                                    // the Writing guide's heading date: "Sunday, 1 November"
+                                    TextCaption { id: whoDate; width: parent.width; text: Qt.formatDateTime(root.today, "dddd, d MMMM") }
+                                }
+                            }
+                            MouseArea {
+                                id: youMa
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.openAccount()
+                                onContainsMouseChanged: panel.hint(you, containsMouse, Globals.syncAppInstalled ? "Open ewe Sync" : "Open ewe Settings")
+                            }
+                        }
+                        Row {
+                            id: headActs
+                            anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
+                            spacing: Theme.spaceXs
+                            QsIconButton {
+                                id: shotBtn
+                                visible: root.shotPlugin !== null
+                                size: "md"; ic: Theme.icCamera
+                                onGo: root.screenshot()
+                                onHoveredChanged: panel.hint(shotBtn, hovered, "Take a screenshot")
+                            }
+                            QsIconButton {
+                                id: setBtn
+                                size: "md"; ic: Theme.icCog
+                                onGo: { Globals.quickSettingsOpen = false; Globals.openSettings() }
+                                onHoveredChanged: panel.hint(setBtn, hovered, "Open ewe Settings")
+                            }
+                            QsIconButton {
+                                id: lockBtn
+                                size: "md"; ic: Theme.icLock
+                                onGo: root.runPower("lock")
+                                onHoveredChanged: panel.hint(lockBtn, hovered, "Lock")
+                            }
+                            QsIconButton {
+                                id: powBtn
+                                size: "md"; ic: Theme.icPower
+                                onGo: root.setTab("power")
+                                onHoveredChanged: panel.hint(powBtn, hovered, "Power")
+                            }
+                        }
+                    }
 
-                        // ═══ HOME ═══
+                    Flickable {
+                        id: flick
+                        width: parent.width
+                        // the page's height while it fits; the rest of 80% of the
+                        // screen, scrolling, when it does not
+                        height: Math.min(inner.implicitHeight,
+                                         panel.maxH - 2 * panel.pad
+                                         - (head.visible ? head.height + body.spacing : 0)
+                                         - (foot.visible ? foot.height + body.spacing : 0))
+                        contentHeight: inner.implicitHeight
+                        interactive: contentHeight > height
+                        clip: true
+                        boundsBehavior: Flickable.StopAtBounds
+
                         Column {
-                            id: homePage
-                            visible: root.tab === "home"
-                            width: parent.width
+                            id: inner
+                            width: flick.width
                             spacing: panel.pad
-                            onVisibleChanged: if (visible) Qt.callLater(root.readTiles)
 
-                            // the tiles: a tile's body toggles, its chevron opens
-                            // the matching page. The built-ins (Wi-Fi, Bluetooth,
-                            // Do not disturb, Sharing) come first, then the
-                            // plugins' quick-tiles (API 3) in manifest order,
-                            // flowing two per row (span 1) or a whole row (span 2).
-                            Flow {
-                                id: homeGrid
-                                width: parent.width; spacing: Theme.spaceS
-                                Tile {
-                                    // follows the link that CARRIES traffic (NetState):
-                                    // the cable's glyph when a cable is the default route
-                                    // — even with Wi-Fi up — or is still waiting for an
-                                    // address; Wi-Fi's otherwise. Its second line says
-                                    // what is wrong first, then where you are.
-                                    readonly property bool onWired: NetState.uplinkType === "ethernet"
-                                                                 || (NetState.uplink === null && NetState.wiredWaiting)
-                                    ic: onWired ? Theme.icEthernet : Theme.icWifi
-                                    label: NetState.wiredUp || NetState.wiredWaiting ? "Network" : "Wi-Fi"
-                                    active: root.wifiOn || NetState.wiredUp       // on = the radio or the link is up
-                                    hasMenu: true
-                                    busy: root.wifiPending !== "" || (NetState.uplink === null && NetState.wiredWaiting)
-                                    // joining: say so, and where to. Both links up: say both —
-                                    // the one carrying traffic first
-                                    sub: {
-                                        if (root.wifiPending !== "") return "Joining " + root.wifiPending + "…"
-                                        var ssid = root.wifiName()
-                                        var name = NetState.uplinkType === "ethernet" ? "Wired"
-                                                 : NetState.uplinkType === "wifi" ? (ssid !== "" ? ssid : "Wi-Fi") : ""
-                                        if (NetState.portal) return "Sign in to this network"
-                                        // the VPN in the way is named on the page ("No internet through …")
-                                        if (NetState.noInternet) return (NetState.activeVpn ? NetState.activeVpn.name : name) + " · no internet"
-                                        if (name === "Wired" && ssid !== "") return "Wired · " + ssid
-                                        if (name !== "" && NetState.uplinkType === "wifi" && NetState.wiredUp) return name + " · Wired"
-                                        if (name !== "") return name
-                                        if (NetState.wiredWaiting) return "Waiting for an address"
-                                        return root.wifiOn ? "On" : "Off"
-                                    }
-                                    // body = the switch (no list needed to turn Wi-Fi off);
-                                    // details = the network list
-                                    onClicked: { Quickshell.execDetached(["nmcli", "radio", "wifi", root.wifiOn ? "off" : "on"]); rescanTimer.restart() }
-                                    onMenu: root.setTab("wifi")
-                                }
-                                Tile {
-                                    ic: Theme.icBluetooth; label: "Bluetooth"
-                                    active: Bluetooth.defaultAdapter ? Bluetooth.defaultAdapter.enabled : false
-                                    disabled: !Bluetooth.defaultAdapter
-                                    hasMenu: true
-                                    sub: !Bluetooth.defaultAdapter ? "No adapter"
-                                       : !Bluetooth.defaultAdapter.enabled ? "Off"
-                                       : (root.btConnectedName() !== "" ? root.btConnectedName() : "On")
-                                    onClicked: if (Bluetooth.defaultAdapter) Bluetooth.defaultAdapter.enabled = !Bluetooth.defaultAdapter.enabled
-                                    onMenu: root.setTab("bt")
-                                }
-                                Tile {
-                                    ic: Theme.icDnd; label: "Do not disturb"; active: Globals.dnd
-                                    sub: Globals.dnd ? "On" : "Off"
-                                    onClicked: Globals.dnd = !Globals.dnd
-                                }
-                                // Game mode (0.42): bin/ewe-game, at the level ewe
-                                // Settings → Power → Gaming chose (Ultra by default)
-                                Tile {
-                                    ic: Theme.icGamepad; label: "Game mode"
-                                    active: GameMode.on
-                                    busy: GameMode.busy
-                                    sub: GameMode.on ? GameMode.label
-                                       : (Globals.gameLevel === "balanced" ? "Off · Balanced" : "Off · Ultra")
-                                    onClicked: GameMode.toggle()
-                                }
-                                // Remote (RFC-009). Turning sharing ON is never one
-                                // stray click: off → the page (switch + what it means);
-                                // on → off in one click (the safe direction)
-                                Tile {
-                                    ic: Theme.icShare; label: "Sharing"
-                                    active: RemoteState.sharing
-                                    hasMenu: true
-                                    busy: RemoteState.busy === "share"
-                                    sub: !RemoteState.sharing ? "Off"
-                                       : RemoteState.connectedCount > 0 ? RemoteState.connectedNames + " connected"
-                                       : "On · " + RemoteState.codeDisplay
-                                    onClicked: RemoteState.sharing ? RemoteState.setSharing(false) : root.setTab("remote")
-                                    onMenu: root.setTab("remote")
-                                }
-                                // the plugins' tiles: the host sizes the Loader (half
-                                // the row, or all of it for span 2); the plugin fills
-                                // a Tile, and hides its slot when it has nothing to say
-                                Repeater {
-                                    id: tileRep
-                                    model: PluginHost.quickTiles
-                                    delegate: Loader {
-                                        id: tileSlot
-                                        required property var modelData
-                                        width: modelData.span >= 2 ? parent.width : Math.floor((parent.width - Theme.spaceS) / 2)
-                                        source: "file://" + modelData.entry
-                                        readonly property bool shown: Globals.quickSettingsOpen && root.tab === "home"
-                                        onShownChanged: if (status === Loader.Ready && item && ("panelOpen" in item)) item.panelOpen = tileSlot.shown
-                                        onVisibleChanged: Qt.callLater(root.readTiles)
-                                        onStatusChanged: {
-                                            if (status === Loader.Error) Log.warn("plugins", modelData.id + "/quick-tile failed to load (see the qml error above)")
-                                            else if (status === Loader.Ready) { PluginHost.inject(item, modelData.id, { panelOpen: tileSlot.shown }); Qt.callLater(root.readTiles) }
+                            // ═══ HOME ═══
+                            Column {
+                                id: homePage
+                                visible: root.tab === "home"
+                                width: parent.width
+                                spacing: panel.pad
+                                onVisibleChanged: if (visible) Qt.callLater(panel.readTiles)
+
+                                // the tiles: a tile's body toggles, its chevron opens
+                                // the matching page. The built-ins (Wi-Fi, Bluetooth,
+                                // Do not disturb, Sharing) come first, then the
+                                // plugins' quick-tiles (API 3) in manifest order,
+                                // flowing two per row (span 1) or a whole row (span 2).
+                                Flow {
+                                    id: homeGrid
+                                    width: parent.width; spacing: Theme.spaceS
+                                    Tile {
+                                        // follows the link that CARRIES traffic (NetState):
+                                        // the cable's glyph when a cable is the default route
+                                        // — even with Wi-Fi up — or is still waiting for an
+                                        // address; Wi-Fi's otherwise. Its second line says
+                                        // what is wrong first, then where you are.
+                                        readonly property bool onWired: NetState.uplinkType === "ethernet"
+                                                                     || (NetState.uplink === null && NetState.wiredWaiting)
+                                        ic: onWired ? Theme.icEthernet : Theme.icWifi
+                                        label: NetState.wiredUp || NetState.wiredWaiting ? "Network" : "Wi-Fi"
+                                        active: root.wifiOn || NetState.wiredUp       // on = the radio or the link is up
+                                        hasMenu: true
+                                        busy: root.wifiPending !== "" || (NetState.uplink === null && NetState.wiredWaiting)
+                                        // joining: say so, and where to. Both links up: say both —
+                                        // the one carrying traffic first
+                                        sub: {
+                                            if (root.wifiPending !== "") return "Joining " + root.wifiPending + "…"
+                                            var ssid = root.wifiName()
+                                            var name = NetState.uplinkType === "ethernet" ? "Wired"
+                                                     : NetState.uplinkType === "wifi" ? (ssid !== "" ? ssid : "Wi-Fi") : ""
+                                            if (NetState.portal) return "Sign in to this network"
+                                            // the VPN in the way is named on the page ("No internet through …")
+                                            if (NetState.noInternet) return (NetState.activeVpn ? NetState.activeVpn.name : name) + " · no internet"
+                                            if (name === "Wired" && ssid !== "") return "Wired · " + ssid
+                                            if (name !== "" && NetState.uplinkType === "wifi" && NetState.wiredUp) return name + " · Wired"
+                                            if (name !== "") return name
+                                            if (NetState.wiredWaiting) return "Waiting for an address"
+                                            return root.wifiOn ? "On" : "Off"
                                         }
-                                        Connections { target: PluginHost; function onSettingsChanged() { if (tileSlot.status === Loader.Ready) PluginHost._giveSettings(tileSlot.item, tileSlot.modelData.id) } }
+                                        // body = the switch (no list needed to turn Wi-Fi off);
+                                        // details = the network list
+                                        onClicked: { Quickshell.execDetached(["nmcli", "radio", "wifi", root.wifiOn ? "off" : "on"]); rescanTimer.restart() }
+                                        onMenu: root.setTab("wifi")
+                                    }
+                                    Tile {
+                                        ic: Theme.icBluetooth; label: "Bluetooth"
+                                        active: Bluetooth.defaultAdapter ? Bluetooth.defaultAdapter.enabled : false
+                                        disabled: !Bluetooth.defaultAdapter
+                                        hasMenu: true
+                                        sub: !Bluetooth.defaultAdapter ? "No adapter"
+                                           : !Bluetooth.defaultAdapter.enabled ? "Off"
+                                           : (root.btConnectedName() !== "" ? root.btConnectedName() : "On")
+                                        onClicked: if (Bluetooth.defaultAdapter) Bluetooth.defaultAdapter.enabled = !Bluetooth.defaultAdapter.enabled
+                                        onMenu: root.setTab("bt")
+                                    }
+                                    Tile {
+                                        ic: Theme.icDnd; label: "Do not disturb"; active: Globals.dnd
+                                        sub: Globals.dnd ? "On" : "Off"
+                                        onClicked: Globals.dnd = !Globals.dnd
+                                    }
+                                    // Game mode (0.42): bin/ewe-game, at the level ewe
+                                    // Settings → Power → Gaming chose (Ultra by default)
+                                    Tile {
+                                        ic: Theme.icGamepad; label: "Game mode"
+                                        active: GameMode.on
+                                        busy: GameMode.busy
+                                        sub: GameMode.on ? GameMode.label
+                                           : (Globals.gameLevel === "balanced" ? "Off · Balanced" : "Off · Ultra")
+                                        onClicked: GameMode.toggle()
+                                    }
+                                    // Remote (RFC-009). Turning sharing ON is never one
+                                    // stray click: off → the page (switch + what it means);
+                                    // on → off in one click (the safe direction)
+                                    Tile {
+                                        ic: Theme.icShare; label: "Sharing"
+                                        active: RemoteState.sharing
+                                        hasMenu: true
+                                        busy: RemoteState.busy === "share"
+                                        sub: !RemoteState.sharing ? "Off"
+                                           : RemoteState.connectedCount > 0 ? RemoteState.connectedNames + " connected"
+                                           : "On · " + RemoteState.codeDisplay
+                                        onClicked: RemoteState.sharing ? RemoteState.setSharing(false) : root.setTab("remote")
+                                        onMenu: root.setTab("remote")
+                                    }
+                                    // the plugins' tiles: the host sizes the Loader (half
+                                    // the row, or all of it for span 2); the plugin fills
+                                    // a Tile, and hides its slot when it has nothing to say
+                                    Repeater {
+                                        id: tileRep
+                                        model: PluginHost.quickTiles
+                                        delegate: Loader {
+                                            id: tileSlot
+                                            required property var modelData
+                                            width: modelData.span >= 2 ? parent.width : Math.floor((parent.width - Theme.spaceS) / 2)
+                                            source: "file://" + modelData.entry
+                                            readonly property bool shown: Globals.quickSettingsOpen && root.tab === "home"
+                                            onShownChanged: if (status === Loader.Ready && item && ("panelOpen" in item)) item.panelOpen = tileSlot.shown
+                                            onVisibleChanged: Qt.callLater(panel.readTiles)
+                                            onStatusChanged: {
+                                                if (status === Loader.Error) Log.warn("plugins", modelData.id + "/quick-tile failed to load (see the qml error above)")
+                                                else if (status === Loader.Ready) { PluginHost.inject(item, modelData.id, { panelOpen: tileSlot.shown }); Qt.callLater(panel.readTiles) }
+                                            }
+                                            Connections { target: PluginHost; function onSettingsChanged() { if (tileSlot.status === Loader.Ready) PluginHost._giveSettings(tileSlot.item, tileSlot.modelData.id) } }
+                                        }
                                     }
                                 }
-                            }
 
-                            // the shortcut row: small tiles for the pages no tile
-                            // opens — Calendar, then the plugins' (SSH, Mobile,
-                            // Mail…). Four to six to a row, wrapping after six.
-                            Flow {
-                                id: shortRow
-                                width: parent.width; spacing: Theme.spaceS
-                                readonly property int cols: Math.max(4, Math.min(6, root.shortcuts.length))
-                                readonly property real cell: Math.floor((width - (cols - 1) * spacing) / cols)
-                                Repeater {
-                                    model: root.shortcuts
-                                    delegate: Tile {
-                                        id: shortTile
-                                        required property var modelData
-                                        small: true
-                                        width: shortRow.cell
-                                        ic: modelData.icon
-                                        label: modelData.label
-                                        onClicked: root.setTab(modelData.key)
-                                        HoverHandler { onHoveredChanged: panel.hint(shortTile, hovered, shortTile.modelData.label) }
+                                // the shortcut row: small tiles for the pages no tile
+                                // opens — Calendar, then the plugins' (SSH, Mobile,
+                                // Mail…). Four to six to a row, wrapping after six.
+                                Flow {
+                                    id: shortRow
+                                    width: parent.width; spacing: Theme.spaceS
+                                    readonly property int cols: Math.max(4, Math.min(6, root.shortcuts.length))
+                                    readonly property real cell: Math.floor((width - (cols - 1) * spacing) / cols)
+                                    Repeater {
+                                        model: root.shortcuts
+                                        delegate: Tile {
+                                            id: shortTile
+                                            required property var modelData
+                                            small: true
+                                            width: shortRow.cell
+                                            ic: modelData.icon
+                                            label: modelData.label
+                                            onClicked: root.setTab(modelData.key)
+                                            HoverHandler { onHoveredChanged: panel.hint(shortTile, hovered, shortTile.modelData.label) }
+                                        }
                                     }
                                 }
-                            }
 
-                            // volume (its chevron: the output list) and brightness
-                            Column {
-                                width: parent.width
-                                spacing: Theme.spaceS
-                                Row {
+                                // volume (its chevron: the output list) and brightness
+                                Column {
                                     width: parent.width
-                                    spacing: Theme.spaceXs
-                                    Slider {
-                                        anchors.verticalCenter: parent.verticalCenter
-                                        width: parent.width - volMore.width - parent.spacing
-                                        live: true
-                                        icon: root.volumeVal <= 0 ? Theme.icVolMute : root.volumeVal < 0.5 ? Theme.icVolLow : Theme.icVolHigh
-                                        showValue: true
-                                        valueText: Math.round(root.volumeVal * 100) + "%"
-                                        value: root.volumeVal
-                                        onMoved: function (v) { root.setVolume(v) }
-                                    }
-                                    QsIconButton {
-                                        id: volMore
-                                        anchors.verticalCenter: parent.verticalCenter
-                                        ic: Theme.icChevronRight
-                                        onGo: root.setTab("audio")
-                                        onHoveredChanged: panel.hint(volMore, hovered, Pipewire.defaultAudioSink ? "Sound output: " + root.audioLabel(Pipewire.defaultAudioSink) : "Sound output")
-                                    }
-                                }
-                                Row {
-                                    visible: root.hasBrightness
-                                    width: parent.width
-                                    spacing: Theme.spaceXs
-                                    Slider {
-                                        anchors.verticalCenter: parent.verticalCenter
-                                        width: parent.width - Theme.controlSm - parent.spacing
-                                        live: true
-                                        icon: Theme.icSun
-                                        showValue: true
-                                        valueText: Math.round(root.brightnessVal * 100) + "%"
-                                        value: root.brightnessVal
-                                        onMoved: function (v) { root.setBrightness(v) }
-                                    }
-                                }
-                            }
-
-                            // the latest notifications, inline: the newest two
-                            // apps' cards; Show all opens the full list
-                            Column {
-                                width: parent.width
-                                spacing: Theme.spaceS
-                                Item {
-                                    width: parent.width; height: Theme.controlSm
-                                    SectionTitle {
-                                        anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter
-                                        topPadding: 0; bottomPadding: 0
-                                        text: "Notifications"
+                                    spacing: Theme.spaceS
+                                    Row {
+                                        width: parent.width
+                                        spacing: Theme.spaceXs
+                                        Slider {
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            width: parent.width - volMore.width - parent.spacing
+                                            live: true
+                                            icon: root.volumeVal <= 0 ? Theme.icVolMute : root.volumeVal < 0.5 ? Theme.icVolLow : Theme.icVolHigh
+                                            showValue: true
+                                            valueText: Math.round(root.volumeVal * 100) + "%"
+                                            value: root.volumeVal
+                                            onMoved: function (v) { root.setVolume(v) }
+                                        }
+                                        QsIconButton {
+                                            id: volMore
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            ic: Theme.icChevronRight
+                                            onGo: root.setTab("audio")
+                                            onHoveredChanged: panel.hint(volMore, hovered, Pipewire.defaultAudioSink ? "Sound output: " + root.audioLabel(Pipewire.defaultAudioSink) : "Sound output")
+                                        }
                                     }
                                     Row {
-                                        anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
+                                        visible: root.hasBrightness
+                                        width: parent.width
                                         spacing: Theme.spaceXs
-                                        QsButton { visible: root.noteCount > 0; variant: "ghost"; label: "Show all"; onGo: root.setTab("notifs") }
-                                        QsButton { visible: root.noteCount > 0; variant: "ghost"; label: "Clear all"; onGo: root.clearAll() }
+                                        Slider {
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            width: parent.width - Theme.controlSm - parent.spacing
+                                            live: true
+                                            icon: Theme.icSun
+                                            showValue: true
+                                            valueText: Math.round(root.brightnessVal * 100) + "%"
+                                            value: root.brightnessVal
+                                            onMoved: function (v) { root.setBrightness(v) }
+                                        }
                                     }
                                 }
-                                TextCaption {
-                                    visible: root.noteCount === 0
+
+                                // the latest notifications, inline: the newest two
+                                // apps' cards; Show all opens the full list
+                                Column {
                                     width: parent.width
-                                    wrapMode: Text.Wrap
-                                    text: Globals.dnd ? "No notifications. Banners are hidden while Do not disturb is on." : "No notifications"
+                                    spacing: Theme.spaceS
+                                    Item {
+                                        width: parent.width; height: Theme.controlSm
+                                        SectionTitle {
+                                            anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter
+                                            topPadding: 0; bottomPadding: 0
+                                            text: "Notifications"
+                                        }
+                                        Row {
+                                            anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
+                                            spacing: Theme.spaceXs
+                                            QsButton { visible: root.noteCount > 0; variant: "ghost"; label: "Show all"; onGo: root.setTab("notifs") }
+                                            QsButton { visible: root.noteCount > 0; variant: "ghost"; label: "Clear all"; onGo: root.clearAll() }
+                                        }
+                                    }
+                                    TextCaption {
+                                        visible: root.noteCount === 0
+                                        width: parent.width
+                                        wrapMode: Text.Wrap
+                                        text: Globals.dnd ? "No notifications. Banners are hidden while Do not disturb is on." : "No notifications"
+                                    }
+                                    Repeater {
+                                        model: root.tab === "home" ? root.noteGroups.slice(0, 2) : []
+                                        delegate: NoteGroup {
+                                            required property var modelData
+                                            group: modelData
+                                            inline: true
+                                        }
+                                    }
                                 }
+                            }
+
+                            // ═══ REMOTE: share this computer, your computers (RFC-009) ═══
+                            RemotePage {
+                                visible: root.tab === "remote"
+                                width: parent.width
+                            }
+
+                            // ═══ SOUND: output and input devices ═══
+                            Column {
+                                visible: root.tab === "audio"
+                                width: parent.width; spacing: panel.pad
+                                QsPageHead {
+                                    title: "Sound"
+                                    note: Pipewire.defaultAudioSink ? root.audioLabel(Pipewire.defaultAudioSink) : ""
+                                }
+                                Slider {
+                                    width: parent.width
+                                    live: true
+                                    icon: root.volumeVal <= 0 ? Theme.icVolMute : root.volumeVal < 0.5 ? Theme.icVolLow : Theme.icVolHigh
+                                    showValue: true
+                                    valueText: Math.round(root.volumeVal * 100) + "%"
+                                    value: root.volumeVal
+                                    onMoved: function (v) { root.setVolume(v) }
+                                }
+                                Column {
+                                    width: parent.width; spacing: Theme.spaceXs
+                                    SectionTitle { text: "Output"; leftPadding: Theme.spaceS }
+                                    ListWell {
+                                        flush: true
+                                        Repeater {
+                                            model: root.audioNodes(true)
+                                            delegate: ListRow {
+                                                required property var modelData
+                                                readonly property bool isDefault: Pipewire.defaultAudioSink && Pipewire.defaultAudioSink.id === modelData.id
+                                                glyph: Theme.icSpeaker
+                                                glyphColor: isDefault ? Theme.accentText : Theme.textSecondary
+                                                label: root.audioLabel(modelData)
+                                                active: isDefault; check: isDefault
+                                                onClicked: { Pipewire.preferredDefaultAudioSink = modelData; volumeProc.running = true }
+                                            }
+                                        }
+                                    }
+                                }
+                                Column {
+                                    width: parent.width; spacing: Theme.spaceXs
+                                    SectionTitle { text: "Input"; leftPadding: Theme.spaceS }
+                                    ListWell {
+                                        flush: true
+                                        Repeater {
+                                            model: root.audioNodes(false)
+                                            delegate: ListRow {
+                                                required property var modelData
+                                                readonly property bool isDefault: Pipewire.defaultAudioSource && Pipewire.defaultAudioSource.id === modelData.id
+                                                glyph: Theme.icMic
+                                                glyphColor: isDefault ? Theme.accentText : Theme.textSecondary
+                                                label: root.audioLabel(modelData)
+                                                active: isDefault; check: isDefault
+                                                onClicked: Pipewire.preferredDefaultAudioSource = modelData
+                                            }
+                                        }
+                                    }
+                                }
+                                // GNOME-style: one switch for every event chime
+                                QsSwitchRow {
+                                    ic: Theme.icBellRing; label: "Event sounds"
+                                    on: Globals.eventSounds
+                                    onToggled: { Globals.eventSounds = !Globals.eventSounds; root.writePrefsPoke.restart(); if (Globals.eventSounds) Globals.playSound("audio-volume-change") }
+                                }
+                                PageFoot {
+                                    QsButton { label: "Sound settings"; onGo: { Globals.quickSettingsOpen = false; Shell.openSettings("sound") } }
+                                }
+                            }
+
+                            // ═══ WI-FI (and the wired port, Tailscale) ═══
+                            Column {
+                                visible: root.expanded === "wifi"
+                                width: parent.width; spacing: panel.pad
+                                QsPageHead {
+                                    title: "Wi-Fi"
+                                    note: !root.wifiOn ? "Off"
+                                        : root.wifiPending !== "" ? "Joining " + root.wifiPending + "…"
+                                        : root.wifiName() !== "" ? "Connected to " + root.wifiName()
+                                        : "Not connected"
+                                    busy: wifiScan.running
+                                    hasSwitch: true; on: root.wifiOn
+                                    onToggled: { Quickshell.execDetached(["nmcli", "radio", "wifi", root.wifiOn ? "off" : "on"]); rescanTimer.restart() }
+                                }
+                                // WHAT IS WRONG, whatever the link: a sign-in page in the
+                                // way (hotel, café, guest network) or a VPN with no
+                                // internet behind it. The VPN itself is the ewe.vpn
+                                // plugin's page — here it is only named.
+                                Row {
+                                    visible: NetState.portal
+                                    width: parent.width
+                                    spacing: Theme.spaceS
+                                    leftPadding: Theme.spaceS
+                                    QsNote {
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        width: parent.width - parent.leftPadding - portalBtn.width - parent.spacing
+                                        tone: "warning"
+                                        text: "Sign in to this network"
+                                    }
+                                    QsButton {
+                                        id: portalBtn
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        variant: "primary"; label: "Open sign-in page"
+                                        onGo: NetState.openPortal()
+                                    }
+                                }
+                                QsNote {
+                                    visible: NetState.vpnHint !== ""
+                                    leftPadding: Theme.spaceS; rightPadding: Theme.spaceS
+                                    tone: "warning"
+                                    text: NetState.vpnHint
+                                }
+                                // NETWORKS
+                                Column {
+                                    width: parent.width; spacing: Theme.spaceXs
+                                    SectionTitle { text: "Networks"; leftPadding: Theme.spaceS }
+                                    // a scan with nothing to show yet — say so instead of
+                                    // sitting there as an empty box that looks broken
+                                    Row {
+                                        visible: root.wifiOn && root.wifiList.length === 0
+                                        spacing: Theme.spaceS
+                                        leftPadding: Theme.spaceS
+                                        Spinner { visible: wifiScan.running; anchors.verticalCenter: parent.verticalCenter; size: Theme.iconSm }
+                                        TextCaption { anchors.verticalCenter: parent.verticalCenter; text: wifiScan.running ? "Looking for networks…" : "No networks found" }
+                                    }
+                                    QsEmpty {
+                                        visible: !root.wifiOn
+                                        ic: Theme.icWifiOff; title: "Wi-Fi is off"
+                                        desc: "Turn it on to see networks nearby."
+                                    }
+                                    ListWell {
+                                        flush: true
+                                        visible: root.wifiOn && root.wifiList.length > 0
+                                        Repeater {
+                                            model: root.wifiOn ? root.wifiList : []
+                                            delegate: Column {
+                                                id: wRow
+                                                required property var modelData
+                                                width: parent.width
+                                                spacing: Theme.spaceXs
+                                                ListRow {
+                                                    readonly property var saved: root.wifiSaved[wRow.modelData.ssid] || null
+                                                    glyph: wRow.modelData.signal >= 66 ? Theme.icWifi : (wRow.modelData.signal >= 33 ? Theme.icWifiMed : Theme.icWifiLow)
+                                                    glyphColor: wRow.modelData.active ? Theme.accentText : Theme.textSecondary
+                                                    label: wRow.modelData.ssid
+                                                    desc: root.wifiPending === wRow.modelData.ssid ? "Connecting…"
+                                                        : wRow.modelData.active ? (NetState.wifiInternet === "portal" ? "Sign in to this network"
+                                                                                 : NetState.isProblem(NetState.wifiInternet) ? "Connected · no internet"
+                                                                                 : "Connected")
+                                                        : saved ? "Saved"
+                                                        : wRow.modelData.sec === "" ? "Open" : ""
+                                                    active: wRow.modelData.active
+                                                    check: wRow.modelData.active && root.wifiPending !== wRow.modelData.ssid
+                                                    busy: root.wifiPending === wRow.modelData.ssid
+                                                    onClicked: root.connectWifi(wRow.modelData.ssid, wRow.modelData.sec)
+                                                    Glyph {
+                                                        visible: wRow.modelData.sec !== "" && !wRow.modelData.active && root.wifiPending !== wRow.modelData.ssid
+                                                        anchors.verticalCenter: parent.verticalCenter
+                                                        text: Theme.icLock; font.pixelSize: Theme.iconSm; color: Theme.textMuted
+                                                    }
+                                                }
+                                                // the password, right under the network being joined
+                                                Row {
+                                                    visible: root.pwTarget === wRow.modelData.ssid
+                                                    width: parent.width
+                                                    spacing: Theme.spaceS
+                                                    bottomPadding: Theme.spaceXs
+                                                    QsField {
+                                                        width: parent.width - pwJoin.width - parent.spacing
+                                                        focused: pwInput.activeFocus
+                                                        QsFieldInput {
+                                                            id: pwInput
+                                                            anchors.fill: parent; anchors.leftMargin: Theme.spaceS; anchors.rightMargin: Theme.controlSm + Theme.spaceXs
+                                                            placeholder: "Password"
+                                                            echoMode: root.pwShow ? TextInput.Normal : TextInput.Password
+                                                            onTextChanged: root.pwText = text
+                                                            Component.onCompleted: if (root.pwTarget === wRow.modelData.ssid) forceActiveFocus()
+                                                            onAccepted: root.connectWifi(wRow.modelData.ssid, wRow.modelData.sec)
+                                                            // Esc gives up on this network, not the panel
+                                                            Keys.onEscapePressed: { root.pwTarget = ""; root.pwText = "" }
+                                                        }
+                                                        // show or hide the password while typing
+                                                        QsIconButton {
+                                                            anchors.right: parent.right; anchors.rightMargin: Theme.spaceXxs
+                                                            anchors.verticalCenter: parent.verticalCenter
+                                                            ic: root.pwShow ? Theme.icEyeOff : Theme.icEye
+                                                            selected: root.pwShow
+                                                            onGo: root.pwShow = !root.pwShow
+                                                        }
+                                                    }
+                                                    QsButton {
+                                                        id: pwJoin
+                                                        anchors.verticalCenter: parent.verticalCenter
+                                                        size: "md"; variant: "primary"; label: "Join"
+                                                        onGo: root.connectWifi(wRow.modelData.ssid, wRow.modelData.sec)
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                // WIRED — only when the machine has a port. The switch is
+                                // the "I'm on Wi-Fi, ignore the cable" control; the line
+                                // under it says what the port is really doing (no cable ·
+                                // waiting for an address, and for how long · connected,
+                                // with or without internet), then a hint when there is
+                                // something to try, and Reconnect while it is stuck.
+                                Column {
+                                    visible: NetState.wiredPresent
+                                    width: parent.width
+                                    spacing: Theme.spaceXs
+                                    SectionTitle { text: "Wired"; leftPadding: Theme.spaceS }
+                                    QsSwitchRow {
+                                        ic: Theme.icEthernet; label: "Ethernet"
+                                        desc: NetState.wiredBusy ? "Connecting…" : NetState.wiredText
+                                        busy: NetState.wiredBusy || NetState.wiredWaiting
+                                        on: NetState.wiredUp || NetState.wiredWaiting
+                                        disabled: NetState.wiredPhase === "unplugged" || NetState.wiredPhase === "unmanaged"
+                                        onToggled: NetState.setWired(!on)
+                                    }
+                                    QsNote {
+                                        visible: NetState.wiredHint !== ""
+                                        leftPadding: Theme.spaceS; rightPadding: Theme.spaceS
+                                        tone: NetState.wiredWaiting ? "warning" : ""
+                                        text: NetState.wiredHint
+                                    }
+                                    QsButton {
+                                        visible: NetState.wiredWaiting || NetState.wiredNoInternet
+                                        x: Theme.spaceS
+                                        ic: Theme.icRefresh; label: "Reconnect"
+                                        busy: NetState.wiredBusy
+                                        onGo: NetState.reconnectWired()
+                                    }
+                                }
+                                // TAILSCALE — only when it is installed (every ewe install
+                                // has it; the daemon runs only once set up here). The
+                                // switch turns it on and off; the buttons are the one
+                                // next step (Set up · Sign in) or Reconnect; an exit node
+                                // in use is named, and Tailscale's own health messages
+                                // are shown as they are.
+                                Column {
+                                    visible: NetState.tsInstalled
+                                    width: parent.width
+                                    spacing: Theme.spaceXs
+                                    SectionTitle { text: "Tailscale"; leftPadding: Theme.spaceS }
+                                    QsSwitchRow {
+                                        ic: Theme.icNetwork; label: "Tailscale"
+                                        desc: NetState.tsText
+                                        busy: NetState.tsBusy !== "" || NetState.tsPhase === "starting"
+                                        on: NetState.tsPhase === "on" || NetState.tsPhase === "starting"
+                                        disabled: NetState.tsBusy !== ""
+                                        onToggled: NetState.tsRun(NetState.tsPhase === "setup" ? "setup"
+                                                                : on ? "down" : "up")
+                                    }
+                                    Row {
+                                        visible: NetState.tsExit !== null
+                                        width: parent.width
+                                        spacing: Theme.spaceS
+                                        leftPadding: Theme.spaceS
+                                        Row {
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            width: parent.width - parent.leftPadding - tsExitBtn.width - parent.spacing
+                                            spacing: Theme.spaceXs
+                                            TextCaption {
+                                                id: tsExitName
+                                                width: Math.min(implicitWidth, parent.width - (NetState.tsExit && !NetState.tsExit.online ? tsExitOff.implicitWidth + parent.spacing : 0))
+                                                text: NetState.tsExit ? "Using exit node " + NetState.tsExit.name : ""
+                                                color: Theme.textSecondary
+                                            }
+                                            TextCaption {
+                                                id: tsExitOff
+                                                visible: NetState.tsExit !== null && !NetState.tsExit.online
+                                                text: "· offline"
+                                                color: Theme.danger
+                                            }
+                                        }
+                                        QsButton {
+                                            id: tsExitBtn
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            label: "Stop using"
+                                            busy: NetState.tsBusy === "exit-node"
+                                            onGo: NetState.tsRun("exit-node")
+                                        }
+                                    }
+                                    Repeater {
+                                        model: NetState.tsHealth.slice(0, 2)
+                                        delegate: QsNote {
+                                            required property var modelData
+                                            leftPadding: Theme.spaceS; rightPadding: Theme.spaceS
+                                            tone: "warning"
+                                            text: modelData
+                                        }
+                                    }
+                                    QsNote {
+                                        visible: NetState.tsPhase === "signin" && NetState.tsLoginUrl !== "" && NetState.tsBusy === ""
+                                        leftPadding: Theme.spaceS; rightPadding: Theme.spaceS
+                                        text: "Finish signing in in your browser."
+                                    }
+                                    QsNote {
+                                        visible: NetState.tsError !== ""
+                                        leftPadding: Theme.spaceS; rightPadding: Theme.spaceS
+                                        tone: "danger"
+                                        text: NetState.tsError
+                                    }
+                                    Row {
+                                        x: Theme.spaceS
+                                        spacing: Theme.spaceS
+                                        // from the phase, never from the buttons' `visible`: that
+                                        // reads back EFFECTIVE visibility, false while this Row
+                                        // is hidden — the Row would never show
+                                        visible: NetState.tsPhase === "setup" || NetState.tsPhase === "signin"
+                                                 || NetState.tsPhase === "on" || NetState.tsPhase === "starting"
+                                        QsButton {
+                                            id: tsSetupBtn
+                                            visible: NetState.tsPhase === "setup"
+                                            variant: "primary"; label: "Set up Tailscale"
+                                            busy: NetState.tsBusy === "setup"
+                                            onGo: NetState.tsRun("setup")
+                                        }
+                                        QsButton {
+                                            id: tsSignInBtn
+                                            visible: NetState.tsPhase === "signin"
+                                            variant: "primary"; label: "Sign in"
+                                            busy: NetState.tsBusy === "up"
+                                            onGo: NetState.tsRun("up")
+                                        }
+                                        QsButton {
+                                            id: tsReconnectBtn
+                                            visible: NetState.tsPhase === "on" || NetState.tsPhase === "starting"
+                                            ic: Theme.icRefresh; label: "Reconnect"
+                                            busy: NetState.tsBusy === "reconnect"
+                                            onGo: NetState.tsRun("reconnect")
+                                        }
+                                    }
+                                }
+                                // HIDDEN NETWORK — its name and (if it has one) its
+                                // password; NetworkManager remembers it from then on
+                                Column {
+                                    visible: root.hiddenOpen
+                                    width: parent.width
+                                    spacing: Theme.spaceS
+                                    SectionTitle { text: "Hidden network"; leftPadding: Theme.spaceS }
+                                    QsField {
+                                        focused: hidSsid.activeFocus
+                                        QsFieldInput {
+                                            id: hidSsid
+                                            anchors.fill: parent; anchors.leftMargin: Theme.spaceS; anchors.rightMargin: Theme.spaceS
+                                            placeholder: "Network name"
+                                            onAccepted: hidPw.forceActiveFocus()
+                                            Keys.onEscapePressed: root.hiddenOpen = false
+                                        }
+                                    }
+                                    QsField {
+                                        focused: hidPw.activeFocus
+                                        QsFieldInput {
+                                            id: hidPw
+                                            anchors.fill: parent; anchors.leftMargin: Theme.spaceS; anchors.rightMargin: Theme.spaceS
+                                            placeholder: "Password (leave empty for an open network)"
+                                            echoMode: TextInput.Password
+                                            onAccepted: root.joinHidden(hidSsid.text, hidPw.text)
+                                            Keys.onEscapePressed: root.hiddenOpen = false
+                                        }
+                                    }
+                                    Row {
+                                        anchors.right: parent.right
+                                        spacing: Theme.spaceS
+                                        QsButton { variant: "ghost"; label: "Cancel"; onGo: root.hiddenOpen = false }
+                                        QsButton { variant: "primary"; label: "Join"; disabled: hidSsid.text.trim() === ""; onGo: root.joinHidden(hidSsid.text, hidPw.text) }
+                                    }
+                                    onVisibleChanged: {
+                                        if (visible) { hidSsid.text = ""; hidPw.text = ""; hidSsid.forceActiveFocus() }
+                                        else keyCatcher.forceActiveFocus()
+                                    }
+                                }
+                                PageFoot {
+                                    start: QsButton { visible: root.wifiOn && !root.hiddenOpen; variant: "ghost"; label: "Hidden network…"; onGo: root.hiddenOpen = true }
+                                    QsButton { label: "Network settings"; onGo: { Globals.quickSettingsOpen = false; Shell.openSettings("network") } }
+                                }
+                            }
+
+                            // ═══ BLUETOOTH ═══
+                            Column {
+                                visible: root.expanded === "bt"
+                                width: parent.width; spacing: panel.pad
+                                QsPageHead {
+                                    title: "Bluetooth"
+                                    busy: Bluetooth.defaultAdapter && Bluetooth.defaultAdapter.discovering
+                                    note: !Bluetooth.defaultAdapter ? "No adapter"
+                                        : !Bluetooth.defaultAdapter.enabled ? "Off"
+                                        : root.btConnectedName() !== "" ? "Connected to " + root.btConnectedName()
+                                        : Bluetooth.defaultAdapter.discovering ? "Searching…" : "On"
+                                    hasSwitch: true
+                                    on: Bluetooth.defaultAdapter ? Bluetooth.defaultAdapter.enabled : false
+                                    switchDisabled: !Bluetooth.defaultAdapter
+                                    onToggled: if (Bluetooth.defaultAdapter) Bluetooth.defaultAdapter.enabled = !Bluetooth.defaultAdapter.enabled
+                                }
+                                QsEmpty {
+                                    visible: !Bluetooth.defaultAdapter
+                                    ic: Theme.icBluetooth; title: "No Bluetooth adapter"
+                                    desc: "This computer has no Bluetooth, or it is turned off in the firmware."
+                                }
+                                Column {
+                                    visible: btList.shown > 0
+                                    width: parent.width; spacing: Theme.spaceXs
+                                    SectionTitle { text: "Devices"; leftPadding: Theme.spaceS }
+                                    ListWell {
+                                        flush: true
+                                        Repeater {
+                                            id: btList
+                                            property int shown: { var c = 0, d = Bluetooth.devices ? Bluetooth.devices.values : []; for (var i = 0; i < d.length; i++) if (d[i].paired || d[i].connected || (Bluetooth.defaultAdapter && Bluetooth.defaultAdapter.discovering)) c++; return c }
+                                            model: Bluetooth.devices ? Bluetooth.devices.values : []
+                                            delegate: ListRow {
+                                                id: bRow
+                                                required property var modelData
+                                                visible: modelData.paired || modelData.connected || (Bluetooth.defaultAdapter && Bluetooth.defaultAdapter.discovering)
+                                                readonly property bool working: modelData.pairing || BtAgent.pairingAddress === modelData.address || BtAgent.busyAddress === modelData.address
+                                                readonly property string battery: modelData.connected && modelData.batteryAvailable
+                                                                                  ? Math.round(modelData.battery <= 1 ? modelData.battery * 100 : modelData.battery) + "%" : ""
+                                                // the device's kind (bluez's Icon → headphones / keyboard / phone / …)
+                                                glyph: BtAgent.glyph(modelData.icon, modelData.connected)
+                                                glyphColor: modelData.connected ? Theme.accentText : Theme.textSecondary
+                                                label: modelData.name || modelData.deviceName || modelData.address
+                                                desc: working ? (modelData.paired ? "Connecting…" : "Pairing…")
+                                                    : modelData.connected ? (battery !== "" ? "Connected · " + battery : "Connected")
+                                                    : modelData.paired ? "" : "New device"
+                                                active: modelData.connected
+                                                check: modelData.connected && !working && !bForget.visible
+                                                busy: working
+                                                onClicked: root.btTap(modelData)
+                                                // forget: a trash button on hover, for anything paired
+                                                QsIconButton {
+                                                    id: bForget
+                                                    visible: (bRow.hovered || bForget.hovered) && bRow.modelData.paired && !bRow.working
+                                                    anchors.verticalCenter: parent.verticalCenter
+                                                    ic: Theme.icTrash; danger: true
+                                                    onGo: { BtAgent.clearError(); bRow.modelData.forget() }
+                                                }
+                                                // a pairing that just completed connects by itself — the tap that
+                                                // started it was the intent, and bluez does not connect on pair
+                                                Connections { target: bRow.modelData; function onPairedChanged() { if (bRow.modelData.paired && !bRow.modelData.connected) { bRow.modelData.trusted = true; bRow.modelData.connect() } } }
+                                            }
+                                        }
+                                    }
+                                }
+                                // searching, nothing found yet
+                                Row {
+                                    visible: btList.shown === 0 && !!Bluetooth.defaultAdapter && Bluetooth.defaultAdapter.enabled
+                                    spacing: Theme.spaceS
+                                    leftPadding: Theme.spaceS
+                                    Spinner { visible: Bluetooth.defaultAdapter && Bluetooth.defaultAdapter.discovering; anchors.verticalCenter: parent.verticalCenter; size: Theme.iconSm }
+                                    TextCaption { anchors.verticalCenter: parent.verticalCenter; text: Bluetooth.defaultAdapter && Bluetooth.defaultAdapter.discovering ? "Looking for devices…" : "No devices" }
+                                }
+                                // why the last tap failed ("codes did not match", "not in
+                                // pairing mode", …) — from BtAgent; cleared by the next tap
+                                QsNote { visible: BtAgent.lastError !== ""; tone: "danger"; text: BtAgent.lastError }
+                                QsNote {
+                                    visible: Bluetooth.defaultAdapter && Bluetooth.defaultAdapter.enabled && !BtAgent.registered
+                                    tone: "warning"
+                                    text: BtAgent.bridgeError !== "" ? BtAgent.bridgeError : "The pairing agent isn’t running yet. Devices that ask for a code can’t pair."
+                                }
+                                PageFoot {
+                                    QsButton { label: "Bluetooth settings"; onGo: { Globals.quickSettingsOpen = false; Shell.openSettings("bluetooth") } }
+                                }
+                            }
+
+                            // ═══ CALENDAR (Agenda): the month, then the week's events ═══
+                            Column {
+                                id: calCol
+                                visible: root.tab === "cal"
+                                width: parent.width; spacing: panel.pad
+                                QsPageHead {
+                                    title: "Calendar"
+                                    note: root.monthNames[root.calMonth] + " " + root.calYear
+                                }
+                                Grid {
+                                    id: calGrid
+                                    width: parent.width; columns: 7
+                                    readonly property real cellW: width / 7
+                                    Repeater {
+                                        model: 7
+                                        delegate: Item {
+                                            required property int index
+                                            width: calGrid.cellW; height: Theme.controlSm
+                                            TextCaption {
+                                                anchors.centerIn: parent
+                                                text: Qt.locale().dayName((root.firstDow + index) % 7, Locale.ShortFormat).slice(0, 2)
+                                            }
+                                        }
+                                    }
+                                    Repeater {
+                                        model: 42
+                                        delegate: Item {
+                                            id: calDay
+                                            required property int index
+                                            readonly property int dayNum: index - root.firstW + 1
+                                            readonly property bool valid: dayNum >= 1 && dayNum <= root.daysIn
+                                            readonly property bool isToday: valid && dayNum === root.calDate
+                                            readonly property bool hasEvent: valid && root.eventDays[dayNum] !== undefined
+                                            readonly property bool weekend: { var d = (root.firstDow + index) % 7; return d === 0 || d === 6 }
+                                            // the sixth week only when the month reaches it
+                                            visible: index < 35 || root.firstW + root.daysIn > 35
+                                            width: calGrid.cellW; height: Theme.controlMd + Theme.spaceXxs
+                                            Rectangle {
+                                                anchors.centerIn: parent
+                                                width: Theme.controlMd; height: Theme.controlMd
+                                                radius: Theme.radiusSecondary
+                                                visible: calDay.isToday
+                                                color: Theme.accent
+                                            }
+                                            TextMono {
+                                                anchors.centerIn: parent
+                                                text: calDay.valid ? calDay.dayNum : ""
+                                                color: calDay.isToday ? Theme.onAccent : calDay.weekend ? Theme.textSecondary : Theme.textPrimary
+                                                font.weight: calDay.isToday ? Theme.fontWeightSemibold : Theme.type.mono.weight
+                                            }
+                                            // the event dot, spaceXxs above the cell's bottom edge
+                                            Rectangle {
+                                                anchors.horizontalCenter: parent.horizontalCenter
+                                                anchors.bottom: parent.bottom
+                                                anchors.bottomMargin: Theme.spaceXxs + Theme.spaceXxs / 2
+                                                width: Theme.spaceXs; height: Theme.spaceXs; radius: Theme.radiusFull
+                                                visible: calDay.hasEvent
+                                                color: calDay.isToday ? Theme.onAccent : Theme.accentText
+                                            }
+                                        }
+                                    }
+                                }
+                                Rectangle { width: parent.width; height: Theme.borderWidth1; color: Theme.borderSubtle }
+                                // offline: the warning Inline alert
+                                Rectangle {
+                                    visible: Agenda.state === "offline"
+                                    width: parent.width; height: offCol.implicitHeight + 2 * Theme.spaceS
+                                    radius: Theme.radiusPrimary
+                                    color: Theme.warningSubtle
+                                    Glyph { id: offIc; anchors.left: parent.left; anchors.leftMargin: Theme.spaceS + Theme.spaceXs; anchors.top: parent.top; anchors.topMargin: Theme.spaceS + Theme.spaceXxs / 2; text: Theme.icCloudOff; color: Theme.warning }
+                                    Column {
+                                        id: offCol
+                                        anchors.left: offIc.right; anchors.leftMargin: Theme.spaceS
+                                        anchors.right: parent.right; anchors.rightMargin: Theme.spaceS + Theme.spaceXs
+                                        anchors.top: parent.top; anchors.topMargin: Theme.spaceS
+                                        TextStrong { text: "Offline"; color: Theme.warning }
+                                        TextBody { width: parent.width; text: "Showing events from the last sync."; wrapMode: Text.Wrap }
+                                    }
+                                }
+                                QsEmpty {
+                                    visible: root.agenda.length === 0
+                                    topPadding: Theme.spaceS; bottomPadding: Theme.spaceS
+                                    ic: Theme.icCalendar
+                                    title: Agenda.hintTitle
+                                    desc: Agenda.hintBody
+                                    QsButton {
+                                        visible: !Agenda.connected
+                                        size: "md"; label: "Open ewe Settings"
+                                        onGo: { Globals.quickSettingsOpen = false; Globals.openSettings() }
+                                    }
+                                }
+                                // the agenda: upcoming events grouped by day
                                 Repeater {
-                                    model: root.tab === "home" ? root.noteGroups.slice(0, 2) : []
+                                    model: root.agenda
+                                    delegate: Column {
+                                        id: agDay
+                                        required property var modelData
+                                        width: calCol.width; spacing: Theme.spaceXxs
+                                        SectionTitle { text: agDay.modelData.label; leftPadding: Theme.spaceS }
+                                        Repeater {
+                                            model: agDay.modelData.events
+                                            delegate: Rectangle {
+                                                id: evRow
+                                                required property var modelData
+                                                readonly property bool now: root.eventNow(modelData)
+                                                width: agDay.width
+                                                height: Math.max(Theme.controlXl, evText.implicitHeight + 2 * Theme.spaceXs)
+                                                radius: Theme.radiusSecondary
+                                                color: evRow.now ? Theme.accentSubtle : "transparent"
+                                                TextMono {
+                                                    id: evTime
+                                                    anchors.left: parent.left; anchors.leftMargin: Theme.spaceS
+                                                    anchors.top: evText.top
+                                                    width: Theme.spaceXl
+                                                    text: root.fmtEventStart(evRow.modelData)
+                                                    color: Theme.textMuted
+                                                }
+                                                // the calendar's own colour
+                                                Rectangle {
+                                                    id: evBar
+                                                    anchors.left: evTime.right; anchors.leftMargin: Theme.spaceS
+                                                    anchors.top: evText.top; anchors.bottom: evText.bottom
+                                                    width: Theme.borderWidth2
+                                                    radius: Theme.borderWidth2 / 2
+                                                    color: evRow.modelData.color !== "" ? evRow.modelData.color : Theme.accent
+                                                }
+                                                Column {
+                                                    id: evText
+                                                    anchors.left: evBar.right; anchors.leftMargin: Theme.spaceS
+                                                    anchors.right: parent.right; anchors.rightMargin: Theme.spaceS
+                                                    anchors.verticalCenter: parent.verticalCenter
+                                                    TextBody { width: parent.width; text: evRow.modelData.summary }
+                                                    TextCaption { visible: text !== ""; width: parent.width; text: root.eventMeta(evRow.modelData) }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // ═══ NOTIFICATIONS (the full list): Do not disturb, then
+                            //     one card per app, the latest app first ═══
+                            Column {
+                                visible: root.tab === "notifs"
+                                width: parent.width; spacing: panel.pad
+                                QsPageHead {
+                                    title: "Notifications"
+                                    note: root.noteCount === 0 ? "" : root.noteCount === 1 ? "1 notification" : root.noteCount + " notifications"
+                                    QsButton {
+                                        visible: root.noteCount > 0
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        variant: "ghost"; label: "Clear all"
+                                        onGo: root.clearAll()
+                                    }
+                                }
+                                QsSwitchRow {
+                                    ic: Theme.icDnd; label: "Do not disturb"
+                                    desc: Globals.dnd ? "Banners are hidden; notifications still land here" : ""
+                                    on: Globals.dnd
+                                    onToggled: Globals.dnd = !Globals.dnd
+                                }
+                                Rectangle { width: parent.width; height: Theme.borderWidth1; color: Theme.borderSubtle }
+                                QsEmpty {
+                                    visible: root.noteCount === 0
+                                    topPadding: Theme.spaceS
+                                    ic: Globals.dnd ? Theme.icDnd : Theme.icBell
+                                    title: "No notifications"
+                                    desc: Globals.dnd ? "Banners are hidden while Do not disturb is on." : "You’re all caught up."
+                                }
+                                // One card per APP. Several from one app stack, with "N more
+                                // from App" below; clicking the stack opens every one of
+                                // them (each closable and clickable). A single
+                                // notification jumps straight to the window that sent it.
+                                Repeater {
+                                    model: root.tab === "notifs" ? root.noteGroups : []
                                     delegate: NoteGroup {
                                         required property var modelData
                                         group: modelData
-                                        inline: true
                                     }
                                 }
                             }
-                        }
 
-                        // ═══ REMOTE: share this computer, your computers (RFC-009) ═══
-                        RemotePage {
-                            visible: root.tab === "remote"
-                            width: parent.width
-                        }
-
-                        // ═══ SOUND: output and input devices ═══
-                        Column {
-                            visible: root.tab === "audio"
-                            width: parent.width; spacing: panel.pad
-                            QsPageHead {
-                                title: "Sound"
-                                note: Pipewire.defaultAudioSink ? root.audioLabel(Pipewire.defaultAudioSink) : ""
-                            }
-                            Slider {
-                                width: parent.width
-                                live: true
-                                icon: root.volumeVal <= 0 ? Theme.icVolMute : root.volumeVal < 0.5 ? Theme.icVolLow : Theme.icVolHigh
-                                showValue: true
-                                valueText: Math.round(root.volumeVal * 100) + "%"
-                                value: root.volumeVal
-                                onMoved: function (v) { root.setVolume(v) }
-                            }
+                            // ═══ POWER (the head's power button): suspend, sign out,
+                            //     restart, shut down — the last three ask first ═══
                             Column {
-                                width: parent.width; spacing: Theme.spaceXs
-                                SectionTitle { text: "Output"; leftPadding: Theme.spaceS }
+                                visible: root.tab === "power"
+                                width: parent.width; spacing: panel.pad
+                                QsPageHead { title: "Power" }
                                 ListWell {
                                     flush: true
-                                    Repeater {
-                                        model: root.audioNodes(true)
-                                        delegate: ListRow {
-                                            required property var modelData
-                                            readonly property bool isDefault: Pipewire.defaultAudioSink && Pipewire.defaultAudioSink.id === modelData.id
-                                            glyph: Theme.icSpeaker
-                                            glyphColor: isDefault ? Theme.accentText : Theme.textSecondary
-                                            label: root.audioLabel(modelData)
-                                            active: isDefault; check: isDefault
-                                            onClicked: { Pipewire.preferredDefaultAudioSink = modelData; volumeProc.running = true }
-                                        }
-                                    }
+                                    ListRow { glyph: root.g(0xE410); label: "Suspend"; onClicked: root.runPower("suspend") }
+                                    ListRow { glyph: root.g(0xE10E); label: "Sign out"; onClicked: root.askPower("logout", "Sign out?", "Sign out") }
+                                    ListRow { glyph: root.g(0xE145); glyphColor: Theme.danger; label: "Restart"; onClicked: root.askPower("reboot", "Restart this computer?", "Restart") }
+                                    ListRow { glyph: root.g(0xE140); glyphColor: Theme.danger; label: "Shut down"; onClicked: root.askPower("poweroff", "Shut down this computer?", "Shut down") }
                                 }
                             }
-                            Column {
-                                width: parent.width; spacing: Theme.spaceXs
-                                SectionTitle { text: "Input"; leftPadding: Theme.spaceS }
-                                ListWell {
-                                    flush: true
-                                    Repeater {
-                                        model: root.audioNodes(false)
-                                        delegate: ListRow {
-                                            required property var modelData
-                                            readonly property bool isDefault: Pipewire.defaultAudioSource && Pipewire.defaultAudioSource.id === modelData.id
-                                            glyph: Theme.icMic
-                                            glyphColor: isDefault ? Theme.accentText : Theme.textSecondary
-                                            label: root.audioLabel(modelData)
-                                            active: isDefault; check: isDefault
-                                            onClicked: Pipewire.preferredDefaultAudioSource = modelData
-                                        }
-                                    }
-                                }
-                            }
-                            // GNOME-style: one switch for every event chime
-                            QsSwitchRow {
-                                ic: Theme.icBellRing; label: "Event sounds"
-                                on: Globals.eventSounds
-                                onToggled: { Globals.eventSounds = !Globals.eventSounds; root.writePrefsPoke.restart(); if (Globals.eventSounds) Globals.playSound("audio-volume-change") }
-                            }
-                            PageFoot {
-                                QsButton { label: "Sound settings"; onGo: { Globals.quickSettingsOpen = false; Shell.openSettings("sound") } }
-                            }
-                        }
 
-                        // ═══ WI-FI (and the wired port, Tailscale) ═══
-                        Column {
-                            visible: root.expanded === "wifi"
-                            width: parent.width; spacing: panel.pad
-                            QsPageHead {
-                                title: "Wi-Fi"
-                                note: !root.wifiOn ? "Off"
-                                    : root.wifiPending !== "" ? "Joining " + root.wifiPending + "…"
-                                    : root.wifiName() !== "" ? "Connected to " + root.wifiName()
-                                    : "Not connected"
-                                busy: wifiScan.running
-                                hasSwitch: true; on: root.wifiOn
-                                onToggled: { Quickshell.execDetached(["nmcli", "radio", "wifi", root.wifiOn ? "off" : "on"]); rescanTimer.restart() }
-                            }
-                            // WHAT IS WRONG, whatever the link: a sign-in page in the
-                            // way (hotel, café, guest network) or a VPN with no
-                            // internet behind it. The VPN itself is the ewe.vpn
-                            // plugin's page — here it is only named.
-                            Row {
-                                visible: NetState.portal
-                                width: parent.width
-                                spacing: Theme.spaceS
-                                leftPadding: Theme.spaceS
-                                QsNote {
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    width: parent.width - parent.leftPadding - portalBtn.width - parent.spacing
-                                    tone: "warning"
-                                    text: "Sign in to this network"
-                                }
-                                QsButton {
-                                    id: portalBtn
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    variant: "primary"; label: "Open sign-in page"
-                                    onGo: NetState.openPortal()
-                                }
-                            }
-                            QsNote {
-                                visible: NetState.vpnHint !== ""
-                                leftPadding: Theme.spaceS; rightPadding: Theme.spaceS
-                                tone: "warning"
-                                text: NetState.vpnHint
-                            }
-                            // NETWORKS
-                            Column {
-                                width: parent.width; spacing: Theme.spaceXs
-                                SectionTitle { text: "Networks"; leftPadding: Theme.spaceS }
-                                // a scan with nothing to show yet — say so instead of
-                                // sitting there as an empty box that looks broken
-                                Row {
-                                    visible: root.wifiOn && root.wifiList.length === 0
-                                    spacing: Theme.spaceS
-                                    leftPadding: Theme.spaceS
-                                    Spinner { visible: wifiScan.running; anchors.verticalCenter: parent.verticalCenter; size: Theme.iconSm }
-                                    TextCaption { anchors.verticalCenter: parent.verticalCenter; text: wifiScan.running ? "Looking for networks…" : "No networks found" }
-                                }
-                                QsEmpty {
-                                    visible: !root.wifiOn
-                                    ic: Theme.icWifiOff; title: "Wi-Fi is off"
-                                    desc: "Turn it on to see networks nearby."
-                                }
-                                ListWell {
-                                    flush: true
-                                    visible: root.wifiOn && root.wifiList.length > 0
-                                    Repeater {
-                                        model: root.wifiOn ? root.wifiList : []
-                                        delegate: Column {
-                                            id: wRow
-                                            required property var modelData
-                                            width: parent.width
-                                            spacing: Theme.spaceXs
-                                            ListRow {
-                                                readonly property var saved: root.wifiSaved[wRow.modelData.ssid] || null
-                                                glyph: wRow.modelData.signal >= 66 ? Theme.icWifi : (wRow.modelData.signal >= 33 ? Theme.icWifiMed : Theme.icWifiLow)
-                                                glyphColor: wRow.modelData.active ? Theme.accentText : Theme.textSecondary
-                                                label: wRow.modelData.ssid
-                                                desc: root.wifiPending === wRow.modelData.ssid ? "Connecting…"
-                                                    : wRow.modelData.active ? (NetState.wifiInternet === "portal" ? "Sign in to this network"
-                                                                             : NetState.isProblem(NetState.wifiInternet) ? "Connected · no internet"
-                                                                             : "Connected")
-                                                    : saved ? "Saved"
-                                                    : wRow.modelData.sec === "" ? "Open" : ""
-                                                active: wRow.modelData.active
-                                                check: wRow.modelData.active && root.wifiPending !== wRow.modelData.ssid
-                                                busy: root.wifiPending === wRow.modelData.ssid
-                                                onClicked: root.connectWifi(wRow.modelData.ssid, wRow.modelData.sec)
-                                                Glyph {
-                                                    visible: wRow.modelData.sec !== "" && !wRow.modelData.active && root.wifiPending !== wRow.modelData.ssid
-                                                    anchors.verticalCenter: parent.verticalCenter
-                                                    text: Theme.icLock; font.pixelSize: Theme.iconSm; color: Theme.textMuted
-                                                }
-                                            }
-                                            // the password, right under the network being joined
-                                            Row {
-                                                visible: root.pwTarget === wRow.modelData.ssid
-                                                width: parent.width
-                                                spacing: Theme.spaceS
-                                                bottomPadding: Theme.spaceXs
-                                                QsField {
-                                                    width: parent.width - pwJoin.width - parent.spacing
-                                                    focused: pwInput.activeFocus
-                                                    QsFieldInput {
-                                                        id: pwInput
-                                                        anchors.fill: parent; anchors.leftMargin: Theme.spaceS; anchors.rightMargin: Theme.controlSm + Theme.spaceXs
-                                                        placeholder: "Password"
-                                                        echoMode: root.pwShow ? TextInput.Normal : TextInput.Password
-                                                        onTextChanged: root.pwText = text
-                                                        Component.onCompleted: if (root.pwTarget === wRow.modelData.ssid) forceActiveFocus()
-                                                        onAccepted: root.connectWifi(wRow.modelData.ssid, wRow.modelData.sec)
-                                                        // Esc gives up on this network, not the panel
-                                                        Keys.onEscapePressed: { root.pwTarget = ""; root.pwText = "" }
-                                                    }
-                                                    // show or hide the password while typing
-                                                    QsIconButton {
-                                                        anchors.right: parent.right; anchors.rightMargin: Theme.spaceXxs
-                                                        anchors.verticalCenter: parent.verticalCenter
-                                                        ic: root.pwShow ? Theme.icEyeOff : Theme.icEye
-                                                        selected: root.pwShow
-                                                        onGo: root.pwShow = !root.pwShow
-                                                    }
-                                                }
-                                                QsButton {
-                                                    id: pwJoin
-                                                    anchors.verticalCenter: parent.verticalCenter
-                                                    size: "md"; variant: "primary"; label: "Join"
-                                                    onGo: root.connectWifi(wRow.modelData.ssid, wRow.modelData.sec)
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            // WIRED — only when the machine has a port. The switch is
-                            // the "I'm on Wi-Fi, ignore the cable" control; the line
-                            // under it says what the port is really doing (no cable ·
-                            // waiting for an address, and for how long · connected,
-                            // with or without internet), then a hint when there is
-                            // something to try, and Reconnect while it is stuck.
-                            Column {
-                                visible: NetState.wiredPresent
-                                width: parent.width
-                                spacing: Theme.spaceXs
-                                SectionTitle { text: "Wired"; leftPadding: Theme.spaceS }
-                                QsSwitchRow {
-                                    ic: Theme.icEthernet; label: "Ethernet"
-                                    desc: NetState.wiredBusy ? "Connecting…" : NetState.wiredText
-                                    busy: NetState.wiredBusy || NetState.wiredWaiting
-                                    on: NetState.wiredUp || NetState.wiredWaiting
-                                    disabled: NetState.wiredPhase === "unplugged" || NetState.wiredPhase === "unmanaged"
-                                    onToggled: NetState.setWired(!on)
-                                }
-                                QsNote {
-                                    visible: NetState.wiredHint !== ""
-                                    leftPadding: Theme.spaceS; rightPadding: Theme.spaceS
-                                    tone: NetState.wiredWaiting ? "warning" : ""
-                                    text: NetState.wiredHint
-                                }
-                                QsButton {
-                                    visible: NetState.wiredWaiting || NetState.wiredNoInternet
-                                    x: Theme.spaceS
-                                    ic: Theme.icRefresh; label: "Reconnect"
-                                    busy: NetState.wiredBusy
-                                    onGo: NetState.reconnectWired()
-                                }
-                            }
-                            // TAILSCALE — only when it is installed (every ewe install
-                            // has it; the daemon runs only once set up here). The
-                            // switch turns it on and off; the buttons are the one
-                            // next step (Set up · Sign in) or Reconnect; an exit node
-                            // in use is named, and Tailscale's own health messages
-                            // are shown as they are.
-                            Column {
-                                visible: NetState.tsInstalled
-                                width: parent.width
-                                spacing: Theme.spaceXs
-                                SectionTitle { text: "Tailscale"; leftPadding: Theme.spaceS }
-                                QsSwitchRow {
-                                    ic: Theme.icNetwork; label: "Tailscale"
-                                    desc: NetState.tsText
-                                    busy: NetState.tsBusy !== "" || NetState.tsPhase === "starting"
-                                    on: NetState.tsPhase === "on" || NetState.tsPhase === "starting"
-                                    disabled: NetState.tsBusy !== ""
-                                    onToggled: NetState.tsRun(NetState.tsPhase === "setup" ? "setup"
-                                                            : on ? "down" : "up")
-                                }
-                                Row {
-                                    visible: NetState.tsExit !== null
-                                    width: parent.width
-                                    spacing: Theme.spaceS
-                                    leftPadding: Theme.spaceS
-                                    Row {
-                                        anchors.verticalCenter: parent.verticalCenter
-                                        width: parent.width - parent.leftPadding - tsExitBtn.width - parent.spacing
-                                        spacing: Theme.spaceXs
-                                        TextCaption {
-                                            id: tsExitName
-                                            width: Math.min(implicitWidth, parent.width - (NetState.tsExit && !NetState.tsExit.online ? tsExitOff.implicitWidth + parent.spacing : 0))
-                                            text: NetState.tsExit ? "Using exit node " + NetState.tsExit.name : ""
-                                            color: Theme.textSecondary
-                                        }
-                                        TextCaption {
-                                            id: tsExitOff
-                                            visible: NetState.tsExit !== null && !NetState.tsExit.online
-                                            text: "· offline"
-                                            color: Theme.danger
-                                        }
-                                    }
-                                    QsButton {
-                                        id: tsExitBtn
-                                        anchors.verticalCenter: parent.verticalCenter
-                                        label: "Stop using"
-                                        busy: NetState.tsBusy === "exit-node"
-                                        onGo: NetState.tsRun("exit-node")
-                                    }
-                                }
-                                Repeater {
-                                    model: NetState.tsHealth.slice(0, 2)
-                                    delegate: QsNote {
-                                        required property var modelData
-                                        leftPadding: Theme.spaceS; rightPadding: Theme.spaceS
-                                        tone: "warning"
-                                        text: modelData
-                                    }
-                                }
-                                QsNote {
-                                    visible: NetState.tsPhase === "signin" && NetState.tsLoginUrl !== "" && NetState.tsBusy === ""
-                                    leftPadding: Theme.spaceS; rightPadding: Theme.spaceS
-                                    text: "Finish signing in in your browser."
-                                }
-                                QsNote {
-                                    visible: NetState.tsError !== ""
-                                    leftPadding: Theme.spaceS; rightPadding: Theme.spaceS
-                                    tone: "danger"
-                                    text: NetState.tsError
-                                }
-                                Row {
-                                    x: Theme.spaceS
-                                    spacing: Theme.spaceS
-                                    // from the phase, never from the buttons' `visible`: that
-                                    // reads back EFFECTIVE visibility, false while this Row
-                                    // is hidden — the Row would never show
-                                    visible: NetState.tsPhase === "setup" || NetState.tsPhase === "signin"
-                                             || NetState.tsPhase === "on" || NetState.tsPhase === "starting"
-                                    QsButton {
-                                        id: tsSetupBtn
-                                        visible: NetState.tsPhase === "setup"
-                                        variant: "primary"; label: "Set up Tailscale"
-                                        busy: NetState.tsBusy === "setup"
-                                        onGo: NetState.tsRun("setup")
-                                    }
-                                    QsButton {
-                                        id: tsSignInBtn
-                                        visible: NetState.tsPhase === "signin"
-                                        variant: "primary"; label: "Sign in"
-                                        busy: NetState.tsBusy === "up"
-                                        onGo: NetState.tsRun("up")
-                                    }
-                                    QsButton {
-                                        id: tsReconnectBtn
-                                        visible: NetState.tsPhase === "on" || NetState.tsPhase === "starting"
-                                        ic: Theme.icRefresh; label: "Reconnect"
-                                        busy: NetState.tsBusy === "reconnect"
-                                        onGo: NetState.tsRun("reconnect")
-                                    }
-                                }
-                            }
-                            // HIDDEN NETWORK — its name and (if it has one) its
-                            // password; NetworkManager remembers it from then on
-                            Column {
-                                visible: root.hiddenOpen
-                                width: parent.width
-                                spacing: Theme.spaceS
-                                SectionTitle { text: "Hidden network"; leftPadding: Theme.spaceS }
-                                QsField {
-                                    focused: hidSsid.activeFocus
-                                    QsFieldInput {
-                                        id: hidSsid
-                                        anchors.fill: parent; anchors.leftMargin: Theme.spaceS; anchors.rightMargin: Theme.spaceS
-                                        placeholder: "Network name"
-                                        onAccepted: hidPw.forceActiveFocus()
-                                        Keys.onEscapePressed: root.hiddenOpen = false
-                                    }
-                                }
-                                QsField {
-                                    focused: hidPw.activeFocus
-                                    QsFieldInput {
-                                        id: hidPw
-                                        anchors.fill: parent; anchors.leftMargin: Theme.spaceS; anchors.rightMargin: Theme.spaceS
-                                        placeholder: "Password (leave empty for an open network)"
-                                        echoMode: TextInput.Password
-                                        onAccepted: root.joinHidden(hidSsid.text, hidPw.text)
-                                        Keys.onEscapePressed: root.hiddenOpen = false
-                                    }
-                                }
-                                Row {
-                                    anchors.right: parent.right
-                                    spacing: Theme.spaceS
-                                    QsButton { variant: "ghost"; label: "Cancel"; onGo: root.hiddenOpen = false }
-                                    QsButton { variant: "primary"; label: "Join"; disabled: hidSsid.text.trim() === ""; onGo: root.joinHidden(hidSsid.text, hidPw.text) }
-                                }
-                                onVisibleChanged: {
-                                    if (visible) { hidSsid.text = ""; hidPw.text = ""; hidSsid.forceActiveFocus() }
-                                    else keyCatcher.forceActiveFocus()
-                                }
-                            }
-                            PageFoot {
-                                start: QsButton { visible: root.wifiOn && !root.hiddenOpen; variant: "ghost"; label: "Hidden network…"; onGo: root.hiddenOpen = true }
-                                QsButton { label: "Network settings"; onGo: { Globals.quickSettingsOpen = false; Shell.openSettings("network") } }
-                            }
-                        }
-
-                        // ═══ BLUETOOTH ═══
-                        Column {
-                            visible: root.expanded === "bt"
-                            width: parent.width; spacing: panel.pad
-                            QsPageHead {
-                                title: "Bluetooth"
-                                busy: Bluetooth.defaultAdapter && Bluetooth.defaultAdapter.discovering
-                                note: !Bluetooth.defaultAdapter ? "No adapter"
-                                    : !Bluetooth.defaultAdapter.enabled ? "Off"
-                                    : root.btConnectedName() !== "" ? "Connected to " + root.btConnectedName()
-                                    : Bluetooth.defaultAdapter.discovering ? "Searching…" : "On"
-                                hasSwitch: true
-                                on: Bluetooth.defaultAdapter ? Bluetooth.defaultAdapter.enabled : false
-                                switchDisabled: !Bluetooth.defaultAdapter
-                                onToggled: if (Bluetooth.defaultAdapter) Bluetooth.defaultAdapter.enabled = !Bluetooth.defaultAdapter.enabled
-                            }
-                            QsEmpty {
-                                visible: !Bluetooth.defaultAdapter
-                                ic: Theme.icBluetooth; title: "No Bluetooth adapter"
-                                desc: "This computer has no Bluetooth, or it is turned off in the firmware."
-                            }
-                            Column {
-                                visible: btList.shown > 0
-                                width: parent.width; spacing: Theme.spaceXs
-                                SectionTitle { text: "Devices"; leftPadding: Theme.spaceS }
-                                ListWell {
-                                    flush: true
-                                    Repeater {
-                                        id: btList
-                                        property int shown: { var c = 0, d = Bluetooth.devices ? Bluetooth.devices.values : []; for (var i = 0; i < d.length; i++) if (d[i].paired || d[i].connected || (Bluetooth.defaultAdapter && Bluetooth.defaultAdapter.discovering)) c++; return c }
-                                        model: Bluetooth.devices ? Bluetooth.devices.values : []
-                                        delegate: ListRow {
-                                            id: bRow
-                                            required property var modelData
-                                            visible: modelData.paired || modelData.connected || (Bluetooth.defaultAdapter && Bluetooth.defaultAdapter.discovering)
-                                            readonly property bool working: modelData.pairing || BtAgent.pairingAddress === modelData.address || BtAgent.busyAddress === modelData.address
-                                            readonly property string battery: modelData.connected && modelData.batteryAvailable
-                                                                              ? Math.round(modelData.battery <= 1 ? modelData.battery * 100 : modelData.battery) + "%" : ""
-                                            // the device's kind (bluez's Icon → headphones / keyboard / phone / …)
-                                            glyph: BtAgent.glyph(modelData.icon, modelData.connected)
-                                            glyphColor: modelData.connected ? Theme.accentText : Theme.textSecondary
-                                            label: modelData.name || modelData.deviceName || modelData.address
-                                            desc: working ? (modelData.paired ? "Connecting…" : "Pairing…")
-                                                : modelData.connected ? (battery !== "" ? "Connected · " + battery : "Connected")
-                                                : modelData.paired ? "" : "New device"
-                                            active: modelData.connected
-                                            check: modelData.connected && !working && !bForget.visible
-                                            busy: working
-                                            onClicked: root.btTap(modelData)
-                                            // forget: a trash button on hover, for anything paired
-                                            QsIconButton {
-                                                id: bForget
-                                                visible: (bRow.hovered || bForget.hovered) && bRow.modelData.paired && !bRow.working
-                                                anchors.verticalCenter: parent.verticalCenter
-                                                ic: Theme.icTrash; danger: true
-                                                onGo: { BtAgent.clearError(); bRow.modelData.forget() }
-                                            }
-                                            // a pairing that just completed connects by itself — the tap that
-                                            // started it was the intent, and bluez does not connect on pair
-                                            Connections { target: bRow.modelData; function onPairedChanged() { if (bRow.modelData.paired && !bRow.modelData.connected) { bRow.modelData.trusted = true; bRow.modelData.connect() } } }
-                                        }
-                                    }
-                                }
-                            }
-                            // searching, nothing found yet
-                            Row {
-                                visible: btList.shown === 0 && !!Bluetooth.defaultAdapter && Bluetooth.defaultAdapter.enabled
-                                spacing: Theme.spaceS
-                                leftPadding: Theme.spaceS
-                                Spinner { visible: Bluetooth.defaultAdapter && Bluetooth.defaultAdapter.discovering; anchors.verticalCenter: parent.verticalCenter; size: Theme.iconSm }
-                                TextCaption { anchors.verticalCenter: parent.verticalCenter; text: Bluetooth.defaultAdapter && Bluetooth.defaultAdapter.discovering ? "Looking for devices…" : "No devices" }
-                            }
-                            // why the last tap failed ("codes did not match", "not in
-                            // pairing mode", …) — from BtAgent; cleared by the next tap
-                            QsNote { visible: BtAgent.lastError !== ""; tone: "danger"; text: BtAgent.lastError }
-                            QsNote {
-                                visible: Bluetooth.defaultAdapter && Bluetooth.defaultAdapter.enabled && !BtAgent.registered
-                                tone: "warning"
-                                text: BtAgent.bridgeError !== "" ? BtAgent.bridgeError : "The pairing agent isn’t running yet. Devices that ask for a code can’t pair."
-                            }
-                            PageFoot {
-                                QsButton { label: "Bluetooth settings"; onGo: { Globals.quickSettingsOpen = false; Shell.openSettings("bluetooth") } }
-                            }
-                        }
-
-                        // ═══ CALENDAR (Agenda): the month, then the week's events ═══
-                        Column {
-                            id: calCol
-                            visible: root.tab === "cal"
-                            width: parent.width; spacing: panel.pad
-                            QsPageHead {
-                                title: "Calendar"
-                                note: root.monthNames[root.calMonth] + " " + root.calYear
-                            }
-                            Grid {
-                                id: calGrid
-                                width: parent.width; columns: 7
-                                readonly property real cellW: width / 7
-                                Repeater {
-                                    model: 7
-                                    delegate: Item {
-                                        required property int index
-                                        width: calGrid.cellW; height: Theme.controlSm
-                                        TextCaption {
-                                            anchors.centerIn: parent
-                                            text: Qt.locale().dayName((root.firstDow + index) % 7, Locale.ShortFormat).slice(0, 2)
-                                        }
-                                    }
-                                }
-                                Repeater {
-                                    model: 42
-                                    delegate: Item {
-                                        id: calDay
-                                        required property int index
-                                        readonly property int dayNum: index - root.firstW + 1
-                                        readonly property bool valid: dayNum >= 1 && dayNum <= root.daysIn
-                                        readonly property bool isToday: valid && dayNum === root.calDate
-                                        readonly property bool hasEvent: valid && root.eventDays[dayNum] !== undefined
-                                        readonly property bool weekend: { var d = (root.firstDow + index) % 7; return d === 0 || d === 6 }
-                                        // the sixth week only when the month reaches it
-                                        visible: index < 35 || root.firstW + root.daysIn > 35
-                                        width: calGrid.cellW; height: Theme.controlMd + Theme.spaceXxs
-                                        Rectangle {
-                                            anchors.centerIn: parent
-                                            width: Theme.controlMd; height: Theme.controlMd
-                                            radius: Theme.radiusSecondary
-                                            visible: calDay.isToday
-                                            color: Theme.accent
-                                        }
-                                        TextMono {
-                                            anchors.centerIn: parent
-                                            text: calDay.valid ? calDay.dayNum : ""
-                                            color: calDay.isToday ? Theme.onAccent : calDay.weekend ? Theme.textSecondary : Theme.textPrimary
-                                            font.weight: calDay.isToday ? Theme.fontWeightSemibold : Theme.type.mono.weight
-                                        }
-                                        // the event dot, spaceXxs above the cell's bottom edge
-                                        Rectangle {
-                                            anchors.horizontalCenter: parent.horizontalCenter
-                                            anchors.bottom: parent.bottom
-                                            anchors.bottomMargin: Theme.spaceXxs + Theme.spaceXxs / 2
-                                            width: Theme.spaceXs; height: Theme.spaceXs; radius: Theme.radiusFull
-                                            visible: calDay.hasEvent
-                                            color: calDay.isToday ? Theme.onAccent : Theme.accentText
-                                        }
-                                    }
-                                }
-                            }
-                            Rectangle { width: parent.width; height: Theme.borderWidth1; color: Theme.borderSubtle }
-                            // offline: the warning Inline alert
-                            Rectangle {
-                                visible: Agenda.state === "offline"
-                                width: parent.width; height: offCol.implicitHeight + 2 * Theme.spaceS
-                                radius: Theme.radiusPrimary
-                                color: Theme.warningSubtle
-                                Glyph { id: offIc; anchors.left: parent.left; anchors.leftMargin: Theme.spaceS + Theme.spaceXs; anchors.top: parent.top; anchors.topMargin: Theme.spaceS + Theme.spaceXxs / 2; text: Theme.icCloudOff; color: Theme.warning }
-                                Column {
-                                    id: offCol
-                                    anchors.left: offIc.right; anchors.leftMargin: Theme.spaceS
-                                    anchors.right: parent.right; anchors.rightMargin: Theme.spaceS + Theme.spaceXs
-                                    anchors.top: parent.top; anchors.topMargin: Theme.spaceS
-                                    TextStrong { text: "Offline"; color: Theme.warning }
-                                    TextBody { width: parent.width; text: "Showing events from the last sync."; wrapMode: Text.Wrap }
-                                }
-                            }
-                            QsEmpty {
-                                visible: root.agenda.length === 0
-                                topPadding: Theme.spaceS; bottomPadding: Theme.spaceS
-                                ic: Theme.icCalendar
-                                title: Agenda.hintTitle
-                                desc: Agenda.hintBody
-                                QsButton {
-                                    visible: !Agenda.connected
-                                    size: "md"; label: "Open ewe Settings"
-                                    onGo: { Globals.quickSettingsOpen = false; Globals.openSettings() }
-                                }
-                            }
-                            // the agenda: upcoming events grouped by day
+                            // ═══ plugin pages (API 3 quick-page): one Column per
+                            //     registered page, shown while its key is the tab —
+                            //     the same way the built-in pages above are ═══
                             Repeater {
-                                model: root.agenda
+                                model: PluginHost.quickPages
                                 delegate: Column {
-                                    id: agDay
+                                    id: pageSlot
                                     required property var modelData
-                                    width: calCol.width; spacing: Theme.spaceXxs
-                                    SectionTitle { text: agDay.modelData.label; leftPadding: Theme.spaceS }
-                                    Repeater {
-                                        model: agDay.modelData.events
-                                        delegate: Rectangle {
-                                            id: evRow
-                                            required property var modelData
-                                            readonly property bool now: root.eventNow(modelData)
-                                            width: agDay.width
-                                            height: Math.max(Theme.controlXl, evText.implicitHeight + 2 * Theme.spaceXs)
-                                            radius: Theme.radiusSecondary
-                                            color: evRow.now ? Theme.accentSubtle : "transparent"
-                                            TextMono {
-                                                id: evTime
-                                                anchors.left: parent.left; anchors.leftMargin: Theme.spaceS
-                                                anchors.top: evText.top
-                                                width: Theme.spaceXl
-                                                text: root.fmtEventStart(evRow.modelData)
-                                                color: Theme.textMuted
-                                            }
-                                            // the calendar's own colour
-                                            Rectangle {
-                                                id: evBar
-                                                anchors.left: evTime.right; anchors.leftMargin: Theme.spaceS
-                                                anchors.top: evText.top; anchors.bottom: evText.bottom
-                                                width: Theme.borderWidth2
-                                                radius: Theme.borderWidth2 / 2
-                                                color: evRow.modelData.color !== "" ? evRow.modelData.color : Theme.accent
-                                            }
-                                            Column {
-                                                id: evText
-                                                anchors.left: evBar.right; anchors.leftMargin: Theme.spaceS
-                                                anchors.right: parent.right; anchors.rightMargin: Theme.spaceS
-                                                anchors.verticalCenter: parent.verticalCenter
-                                                TextBody { width: parent.width; text: evRow.modelData.summary }
-                                                TextCaption { visible: text !== ""; width: parent.width; text: root.eventMeta(evRow.modelData) }
-                                            }
+                                    // a key the shell keeps for itself (remote, power…)
+                                    // is the built-in page, never also this one
+                                    visible: root.tab === modelData.key && root.builtinTabs.indexOf(modelData.key) < 0
+                                    width: parent.width; spacing: Theme.spaceS
+                                    readonly property bool shown: Globals.quickSettingsOpen && pageSlot.visible
+                                    onShownChanged: if (pageLoader.status === Loader.Ready && pageLoader.item && ("panelOpen" in pageLoader.item)) pageLoader.item.panelOpen = pageSlot.shown
+                                    Loader {
+                                        id: pageLoader
+                                        width: parent.width
+                                        source: "file://" + pageSlot.modelData.entry
+                                        onStatusChanged: {
+                                            if (status === Loader.Error) Log.warn("plugins", pageSlot.modelData.id + "/quick-page failed to load (see the qml error above)")
+                                            else if (status === Loader.Ready) PluginHost.inject(item, pageSlot.modelData.id, { panelOpen: pageSlot.shown })
                                         }
+                                        Connections { target: PluginHost; function onSettingsChanged() { if (pageLoader.status === Loader.Ready) PluginHost._giveSettings(pageLoader.item, pageSlot.modelData.id) } }
                                     }
                                 }
                             }
                         }
-
-                        // ═══ NOTIFICATIONS (the full list): Do not disturb, then
-                        //     one card per app, the latest app first ═══
-                        Column {
-                            visible: root.tab === "notifs"
-                            width: parent.width; spacing: panel.pad
-                            QsPageHead {
-                                title: "Notifications"
-                                note: root.noteCount === 0 ? "" : root.noteCount === 1 ? "1 notification" : root.noteCount + " notifications"
-                                QsButton {
-                                    visible: root.noteCount > 0
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    variant: "ghost"; label: "Clear all"
-                                    onGo: root.clearAll()
-                                }
-                            }
-                            QsSwitchRow {
-                                ic: Theme.icDnd; label: "Do not disturb"
-                                desc: Globals.dnd ? "Banners are hidden; notifications still land here" : ""
-                                on: Globals.dnd
-                                onToggled: Globals.dnd = !Globals.dnd
-                            }
-                            Rectangle { width: parent.width; height: Theme.borderWidth1; color: Theme.borderSubtle }
-                            QsEmpty {
-                                visible: root.noteCount === 0
-                                topPadding: Theme.spaceS
-                                ic: Globals.dnd ? Theme.icDnd : Theme.icBell
-                                title: "No notifications"
-                                desc: Globals.dnd ? "Banners are hidden while Do not disturb is on." : "You’re all caught up."
-                            }
-                            // One card per APP. Several from one app stack, with "N more
-                            // from App" below; clicking the stack opens every one of
-                            // them (each closable and clickable). A single
-                            // notification jumps straight to the window that sent it.
-                            Repeater {
-                                model: root.tab === "notifs" ? root.noteGroups : []
-                                delegate: NoteGroup {
-                                    required property var modelData
-                                    group: modelData
-                                }
-                            }
-                        }
-
-                        // ═══ POWER (the head's power button): suspend, sign out,
-                        //     restart, shut down — the last three ask first ═══
-                        Column {
-                            visible: root.tab === "power"
-                            width: parent.width; spacing: panel.pad
-                            QsPageHead { title: "Power" }
-                            ListWell {
-                                flush: true
-                                ListRow { glyph: root.g(0xE410); label: "Suspend"; onClicked: root.runPower("suspend") }
-                                ListRow { glyph: root.g(0xE10E); label: "Sign out"; onClicked: root.askPower("logout", "Sign out?", "Sign out") }
-                                ListRow { glyph: root.g(0xE145); glyphColor: Theme.danger; label: "Restart"; onClicked: root.askPower("reboot", "Restart this computer?", "Restart") }
-                                ListRow { glyph: root.g(0xE140); glyphColor: Theme.danger; label: "Shut down"; onClicked: root.askPower("poweroff", "Shut down this computer?", "Shut down") }
-                            }
-                        }
-
-                        // ═══ plugin pages (API 3 quick-page): one Column per
-                        //     registered page, shown while its key is the tab —
-                        //     the same way the built-in pages above are ═══
-                        Repeater {
-                            model: PluginHost.quickPages
-                            delegate: Column {
-                                id: pageSlot
-                                required property var modelData
-                                // a key the shell keeps for itself (remote, power…)
-                                // is the built-in page, never also this one
-                                visible: root.tab === modelData.key && root.builtinTabs.indexOf(modelData.key) < 0
-                                width: parent.width; spacing: Theme.spaceS
-                                readonly property bool shown: Globals.quickSettingsOpen && pageSlot.visible
-                                onShownChanged: if (pageLoader.status === Loader.Ready && pageLoader.item && ("panelOpen" in pageLoader.item)) pageLoader.item.panelOpen = pageSlot.shown
-                                Loader {
-                                    id: pageLoader
-                                    width: parent.width
-                                    source: "file://" + pageSlot.modelData.entry
-                                    onStatusChanged: {
-                                        if (status === Loader.Error) Log.warn("plugins", pageSlot.modelData.id + "/quick-page failed to load (see the qml error above)")
-                                        else if (status === Loader.Ready) PluginHost.inject(item, pageSlot.modelData.id, { panelOpen: pageSlot.shown })
-                                    }
-                                    Connections { target: PluginHost; function onSettingsChanged() { if (pageLoader.status === Loader.Ready) PluginHost._giveSettings(pageLoader.item, pageSlot.modelData.id) } }
-                                }
-                            }
-                        }
                     }
-                }
 
-                // ══ the foot (home): the battery and the power mode, each only
-                //    when the machine has it; no foot at all on a desktop
-                //    without power-profiles-daemon ══
-                Item {
-                    id: foot
-                    visible: panel.onHome && (root.hasBattery || root.hasModes)
-                    width: parent.width
-                    height: Theme.borderWidth1 + Theme.spaceXs + Theme.controlSm
-                    Rectangle { width: parent.width; height: Theme.borderWidth1; color: Theme.borderSubtle }
-                    Row {
-                        visible: root.hasBattery
-                        anchors.left: parent.left; anchors.leftMargin: Theme.spaceXs
-                        anchors.right: modes.visible ? modes.left : parent.right; anchors.rightMargin: Theme.spaceS
-                        anchors.bottom: parent.bottom
-                        height: Theme.controlSm
-                        spacing: Theme.spaceS
-                        Glyph {
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: root.battCharging ? Theme.icBolt
-                                : root.battPct >= 60 ? Theme.icBattFull : root.battPct >= 30 ? Theme.icBatt50 : Theme.icBattEmpty
-                            color: root.battCharging ? Theme.success : root.battPct <= 15 ? Theme.danger : Theme.textSecondary
-                        }
-                        Text {
-                            anchors.verticalCenter: parent.verticalCenter
-                            width: parent.width - Theme.iconMd - parent.spacing
-                            text: root.battText
-                            elide: Text.ElideRight
-                            color: Theme.textSecondary
-                            font.family: Theme.type.label.family
-                            font.pixelSize: Theme.type.label.size
-                        }
-                    }
-                    // the power mode (PowerProfiles service ← power-profiles-daemon
-                    // or tuned-ppd); Performance only where the machine offers it
-                    QsSegmented {
-                        id: modes
-                        visible: root.hasModes
-                        anchors.right: parent.right; anchors.bottom: parent.bottom
-                        size: "sm"
-                        value: PowerProfiles.profile
-                        options: PowerProfiles.hasPerformanceProfile
-                                 ? [{ icon: Theme.icLeaf, tip: "Power saver", value: PowerProfile.PowerSaver },
-                                    { icon: Theme.icBalance, tip: "Balanced", value: PowerProfile.Balanced },
-                                    { icon: Theme.icSpeed, tip: "Performance", value: PowerProfile.Performance }]
-                                 : [{ icon: Theme.icLeaf, tip: "Power saver", value: PowerProfile.PowerSaver },
-                                    { icon: Theme.icBalance, tip: "Balanced", value: PowerProfile.Balanced }]
-                        onPicked: function (v) { PowerProfiles.profile = v }
-                        onHoverItemChanged: panel.hint(modes.hoverItem, modes.hoverItem !== null, modes.hoverTip)
-                    }
-                }
-            }
-
-            // ══ the confirmation: a Dialog on the `scrim` for the actions that
-            //    close apps (Sign out · Restart · Shut down). Esc, Cancel or a
-            //    click on the scrim cancels. ══
-            Item {
-                id: confirmPop
-                anchors.fill: parent
-                visible: root.confirmAction !== "" || cfCloseTimer.running
-                z: 100
-                Timer { id: cfCloseTimer; interval: Math.max(1, Theme.durBase) }
-                Connections { target: root; function onConfirmActionChanged() { if (root.confirmAction === "") cfCloseTimer.restart() } }
-
-                readonly property bool shown: root.confirmAction !== ""
-                readonly property bool danger: root.confirmAction === "poweroff" || root.confirmAction === "reboot"
-
-                Rectangle {
-                    anchors.fill: parent
-                    radius: Theme.radiusRounded
-                    color: Theme.scrim
-                    opacity: confirmPop.shown ? 1 : 0
-                    Behavior on opacity { NumberAnimation { duration: confirmPop.shown ? Theme.durBase : Theme.durFast; easing.type: Theme.ease } }
-                    MouseArea { anchors.fill: parent; onClicked: root.confirmAction = "" }
-                }
-
-                Rectangle {
-                    id: cfCard
-                    anchors.centerIn: parent
-                    width: parent.width - 2 * Theme.spaceMd
-                    height: cfCol.implicitHeight + 2 * Theme.spaceMd
-                    radius: Theme.radiusRounded
-                    color: Theme.surfaceRaised
-                    border.color: Theme.borderSubtle; border.width: Theme.borderWidth1
-                    layer.enabled: true
-                    layer.effect: Elevation {}
-                    opacity: confirmPop.shown ? 1 : 0
-                    Behavior on opacity { NumberAnimation { duration: confirmPop.shown ? Theme.durBase : Theme.durFast; easing.type: Theme.ease } }
-                    transform: Translate {
-                        y: (confirmPop.shown || Theme.reduceMotion) ? 0 : Theme.slideOffset
-                        Behavior on y { NumberAnimation { duration: Theme.durBase; easing.type: Theme.ease } }
-                    }
-                    MouseArea { anchors.fill: parent }   // swallow clicks on the dialog
-
-                    Column {
-                        id: cfCol
-                        anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top
-                        anchors.margins: Theme.spaceMd
-                        spacing: Theme.spaceMd
-
+                    // ══ the foot (home): the battery and the power mode, each only
+                    //    when the machine has it; no foot at all on a desktop
+                    //    without power-profiles-daemon ══
+                    Item {
+                        id: foot
+                        visible: panel.onHome && (root.hasBattery || root.hasModes)
+                        width: parent.width
+                        height: Theme.borderWidth1 + Theme.spaceXs + Theme.controlSm
+                        Rectangle { width: parent.width; height: Theme.borderWidth1; color: Theme.borderSubtle }
                         Row {
-                            width: parent.width
-                            spacing: Theme.spaceS + Theme.spaceXs
-                            Rectangle {
-                                width: Theme.icon2xl; height: Theme.icon2xl
-                                radius: Theme.radiusFull
-                                color: confirmPop.danger ? Theme.dangerSubtle : Theme.accentSubtle
-                                Glyph {
-                                    anchors.centerIn: parent
-                                    text: root.g(confirmPop.danger ? 0xE140 : 0xE10E)
-                                    color: confirmPop.danger ? Theme.danger : Theme.accentText
-                                }
-                            }
-                            Column {
-                                width: parent.width - Theme.icon2xl - parent.spacing
-                                spacing: Theme.spaceXs
-                                Text {
-                                    width: parent.width; wrapMode: Text.WordWrap
-                                    text: root.confirmTitle
-                                    color: Theme.textPrimary
-                                    font.family: Theme.type.h3.family
-                                    font.pixelSize: Theme.type.h3.size
-                                    font.weight: Theme.type.h3.weight
-                                    font.letterSpacing: Theme.type.h3.letterSpacing
-                                }
-                                Text {
-                                    width: parent.width; wrapMode: Text.WordWrap
-                                    text: "Open apps will close. Save your work first."
-                                    color: Theme.textSecondary
-                                    font.family: Theme.type.body.family
-                                    font.pixelSize: Theme.type.body.size
-                                }
-                            }
-                        }
-                        Row {
-                            anchors.right: parent.right
+                            visible: root.hasBattery
+                            anchors.left: parent.left; anchors.leftMargin: Theme.spaceXs
+                            anchors.right: modes.visible ? modes.left : parent.right; anchors.rightMargin: Theme.spaceS
+                            anchors.bottom: parent.bottom
+                            height: Theme.controlSm
                             spacing: Theme.spaceS
-                            QsButton { size: "md"; variant: "ghost"; label: "Cancel"; onGo: root.confirmAction = "" }
-                            QsButton {
-                                size: "md"
-                                variant: confirmPop.danger ? "danger" : "primary"
-                                label: root.confirmVerb
-                                onGo: root.runPower(root.confirmAction)
+                            Glyph {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: root.battCharging ? Theme.icBolt
+                                    : root.battPct >= 60 ? Theme.icBattFull : root.battPct >= 30 ? Theme.icBatt50 : Theme.icBattEmpty
+                                color: root.battCharging ? Theme.success : root.battPct <= 15 ? Theme.danger : Theme.textSecondary
+                            }
+                            Text {
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: parent.width - Theme.iconMd - parent.spacing
+                                text: root.battText
+                                elide: Text.ElideRight
+                                color: Theme.textSecondary
+                                font.family: Theme.type.label.family
+                                font.pixelSize: Theme.type.label.size
+                            }
+                        }
+                        // the power mode (PowerProfiles service ← power-profiles-daemon
+                        // or tuned-ppd); Performance only where the machine offers it
+                        QsSegmented {
+                            id: modes
+                            visible: root.hasModes
+                            anchors.right: parent.right; anchors.bottom: parent.bottom
+                            size: "sm"
+                            value: PowerProfiles.profile
+                            options: PowerProfiles.hasPerformanceProfile
+                                     ? [{ icon: Theme.icLeaf, tip: "Power saver", value: PowerProfile.PowerSaver },
+                                        { icon: Theme.icBalance, tip: "Balanced", value: PowerProfile.Balanced },
+                                        { icon: Theme.icSpeed, tip: "Performance", value: PowerProfile.Performance }]
+                                     : [{ icon: Theme.icLeaf, tip: "Power saver", value: PowerProfile.PowerSaver },
+                                        { icon: Theme.icBalance, tip: "Balanced", value: PowerProfile.Balanced }]
+                            onPicked: function (v) { PowerProfiles.profile = v }
+                            onHoverItemChanged: panel.hint(modes.hoverItem, modes.hoverItem !== null, modes.hoverTip)
+                        }
+                    }
+                }
+
+                // ══ the confirmation: a Dialog on the `scrim` for the actions that
+                //    close apps (Sign out · Restart · Shut down). Esc, Cancel or a
+                //    click on the scrim cancels. ══
+                Item {
+                    id: confirmPop
+                    anchors.fill: parent
+                    visible: root.confirmAction !== "" || cfCloseTimer.running
+                    z: 100
+                    Timer { id: cfCloseTimer; interval: Math.max(1, Theme.durBase) }
+                    Connections { target: root; function onConfirmActionChanged() { if (root.confirmAction === "") cfCloseTimer.restart() } }
+
+                    readonly property bool shown: root.confirmAction !== ""
+                    readonly property bool danger: root.confirmAction === "poweroff" || root.confirmAction === "reboot"
+
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: Theme.radiusRounded
+                        color: Theme.scrim
+                        opacity: confirmPop.shown ? 1 : 0
+                        Behavior on opacity { NumberAnimation { duration: confirmPop.shown ? Theme.durBase : Theme.durFast; easing.type: Theme.ease } }
+                        MouseArea { anchors.fill: parent; onClicked: root.confirmAction = "" }
+                    }
+
+                    Rectangle {
+                        id: cfCard
+                        anchors.centerIn: parent
+                        width: parent.width - 2 * Theme.spaceMd
+                        height: cfCol.implicitHeight + 2 * Theme.spaceMd
+                        radius: Theme.radiusRounded
+                        color: Theme.surfaceRaised
+                        border.color: Theme.borderSubtle; border.width: Theme.borderWidth1
+                        layer.enabled: true
+                        layer.effect: Elevation {}
+                        opacity: confirmPop.shown ? 1 : 0
+                        Behavior on opacity { NumberAnimation { duration: confirmPop.shown ? Theme.durBase : Theme.durFast; easing.type: Theme.ease } }
+                        transform: Translate {
+                            y: (confirmPop.shown || Theme.reduceMotion) ? 0 : Theme.slideOffset
+                            Behavior on y { NumberAnimation { duration: Theme.durBase; easing.type: Theme.ease } }
+                        }
+                        MouseArea { anchors.fill: parent }   // swallow clicks on the dialog
+
+                        Column {
+                            id: cfCol
+                            anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top
+                            anchors.margins: Theme.spaceMd
+                            spacing: Theme.spaceMd
+
+                            Row {
+                                width: parent.width
+                                spacing: Theme.spaceS + Theme.spaceXs
+                                Rectangle {
+                                    width: Theme.icon2xl; height: Theme.icon2xl
+                                    radius: Theme.radiusFull
+                                    color: confirmPop.danger ? Theme.dangerSubtle : Theme.accentSubtle
+                                    Glyph {
+                                        anchors.centerIn: parent
+                                        text: root.g(confirmPop.danger ? 0xE140 : 0xE10E)
+                                        color: confirmPop.danger ? Theme.danger : Theme.accentText
+                                    }
+                                }
+                                Column {
+                                    width: parent.width - Theme.icon2xl - parent.spacing
+                                    spacing: Theme.spaceXs
+                                    Text {
+                                        width: parent.width; wrapMode: Text.WordWrap
+                                        text: root.confirmTitle
+                                        color: Theme.textPrimary
+                                        font.family: Theme.type.h3.family
+                                        font.pixelSize: Theme.type.h3.size
+                                        font.weight: Theme.type.h3.weight
+                                        font.letterSpacing: Theme.type.h3.letterSpacing
+                                    }
+                                    Text {
+                                        width: parent.width; wrapMode: Text.WordWrap
+                                        text: "Open apps will close. Save your work first."
+                                        color: Theme.textSecondary
+                                        font.family: Theme.type.body.family
+                                        font.pixelSize: Theme.type.body.size
+                                    }
+                                }
+                            }
+                            Row {
+                                anchors.right: parent.right
+                                spacing: Theme.spaceS
+                                QsButton { size: "md"; variant: "ghost"; label: "Cancel"; onGo: root.confirmAction = "" }
+                                QsButton {
+                                    size: "md"
+                                    variant: confirmPop.danger ? "danger" : "primary"
+                                    label: root.confirmVerb
+                                    onGo: root.runPower(root.confirmAction)
+                                }
                             }
                         }
                     }
                 }
             }
         }
-    }
-
-    // which plugin tiles open their own page (read off the home grid while it
-    // shows — a slot's `visible` is the effective one, so a hidden home says
-    // nothing about the tiles on it)
-    function readTiles() {
-        if (!homePage.visible) return
-        var m = {}
-        for (var i = 0; i < tileRep.count; i++) {
-            var s = tileRep.itemAt(i)
-            if (!s) continue
-            m[s.modelData.id] = s.visible && !!s.item && s.item.hasMenu === true
-        }
-        if (JSON.stringify(m) !== JSON.stringify(root.tileOpens)) root.tileOpens = m
     }
 }

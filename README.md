@@ -97,8 +97,9 @@ Then reboot, pick **Ewe** at the greeter, and you're in —
   Qt strays, icons and cursor; the accent applies live, with no relogin.
 - **The machine as one file** — `~/.config/ewe/ewe.conf` describes the desktop;
   every runtime file is generated from it ([RFC-001](docs/RFC-001-one-config.md)).
-- **Curated GTK app set** — Nemo, Engrampa, imv, Zathura, mpv, kitty, Zed:
-  borderless under Hyprland, defaults managed in one `mimeapps.list`.
+- **ewe's own apps** — ewe Files (folders, archives), ewe Player (video and
+  music) and ewe Viewer (PDFs, books, documents, pictures), in the ewe Browser
+  look, plus kitty and Zed; defaults managed in one `mimeapps.list`.
 - **Komble + ewe Settings** — first-party software manager and settings app.
 - **Plugins** — `ewe-plugin add <git-url>` drops third-party bar
   widgets, panels and services into the shell; ewe's own extras are

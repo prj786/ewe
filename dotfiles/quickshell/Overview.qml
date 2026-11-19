@@ -515,6 +515,9 @@ Scope {
         // warms this exact cache key at shell start, so nothing decodes on
         // open; every Image below with this source + size shares one texture
         readonly property size wallSize: win.screen ? Qt.size(win.screen.width, win.screen.height) : Qt.size(0, 0)
+        // and cropped to the screen in the decode (Wallpaper.clipFor): the
+        // same pixels PreserveAspectCrop would show, half the cache
+        readonly property rect wallClip: win.screen ? Wallpaper.clipFor(win.screen.name, win.screen.width, win.screen.height) : Qt.rect(0, 0, 0, 0)
 
         // keyboard: Esc closes, arrows move, Enter opens. Nothing to type.
         FocusScope {
@@ -563,6 +566,7 @@ Scope {
                     anchors.fill: parent
                     source: win.wallSource
                     sourceSize: win.wallSize
+                    sourceClipRect: win.wallClip
                     fillMode: Image.PreserveAspectCrop
                     asynchronous: true
                     cache: true
@@ -591,6 +595,7 @@ Scope {
                         width: win.width; height: win.height
                         source: win.wallSource
                         sourceSize: win.wallSize
+                        sourceClipRect: win.wallClip
                         fillMode: Image.PreserveAspectCrop
                         asynchronous: true
                         cache: true
@@ -944,6 +949,7 @@ Scope {
                                     anchors.fill: parent
                                     source: win.wallSource
                                     sourceSize: win.wallSize
+                                    sourceClipRect: win.wallClip
                                     fillMode: Image.PreserveAspectCrop
                                     asynchronous: true
                                     cache: true

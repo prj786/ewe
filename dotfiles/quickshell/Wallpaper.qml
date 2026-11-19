@@ -89,6 +89,58 @@ QtObject {
     }
     function _readConf() { wp._conf.running = false; wp._conf.running = true }
 
+    // ── The decode: the screen's pixels, nothing more ─────────────────────
+    // PreserveAspectCrop asks Qt for an image that COVERS sourceSize, so a
+    // portrait 4K wallpaper on a 1920x1200 screen was cached as 1920x2400 —
+    // twice the pixels anyone paints, held for the whole session by the warm
+    // below (18 MB instead of 9 per screen size, measured 2026-11; the
+    // owner's 2560-wide display paid 33). sourceClipRect in that scaled
+    // space keeps only the centred screen-sized window, which is exactly
+    // what PreserveAspectCrop showed. The crop needs the picture's own size:
+    // one `identify -ping` per file (ImageMagick is ewe-theme's dependency
+    // already). Until it answers — or if it cannot — the rect is null and
+    // every reader takes the plain key. The warm, the Overview and the lock
+    // all go through clipFor(), so they always agree on ONE cache key.
+    property var _dims: ({})            // path → {w, h}; 0x0 = could not read
+    property var _dimQueue: []
+    function clipFor(outputName, w, h) {
+        var p = wp.pathFor(outputName), d = wp._dims[p]
+        if (!p || !d || d.w <= 0 || d.h <= 0 || w <= 0 || h <= 0) return Qt.rect(0, 0, 0, 0)
+        // the size Qt decodes to for PreserveAspectCrop: the larger ratio,
+        // each side rounded (QQuickImageProviderWithOptions::loadSize —
+        // checked against Qt 6 in the nest: 1950x1200 asks 1950x2437, not
+        // 2438). The centred window of it is pixel-identical to what the
+        // unclipped decode painted (compared with ImageMagick, 2026-11).
+        var ratio = Math.max(w / d.w, h / d.h)
+        var sw = Math.max(w, Math.round(d.w * ratio)), sh = Math.max(h, Math.round(d.h * ratio))
+        return Qt.rect(Math.floor((sw - w) / 2), Math.floor((sh - h) / 2), w, h)
+    }
+    function probeDims(path) {
+        if (!path || wp._dims[path] !== undefined || wp._dimQueue.indexOf(path) >= 0) return
+        wp._dimQueue = wp._dimQueue.concat([path])
+        wp._pumpDims()
+    }
+    function _pumpDims() {
+        if (wp._dimProc.running || wp._dimQueue.length === 0) return
+        // through sh so stdout always closes with an answer (no identify,
+        // unreadable file: "0 0" = give up on the crop for this file)
+        wp._dimProc.command = ["sh", "-c", 'identify -ping -format "%w %h" "$1[0]" 2>/dev/null || echo 0 0', "sh", wp._dimQueue[0]]
+        wp._dimProc.running = true
+    }
+    property Process _dimProc: Process {
+        stdout: StdioCollector {
+            onStreamFinished: {
+                var path = wp._dimQueue[0], m = /^(\d+)\s+(\d+)/.exec(this.text.trim())
+                var d = Object.assign({}, wp._dims)
+                d[path] = m ? { w: parseInt(m[1], 10), h: parseInt(m[2], 10) } : { w: 0, h: 0 }
+                wp._dims = d
+                wp._dimQueue = wp._dimQueue.slice(1)
+                Log.debug("wallpaper", "size of", path, d[path].w + "x" + d[path].h)
+                wp._pumpDims()
+            }
+        }
+    }
+
     // ── Warm the backdrop decode ──────────────────────────────────────────
     // The Overview and the lock screen paint this file THEMSELVES, at the
     // screen's size. A 3840x2400 JPEG takes a beat to decode, and the window
@@ -97,17 +149,22 @@ QtObject {
     // are never drawn: they hold a reference to the decoded pixmap in Qt's
     // cache from shell start, so the surfaces that DO draw it get a cache hit
     // and are ready on their first frame. The key is (url, sourceSize,
-    // fillMode) — Qt's pixmap cache keys on the provider options too, and
+    // sourceClipRect, fillMode) — Qt's pixmap cache keys on the provider options too, and
     // fillMode puts PreserveAspectCrop in them: until 0.41 this Image was
     // Stretch, so it decoded a second copy nobody drew and the Overview
-    // still missed the cache. Keep all three byte-identical to Overview.qml.
+    // still missed the cache. Keep all four byte-identical to Overview.qml.
     property Instantiator _warm: Instantiator {
         model: Quickshell.screens
         delegate: Image {
             required property var modelData
             readonly property string path: wp.pathFor(modelData.name)
-            source: path ? "file://" + path : ""
+            // decode once the crop is known (or known to be unavailable):
+            // a key that changes under a loaded Image is a second decode
+            source: (path && wp._dims[path] !== undefined) ? "file://" + path : ""
+            onPathChanged: wp.probeDims(path)
+            Component.onCompleted: wp.probeDims(path)
             sourceSize: Qt.size(modelData.width, modelData.height)
+            sourceClipRect: wp.clipFor(modelData.name, modelData.width, modelData.height)
             fillMode: Image.PreserveAspectCrop
             asynchronous: true
             cache: true

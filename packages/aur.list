@@ -8,12 +8,10 @@
 oh-my-posh-bin             # shell prompt engine; themes in dotfiles/oh-my-posh/
 mpvpaper                   # video wallpapers (wallpaper.sh's video backend) — AUR-only, was
                            # wrongly in common.list where the pacman batch tripped over it
-gnome-network-displays     # Cast to TV — Miracast (Samsung "Screen Mirroring", most Android TVs) AND
-                           # Chromecast built-in (Google TV) from one app; captures via the
-                           # xdg-desktop-portal ScreenCast (the hyprland portal), so it works outside
-                           # GNOME. Needs NetworkManager + wpa_supplicant for Wi-Fi P2P (not iwd) and
-                           # avahi-daemon for Chromecast discovery (phase 30). Driven by the ewe.cast add-on.
-mpv-uosc-git            # uosc controller for mpv — themed by colorscheme.sh (script-opts/uosc.conf)
+# gnome-network-displays (Cast to TV) is NOT here since 0.44: the Cast plugin (ewe.cast)
+# `requires` it with ewe-cast, and Komble installs both with the plugin. [ewe] still
+# serves it prebuilt (ewe-repo aur-packages.txt).
+# mpv-uosc-git left with mpv as the video app (0.44): ewe Player plays video now.
 libreswan               # IPsec for networkmanager-l2tp (L2TP/IPsec VPNs). Replaces strongswan: strongSwan 6.1
                         # disabled IKEv1 at build time and Arch ships it that way, and L2TP/IPsec IS IKEv1
                         # (Windows RRAS, MikroTik, every ISP box) — so no L2TP profile could connect

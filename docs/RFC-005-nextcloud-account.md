@@ -53,6 +53,11 @@ Why:
 
 ```
 ewe-cloud   (Python, GLib-free stdlib, the house pattern)  — NEW
+   login <server> --user <login> --password-stdin
+                    (0.43.1) no Nextcloud page: the password from stdin,
+                    GET /ocs/v2.php/core/getapppassword with it (redirects
+                    refused) → the app password; then as below. 2FA / SSO
+                    accounts get `unauthorized` + `browser: true`
    login <server>   Login Flow v2: POST /index.php/login/v2 → open the
                     returned login URL in the browser, poll the endpoint
                     until it hands back {server, loginName, appPassword};

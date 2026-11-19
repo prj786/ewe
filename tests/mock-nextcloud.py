@@ -5,6 +5,11 @@ the real thing for ewe-cloud and ewe-conf's WebDAV backend:
   POST /index.php/login/v2            Login Flow v2 start
   GET  /login/v2/flow/<token>         "the person signed in" (the browser step)
   POST /login/v2/poll                 404 until the flow completed, then the grant
+  GET  /ocs/v2.php/core/getapppassword the password → app password exchange
+                                      (basic auth with LOGIN_PW; an app
+                                      password gets 403, a wrong one 401;
+                                      user `wanderer` is redirected to /steal,
+                                      which records any request reaching it)
   GET  /ocs/v2.php/cloud/user         display name / email / quota (basic auth)
   DELETE /ocs/v2.php/core/apppassword revoke the app password
   GET  /index.php/avatar/<user>/<n>   a PNG
@@ -21,7 +26,8 @@ the real thing for ewe-cloud and ewe-conf's WebDAV backend:
 State lives in one JSON file so a test can inspect or forge it (a "foreign
 machine" is just another PUT without If-Match). Usage:
     mock-nextcloud.py <port> <state.json>
-Credentials: user `tester`, app password `app-pass-0123456789abcdef`.
+Credentials: user `tester`, app password `app-pass-0123456789abcdef`, login
+password `login-Pass word:1` (spaces and a colon on purpose).
 """
 import hashlib
 import json
@@ -34,6 +40,7 @@ from xml.sax.saxutils import escape
 PORT, STATE = int(sys.argv[1]), sys.argv[2]
 BASE = "http://127.0.0.1:%d" % PORT
 USER, APP_PW = "tester", "app-pass-0123456789abcdef"
+LOGIN_PW = "login-Pass word:1"
 PNG = bytes.fromhex("89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489"
                     "0000000d4944415478da63f8ffff3f0005fe02fe0d2f8f6c0000000049454e44ae426082")
 
@@ -77,15 +84,19 @@ class H(BaseHTTPRequestHandler):
         n = int(self.headers.get("Content-Length") or 0)
         return self.rfile.read(n) if n else b""
 
-    def _authed(self):
+    def _basic(self):
         import base64
         a = self.headers.get("Authorization", "")
         if not a.startswith("Basic "):
-            return False
+            return None, None
         try:
             u, p = base64.b64decode(a[6:]).decode().split(":", 1)
         except Exception:
-            return False
+            return None, None
+        return u, p
+
+    def _authed(self):
+        u, p = self._basic()
         s = load()
         return u == USER and p == APP_PW and not s.get("revoked")
 
@@ -124,6 +135,30 @@ class H(BaseHTTPRequestHandler):
 
     def do_GET(self):
         p = urllib.parse.urlsplit(self.path).path
+        if p == "/steal":
+            s = load()
+            s["stolen"] = s.get("stolen", 0) + 1
+            save(s)
+            return self._json({}, 404)
+        if p == "/ocs/v2.php/core/getapppassword":
+            if self.headers.get("OCS-APIRequest", "").lower() != "true":
+                return self._json({"message": "OCS-APIRequest header missing"}, 400)
+            u, pw = self._basic()
+            if u == "wanderer":
+                return self._send(302, b"", "text/plain", {"Location": BASE + "/steal"})
+            if u == USER and pw == APP_PW and not load().get("revoked"):
+                return self._json({"ocs": {"meta": {"status": "failure", "statuscode": 403,
+                                                    "message": "You cannot request an new apppassword with an apppassword"},
+                                           "data": []}}, 403)
+            if u == USER and pw == LOGIN_PW:
+                s = load()
+                s["revoked"] = False
+                s["exchanges"] = s.get("exchanges", 0) + 1
+                s["exchange_agent"] = self.headers.get("User-Agent", "")
+                save(s)
+                return self._json({"ocs": {"meta": {"status": "ok", "statuscode": 200},
+                                           "data": {"apppassword": APP_PW}}})
+            return self._json({"message": "Unauthorised"}, 401)
         if p.startswith("/login/v2/flow/"):
             tok = p.rsplit("/", 1)[1]
             s = load()

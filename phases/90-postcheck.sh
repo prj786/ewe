@@ -26,9 +26,9 @@ phase_postcheck() {
         _note "greeter: not installed (coexist — your login manager lists 'Ewe')"
     fi
     _check "fully Wayland: no xorg-server"         sh -c '! pacman -Qq xorg-server 2>/dev/null'
-    _check "apps: file manager (nemo)"             sh -c 'command -v nemo'
-    _check "apps: viewers (imv + zathura)"         sh -c 'command -v imv && command -v zathura'
-    _check "apps: archive (engrampa) + video (mpv)" sh -c 'command -v engrampa && command -v mpv'
+    _check "apps: ewe Files"                       sh -c 'command -v ewe-files-app'
+    _check "apps: ewe Player + ewe Viewer"         sh -c 'command -v ewe-player && command -v ewe-viewer'
+    _check "codecs: FFmpeg in GStreamer (gst-libav)" sh -c 'gst-inspect-1.0 avdec_h264 >/dev/null 2>&1'
     _check "theming: qt6ct fallback present"       sh -c 'pacman -Qq qt6ct'
     _check "theming: Reversal icons installed"     test -d /usr/share/icons/Reversal-blue-dark
     _check "theming: Mocu cursor installed"        test -d /usr/share/icons/Mocu-White-Right

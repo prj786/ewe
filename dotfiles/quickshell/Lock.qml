@@ -172,6 +172,7 @@ Scope {
                     // wallpaper and, while it decoded, dropped the blur below
                     // to the black ground: one more blink before the password.
                     sourceSize: surf.screen ? Qt.size(surf.screen.width, surf.screen.height) : Qt.size(0, 0)
+                    sourceClipRect: surf.screen ? Wallpaper.clipFor(surf.screen.name, surf.screen.width, surf.screen.height) : Qt.rect(0, 0, 0, 0)
                     visible: false
                     // keep the last good frame up while a reload is in flight;
                     // only a real failure (or no wallpaper) shows the ground

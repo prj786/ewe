@@ -89,9 +89,10 @@ still offer that exact version, so it retires itself.
 
 - **`packages/common.list`** — official-repo packages (real Arch names),
   installed with `pacman -S --needed`. Grouped: core session, greeter, audio,
-  network, bluetooth, power, terminals, **GTK utility apps** (Nemo, Engrampa,
-  imv, Zathura, mpv), browser, utilities, theming + fonts, `git`, core GPU
-  userspace (mesa), tuning, build deps.
+  network, bluetooth, power, terminals, the codecs (GStreamer + `gst-libav`),
+  small GTK utilities, editor, utilities, theming + fonts, `git`, core GPU
+  userspace (mesa + `vulkan-swrast`), tuning, package tools. ewe's own apps
+  come in the `ewe-apps` package (a dependency of `ewe`, phase 20 on get.sh).
 - **`packages/aur.list`** — AUR packages (built via paru): just
   `gpu-screen-recorder`. Kept deliberately short.
 - **`packages/gaming.list`** — **optional, off by default.** Steam, gamescope,
@@ -102,25 +103,29 @@ still offer that exact version, so it retires itself.
 - **GPU/Vulkan drivers** are *not* in the lists — phase 40 installs the right
   set for the detected vendor; the 32-bit ones only with `--gaming`.
 
-## Why traditional GTK apps (not Qt/KDE, not libadwaita)
+## ewe's own apps (0.44)
 
-The shipped first-party apps are **traditional GTK**: **Nemo** (file manager),
-**Engrampa** (archives), **imv** (images), **Zathura** (PDF/docs), **mpv**
-(video). These use a normal menubar/toolbar + server-side decorations, so under
-Hyprland — which draws **no titlebar**, just the accent border — they come up
-clean and fully borderless. The "GTK forces an unhideable headerbar" rule only
-applies to **GNOME/libadwaita** apps (Nautilus, GNOME Calendar, Evince);
-ordinary GTK apps don't, which is why the no-titlebar aesthetic *and* GTK can
-coexist.
+Folders, media and documents open in **ewe's own apps** (repo `prj786/ewe-apps`,
+package `ewe-apps`): **ewe Files** (`ewe-files-app` — tabs, split view, copy and
+move with progress and Undo, Trash with Restore, drives, phones and network
+shares, Open with, archives: Extract here / Compress), **ewe Player**
+(`ewe-player` — video with subtitles and audio tracks, the music library,
+media keys) and **ewe Viewer** (`ewe-viewer` — PDFs, books, comics, Markdown
+and code, Word and spreadsheet files, pictures). They share ewe Browser's look
+and the design-system tokens, follow the live theme, and nothing of them stays
+running after the window closes. They replaced Nemo, Engrampa, imv, Zathura and
+mpv (still installed for video wallpapers) as the defaults; after an upgrade
+`sudo pacman -Rns nemo engrampa imv zathura zathura-pdf-mupdf mpv-mpris
+mpv-uosc-git` removes the old ones.
 
-Going all-GTK also fixes default-app management: **one `~/.config/mimeapps.list`**
-is the single source of truth, read natively by **GIO** — "Open With" always
-sees your installed apps, with no KDE `ksycoca` cache to rebuild. Manage it from
-**ewe Settings → Default Apps**. Right-click **Compress… / Extract Here / Extract To…**
-(engrampa; Compress makes a .zip) and **Set as Wallpaper** in Nemo ship as
-`system/nemo-actions/*` (copied per user by phase 60 and `ewe-setup`); Files' defaults —
-Open in Terminal = kitty, no Delete beside Move to Trash, thumbnails up to 50 MB —
-are the dconf system db `system/dconf/ewe.d/` (phase 30 and the package hook).
+Default apps stay **one `~/.config/mimeapps.list`**, read natively by **GIO** —
+"Open With" sees every installed app, with no KDE `ksycoca` cache. Manage it from
+**ewe Settings → Default apps**. On the first login after 0.44, a type still set
+to one of the old apps moves to the new one once (marker
+`~/.local/state/ewe/default-apps-0.44.done`); any other choice stays yours. Stray
+GTK apps are still themed through adw-gtk3; Nemo's actions and the dconf
+defaults (`system/nemo-actions/`, `system/dconf/ewe.d/`) remain for anyone who
+keeps Nemo installed.
 
 **Appearance** (a scheme + an accent: Ewe Dark by default; light mode is the
 built-in Ewe Light, an imported light scheme or *From wallpaper (light)*) is
@@ -134,7 +139,7 @@ applied by `dotfiles/quickshell/scripts/colorscheme.sh` and changed live in
   `kdeglobals` fallback covers any KDE app added later. No `plasma-integration`.
 - **Icons** — **Reversal**, auto-matched to the accent by hue (its light
   variant on a light scheme).
-- **Apps** — kitty, Zathura, Zed, mpv, ewe Browser, Helium (while installed)
+- **Apps** — kitty, Zed, mpv (video wallpapers), ewe Browser, Helium (while installed); ewe's own apps read theme-tokens.json themselves
   and ewe's own apps (ewe Settings, Komble, ewe Sync) take the scheme too; Zed switches to a light theme with
   the scheme's own syntax colours. The lock screen stays Ewe Dark over the
   wallpaper.
@@ -199,10 +204,13 @@ lights up around it:
 | **calendar** | CalDAV — the Control Center's calendar and reminders |
 | **mail** | any IMAP account (ewe Sync → Mail adds it): the **Mail plugin** (`ewe.mail`, Komble → Plugins) shows the unread badge, the latest mail and new-mail notifications (its *Notifications for new mail* option) |
 
-Signing in is Nextcloud's own **Login Flow v2**: the browser opens your
-server's page, you sign in there (password, 2FA, SSO — whatever your server
-uses) and grant access to *ewe (<your computer>)*; the server hands ewe an
-**app password** that lives only in the keyring. Revoke it any time in
+Signing in asks for the server, your username or email and your password,
+right in ewe Sync (or the installer) — no Nextcloud page: the password goes
+to your server once and comes back as an **app password** for *ewe (<your
+computer>)*, which lives only in the keyring; the password itself is never
+kept. Accounts with two-step verification or single sign-on use **Sign in
+with the browser instead** (Nextcloud's own Login Flow v2: your server's
+page, then grant access). Revoke it any time in
 Nextcloud → Settings → Security. Details, the terminal tools and the
 troubleshooting: [NEXTCLOUD.md](NEXTCLOUD.md).
 

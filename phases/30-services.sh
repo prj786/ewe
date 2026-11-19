@@ -287,6 +287,14 @@ phase_services() {
         sudo_run install -m 755 "$DOTREPO/system/bin/gnome-software" /usr/local/bin/gnome-software \
             && ok "installed the Komble stand-in for gnome-software (/usr/local/bin/gnome-software)"
     fi
+    # ── Files' "Open in Terminal" (0.43.1): the dconf default below names
+    # ewe-terminal-here — kitty on the workspace you are on, whatever a
+    # Window Rule says. The package ships it in /usr/bin; a git install gets
+    # it here.
+    if [ ! -x /usr/bin/ewe-terminal-here ]; then
+        sudo_run install -m 755 "$DOTREPO/system/bin/ewe-terminal-here" /usr/local/bin/ewe-terminal-here \
+            && ok "installed ewe-terminal-here (/usr/local/bin) — Files opens kitty where you are"
+    fi
     if systemctl --user is-active --quiet xdg-desktop-portal-hyprland.service 2>/dev/null; then
         run systemctl --user restart xdg-desktop-portal-hyprland.service 2>/dev/null \
             || info "restart xdg-desktop-portal-hyprland (or log out) to pick up the new share picker"

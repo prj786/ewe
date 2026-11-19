@@ -23,6 +23,11 @@ id `io.github.prj786.ewe-sync`.
 desktop app to obtain credentials; it yields an app password that appears
 under the user's Security page as a device. `ewe-cloud` (RFC-005 phase 1)
 already implements it; ewe-sync drives that, it does not reimplement it.
+*Update 2026-11-19 (owner: "login with no nextcloud gui"):* the default
+is now a password typed in ewe Sync, exchanged once through OCS
+`core/getapppassword` (the official exchange Nextcloud's own clients use)
+for the same kind of app password; the login flow stays for two-step
+verification and single sign-on. Still `ewe-cloud`, still one app password.
 
 **Registration.** There is no public way to create an account on someone
 else's Nextcloud. The OCS Provisioning API creates users but needs

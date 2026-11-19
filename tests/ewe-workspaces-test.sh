@@ -221,6 +221,19 @@ check(ws.launch_matches("dev.zed.Zed", "dev.zed.Zed") and ws.launch_matches("Sla
       and ws.launch_matches("jetbrains-rustrover", "jetbrains-rustrover-207232cb")
       and not ws.launch_matches("steam", "ewe-browser") and not ws.launch_matches("kitty", "calendar.sh"),
       "launch_matches: ids, case, AppImage/JetBrains prefixes; unrelated apps never")
+-- 0.43.1 — "open it here" (the desktop's Open terminal here, Files' Open in
+-- Terminal): a rule "kitty → workspace 3" must not carry it off unfocused
+D[1].active = 2; focusedWin = nil
+local nmoves = #follows
+_G.ewe_launched("kitty", true)
+op("termhere", 2, "kitty", { "ewe-ws-3*" })
+check(#follows == nmoves and W[2].windows[#W[2].windows] == "termhere" and active("eDP-1") == 2,
+      "a here-launch stays on the workspace you are on, whatever its rule says")
+check(focusedWin == "termhere", "…and is focused")
+focusedWin = nil
+op("termlater", 2, "kitty", { "ewe-ws-3*" })
+check(#follows == nmoves + 1 and W[3] and W[3].windows[#W[3].windows] == "termlater" and focusedWin == nil,
+      "the here is spent: the next kitty follows its rule again, quietly")
 
 os.exit(FAILED and 1 or 0)
 EOF

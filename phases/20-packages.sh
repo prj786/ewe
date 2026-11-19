@@ -155,15 +155,20 @@ phase_packages() {
     # pacman path; this line is what covers the get.sh path, where nothing
     # resolves that dependency for us.
     install_release_pkg ewe-sync prj786/ewe-sync https://github.com/prj786/ewe-sync.git
-    # ewe-cast — the casting daemon (RFC-004). Headless on purpose: the shell's
-    # Cast card is the UI. Like the three above it is a dependency of the `ewe`
-    # PACKAGE, so pacman covers it; this covers the get.sh path.
+    # ewe-cast — the casting daemon (RFC-004). Headless on purpose: the Cast
+    # plugin is the UI. Since 0.44 the `ewe` PACKAGE no longer depends on it
+    # (the plugin `requires` it and Komble installs it with the plugin); the
+    # get.sh path keeps installing it, it is small.
     install_release_pkg ewe-cast prj786/ewe-cast https://github.com/prj786/ewe-cast.git
     # ewe browser — THE browser (web, files, PDFs, music). Electron with its
     # own castlabs runtime for Widevine, so the prebuilt release matters even
     # more than for the Tauri apps: the source fallback downloads ~100 MB and
     # builds with pnpm. A dependency of the ewe PACKAGE; this covers get.sh.
     install_release_pkg ewe-browser prj786/ewe-browser https://github.com/prj786/ewe-browser.git
+    # ewe-apps — ewe Files, ewe Player, ewe Viewer (0.44): the folder, media and
+    # document defaults (Nemo, mpv, Zathura and imv left the lists). Tauri, like
+    # the apps above; a dependency of the ewe PACKAGE; this covers get.sh.
+    install_release_pkg ewe-apps prj786/ewe-apps https://github.com/prj786/ewe-apps.git
     _install_themes
     ok "package phase done"
 }

@@ -1,11 +1,20 @@
 #!/usr/bin/env python3
 """ewe-cloud — the ewe account is a Nextcloud account (RFC-005).
 
-One sign-in to the user's OWN Nextcloud (self-hosted or a hosted provider)
-through Nextcloud's browser login flow; the app password it hands back is
-the only credential, and it lives in the keyring. Every command prints one
+One sign-in to the user's OWN Nextcloud (self-hosted or a hosted provider),
+in ewe itself (name + password, exchanged once for an app password) or
+through Nextcloud's browser login flow; the app password is the only
+credential kept, and it lives in the keyring. Every command prints one
 JSON object and exits 0, so callers never hang on it:
 
+  login <server-url> --user <login> --password-stdin
+                       no Nextcloud page (0.43.1): the password is read from
+                       stdin (never argv), sent once over https to OCS
+                       core/getapppassword — Nextcloud's own password → app
+                       password exchange — and forgotten. An account with
+                       two-step verification or single sign-on answers
+                       `unauthorized` with `browser: true`: use the flow below.
+                       -> the same reply as the browser flow
   login <server-url>   Login Flow v2: opens the browser, waits for the user,
                        stores the app password -> {ok, server, user,
                        display_name, email, quota}
@@ -335,18 +344,131 @@ def open_browser(url):
     return False
 
 
+# ── sign-in with a password (no Nextcloud page) ─────────────────────────────
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """The password goes to the address the person typed and nowhere else: a
+    redirect (to another host, or http) is reported, never followed."""
+    def redirect_request(self, *a, **k):
+        return None
+
+
+BROWSER_HINT = ("If your account uses two-step verification or single sign-on, "
+                "sign in with the browser instead.")
+
+
+def exchange_password(server, login_name, password):
+    """Nextcloud's own password → app-password exchange (OCS
+    core/getapppassword, what its desktop and mobile clients use) -> the app
+    password; fail()s with a plain reason otherwise. The new token is named
+    after USER_AGENT in Nextcloud → Settings → Security, like the flow's."""
+    auth = base64.b64encode(("%s:%s" % (login_name, password)).encode()).decode()
+    req = urllib.request.Request(
+        server + "/ocs/v2.php/core/getapppassword?format=json", method="GET",
+        headers={"User-Agent": USER_AGENT, "OCS-APIRequest": "true",
+                 "Accept": "application/json", "Authorization": "Basic " + auth})
+    try:
+        with urllib.request.build_opener(_NoRedirect).open(req, timeout=HTTP_TIMEOUT) as resp:
+            code, headers, body = resp.status, dict(resp.headers), resp.read()
+    except urllib.error.HTTPError as e:
+        code, headers, body = e.code, dict(e.headers or {}), e.read()
+    except (urllib.error.URLError, OSError) as e:
+        fail("network", "Couldn't reach %s: %s" % (server, getattr(e, "reason", e)), server=server)
+    if code == 200:
+        try:
+            token = json.loads(body.decode())["ocs"]["data"]["apppassword"]
+        except (ValueError, KeyError, TypeError):
+            token = ""
+        if not token:
+            fail("bad-reply", "Nextcloud's answer had no app password.", server=server)
+        return token
+    if code == 403:
+        # Nextcloud refuses to mint an app password FROM an app password —
+        # then the one typed is already one, and good as it is
+        try:
+            user_info(server, (login_name, password))
+            return password
+        except HttpFailed:
+            fail("forbidden", "Nextcloud refused this sign-in. " + BROWSER_HINT,
+                 server=server, browser=True)
+    if code == 401:
+        fail("unauthorized", "Nextcloud didn't accept that username and password. " + BROWSER_HINT,
+             server=server, browser=True)
+    if code == 429:
+        fail("too-many-tries", "Too many tries — your server is slowing down sign-ins from this "
+             "computer. Wait a minute, then try again.", server=server)
+    if code in (301, 302, 303, 307, 308):
+        where = headers.get("Location") or headers.get("location") or ""
+        fail("redirected", "Your server sends sign-ins to another address%s. Use that address, "
+             "or sign in with the browser." % ((" (%s)" % where) if where else ""),
+             server=server, browser=True)
+    if code == 404:
+        fail("not-nextcloud", "%s did not answer like a Nextcloud (HTTP 404 on "
+             "core/getapppassword)." % server, server=server)
+    fail("http-%d" % code, "Nextcloud answered %d to the sign-in." % code, server=server)
+
+
+def finish_login(server, login_name, app_pw, kp):
+    """Keep the app password in the keyring, learn who this is, write the
+    non-secret facts — the same end for both ways in. Never returns."""
+    # the secret (long timeout: a keyring prompt may be pending)
+    ok, code, msg = keyring_store(server, login_name, app_pw, timeout=LOGIN_TIMEOUT)
+    if not ok:
+        fail(code, msg, server=server, keyring=kp["state"])
+    auth = (login_name, app_pw)
+    info = {"user": login_name, "display_name": "", "email": "", "quota": {}}
+    try:
+        info = user_info(server, auth)
+    except HttpFailed:
+        pass
+    write_json(CLOUD_META, {"server": server, "user": info["user"] or login_name,
+                            "login_name": login_name, "display_name": info["display_name"],
+                            "email": info["email"],
+                            "logged_in_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())})
+    try:
+        os.remove(LOGIN_URL_FILE)
+    except OSError:
+        pass
+    out({"ok": True, "server": server, "user": info["user"] or login_name,
+         "login_name": login_name, "display_name": info["display_name"],
+         "email": info["email"], "quota": info["quota"], "keyring": kp["state"]})
+
+
 # ── commands ────────────────────────────────────────────────────────────────
 
 def cmd_login(argv):
-    server = normalize_server(argv[0] if argv else "")
+    rest, login_name, from_stdin = [], "", False
+    it = iter(argv)
+    for a in it:
+        if a == "--password-stdin":
+            from_stdin = True
+        elif a == "--user":
+            login_name = next(it, "")
+        elif a.startswith("--user="):
+            login_name = a[len("--user="):]
+        else:
+            rest.append(a)
+    server = normalize_server(rest[0] if rest else "")
     if not server:
         fail("no-server", "Give the address of your Nextcloud, e.g. cloud.example.org.")
     if not server_allowed(server):
         fail("insecure-server", "Only https:// servers are accepted (%s)." % server)
+    password = ""
+    if from_stdin:
+        login_name = login_name.strip()
+        password = sys.stdin.readline().rstrip("\r\n")
+        if not login_name:
+            fail("no-user", "Enter your username or email.", server=server)
+        if not password:
+            fail("no-password", "Enter your password.", server=server)
     kp = keyring_probe()
     if kp["state"] == "unavailable":
         fail("keyring-unavailable", "No Secret Service keyring is running — gnome-keyring must "
              "be installed and started for this session.", server=server, keyring=kp["state"])
+    if from_stdin:
+        app_pw = exchange_password(server, login_name, password)
+        password = ""
+        finish_login(server, login_name, app_pw, kp)
     # 1 · start the flow
     try:
         code, _, body = http("POST", server + "/index.php/login/v2", data=b"")
@@ -401,28 +523,8 @@ def cmd_login(argv):
         server = granted_server
     if not login_name or not app_pw:
         fail("bad-reply", "Nextcloud finished the sign-in without an app password.", server=server)
-    # 3 · store the secret (long timeout: a keyring prompt may be pending)
-    ok, code, msg = keyring_store(server, login_name, app_pw, timeout=LOGIN_TIMEOUT)
-    if not ok:
-        fail(code, msg, server=server, keyring=kp["state"])
-    # 4 · who is this
-    auth = (login_name, app_pw)
-    info = {"user": login_name, "display_name": "", "email": "", "quota": {}}
-    try:
-        info = user_info(server, auth)
-    except HttpFailed:
-        pass
-    write_json(CLOUD_META, {"server": server, "user": info["user"] or login_name,
-                            "login_name": login_name, "display_name": info["display_name"],
-                            "email": info["email"],
-                            "logged_in_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())})
-    try:
-        os.remove(LOGIN_URL_FILE)
-    except OSError:
-        pass
-    out({"ok": True, "server": server, "user": info["user"] or login_name,
-         "login_name": login_name, "display_name": info["display_name"],
-         "email": info["email"], "quota": info["quota"], "keyring": kp["state"]})
+    # 3 · keep it, 4 · who is this
+    finish_login(server, login_name, app_pw, kp)
 
 
 def _session():
