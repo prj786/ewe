@@ -8,6 +8,6 @@ BarStatusGlyph {
     property var settings: ({})
     property var screen: null
     property var barWindow: null
-    text: Theme.icEye
+    text: Theme.icCoffee
     shown: Insomnia.on
 }

@@ -244,9 +244,9 @@ Scope {
                     Row {
                         anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
                         spacing: Theme.spaceXxs
-                        QsIconButton { ic: Theme.icPlus; visible: SafeState.unlocked && SafeState.appInstalled; onGo: { root.open = false; SafeState.openApp("new") } }
-                        QsIconButton { ic: Theme.ic(0xe0b9); visible: SafeState.appInstalled; onGo: { root.open = false; SafeState.openApp(root.current ? "show" : "", root.current ? root.current.id : "") } }
-                        QsIconButton { ic: Theme.icLock; visible: SafeState.unlocked; onGo: SafeState.lock() }
+                        QsIconButton { ic: Theme.icPlus; tip: "New item"; visible: SafeState.unlocked && SafeState.appInstalled; onGo: { root.open = false; SafeState.openApp("new") } }
+                        QsIconButton { ic: Theme.ic(0xe0b9); tip: root.current ? "Open in ewe Safe" : "Open ewe Safe"; visible: SafeState.appInstalled; onGo: { root.open = false; SafeState.openApp(root.current ? "show" : "", root.current ? root.current.id : "") } }
+                        QsIconButton { ic: Theme.icLock; tip: "Lock"; visible: SafeState.unlocked; onGo: SafeState.lock() }
                     }
                 }
 

@@ -161,7 +161,17 @@ if [ -r "$_gtkini" ]; then
     _v="$(sed -n 's/^gtk-cursor-theme-size=\([0-9][0-9]*\)$/\1/p' "$_gtkini" | head -n1)"
     case "$_v" in 24|36|48|60|72|96) _cursz="$_v" ;; esac
 fi
-export XCURSOR_THEME="$_cur"
+# The THEME is exported as "default" (0.43): ~/.icons/default/index.theme,
+# which colorscheme.sh points at the chosen cursor, so an app started AFTER
+# Settings → Cursor gets the new pointer. A concrete name here froze the
+# login-time choice into every process the session starts — Quickshell,
+# Hyprland's own exec, systemd — and X11 apps (Steam, Office) kept the old
+# pointer until the next login ("the pointer is not changing").
+if grep -qs '^Inherits=Mocu-' "$HOME/.icons/default/index.theme"; then
+    export XCURSOR_THEME=default
+else
+    export XCURSOR_THEME="$_cur"
+fi
 export XCURSOR_SIZE="$_cursz"
 export HYPRCURSOR_SIZE="$_cursz"
 unset _cur _cursz _gtkini _v

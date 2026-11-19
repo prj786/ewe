@@ -543,10 +543,12 @@ QtObject {
     readonly property string icComputer:     ic(0xE11D)  // monitor — one of your other computers (Remote)
     readonly property string icWeb:          ic(0xE0E8)  // globe — browse / port-forward
     readonly property string icCamera:       ic(0xE064)  // camera
-    readonly property string icClipboard:    ic(0xE14E)  // scissors — clipboard popup
+    readonly property string icClipboard:    ic(0xE085)  // clipboard — clipboard history (scissors read as "cut")
+    readonly property string icCopy:         ic(0xE09E)  // copy — Shaun: copy to the clipboard
     readonly property string icTrash:        ic(0xE18E)  // trash-2
     readonly property string icPencil:       ic(0xE1F9)  // pencil
-    readonly property string icEye:          ic(0xE0BA)  // eye — insomnia / keep-awake
+    readonly property string icEye:          ic(0xE0BA)  // eye — show a password
+    readonly property string icCoffee:       ic(0xE096)  // coffee — Insomnia / keep-awake
     readonly property string icEyeOff:       ic(0xE0BB)  // eye-off
     readonly property string icDnd:          ic(0xE11E)  // moon — do not disturb
     readonly property string icCast:         ic(0xE066)  // cast — cast to TV
@@ -570,7 +572,7 @@ QtObject {
     readonly property string icPrev:         ic(0xE15F)  // skip-back
     readonly property string icNext:         ic(0xE160)  // skip-forward
     readonly property string icMusic:        ic(0xE122)  // music
-    readonly property string icMonitorOff:   ic(0xE11D)  // monitor — display states
+    readonly property string icMonitorOff:   ic(0xE1DC)  // monitor-off — display states
     readonly property string icLock:         ic(0xE10B)  // lock
     readonly property string icPower:        ic(0xE140)  // power
     readonly property string icCog:          ic(0xE154)  // settings
@@ -604,6 +606,14 @@ QtObject {
     readonly property string icPen:          ic(0xE129)  // package — the retired Pen (kept: plugins may still name it)
     readonly property string icMinimized:    ic(0xE455)  // arrow-down-to-line — minimize (the dock's 1.2.0 box; 1.2.1 shows the windows themselves)
     readonly property string icDownload:     ic(0xE0B2)  // download — dock downloads
+    readonly property string icUpgrade:      ic(0xE07B)  // arrow-up-circle — bar: updates are available
+    readonly property string icPuzzle:       ic(0xE29C)  // puzzle — a plugin with no icon of its own
+    readonly property string icExternal:     ic(0xE0B9)  // external-link — opens in the browser / another app
+    readonly property string icTimer:        ic(0xE1E0)  // timer — Shaun's timers
+    readonly property string icCheckbox:     ic(0xE167)  // square — menu: an unchecked toggle
+    readonly property string icCheckboxOn:   ic(0xE16A)  // check-square — menu: a checked toggle
+    readonly property string icRadio:        ic(0xE076)  // circle — menu: an unchosen option
+    readonly property string icRadioOn:      ic(0xE345)  // circle-dot — menu: the chosen option
     readonly property string icStore:        ic(0xE3E4)  // store — dock: Komble, the software manager
     readonly property string icKeyboard:     ic(0xE284)  // keyboard
     // Bluetooth device kinds (bluez Icon strings → BtAgent.glyph)

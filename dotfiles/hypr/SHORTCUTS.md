@@ -18,9 +18,9 @@ while that plugin is on. Your own launch keys live in ewe.conf
 |---|---|---|
 | `Super` | **Overview** (tap it alone): every window spread out, your workspaces along the top | Quickshell |
 | `Super` + `D` | **Launcher**: fuzzy app and file search (press again to close) | Quickshell |
-| `Super` + `Return` | Terminal | `kitty` |
+| `Super` + `Return` / `Ctrl` + `Alt` + `T` | Terminal | `kitty` |
 | `Super` + `E` | File manager | `nemo` |
-| `Super` + `B` | Web browser | default browser (ewe Settings → Default apps), else ewe Browser |
+| `Super` + `B` | Web browser: brings the open one forward (out of a minimized stash too), else starts the default browser (ewe Settings → Default apps), else ewe Browser | default browser |
 | `Super` + `C` | Calendar: GNOME Calendar when installed, else this month as a notification | `calendar.sh` |
 | `Super` + `,` | **ewe Settings** | `ewe-settings` |
 | `Super` + `N` | Quick settings | Quickshell |
@@ -28,6 +28,10 @@ while that plugin is on. Your own launch keys live in ewe.conf
 
 > The workspace number at the top-left of the bar opens the Overview, and the
 > pill with the clock at the right opens Quick settings.
+>
+> An app you start yourself (a key above, the launcher, the dock) that has a
+> Window Rules workspace takes you to that workspace; a window the app opens on
+> its own — Steam's toasts, a chat popping up — goes there quietly (0.43).
 
 ## Windows
 
@@ -40,7 +44,7 @@ while that plugin is on. Your own launch keys live in ewe.conf
 | `Super` + `[` / `]` | Previous / next tab inside a group |
 | `Super` + `Alt` + `1`…`9` | Jump straight to tab 1–9 of the group |
 | `Super` + `Ctrl` + `H/J/K/L` | Resize the focused window (also how to even out a split) |
-| `Super` + `Q` | Close focused window |
+| `Super` + `Q` / `Alt` + `F4` | Close focused window |
 | `Super` + `F` | Fullscreen |
 | `Super` + `Shift` + `F` | Maximise (keep bar/gaps) |
 | `Super` + `V` | Toggle floating |
@@ -96,7 +100,7 @@ across all displays instead: switching one switches every display
 | `Super` + `Space` | Switch keyboard layout (when more than one is configured) |
 | `Super` + `Shift` + `R` | Display recovery: every screen back on, the saved arrangement reapplied (works on a black screen) |
 | `Super` + `Ctrl` + `R` | Reload Hyprland config |
-| `Super` + `Ctrl` + `Q` | Quit Hyprland (log out) |
+| `Super` + `Ctrl` + `Q` / `Ctrl` + `Alt` + `Delete` | Sign out — asks first |
 
 ## Media & hardware keys (no modifier)
 

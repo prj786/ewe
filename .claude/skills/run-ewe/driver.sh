@@ -31,6 +31,7 @@
 #   HS_SCHEME=ewe-light          # [desktop.theme] scheme (default ewe-dark)
 #   HS_CONF=<file>               # use this ewe.conf instead (HS_SCHEME ignored)
 #   HS_WALLPAPER=<file>          # seed generated/wallpapers.conf (Overview/lock backdrop)
+#   HS_DATA=<dir>                # merged into the sandbox ~/.local/share (test applications/*.desktop + icons/)
 #   HS_WELCOME=1                 # let the first-run Welcome screen appear
 #   HS_PLUGINS=1                 # install every add-on of the payload into the sandbox
 #   HS_PAYLOAD=<dir>             # that payload (default $EWE_PAYLOAD_PLUGINS, else this checkout's plugins/)
@@ -115,6 +116,14 @@ sandbox_prepare() {
     mkdir -p "$SBHOME/.config/hypr/generated"
     printf '*=%s\n' "$HS_WALLPAPER" > "$SBHOME/.config/hypr/generated/wallpapers.conf"
   fi
+  # HS_DATA=<dir>: merged into the sandbox's ~/.local/share — test .desktop
+  # entries (applications/*.desktop) and their icons (icons/hicolor/…) the
+  # nested shell should see, e.g. a Steam game or a Komble AppImage entry
+  # beside a `spawn kitty --class steam_app_570` window
+  if [ -n "${HS_DATA:-}" ]; then
+    [ -d "$HS_DATA" ] || die "HS_DATA $HS_DATA is not a directory"
+    cp -r "$HS_DATA"/. "$SBHOME/.local/share/"
+  fi
   ( sandbox_env
     "$REPO/bin/ewe-theme" build --json "$XDG_CONFIG_HOME/quickshell/theme-tokens.json" --css /dev/null >"$WORK/theme.log" 2>&1
   ) || die "ewe-theme build failed — see $WORK/theme.log"
@@ -176,6 +185,10 @@ hl.config({
         disable_watchdog_warning = true,
         force_default_wallpaper = 0,
     },
+    -- the nest shares the host's session bus: Hyprland's default gsettings
+    -- sync wrote the nest's cursor over the user's real cursor-theme key
+    -- (2026-11-19 — a black cursor turned white in every GTK3/X11 app)
+    cursor = { sync_gsettings_theme = false },
 })
 EOF
   # HS_EXTRA_LUA=<file>: appended to the nested config — e.g. the glass blur

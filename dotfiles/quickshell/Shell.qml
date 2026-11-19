@@ -14,8 +14,9 @@ import Quickshell.Hyprland
 //            pinnedApps · primaryScreenName · dockItems · activeCount
 //   call     toast() · openQuickSettings() · closeQuickSettings() ·
 //            openSettings() · openStore() · launch() · focusApp() ·
+//            entryForClass() · iconForClass() ·
 //            toggleOverview() · registerAction() · runAction() ·
-//            setBottomInset() · anchorFor() · setActive() · isActive() ·
+//            setBottomInset() · anchorFor() · screenPoint() · setActive() · isActive() ·
 //            setPinned() · setDockItemShown() · dockItemShown() · closePopups()
 //   signals  aboutToSleep() · resumed()   (Resume.qml emits them) ·
 //            popupsClosing(exceptId)      (closePopups emits it)
@@ -122,13 +123,13 @@ QtObject {
     function openSettings(page) {
         if (!page) { Globals.openSettings(); return }
         if (Globals.focusWindowByClass("ewe-settings") || Globals.focusWindowByClass("hypr-settings")) return
-        if (Globals.settingsAppInstalled) Quickshell.execDetached([Globals.settingsAppBin, "--page", String(page)])
+        if (Globals.settingsAppInstalled) { Globals.markLaunch(Globals.settingsAppBin); Quickshell.execDetached([Globals.settingsAppBin, "--page", String(page)]) }
         else Globals.settingsOpen = true
     }
     function openStore(page) {
         if (!page) { Globals.openStore(); return }
         if (Globals.kombleInstalled) {
-            Globals.focusAppWindow(["komble"])
+            if (!Globals.focusAppWindow(["komble"])) Globals.markLaunch("komble")
             Quickshell.execDetached(["komble", "--" + String(page)])
         } else Globals.storeOpen = true
     }
@@ -144,6 +145,15 @@ QtObject {
     // focusApp([classes]): bring the window of one of these app classes
     // forward (its workspace comes with it); false when none is open.
     function focusApp(classes) { return Globals.focusAppWindow(Array.isArray(classes) ? classes : [classes]) }
+    // entryForClass(cls) (0.43): the DesktopEntry behind a window class —
+    // the shell's one answer (id, StartupWMClass, reverse-DNS tail, Komble's
+    // AppImages, Steam's steam_app_N), null when nothing fits. Cached.
+    // iconForClass(cls, fallback): that entry's icon path, else the class as
+    // an icon name, else `fallback` ("application-x-executable"; `true` =
+    // "" when nothing resolves). Additive — a plugin that must load on an
+    // older shell checks `("iconForClass" in Shell)` first.
+    function entryForClass(cls) { return Globals.entryForClass(cls) }
+    function iconForClass(cls, fallback) { return Globals.iconForClass(cls, fallback) }
 
     // Actions: a plugin registers a named function (manifest dockItem.action
     // names one); the dock — or any other plugin — runs it with an anchor.
@@ -211,6 +221,34 @@ QtObject {
         var fm = Hyprland.focusedMonitor, ss = Quickshell.screens
         if (fm) for (var i = 0; i < ss.length; i++) if (ss[i].name === fm.name) return ss[i]
         return ss.length > 0 ? ss[0] : null
+    }
+    // screenPoint(item, x, y) → { screen, x, y }: a point of an item (item-
+    // local; its centre when x/y are left out) in SCREEN coordinates — what
+    // a ContextMenu or a Tooltip opens at. The item's layer-shell window is
+    // read off the QsWindow attached property; a window anchored to an edge
+    // (bar, dock) is offset by that edge, one spanning its output is not,
+    // one anchored to no edge is taken as centred. Added in 0.43 (additive,
+    // API 3).
+    function screenPoint(item, x, y) {
+        if (!item) return null
+        var lx = (x === undefined || x === null) ? item.width / 2 : x
+        var ly = (y === undefined || y === null) ? item.height / 2 : y
+        var p = item.mapToItem(null, lx, ly)
+        var w = (item.QsWindow && item.QsWindow.window) ? item.QsWindow.window : null
+        var scr = (w && w.screen) ? w.screen : sh._focusedScreen()
+        var ox = 0, oy = 0
+        if (w && scr && w.anchors !== undefined && w.anchors !== null) {
+            var a = w.anchors, m = w.margins || null
+            if (a.left && a.right) ox = m ? m.left : 0
+            else if (a.right) ox = scr.width - w.width - (m ? m.right : 0)
+            else if (a.left) ox = m ? m.left : 0
+            else ox = (scr.width - w.width) / 2
+            if (a.top && a.bottom) oy = m ? m.top : 0
+            else if (a.bottom) oy = scr.height - w.height - (m ? m.bottom : 0)
+            else if (a.top) oy = m ? m.top : 0
+            else oy = (scr.height - w.height) / 2
+        }
+        return { screen: scr, x: p.x + ox, y: p.y + oy }
     }
 
     // ── signals (Resume.qml emits them from the logind bridge's events) ───

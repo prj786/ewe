@@ -562,6 +562,8 @@ check "--scheme with an unknown slug is a clear error" "echo '$r' | grep -q 'no-
 mkdir -p "$SB/bin"
 # helium-browser: colorscheme.sh dresses Helium only while it is installed
 for c in gsettings hyprctl pkill dbus-send notify-send qs gio xdg-settings helium-browser; do printf '#!/bin/sh\nexit 0\n' > "$SB/bin/$c"; chmod +x "$SB/bin/$c"; done
+# the session environment (0.43 cursor): logged, never the live user manager
+for c in systemctl dbus-update-activation-environment; do printf '#!/bin/sh\necho "%s $*" >> "%s/session-env.log"\n' "$c" "$SB" > "$SB/bin/$c"; chmod +x "$SB/bin/$c"; done
 export PATH="$SB/bin:$PATH"
 $T scheme --no-hooks import "$SB/gruvbox.yaml" >/dev/null
 $T scheme --no-hooks set accent '#fe8019' --slug gruvbox-dark-medium >/dev/null
@@ -637,6 +639,7 @@ check "ewe-conf: cursor size + colour reach user-theme.json" "grep -q '\"cursorS
 rm -f "$SB/hyprctl.log"
 HYPRLAND_INSTANCE_SIGNATURE="sig-test" sh dotfiles/quickshell/scripts/colorscheme.sh dark eeb407 >/dev/null 2>&1 || true
 check "cursor white/48 wins over the light scheme's black, and moves the live pointer" "grep -q 'gtk-cursor-theme-name=Mocu-White-Right' '$SB/cfg/gtk-3.0/settings.ini' && grep -q 'gtk-cursor-theme-size=48' '$SB/cfg/gtk-3.0/settings.ini' && grep -qx 'setcursor Mocu-White-Right 48' '$SB/hyprctl.log'"
+check "apps started later follow it: session env says XCURSOR_THEME=default (~/.icons/default) at size 48" "grep -q 'systemctl --user set-environment XCURSOR_THEME=default XCURSOR_SIZE=48' '$SB/session-env.log' && grep -q 'dbus-update-activation-environment XCURSOR_THEME=default XCURSOR_SIZE=48' '$SB/session-env.log' && grep -q 'Inherits=Mocu-White-Right' '$SB/home/.icons/default/index.theme'"
 r="$(bin/ewe-conf set --no-hooks desktop.cursor.size 50 2>&1 || true)"
 check "ewe-conf set: a cursor size Mocu does not draw is refused" "echo '$r' | grep -q 'bad-value' && [ \"\$(bin/ewe-conf get desktop.cursor.size)\" = 48 ]"
 r="$(bin/ewe-conf set --no-hooks desktop.game.level '"turbo"' 2>&1 || true)"

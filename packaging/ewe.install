@@ -101,6 +101,89 @@ _ewe_network_defaults() {
     return 0
 }
 
+# Desktop defaults from phase 30 that a pacman or ISO install never got
+# (0.43 — the Ubuntu-parity audit found them missing on package installs):
+#  * the GSettings system db (system/dconf): Nemo's "Open in Terminal" opens
+#    kitty (Cinnamon's schema default is a terminal ewe does not install —
+#    `velocitty` since cinnamon-desktop 6.8 — so the item did nothing), no
+#    "Delete" next to "Move to Trash", thumbnails for photos over 1 MiB, the
+#    broken "Mount archive" item hidden, Compress… makes a .zip. The profile
+#    is written only when absent or already ours (it orders every GSettings
+#    read on the machine), then `dconf update`.
+#  * the logind drop-in: the power button opens ewe's shutdown dialog instead
+#    of switching the machine off at once, and the shell owns the lid. Only
+#    when no 10-ewe-lid.conf exists yet (an install.sh machine has it); logind
+#    reads it at the next boot — restarting logind under a live session can
+#    black-screen the desktop.
+# Same files and rules as phase 30 — keep the two in step.
+_ewe_system_defaults() {
+    _p=/usr/share/ewe/system
+    if command -v dconf >/dev/null 2>&1 && [ -d "$_p/dconf/ewe.d" ]; then
+        install -d /etc/dconf/db/ewe.d /etc/dconf/profile
+        for _f in "$_p/dconf/ewe.d/"*; do
+            [ -f "$_f" ] && install -m 644 "$_f" "/etc/dconf/db/ewe.d/${_f##*/}"
+        done
+        if [ ! -e /etc/dconf/profile/user ] || grep -q '^system-db:ewe$' /etc/dconf/profile/user 2>/dev/null; then
+            install -m 644 "$_p/dconf/profile-user" /etc/dconf/profile/user \
+                && dconf update \
+                && echo ":: ewe: desktop defaults installed (Files: Open in Terminal, thumbnails, Compress → .zip)"
+        else
+            echo ":: ewe: /etc/dconf/profile/user belongs to something else — add 'system-db:ewe' to it for ewe's defaults"
+        fi
+    fi
+    if [ -r "$_p/logind/10-ewe-lid.conf" ] && [ ! -e /etc/systemd/logind.conf.d/10-ewe-lid.conf ]; then
+        install -d /etc/systemd/logind.conf.d \
+            && install -m 644 "$_p/logind/10-ewe-lid.conf" /etc/systemd/logind.conf.d/10-ewe-lid.conf \
+            && echo ":: ewe: the power button now asks before shutting down (from the next boot)"
+    fi
+    return 0
+}
+
+# More phase-30 files a pacman/ISO install never got, and that an install.sh
+# machine only had as of the day it last ran phase 30 (0.43 audit; this very
+# box lacked the gnome-software stand-in). Installed, or refreshed when the
+# payload's copy differs:
+#  * /usr/local/bin/gnome-software — GTK's "Find New Applications" in Open
+#    With runs a binary of that name; the stand-in opens Komble on a search
+#    (skipped when the real GNOME Software is installed);
+#  * NetworkManager dispatchers: Cast keeps the Wi-Fi radio awake during a
+#    Miracast session; the time zone follows the network's location
+#    (opt out: /etc/ewe/no-auto-timezone);
+#  * udev: the battery charge ceiling is writable from Settings → Power
+#    (only on batteries that have one); dock USB-LAN adapters cannot power
+#    the machine back on after shutdown;
+#  * the poweroff hook that unloads Wi-Fi/dock-LAN drivers before ACPI S5.
+# Same files as phase 30 — keep the two in step. DNS (systemd-resolved) and
+# the bluetooth main.conf tuning stay install.sh's: they rewrite config a
+# user may own.
+_ewe_put() {   # SRC DST MODE — 0 when it installed something
+    [ -r "$1" ] || return 1
+    cmp -s "$1" "$2" && return 1
+    install -d "${2%/*}" && install -m "$3" "$1" "$2"
+}
+_ewe_system_files() {
+    _p=/usr/share/ewe/system
+    _n=0; _u=0
+    if [ ! -x /usr/bin/gnome-software ]; then
+        _ewe_put "$_p/bin/gnome-software" /usr/local/bin/gnome-software 755 && _n=$((_n + 1))
+    fi
+    if [ -d /etc/NetworkManager ]; then
+        _ewe_put "$_p/networkmanager/50-ewe-cast-powersave" /etc/NetworkManager/dispatcher.d/50-ewe-cast-powersave 755 && _n=$((_n + 1))
+        _ewe_put "$_p/networkmanager/60-ewe-auto-timezone" /etc/NetworkManager/dispatcher.d/60-ewe-auto-timezone 755 && _n=$((_n + 1))
+    fi
+    if ls /sys/class/power_supply/BAT*/charge_control_end_threshold >/dev/null 2>&1; then
+        _ewe_put "$_p/udev/99-ewe-charge-threshold.rules" /etc/udev/rules.d/99-ewe-charge-threshold.rules 644 && { _n=$((_n + 1)); _u=1; }
+    fi
+    _ewe_put "$_p/udev/99-ewe-usb-lan-no-wake.rules" /etc/udev/rules.d/99-ewe-usb-lan-no-wake.rules 644 && { _n=$((_n + 1)); _u=1; }
+    if [ "$_u" = 1 ] && command -v udevadm >/dev/null 2>&1; then
+        udevadm control --reload >/dev/null 2>&1
+        udevadm trigger --subsystem-match=power_supply >/dev/null 2>&1
+    fi
+    _ewe_put "$_p/shutdown/ewe-unload-nics.shutdown" /usr/lib/systemd/system-shutdown/ewe-unload-nics.shutdown 755 && _n=$((_n + 1))
+    [ "$_n" -gt 0 ] && echo ":: ewe: $_n system file(s) installed or refreshed (Find New Applications, Cast, time zone, charge limit, clean poweroff)"
+    return 0
+}
+
 # Memory/journal/file-index tuning (2026-11-08): zswap off + swappiness 180
 # next to zram, transparent huge pages on request only, a 1 GB journal, no
 # plocate scan while the desktop starts. The same script phase 60 runs; it
@@ -113,6 +196,8 @@ _ewe_tuning() {
 post_install() {
     _ewe_ikev1_accept
     _ewe_network_defaults
+    _ewe_system_defaults
+    _ewe_system_files
     _ewe_tuning
     cat <<'EOF'
 :: ewe is installed. Two steps remain:
@@ -127,6 +212,8 @@ post_upgrade() {
     _ewe_ikev1_accept
     _ewe_refresh_greeter
     _ewe_network_defaults
+    _ewe_system_defaults
+    _ewe_system_files
     _ewe_tuning
     cat <<'EOF'
 :: ewe payload updated. Each user's desktop refreshes itself at next login

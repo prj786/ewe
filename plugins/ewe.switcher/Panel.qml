@@ -64,12 +64,16 @@ Scope {
             return c
         } catch (e) { return "" }
     }
+    // the shell's one class → app answer (Komble AppImages, Steam games…);
+    // the local lookup only on a shell older than 0.43
     function entryOf(t) {
         var c = root.classOf(t)
-        return c === "" ? null : DesktopEntries.heuristicLookup(c)
+        if (c === "") return null
+        return ("entryForClass" in Shell) ? Shell.entryForClass(c) : DesktopEntries.heuristicLookup(c)
     }
     function iconFor(t) {
         var c = root.classOf(t)
+        if ("iconForClass" in Shell) return Shell.iconForClass(c)
         if (c === "") return Quickshell.iconPath("application-x-executable")
         var e = root.entryOf(t)
         return Quickshell.iconPath(e && e.icon ? e.icon : c, "application-x-executable")

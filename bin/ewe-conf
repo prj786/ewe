@@ -1268,14 +1268,18 @@ def gen_keybinds_lua(binds):
         exe = str(b.get("exec", "")).strip()
         if not combo or not exe:
             continue
-        s += 'hl.bind("%s", hl.dsp.exec_cmd("%s"))\n' % (_lua_esc(combo), _lua_esc(exe))
+        # ewe_launch (workspaces.lua, 0.43): a window started from your own
+        # key follows its workspace rule and takes you along; the fallback
+        # keeps the bind working under a hyprland.lua that predates it
+        s += 'hl.bind("%s", (ewe_launch or hl.dsp.exec_cmd)("%s"))\n' % (_lua_esc(combo), _lua_esc(exe))
     return s
 
 
 def parse_keybinds_lua(text):
     import re
     out = []
-    for m in re.finditer(r'hl\.bind\("((?:[^"\\]|\\.)*)", hl\.dsp\.exec_cmd\("((?:[^"\\]|\\.)*)"\)\)', text):
+    # both the 0.43 form and the plain exec_cmd one an older ewe-conf wrote
+    for m in re.finditer(r'hl\.bind\("((?:[^"\\]|\\.)*)", (?:hl\.dsp\.exec_cmd|\(ewe_launch or hl\.dsp\.exec_cmd\))\("((?:[^"\\]|\\.)*)"\)\)', text):
         out.append({"combo": _lua_unesc(m.group(1)), "exec": _lua_unesc(m.group(2))})
     return out
 

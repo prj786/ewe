@@ -99,11 +99,13 @@ phase_userconfig() {
         done
     fi
 
-    # Nemo right-click actions: "Compress…" / "Extract Here" via engrampa. Shipped
-    # in the repo, copied to the user's Nemo actions dir (Nemo loads *.nemo_action).
+    # Nemo right-click actions: "Compress…" / "Extract Here" / "Extract To…" via
+    # engrampa, "Set as Wallpaper" (+ its script, run from the same folder).
+    # Shipped in the repo, copied to the user's Nemo actions dir (Nemo loads
+    # *.nemo_action). packaging/ewe-setup does the same for pacman installs.
     if [ -d "$DOTREPO/system/nemo-actions" ]; then
         run mkdir -p "$HOME/.local/share/nemo/actions"
-        run sh -c "cp -f '$DOTREPO/system/nemo-actions/'*.nemo_action '$HOME/.local/share/nemo/actions/' 2>/dev/null || true"
+        run sh -c "cp -f '$DOTREPO/system/nemo-actions/'*.nemo_action '$DOTREPO/system/nemo-actions/'*.sh '$HOME/.local/share/nemo/actions/' 2>/dev/null || true"
     fi
 
     # Nemo: bare window — no sidebar, menubar, toolbar, or status bar; just the

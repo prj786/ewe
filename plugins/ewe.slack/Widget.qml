@@ -43,9 +43,9 @@ Item {
             Row {
                 anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
                 spacing: Theme.spaceXxs
-                QsIconButton { ic: Theme.icRefresh; onGo: SlackInbox.fetch() }
-                QsIconButton { ic: Theme.icWeb; onGo: SlackInbox.openSlack() }
-                QsIconButton { ic: Theme.icCog; onGo: SlackInbox.openSetup() }
+                QsIconButton { ic: Theme.icRefresh; tip: "Check now"; onGo: SlackInbox.fetch() }
+                QsIconButton { ic: Theme.icExternal; tip: "Open Slack"; onGo: SlackInbox.openSlack() }
+                QsIconButton { ic: Theme.icCog; tip: "Slack settings"; onGo: SlackInbox.openSetup() }
             }
         }
 

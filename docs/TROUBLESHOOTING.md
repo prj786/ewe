@@ -382,3 +382,58 @@ Check what ran: `ewe-game status` lists every step of the current session,
 with the reason a step was skipped, and `ready` says whether GameMode is
 installed, allowed and configured. Ultra puts everything back when it turns
 off; a game closing never turns off a game mode you turned on yourself.
+
+## An app keeps pulling me to its workspace (Steam's pop-ups)
+
+Before 0.43 a Window Rules "open on workspace N" moved EVERY window of that
+app there, with the focus — and Steam's own toasts (friend online, download
+done) are Steam windows, so each one dragged you to Steam's workspace. Since
+0.43 such a window opens without taking the focus and goes to its workspace
+quietly; you are taken along only when you started the app yourself (a key,
+the launcher, the dock), or when it opens on the workspace you are on.
+Steam's toasts show where you are, on top, and never take the keyboard.
+
+## Clicking a link in the terminal does nothing
+
+It opened — in the browser window on another workspace, which never came
+forward. Since 0.43 an app may come forward when you clicked something in
+another app (Hyprland's `focus_on_activate`, checked by an activation token;
+X11 apps such as Steam only mark their window urgent: a dot in the bar and
+the dock). A plain click opens a link in kitty; inside a program that uses
+the mouse (vim, htop, some TUIs) hold `Ctrl` + `Shift` while clicking.
+
+## The pointer did not change after Settings → Cursor
+
+Apps kept the cursor theme the session started with. Since 0.43 the session
+exports `XCURSOR_THEME=default` (`~/.icons/default`, which follows your
+choice), so an app started after the change gets the new pointer; apps that
+were already open keep theirs until restarted. A pointer that changes back by
+itself was Hyprland writing its startup theme into GSettings
+(`cursor.sync_gsettings_theme`, now off). Check:
+
+```sh
+gsettings get org.gnome.desktop.interface cursor-theme
+cat ~/.icons/default/index.theme   # Inherits=Mocu-…
+```
+
+## Files: "Open in Terminal" does nothing, no Compress, no Set as Wallpaper
+
+"Open in Terminal" runs the terminal GSettings names, and Cinnamon's default
+(`velocitty` since cinnamon-desktop 6.8) is not installed. ewe's defaults
+(kitty; no Delete beside Move to Trash; thumbnails up to 50 MB; Compress →
+.zip; the broken "Mount archive" hidden) are a dconf system db that only
+`install.sh` installed before 0.43 — the package does now. The right-click
+actions (Compress…, Extract Here, Extract To…, Set as Wallpaper) are copied
+per account by `ewe-setup` at the next login. Check:
+
+```sh
+ls /etc/dconf/db/ewe.d/ && cat /etc/dconf/profile/user   # system-db:ewe
+gsettings get org.cinnamon.desktop.default-applications.terminal exec   # 'kitty'
+ls ~/.local/share/nemo/actions/
+```
+
+A value you once set yourself (`dconf read
+/org/cinnamon/desktop/default-applications/terminal/exec`) wins over ewe's;
+`dconf reset` it to follow the default. RAR archives need `unarchiver`, and
+"Open With" a terminal program needs `xdg-terminal-exec` (both dependencies
+since 0.43).

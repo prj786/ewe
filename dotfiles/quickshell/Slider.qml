@@ -204,6 +204,8 @@ Item {
                 var lo = Math.min(sld.from, sld.to), hi = Math.max(sld.from, sld.to)
                 return Math.max(lo, Math.min(hi, v))
             }
+            // a pointing hand over the track, a closed hand while the thumb is dragged
+            cursorShape: sld.disabled ? Qt.ArrowCursor : sld.dragging ? Qt.ClosedHandCursor : Qt.PointingHandCursor
             onPressed: function (m) { sld.dragging = true; sld.dragVal = pick(m.x); if (sld.live) sld.moved(sld.dragVal) }
             onPositionChanged: function (m) { if (!pressed) return; sld.dragVal = pick(m.x); if (sld.live) sld.moved(sld.dragVal) }
             onReleased: { sld.dragging = false; if (!sld.live) sld.moved(sld.dragVal) }

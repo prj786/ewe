@@ -19,6 +19,7 @@ singleton AudioState 1.0 AudioState.qml
 singleton NetState 1.0 NetState.qml
 singleton GlobalShortcuts 1.0 GlobalShortcuts.qml
 singleton RemoteState 1.0 RemoteState.qml
+singleton TooltipHost 1.0 TooltipHost.qml
 Elevation 1.0 Elevation.qml
 Spinner 1.0 Spinner.qml
 BarIcon 1.0 BarIcon.qml
@@ -27,6 +28,8 @@ BarModule 1.0 BarModule.qml
 BarSep 1.0 BarSep.qml
 BarStatusGlyph 1.0 BarStatusGlyph.qml
 AnchoredPopup 1.0 AnchoredPopup.qml
+ContextMenu 1.0 ContextMenu.qml
+Tooltip 1.0 Tooltip.qml
 FileDropTarget 1.0 FileDropTarget.qml
 DropRow 1.0 DropRow.qml
 Toggle 1.0 Toggle.qml

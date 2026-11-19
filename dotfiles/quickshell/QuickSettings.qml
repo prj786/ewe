@@ -277,7 +277,7 @@ Scope {
         var ps = PluginHost.quickPages
         for (var i = 0; i < ps.length; i++)
             if (!root.tileOpens[ps[i].id] && root.builtinTabs.indexOf(ps[i].key) < 0)
-                out.push({ key: ps[i].key, label: ps[i].label, icon: Theme[ps[i].icon] || Theme.icApps })
+                out.push({ key: ps[i].key, label: ps[i].label, icon: Theme[ps[i].icon] || Theme.icPuzzle })
         return out
     }
 
@@ -380,11 +380,21 @@ Scope {
         var d = new Date(t), today = new Date(root.nowMs)
         return d.toDateString() === today.toDateString() ? Qt.formatTime(d, "hh:mm") : Qt.formatDateTime(d, "d MMM")
     }
+    // The app's actions as buttons: everything but "default" (the card's own
+    // click), the first two — the Notification card's limit.
+    function noteActions(n) {
+        var out = []
+        try {
+            var acts = n && n.actions ? n.actions : []
+            for (var i = 0; i < acts.length && out.length < 2; i++)
+                if (acts[i].identifier !== "default") out.push(acts[i])
+        } catch (e) {}
+        return out
+    }
     // Focus the window a notification came from (same matching Notifications.qml
     // uses for toasts), fire its default action, close the panel.
     function noteFocus(n) {
-        Globals.focusAppWindow([n.desktopEntry, n.appName])
-        try { if (n.actions) for (var i = 0; i < n.actions.length; i++) if (n.actions[i].identifier === "default") { n.actions[i].invoke(); break } } catch (e) {}
+        Globals.openNotification(n)
         Globals.quickSettingsOpen = false
     }
     function noteIcon(n) {
@@ -518,6 +528,13 @@ Scope {
         appid: "ewe"; name: "power"
         description: "Shut down (confirmation)"
         onPressed: { Globals.quickSettingsOpen = true; root.askPower("poweroff", "Shut down this computer?", "Shut down") }
+    }
+    // Super+Ctrl+Q and Ctrl+Alt+Delete (0.43): sign out, asked first — the
+    // chord used to end the session at once
+    GlobalShortcut {
+        appid: "ewe"; name: "logout"
+        description: "Sign out (confirmation)"
+        onPressed: { Globals.quickSettingsOpen = true; root.askPower("logout", "Sign out?", "Sign out") }
     }
     IpcHandler {
         target: "quicksettings"
@@ -725,22 +742,14 @@ Scope {
             //    files in API 3 (public to plugins, docs/PLUGINS.md) ══
 
             // ── Tooltip: names an icon-only control (the head's buttons, the
-            //    shortcut tiles, the power modes) after 500 ms of hover —
-            //    at once when a neighbour's was just showing ──
-            property Item tipItem: null
-            property string tipText: ""
+            //    shortcut tiles, the power modes) — the shell's one
+            //    TooltipHost (Tooltip.qml), shared with the bar and the dock,
+            //    carries the delay, the warm period and the placement ──
             function hint(item, on, text) {
-                if (on && item) {
-                    panel.tipItem = item; panel.tipText = text
-                    if (tipWarm.running || tipBox.shown) tipBox.place()
-                    else tipDelay.restart()
-                } else if (!item || panel.tipItem === item) {
-                    if (tipBox.shown) tipWarm.restart()
-                    tipDelay.stop(); tipBox.shown = false; panel.tipItem = null
-                }
+                if (on && item) TooltipHost.show(item, text)
+                else if (item) TooltipHost.hide(item)
+                else TooltipHost.hide()
             }
-            Timer { id: tipDelay; interval: 500; onTriggered: tipBox.place() }   // the Tooltip spec's hover delay
-            Timer { id: tipWarm; interval: 500 }
 
             // ── a page's foot: a borderWidth1 rule, spaceXs, then its actions
             //    (`start` on the left, the rest on the right) ──
@@ -753,6 +762,31 @@ Scope {
                 Rectangle { width: parent.width; height: Theme.borderWidth1; color: Theme.borderSubtle }
                 Row { id: pfStart; anchors.left: parent.left; anchors.bottom: parent.bottom; spacing: Theme.spaceS }
                 Row { id: pfEnd; anchors.right: parent.right; anchors.bottom: parent.bottom; spacing: Theme.spaceS }
+            }
+
+            // ── an app's action buttons under a notification: everything but
+            //    "default" (that is the card's own click), the first two, as
+            //    sm buttons sharing the width — secondary, then ghost. invoke()
+            //    runs the action and closes the notification unless the app
+            //    asked for it to stay (resident). ──
+            component NoteActions: Row {
+                id: na
+                property var note: null
+                readonly property var acts: root.noteActions(na.note)
+                visible: na.acts.length > 0
+                width: parent ? parent.width : Theme.panelSm
+                spacing: Theme.spaceS
+                Repeater {
+                    model: na.acts
+                    delegate: QsButton {
+                        required property var modelData
+                        required property int index
+                        width: (na.width - (na.acts.length - 1) * na.spacing) / na.acts.length
+                        variant: index === 0 ? "secondary" : "ghost"
+                        label: modelData.text || modelData.identifier || ""
+                        onGo: { try { modelData.invoke() } catch (e) {} }
+                    }
+                }
             }
 
             // ── one app's notifications (Notification, grouped): a flat card
@@ -925,6 +959,8 @@ Scope {
                                 }
                             }
                         }
+                        // the newest one's actions, under it
+                        NoteActions { visible: !nGroup.open && acts.length > 0; note: nGroup.latest }
 
                         // open: every notification of the app, newest first, divided
                         Repeater {
@@ -957,6 +993,7 @@ Scope {
                                         wrapMode: Text.Wrap; maximumLineCount: 3; elide: Text.ElideRight
                                         textFormat: Text.PlainText
                                     }
+                                    NoteActions { note: nItem.modelData }
                                 }
                                 QsIconButton {
                                     id: iClose
@@ -2045,38 +2082,6 @@ Scope {
                         onPicked: function (v) { PowerProfiles.profile = v }
                         onHoverItemChanged: panel.hint(modes.hoverItem, modes.hoverItem !== null, modes.hoverTip)
                     }
-                }
-            }
-
-            // ══ the tooltip box (Tooltip): surfaceOverlay, borderSubtle, the
-            //    radiusSlight corner, label type; spaceXs under its target,
-            //    centred on it, above it when the panel's edge is in the way ══
-            Rectangle {
-                id: tipBox
-                property bool shown: false
-                function place() {
-                    var t = panel.tipItem
-                    if (!t || !t.visible) { tipBox.shown = false; return }
-                    var p = t.mapToItem(panel, t.width / 2, 0)
-                    tipBox.x = Math.max(panel.pad, Math.min(panel.width - tipBox.width - panel.pad, p.x - tipBox.width / 2))
-                    var below = p.y + t.height + Theme.spaceXs
-                    tipBox.y = (below + tipBox.height <= panel.height - Theme.spaceXs) ? below : p.y - Theme.spaceXs - tipBox.height
-                    tipBox.shown = true
-                }
-                visible: shown && panel.tipText !== ""
-                z: 60
-                width: tipText.implicitWidth + 2 * Theme.spaceS
-                height: tipText.implicitHeight + 2 * Theme.spaceXxs
-                radius: Theme.radiusSlight
-                color: Theme.surfaceOverlay
-                border.color: Theme.borderSubtle; border.width: Theme.borderWidth1
-                Text {
-                    id: tipText
-                    anchors.centerIn: parent
-                    text: panel.tipText
-                    color: Theme.textPrimary
-                    font.family: Theme.type.label.family
-                    font.pixelSize: Theme.type.label.size
                 }
             }
 

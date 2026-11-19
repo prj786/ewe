@@ -143,6 +143,8 @@ fuse3                   # rclone mount's engine
 udisks2
 unzip
 7zip                     # provides 7z (p7zip was dropped from the Arch repos)
+unarchiver               # unar/lsar — RAR for Engrampa (Arch's 7zip has no RAR codec; LGPL, not unrar's licence)
+xdg-terminal-exec        # GIO runs Terminal=true apps through it: "Open With → micro" failed with "no terminal" (kitty is the one found)
 
 # ── browser + editor ──────────────────────────────────────────────────────────
 # Zed (official repo) is THE editor/IDE — GUI, default handler for every text

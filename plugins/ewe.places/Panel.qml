@@ -138,6 +138,31 @@ Scope {
     function enter(path) { root.cwd = path; root.sel = -1 }  // changing cwd re-lists
     function openFile(path) { Quickshell.execDetached(["xdg-open", path]) }
     function activate(path, isDir) { if (isDir) root.enter(path); else root.openFile(path) }
+
+    // ── a row's right-click menu (ContextMenu, Places 1.1): Open, Open
+    //    with… (the item selected in Files, where Open with lives), Show in
+    //    Files, Copy path, and for a pinned place Remove from Places. The
+    //    panel keeps the keyboard (its list), so it forwards keys to the menu ──
+    ContextMenu { id: rowMenu; name: "places-menu"; takesKeyboard: false }
+    Connections { target: root; function onOpenChanged() { if (!root.open) rowMenu.close() } }
+    function rowMenu(path, isDir, pinned) {
+        var out = [
+            { header: root.baseName(path) },
+            { label: "Open", action: function () { root.activate(path, isDir); if (!isDir) root.close() } },
+            { label: "Open with…", action: function () { Quickshell.execDetached(["nemo", path]); root.close() } },
+            { label: "Show in Files", icon: Theme.icFolder, action: function () { Quickshell.execDetached(["nemo", isDir ? path : root.parentOf(path)]); root.close() } },
+            { separator: true },
+            { label: "Copy path", icon: Theme.icClipboard, action: function () { Quickshell.execDetached(["wl-copy", "--", path]); Shell.toast("Path copied") } }
+        ]
+        if (pinned) {
+            out.push({ separator: true })
+            out.push({ label: "Remove from Places", icon: Theme.icPinOff, danger: true, action: function () { root.togglePin(path) } })
+        } else if (isDir) {
+            out.push({ separator: true })
+            out.push({ label: "Add to Places", icon: Theme.icPin, action: function () { root.togglePin(path) } })
+        }
+        return out
+    }
     function pinDrop(uris) {
         for (var i = 0; i < uris.length; i++) { var p = root.uriToPath(uris[i]); if (p && p.indexOf("/") === 0 && !root.isPinned(p)) root.togglePin(p) }
     }
@@ -287,11 +312,13 @@ Scope {
 
             // ── keyboard navigation ──
             Keys.onEscapePressed: root.close()
-            Keys.onUpPressed: root.moveSel(-1)
-            Keys.onDownPressed: root.moveSel(1)
-            Keys.onReturnPressed: root.activateSel()
-            Keys.onEnterPressed: root.activateSel()
+            Keys.onUpPressed: function (ev) { if (rowMenu.handleKey(ev)) return; root.moveSel(-1) }
+            Keys.onDownPressed: function (ev) { if (rowMenu.handleKey(ev)) return; root.moveSel(1) }
+            Keys.onReturnPressed: function (ev) { if (rowMenu.handleKey(ev)) return; root.activateSel() }
+            Keys.onEnterPressed: function (ev) { if (rowMenu.handleKey(ev)) return; root.activateSel() }
             Keys.onPressed: function (ev) {
+                // an open row menu takes the keys first
+                if (rowMenu.handleKey(ev)) { ev.accepted = true; return }
                 if (ev.key === Qt.Key_Backspace) {
                     if (root.cwd !== "/" && root.cwd !== "") root.enter(root.parentOf(root.cwd))
                     ev.accepted = true
@@ -384,9 +411,15 @@ Scope {
                     Drag.mimeData: ({ "text/uri-list": root.fileUri(fr.rPath) })
                 }
                 MouseArea {
-                    id: frMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                    drag.target: dragProxy
-                    onClicked: root.activate(fr.rPath, fr.rIsDir)
+                    id: frMa; anchors.fill: parent; hoverEnabled: true
+                    cursorShape: frMa.drag.active ? Qt.ClosedHandCursor : Qt.PointingHandCursor   // a closed hand while the file is dragged out
+                    acceptedButtons: Qt.LeftButton | Qt.RightButton
+                    // only the left button drags a row out
+                    onPressed: function (m) { frMa.drag.target = m.button === Qt.LeftButton ? dragProxy : null }
+                    onClicked: function (m) {
+                        if (m.button === Qt.RightButton) { rowMenu.items = root.rowMenu(fr.rPath, fr.rIsDir, fr.rPinned); rowMenu.openAt(frMa, m.x, m.y) }
+                        else root.activate(fr.rPath, fr.rIsDir)
+                    }
                 }
 
                 Row {
@@ -405,7 +438,7 @@ Scope {
                     }
                     // folder hint chevron (browse entries)
                     Text { visible: fr.rIsDir && !fr.rPinned; anchors.verticalCenter: parent.verticalCenter; text: Theme.icChevronRight; font.family: Theme.fontIcons; font.pixelSize: Theme.iconSm; color: Theme.textMuted }
-                    // unpin ✕ (pinned items)
+                    // unpin (pinned items) — pin-off, not a ✕ (that reads as "remove the file")
                     Rectangle {
                         visible: fr.rPinned
                         width: Theme.controlSm; height: Theme.controlSm
@@ -413,7 +446,7 @@ Scope {
                         anchors.verticalCenter: parent.verticalCenter
                         color: upMa.containsMouse ? Theme.dangerSubtle : "transparent"
                         Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
-                        Text { anchors.centerIn: parent; text: Theme.icClose; font.family: Theme.fontIcons; font.pixelSize: Theme.iconSm; color: upMa.containsMouse ? Theme.danger : Theme.textSecondary }
+                        Text { anchors.centerIn: parent; text: Theme.icPinOff; font.family: Theme.fontIcons; font.pixelSize: Theme.iconSm; color: upMa.containsMouse ? Theme.danger : Theme.textSecondary }
                         MouseArea { id: upMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.togglePin(fr.rPath) }
                     }
                 }
@@ -448,7 +481,7 @@ Scope {
                             elide: Text.ElideLeft
                         }
                     }
-                    IconBtn { glyph: (root.isPinned(root.cwd) ? Theme.icStar : Theme.icPin); selected: root.isPinned(root.cwd); enabledState: root.cwd !== ""; anchors.verticalCenter: parent.verticalCenter; onAct: root.togglePin(root.cwd) }
+                    IconBtn { glyph: (root.isPinned(root.cwd) ? Theme.icPinOff : Theme.icPin); selected: root.isPinned(root.cwd); enabledState: root.cwd !== ""; anchors.verticalCenter: parent.verticalCenter; onAct: root.togglePin(root.cwd) }
                 }
 
                 Flickable {

@@ -30,7 +30,7 @@ QtObject {
     // Project version — the shell's runtime copy. Keep in sync with the repo-root
     // VERSION file (the canonical source used for git tags / releases). Semver, with
     // an -alpha/-beta pre-release suffix until the first stable cut.
-    readonly property string version: "0.42.0-beta"
+    readonly property string version: "0.43.0-beta"
 
     // ── event sounds (GNOME-style; the freedesktop sound theme, one toggle) ──
     // playSound("message-new-instant") etc — names are theme event ids from
@@ -122,6 +122,7 @@ QtObject {
     function launchEntry(e, fresh) {
         if (!e) return
         if (!fresh && g.activateAppWindow(e)) return
+        g.markLaunch(e.runInTerminal ? "kitty" : (e.startupClass || e.id))
         if (e.runInTerminal) {
             var argv = ["kitty"]
             if (e.workingDirectory) argv = argv.concat(["--directory", e.workingDirectory])
@@ -131,14 +132,27 @@ QtObject {
         e.execute()
     }
 
+    // ── "You asked for this window" ───────────────────────────────────────
+    // Tells the compositor a launch is the user's own, so the window it opens
+    // follows a Window Rules workspace and takes the user along
+    // (workspaces.lua, "Launches you asked for"); windows an app opens by
+    // itself — Steam's toasts — go to their workspace quietly. A Lua function
+    // through the dispatch socket: no process. `hint` names the app whose
+    // window spends the launch (StartupWMClass, desktop id or binary) — kept
+    // to [A-Za-z0-9._-], so a desktop id can never become Lua.
+    function markLaunch(hint) {
+        var h = String(hint || "").replace(/[^A-Za-z0-9._-]/g, "")
+        Hyprland.dispatch('function() if ewe_launched then ewe_launched("' + h + '") end end')
+    }
+
     function openSettings() {
         if (g.focusWindowByClass("ewe-settings") || g.focusWindowByClass("hypr-settings")) return
-        if (g.settingsAppInstalled) Quickshell.execDetached([g.settingsAppBin])
+        if (g.settingsAppInstalled) { g.markLaunch(g.settingsAppBin); Quickshell.execDetached([g.settingsAppBin]) }
         else g.settingsOpen = true
     }
     function openStore() {
         if (g.focusWindowByClass("komble")) return
-        if (g.kombleInstalled) Quickshell.execDetached(["komble"])
+        if (g.kombleInstalled) { g.markLaunch("komble"); Quickshell.execDetached(["komble"]) }
         else g.storeOpen = true
     }
     // ewe-sync (RFC-006): the account app — your machines, folders, conflicts.
@@ -147,7 +161,7 @@ QtObject {
     property bool syncAppInstalled: false
     function openSync() {
         if (g.focusWindowByClass("ewe-sync")) return
-        if (g.syncAppInstalled) Quickshell.execDetached(["ewe-sync"])
+        if (g.syncAppInstalled) { g.markLaunch("ewe-sync"); Quickshell.execDetached(["ewe-sync"]) }
     }
     // ── Focus-or-launch ────────────────────────────────────────────────────
     // Clicking an app that already has a window JUMPS to it (focus +
@@ -178,7 +192,10 @@ QtObject {
             want.push(n)
             var seg = n.split(".").pop().replace(/[^a-z0-9_-]/g, "")
             if (seg !== "" && seg !== n) want.push(seg)
-            var de = DesktopEntries.heuristicLookup(names[i])
+            // the same answer the dock and Overview give a window's class, so
+            // launching "Dota 2" (class steam_app_570) or a Komble AppImage
+            // (komble-google-chrome, class google-chrome) finds its window
+            var de = g.entryForClass(names[i])
             if (de && de.id) ids.push(String(de.id).toLowerCase())
         }
         if (want.length === 0) return false
@@ -190,7 +207,7 @@ QtObject {
             if (c === "") continue
             var hit = want.indexOf(c) >= 0 || want.indexOf(c.split(".").pop()) >= 0
             if (!hit && ids.length) {
-                var ce = DesktopEntries.heuristicLookup(c)
+                var ce = g.entryForClass(c)
                 hit = !!(ce && ce.id && ids.indexOf(String(ce.id).toLowerCase()) >= 0)
             }
             if (!hit) continue
@@ -201,6 +218,28 @@ QtObject {
         if (!best) return false
         return g.focusToplevel(best)
     }
+    // ── A click on a notification (banner or Quick settings list) ─────────
+    // Goes to the most recent window of the app, wherever it is, then fires
+    // the app's "default" action (opens the message/thread) — after the
+    // focus, so the app acts on the now-current window. GNOME's rule for the
+    // rest: a notification with no action of its own opens its app. An app
+    // hidden in the tray (Komble, Slack, Steam) has no window to focus, so
+    // the click used to do nothing. Only the sender's own desktop-entry hint
+    // is trusted — a fuzzy match on the app NAME could start something else.
+    function openNotification(n) {
+        if (!n) return
+        var had = g.focusAppWindow([n.desktopEntry, n.appName])
+        var acted = false
+        try {
+            if (n.actions) for (var i = 0; i < n.actions.length; i++)
+                if (n.actions[i].identifier === "default") { n.actions[i].invoke(); acted = true; break }
+        } catch (e) {}
+        if (!had && !acted && n.desktopEntry) {
+            var de = DesktopEntries.byId(String(n.desktopEntry)) || DesktopEntries.heuristicLookup(String(n.desktopEntry))
+            if (de) g.launchEntry(de, true)
+        }
+    }
+
     // ── Focus one window ──────────────────────────────────────────────────
     // THE way the shell brings a window forward (bar, dock, Overview,
     // launchers, notifications, the app openers above). By ADDRESS, so
@@ -216,8 +255,102 @@ QtObject {
             return false
         }
         if (a.indexOf("0x") !== 0) a = "0x" + a   // Hyprland events sometimes omit the 0x
+        // A minimized window (Super+Z → special:minimized; the retired Pen's
+        // special:pen) comes back to the workspace you are on, as the dock's
+        // restore does. Focusing it where it was only opened the hidden stash
+        // over your workspace: the app looked half-open, stayed "minimized",
+        // and the next new window landed inside the stash.
+        var wsn = String((t.workspace && t.workspace.name)
+                         || (t.lastIpcObject && t.lastIpcObject.workspace && t.lastIpcObject.workspace.name) || "")
+        if (wsn === "special:minimized" || wsn === "special:pen") {
+            var ws = Hyprland.focusedWorkspace ? Hyprland.focusedWorkspace.id : 1
+            Hyprland.dispatch('hl.dsp.window.move({ workspace = ' + ws + ', window = "address:' + a + '", follow = false })')
+        }
         Hyprland.dispatch('hl.dsp.focus({ window = "address:' + a + '" })')
         return true
+    }
+
+    // ── Which app is this window? ─────────────────────────────────────────
+    // ONE answer for a window class — the dock, Overview, Alt+Tab switcher,
+    // share picker, bar and focus-or-launch all ask here (plugins through
+    // Shell.entryForClass / Shell.iconForClass), so an app looks and behaves
+    // the same everywhere. DesktopEntries.heuristicLookup alone knows only
+    // the id, StartupWMClass and the reverse-DNS tail, which left two kinds
+    // of app with the generic executable icon and a second copy on every
+    // click: AppImages Komble installs (entry komble-google-chrome, Icon
+    // komble-*, no StartupWMClass, while the window says google-chrome) and
+    // Steam games ("Dota 2.desktop": Exec=steam steam://rungameid/570,
+    // Icon=steam_icon_570, window class steam_app_570). In order:
+    //   1. DesktopEntries.byId / heuristicLookup (id, StartupWMClass, tail)
+    //   2. an entry whose StartupWMClass equals the class, case-insensitive
+    //   3. the class's last dotted segment as an id ("org.foo.Bar" → bar)
+    //   4. Komble: "komble-<class>", else the komble-* entry whose Exec runs
+    //      ".komble-run/<class>/AppRun" or an AppImage named after the class
+    //   5. Steam: steam_app_N → the entry whose Exec has "rungameid/N"
+    // null when nothing fits. Cached per class; the cache empties whenever
+    // the desktop entries change (an install, a Komble AppImage, a new game).
+    property var _clsCache: ({})
+    property Connections _clsCacheWatch: Connections {
+        target: DesktopEntries.applications
+        function onValuesChanged() { g._clsCache = ({}) }
+    }
+    function entryForClass(cls) {
+        var c = String(cls || "")
+        if (c === "") return null
+        var cache = g._clsCache
+        if (Object.prototype.hasOwnProperty.call(cache, c)) return cache[c]
+        var e = null
+        try { e = g._resolveClass(c) } catch (err) { e = null }
+        cache[c] = e
+        return e
+    }
+    function _resolveClass(c) {
+        var e = DesktopEntries.byId(c) || DesktopEntries.heuristicLookup(c)
+        if (e) return e
+        var lc = c.toLowerCase()
+        var all = DesktopEntries.applications ? DesktopEntries.applications.values : []
+        var i, a
+        // 2. StartupWMClass, case-insensitive
+        for (i = 0; i < all.length; i++) {
+            a = all[i]
+            if (a && a.startupClass && String(a.startupClass).toLowerCase() === lc) return a
+        }
+        // 3. the last dotted segment as an id
+        var seg = lc.split(".").pop()
+        if (seg !== "" && seg !== lc) {
+            e = DesktopEntries.byId(seg) || DesktopEntries.heuristicLookup(seg)
+            if (e) return e
+        }
+        // 4. Komble's AppImages
+        e = DesktopEntries.byId("komble-" + lc) || DesktopEntries.byId("komble-" + c)
+        if (e) return e
+        for (i = 0; i < all.length; i++) {
+            a = all[i]
+            if (!a || !a.id || String(a.id).toLowerCase().indexOf("komble-") !== 0) continue
+            var x = String(a.execString || "").toLowerCase()
+            if (x.indexOf(".komble-run/" + lc + "/") >= 0 || x.indexOf("/" + lc + ".appimage") >= 0) return a
+        }
+        // 5. Steam games
+        var m = /^steam_app_(\d+)$/.exec(lc)
+        if (m) {
+            var re = new RegExp("rungameid/" + m[1] + "(\\D|$)")
+            for (i = 0; i < all.length; i++) {
+                a = all[i]
+                if (a && re.test(String(a.execString || ""))) return a
+            }
+        }
+        return null
+    }
+    // The icon for a window class: its entry's Icon, else the class as an
+    // icon name, else `fallback` ("application-x-executable" by default;
+    // `true` = "" when nothing resolves — the bar's name-instead-of-icon).
+    function iconForClass(cls, fallback) {
+        var fb = (fallback === undefined || fallback === null) ? "application-x-executable" : fallback
+        var c = String(cls || "")
+        var e = g.entryForClass(c)
+        if (e && e.icon) return Quickshell.iconPath(e.icon, fb)
+        if (c !== "") return Quickshell.iconPath(c, fb)
+        return fb === true ? "" : Quickshell.iconPath(String(fb))
     }
 
     property Process _standaloneProbe: Process {

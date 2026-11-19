@@ -446,9 +446,12 @@ phase_services() {
     fi
 
     # ── GSettings system defaults (dconf) ──────────────────────────────────
-    # Currently one key: Nemo's "Open in Terminal", whose Cinnamon schema
-    # default is gnome-terminal — a program ewe does not install, so the menu
-    # item did nothing at all. Phase 60 used to `gsettings set` it, which only
+    # 10-terminal: Nemo's "Open in Terminal", whose Cinnamon schema default is
+    # a program ewe does not install (gnome-terminal; `velocitty` since
+    # cinnamon-desktop 6.8), so the menu item did nothing at all. 20-files
+    # (0.43): no Delete beside Move to Trash, thumbnails up to 50 MB, the
+    # broken "Mount archive" hidden, Compress… → .zip. packaging/ewe.install
+    # installs the same db on pacman/ISO installs — keep the two in step. Phase 60 used to `gsettings set` it, which only
     # helped a machine that reached phase 60 AND wrote into the user db, where
     # it shadowed us forever. A system db is read for every user at every
     # login with no script in the path, and still loses to a real user choice.

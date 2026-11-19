@@ -44,9 +44,33 @@ Scope {
     function refresh() { if (root.open) clipList.running = true }
     function copyClip(id) { Quickshell.execDetached(["sh", "-c", "cliphist decode " + id + " | wl-copy"]); root.open = false }
     function copyEmoji(e) { Quickshell.execDetached(["wl-copy", "--", e]); root.open = false }
-    function clearClips() { Quickshell.execDetached(["cliphist", "wipe"]); root.clips = []; }
+    // Clear needs a second click (1.2.0): the first turns the trash into a
+    // "Clear all?" pill for a few seconds; a wipe cannot be undone
+    property bool clearArmed: false
+    Timer { id: clearHold; interval: Math.max(1, 3 * Theme.durDim); onTriggered: root.clearArmed = false }
+    function clearClips() {
+        if (!root.clearArmed) { root.clearArmed = true; clearHold.restart(); return }
+        root.clearArmed = false; clearHold.stop()
+        Quickshell.execDetached(["cliphist", "wipe"]); root.clips = []
+        Shell.toast("Clipboard history cleared")
+    }
+    // one entry: cliphist reads "<id>\t…" lines on stdin
+    function deleteClip(id) {
+        Quickshell.execDetached(["sh", "-c", 'printf "%s\\t.\\n" "$1" | cliphist delete', "sh", String(id)])
+        root.clips = root.clips.filter(function (c) { return c.id !== id })
+    }
+    // a row's right-click menu (ContextMenu): Copy, Delete
+    ContextMenu { id: clipMenu; name: "clipboard-menu"; takesKeyboard: false }
+    function clipMenuFor(c) {
+        return [{ label: "Copy", icon: Theme.icClipboard, action: function () { root.copyClip(c.id) } },
+                { separator: true },
+                { label: "Delete", icon: Theme.icTrash, danger: true, action: function () { root.deleteClip(c.id) } }]
+    }
 
-    onOpenChanged: { if (root.open) { root.filter = ""; root.refresh() } }
+    onOpenChanged: {
+        root.clearArmed = false; clearHold.stop(); clipMenu.close()
+        if (root.open) { root.filter = ""; root.refresh() }
+    }
 
     IpcHandler {
         target: "ewe.clipboard"
@@ -206,20 +230,31 @@ Scope {
                             color: Theme.textPrimary; font.family: Theme.type.body.family; font.pixelSize: Theme.type.body.size
                             selectionColor: Theme.accent; selectedTextColor: Theme.onAccent; clip: true
                             onTextChanged: root.filter = text
-                            Keys.onEscapePressed: root.open = false
+                            Keys.onPressed: function (ev) {
+                                if (clipMenu.handleKey(ev)) { ev.accepted = true; return }     // an open row menu takes the keys first
+                                if (ev.key === Qt.Key_Escape) { root.open = false; ev.accepted = true }
+                            }
                             Text { anchors.verticalCenter: parent.verticalCenter; visible: searchField.text.length === 0; text: "Search clipboard"; color: Theme.textMuted; font: searchField.font }
                         }
                     }
-                    // Icon button (md, danger on hover): clears the history
+                    // Icon button (md, danger on hover): clears the history —
+                    // the first click arms it ("Clear all?" in danger), the
+                    // second within a few seconds wipes
                     Rectangle {
                         id: clearBtn
                         anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
-                        width: Theme.controlMd; height: Theme.controlMd; radius: Theme.radiusPrimary
-                        color: clearMa.pressed ? Theme.surfacePressed : clearMa.containsMouse ? Theme.dangerSubtle : "transparent"
+                        width: root.clearArmed ? clearLbl.implicitWidth + 2 * Theme.spaceS : Theme.controlMd
+                        height: Theme.controlMd; radius: Theme.radiusPrimary
+                        color: clearMa.pressed ? Theme.surfacePressed : (clearMa.containsMouse || root.clearArmed) ? Theme.dangerSubtle : "transparent"
+                        border.color: root.clearArmed ? Theme.danger : "transparent"; border.width: Theme.borderWidth1
                         Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
-                        Accessible.role: Accessible.Button; Accessible.name: "Clear clipboard history"
-                        Text { anchors.centerIn: parent; text: Theme.icTrash; font.family: Theme.fontIcons; font.pixelSize: Theme.iconMd; color: clearMa.containsMouse ? Theme.danger : Theme.textSecondary }
+                        Behavior on width { NumberAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
+                        Accessible.role: Accessible.Button; Accessible.name: root.clearArmed ? "Clear all? Click again to confirm" : "Clear clipboard history"
+                        Text { visible: !root.clearArmed; anchors.centerIn: parent; text: Theme.icTrash; font.family: Theme.fontIcons; font.pixelSize: Theme.iconMd; color: clearMa.containsMouse ? Theme.danger : Theme.textSecondary }
+                        Text { id: clearLbl; visible: root.clearArmed; anchors.centerIn: parent; text: "Clear all?"; color: Theme.danger
+                               font.family: Theme.type.label.family; font.pixelSize: Theme.type.label.size; font.weight: Theme.fontWeightMedium }
                         MouseArea { id: clearMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.clearClips() }
+                        Tooltip { text: root.clearArmed ? "Click again to clear everything" : "Clear history" }
                     }
                 }
 
@@ -246,17 +281,42 @@ Scope {
                         height: Math.max(Theme.controlXl, clipText.implicitHeight + 2 * Theme.spaceXs)
                         radius: Theme.radiusSecondary
                         color: clMa.pressed ? Theme.surfacePressed : clMa.containsMouse ? Theme.surfaceHover : "transparent"
+                        id: clipRow
+                        readonly property bool hot: clMa.containsMouse || delMa.containsMouse
                         Text {
                             id: clipText
                             anchors.left: parent.left; anchors.right: parent.right
-                            anchors.leftMargin: Theme.spaceS; anchors.rightMargin: Theme.spaceS
+                            anchors.leftMargin: Theme.spaceS
+                            // room for the delete button while the row is pointed at
+                            anchors.rightMargin: Theme.spaceS + (clipRow.hot ? Theme.controlSm + Theme.spaceXs : 0)
                             anchors.verticalCenter: parent.verticalCenter
                             text: modelData.preview
                             color: Theme.textPrimary; font.family: Theme.type.body.family; font.pixelSize: Theme.type.body.size
                             lineHeight: Theme.type.body.lineHeight; lineHeightMode: Text.FixedHeight
                             elide: Text.ElideRight; maximumLineCount: 2; wrapMode: Text.Wrap
                         }
-                        MouseArea { id: clMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.copyClip(modelData.id) }
+                        // click copies; right-click → Copy / Delete
+                        MouseArea {
+                            id: clMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                            acceptedButtons: Qt.LeftButton | Qt.RightButton
+                            onClicked: function (m) {
+                                if (m.button === Qt.RightButton) { clipMenu.items = root.clipMenuFor(clipRow.modelData); clipMenu.openAt(clMa, m.x, m.y) }
+                                else root.copyClip(clipRow.modelData.id)
+                            }
+                        }
+                        // per-entry delete (Icon button sm, danger on hover), on hover
+                        Rectangle {
+                            anchors.right: parent.right; anchors.rightMargin: Theme.spaceXs
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: Theme.controlSm; height: Theme.controlSm; radius: Theme.radiusSecondary
+                            visible: clipRow.hot
+                            color: delMa.containsMouse ? Theme.dangerSubtle : "transparent"
+                            Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
+                            Accessible.role: Accessible.Button; Accessible.name: "Delete this entry"
+                            Text { anchors.centerIn: parent; text: Theme.icClose; font.family: Theme.fontIcons; font.pixelSize: Theme.iconSm; color: delMa.containsMouse ? Theme.danger : Theme.textSecondary }
+                            MouseArea { id: delMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.deleteClip(clipRow.modelData.id) }
+                            Tooltip { text: "Delete this entry" }
+                        }
                     }
                     // Empty state: what is missing, then what to do
                     Column {

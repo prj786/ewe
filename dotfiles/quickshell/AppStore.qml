@@ -319,7 +319,7 @@ Scope {
                             visible: Globals.kombleInstalled
                             anchors.verticalCenter: parent.verticalCenter
                             kind: "ghost"; size: "sm"; label: "Open Komble"
-                            onGo: { if (!Globals.focusAppWindow(["komble"])) Quickshell.execDetached(["komble"]); Globals.storeOpen = false }
+                            onGo: { if (!Globals.focusAppWindow(["komble"])) { Globals.markLaunch("komble"); Quickshell.execDetached(["komble"]) } Globals.storeOpen = false }
                         }
                     }
                 }

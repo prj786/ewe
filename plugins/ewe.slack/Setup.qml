@@ -108,7 +108,7 @@ Scope {
                         width: parent.width; wrapMode: Text.Wrap; elide: Text.ElideNone
                         text: "1. Create a Slack app for your workspace. Slack opens with everything filled in: pick the workspace, Create, then Install to Workspace."
                     }
-                    QsButton { label: "Create the Slack app"; ic: Theme.icWeb; onGo: SlackInbox.createApp() }
+                    QsButton { label: "Create the Slack app"; ic: Theme.icExternal; onGo: SlackInbox.createApp() }
                     TextBody {
                         width: parent.width; wrapMode: Text.Wrap; elide: Text.ElideNone
                         text: "2. On the app's OAuth & Permissions page, copy the User OAuth Token and paste it here."
