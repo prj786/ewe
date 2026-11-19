@@ -146,4 +146,39 @@ r=$("$EC" status)
 "$EC" token >/dev/null 2>&1 && fail "token should fail after logout"
 ok "logout revokes the app password and leaves no trace"
 
+# 10 · sign in with a password, no Nextcloud page (0.43.1): the password on
+# stdin, exchanged once (OCS core/getapppassword) for an app password
+PW='login-Pass word:1'
+r=$(printf '%s\n' "$PW" | "$EC" login "127.0.0.1:$PORT" --password-stdin)
+[ "$(jget "$r" "['error']")" = "no-user" ] || fail "password login without --user: $r"
+r=$(printf '\n' | "$EC" login "127.0.0.1:$PORT" --user tester --password-stdin)
+[ "$(jget "$r" "['error']")" = "no-password" ] || fail "empty password: $r"
+r=$(printf 'wrong\n' | "$EC" login "127.0.0.1:$PORT" --user tester --password-stdin)
+[ "$(jget "$r" "['error']")" = "unauthorized" ] || fail "wrong password: $r"
+[ "$(jget "$r" "['browser']")" = "True" ] || fail "wrong password should point at the browser: $r"
+[ ! -e "$EWE_CLOUD_FAKE_KEYRING" ] && [ ! -e "$XDG_CONFIG_HOME/ewe/cloud.json" ] || fail "a refused sign-in left something behind"
+r=$(printf '%s\n' "$PW" | "$EC" login "127.0.0.1:$PORT" --user wanderer --password-stdin)
+[ "$(jget "$r" "['error']")" = "redirected" ] || fail "a redirect must be reported: $r"
+[ "$(jget "$(cat "$WORK/nc.json")" ".get('stolen', 0)")" = "0" ] || fail "the password followed a redirect"
+ok "password sign-in: missing name/password, a wrong password (→ browser hint), a redirect never followed"
+
+r=$(printf '%s\n' "$PW" | "$EC" login "127.0.0.1:$PORT" --user tester --password-stdin)
+[ "$(jget "$r" "['ok']")" = "True" ] || fail "password login: $r"
+[ "$(jget "$r" "['user']")" = "tester" ] && [ "$(jget "$r" "['display_name']")" = "Test User" ] || fail "password login facts: $r"
+[ "$("$EC" token)" = "app-pass-0123456789abcdef" ] || fail "the app password is not what the keyring keeps"
+[ "$(jget "$(cat "$XDG_CONFIG_HOME/ewe/cloud.json")" "['login_name']")" = "tester" ] || fail "cloud.json login_name"
+[ "$(jget "$(cat "$WORK/nc.json")" "['exchanges']")" = "1" ] || fail "not exactly one exchange"
+[[ "$(jget "$(cat "$WORK/nc.json")" "['exchange_agent']")" == "ewe ("* ]] || fail "the token is not named like the flow's"
+grep -rqF "$PW" "$XDG_CONFIG_HOME" "$XDG_RUNTIME_DIR" "$XDG_CACHE_HOME" "$EWE_CLOUD_FAKE_KEYRING" 2>/dev/null \
+  && fail "the login password was written somewhere"
+r=$("$EC" status)
+[ "$(jget "$r" "['signed_in']")" = "True" ] || fail "status after password login: $r"
+ok "password sign-in: one exchange, the app password in the keyring, the password itself kept nowhere"
+
+r=$(printf '%s\n' "app-pass-0123456789abcdef" | "$EC" login "127.0.0.1:$PORT" --user tester --password-stdin)
+[ "$(jget "$r" "['ok']")" = "True" ] || fail "an app password typed in: $r"
+[ "$(jget "$(cat "$WORK/nc.json")" "['exchanges']")" = "1" ] || fail "an app password must not mint another"
+ok "an app password typed as the password is used as it is (Nextcloud's 403)"
+"$EC" logout >/dev/null
+
 echo "ALL PASS"

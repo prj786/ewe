@@ -64,23 +64,59 @@ phase_userconfig() {
             run xdg-mime default "$d" "$m"
         done
     }
+    # 0.44: ewe's own apps replaced Nemo, Engrampa, imv, Zathura and mpv. A mime
+    # still pointing at one of those RETIRED ewe defaults moves once (same marker
+    # as packaging/ewe-setup); any other choice is the user's and stays.
+    _mime_take() {
+        local old="$1" new="$2"; shift 2
+        [ -r "/usr/share/applications/$new" ] || [ -r "$HOME/.local/share/applications/$new" ] || return 0
+        local m; for m in "$@"; do
+            [ "$(_user_default "$m")" = "$old" ] && run xdg-mime default "$new" "$m"
+        done
+        return 0
+    }
     if command -v xdg-mime >/dev/null 2>&1; then
-        _mime nemo.desktop             inode/directory
+        _mime ewe-files-app.desktop    inode/directory
         # Zed is the default text + code editor (micro covers \$EDITOR in a TTY).
         _mime dev.zed.Zed.desktop text/plain text/markdown text/html text/css text/javascript \
               application/json application/javascript application/xml text/xml application/x-yaml \
               text/x-python text/x-csrc text/x-chdr text/x-c++src application/x-shellscript \
               text/x-rust text/x-go
-        _mime imv.desktop              image/png image/jpeg image/gif image/webp image/bmp image/tiff
-        _mime org.pwmt.zathura.desktop application/pdf application/epub+zip
-        _mime mpv.desktop              video/mp4 video/x-matroska video/webm video/quicktime audio/mpeg audio/flac
-        _mime engrampa.desktop         application/zip application/x-tar application/gzip application/x-xz \
-              application/x-bzip2 application/x-7z-compressed application/x-rar application/zstd application/x-compressed-tar
+        _mime ewe-viewer.desktop       application/pdf application/epub+zip application/vnd.comicbook+zip application/vnd.comicbook-rar \
+              application/vnd.openxmlformats-officedocument.wordprocessingml.document \
+              application/vnd.openxmlformats-officedocument.spreadsheetml.sheet application/vnd.oasis.opendocument.spreadsheet \
+              text/csv image/png image/jpeg image/gif image/webp image/bmp image/tiff image/avif image/svg+xml
+        _mime ewe-player.desktop       video/mp4 video/x-matroska video/webm video/quicktime video/x-msvideo video/mpeg video/ogg video/x-flv \
+              video/3gpp video/x-ms-wmv audio/mpeg audio/flac audio/ogg audio/x-vorbis+ogg audio/opus audio/x-opus+ogg \
+              audio/wav audio/x-wav audio/mp4 audio/x-m4a audio/aac audio/x-ms-wma audio/x-ape audio/webm
+        _mime ewe-files-app.desktop    application/zip application/x-tar application/gzip application/x-xz \
+              application/x-bzip2 application/x-7z-compressed application/x-rar application/vnd.rar application/zstd \
+              application/x-compressed-tar application/x-xz-compressed-tar application/x-zstd-compressed-tar
         # Double-clicking a downloaded .AppImage opens Komble's install flow
         # (shared-mime-info tags type-2 AppImages as vnd.appimage, type-1 as
         # x-iso9660-appimage; x-appimage covers older tag variants).
         _mime komble.desktop           application/vnd.appimage application/x-iso9660-appimage application/x-appimage
+        local apps_stamp="${XDG_STATE_HOME:-$HOME/.local/state}/ewe/default-apps-0.44.done"
+        if [ ! -e "$apps_stamp" ] && [ -r /usr/share/applications/ewe-files-app.desktop ]; then
+            _mime_take nemo.desktop ewe-files-app.desktop inode/directory
+            _mime_take engrampa.desktop ewe-files-app.desktop application/zip application/x-tar application/gzip application/x-xz \
+              application/x-bzip2 application/x-7z-compressed application/x-rar application/vnd.rar application/zstd \
+              application/x-compressed-tar application/x-xz-compressed-tar application/x-zstd-compressed-tar
+            _mime_take imv.desktop ewe-viewer.desktop application/pdf application/epub+zip application/vnd.comicbook+zip application/vnd.comicbook-rar \
+              application/vnd.openxmlformats-officedocument.wordprocessingml.document \
+              application/vnd.openxmlformats-officedocument.spreadsheetml.sheet application/vnd.oasis.opendocument.spreadsheet \
+              text/csv image/png image/jpeg image/gif image/webp image/bmp image/tiff image/avif image/svg+xml
+            _mime_take org.pwmt.zathura.desktop ewe-viewer.desktop application/pdf application/epub+zip application/vnd.comicbook+zip application/vnd.comicbook-rar \
+              application/vnd.openxmlformats-officedocument.wordprocessingml.document \
+              application/vnd.openxmlformats-officedocument.spreadsheetml.sheet application/vnd.oasis.opendocument.spreadsheet \
+              text/csv image/png image/jpeg image/gif image/webp image/bmp image/tiff image/avif image/svg+xml
+            _mime_take mpv.desktop ewe-player.desktop video/mp4 video/x-matroska video/webm video/quicktime video/x-msvideo video/mpeg video/ogg video/x-flv \
+              video/3gpp video/x-ms-wmv audio/mpeg audio/flac audio/ogg audio/x-vorbis+ogg audio/opus audio/x-opus+ogg \
+              audio/wav audio/x-wav audio/mp4 audio/x-m4a audio/aac audio/x-ms-wma audio/x-ape audio/webm
+            if [ "${DRY_RUN:-0}" != "1" ]; then mkdir -p "${apps_stamp%/*}"; touch "$apps_stamp"; fi
+        fi
     fi
+
 
     # GTK/GIO reads ~/.config/mimeapps.list directly — there is no KDE ksycoca cache
     # to rebuild. Just refresh the desktop-file/mimeinfo cache so "Open With" lists
@@ -103,7 +139,7 @@ phase_userconfig() {
     # engrampa, "Set as Wallpaper" (+ its script, run from the same folder).
     # Shipped in the repo, copied to the user's Nemo actions dir (Nemo loads
     # *.nemo_action). packaging/ewe-setup does the same for pacman installs.
-    if [ -d "$DOTREPO/system/nemo-actions" ]; then
+    if [ -d "$DOTREPO/system/nemo-actions" ] && command -v nemo >/dev/null 2>&1; then
         run mkdir -p "$HOME/.local/share/nemo/actions"
         run sh -c "cp -f '$DOTREPO/system/nemo-actions/'*.nemo_action '$DOTREPO/system/nemo-actions/'*.sh '$HOME/.local/share/nemo/actions/' 2>/dev/null || true"
     fi
@@ -139,13 +175,20 @@ phase_userconfig() {
     # would permanently pin the machine to whatever it wrote. Reset it — but
     # only when it still holds a value we recognise as ours or as the broken
     # default, never a terminal the user deliberately chose.
+    #
+    # The key lives at /org/cinnamon/desktop/APPLICATIONS/terminal/ (the
+    # schema's path, not its id) — until 0.43.1 this read and reset
+    # .../default-applications/terminal/, which nothing uses, so an old
+    # `gsettings set … kitty` stayed in the user db. `dconf read` shows the
+    # user db first, so a value equal to the system default reads the same;
+    # resetting it is harmless either way.
     if command -v dconf >/dev/null 2>&1; then
-        _term_now="$(dconf read /org/cinnamon/desktop/default-applications/terminal/exec 2>/dev/null || true)"
+        _term_now="$(dconf read /org/cinnamon/desktop/applications/terminal/exec 2>/dev/null || true)"
         case "$_term_now" in
             "'kitty'"|"'gnome-terminal'")
-                run dconf reset /org/cinnamon/desktop/default-applications/terminal/exec || true
-                run dconf reset /org/cinnamon/desktop/default-applications/terminal/exec-arg || true
-                ok "nemo: dropped the per-user terminal override; the system default (kitty) applies"
+                run dconf reset /org/cinnamon/desktop/applications/terminal/exec || true
+                run dconf reset /org/cinnamon/desktop/applications/terminal/exec-arg || true
+                ok "nemo: dropped the per-user terminal override; the system default (ewe-terminal-here) applies"
                 ;;
         esac
         unset _term_now

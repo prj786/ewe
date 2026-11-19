@@ -18,17 +18,27 @@ through the optional Google client (`docs/GOOGLE-CLIENT.md`).
 
 ## Signing in
 
-Welcome (first login) and ewe Sync, the account app, both ask for the server
-address and open the browser. That is Nextcloud's own **Login Flow v2**:
-you sign in on your server's page (with your password, 2FA, SSO — whatever
-your server uses), the page asks whether to grant access to *"ewe
-(<your computer's name>)"*, and hands ewe an **app password**. ewe never
-sees your real password.
+ewe Sync, the account app (Welcome sends you there), and the installer ask
+for the server address, your username or email and your password — no
+Nextcloud page (0.43.1). ewe-cloud sends the password to your server once,
+over https and never to an address it was redirected to, through Nextcloud's
+own password → app-password exchange (OCS `core/getapppassword`, the one its
+desktop and mobile clients use). The server hands back an **app password**
+named *"ewe (<your computer's name>)"*; that is what ewe keeps, and the
+password itself is never stored.
+
+An account with two-step verification or single sign-on cannot sign in with
+a password alone: Nextcloud refuses it, and the error offers **Sign in with
+the browser instead** — Nextcloud's own **Login Flow v2**: you sign in on
+your server's page (password, 2FA, SSO — whatever it uses), grant access to
+*ewe (<your computer's name>)*, and the page hands ewe the app password. Then
+ewe never sees your password at all.
 
 From a terminal:
 
 ```sh
-ewe-cloud login cloud.example.org      # opens the browser; prints JSON when done
+read -rs PW; printf '%s\n' "$PW" | ewe-cloud login cloud.example.org --user me --password-stdin
+ewe-cloud login cloud.example.org      # the browser way; prints JSON when done
 ewe-cloud status                       # {signed_in, server, user, display_name, email, quota, keyring…}
 ewe-conf push                          # first backup (or: ewe Sync → Back up this machine)
 ewe-files setup                        # mount the account at ~/Nextcloud

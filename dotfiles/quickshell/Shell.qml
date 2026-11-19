@@ -119,12 +119,17 @@ QtObject {
     function toggleOverview() { Globals.overviewOpen = !Globals.overviewOpen }
     // The Settings app (ewe-settings) and Komble; `page` is forwarded as
     // `--<page>` to Komble ("addons", "updates") and `--page <name>` to
-    // ewe-settings. An already-open window is focused instead of doubled.
+    // ewe-settings. An already-open window is focused instead of doubled —
+    // and still sent the page: the second `ewe-settings --page X` hands X to
+    // the running one (its single-instance hook, ewe-settings 0.23.1). Before,
+    // an open Settings only came forward, on whatever page it showed, so
+    // "Change wallpaper…" landed on Appearance.
     function openSettings(page) {
         if (!page) { Globals.openSettings(); return }
-        if (Globals.focusWindowByClass("ewe-settings") || Globals.focusWindowByClass("hypr-settings")) return
-        if (Globals.settingsAppInstalled) { Globals.markLaunch(Globals.settingsAppBin); Quickshell.execDetached([Globals.settingsAppBin, "--page", String(page)]) }
-        else Globals.settingsOpen = true
+        if (!Globals.settingsAppInstalled) { Globals.settingsOpen = true; return }
+        var open = Globals.focusWindowByClass("ewe-settings") || Globals.focusWindowByClass("hypr-settings")
+        if (!open) Globals.markLaunch(Globals.settingsAppBin)
+        Quickshell.execDetached([Globals.settingsAppBin, "--page", String(page)])
     }
     function openStore(page) {
         if (!page) { Globals.openStore(); return }

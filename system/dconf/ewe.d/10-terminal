@@ -17,7 +17,18 @@
 #
 # Applied by `dconf update` (phase 30). Lowest precedence after the schema
 # default, so it never fights a deliberate user choice.
-[org/cinnamon/desktop/default-applications/terminal]
-exec='kitty'
+#
+# THE PATH IS NOT THE SCHEMA ID. org.cinnamon.desktop.default-applications
+# .terminal lives at /org/cinnamon/desktop/APPLICATIONS/terminal/ (its
+# gschema says so; `gsettings list-schemas --print-paths`). 0.43 wrote
+# .../default-applications/terminal/, a path nothing reads: `dconf read`
+# there said 'kitty' while `gsettings get` — what Nemo sees — still said
+# 'velocitty' (0.43.1).
+#
+# ewe-terminal-here (system/bin, /usr/bin on a package install) is kitty
+# opened on the workspace you are on: a Window Rule that sends kitty to
+# another workspace no longer carries it off unfocused.
+[org/cinnamon/desktop/applications/terminal]
+exec='ewe-terminal-here'
 # what Nemo puts before the command when it runs one there
 exec-arg='-e'

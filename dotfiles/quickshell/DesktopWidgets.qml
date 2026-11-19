@@ -130,7 +130,11 @@ Scope {
             { label: "Change wallpaper…", icon: Theme.icImage, action: function () { Shell.openSettings("wallpaper") } },
             { label: "Display settings", icon: Theme.icComputer, action: function () { Shell.openSettings("displays") } },
             { separator: true },
-            { label: "Open terminal here", action: function () { Quickshell.execDetached(["kitty", "--directory", Quickshell.env("HOME") || "/"]) } },
+            // "here" = this workspace too: a Window Rule that sends kitty to
+            // workspace 3 must not carry this one off (Globals.markLaunch here)
+            { label: "Open terminal here", action: function () {
+                Globals.markLaunch("kitty", true)
+                Quickshell.execDetached(["kitty", "--directory", Quickshell.env("HOME") || "/"]) } },
             { separator: true },
             { label: "Arrange widgets", icon: Theme.icGrip, shortcut: "Super+Shift+W", checked: Globals.widgetsArrange,
               action: function () { Globals.widgetsArrange = !Globals.widgetsArrange } }

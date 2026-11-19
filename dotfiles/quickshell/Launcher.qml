@@ -296,8 +296,8 @@ Scope {
         } else if (item.type === "file") {
             var dir = item.isDir ? item.path : (item.path.slice(0, Math.max(0, item.path.lastIndexOf("/"))) || "/")
             out.push({ label: "Open", action: function () { root.launch(item, false) } })
-            out.push({ label: "Open with…", action: function () { Quickshell.execDetached(["nemo", item.path]); root.hide() } })
-            out.push({ label: "Open containing folder", icon: Theme.icFolder, action: function () { Quickshell.execDetached(["nemo", dir]); root.hide() } })
+            out.push({ label: "Open with…", action: function () { Quickshell.execDetached(["ewe-files-app", "--open-with=" + item.path]); root.hide() } })
+            out.push({ label: "Open containing folder", icon: Theme.icFolder, action: function () { Quickshell.execDetached(item.isDir ? ["ewe-files-app", dir] : ["ewe-files-app", "--select=" + item.path]); root.hide() } })
             out.push({ separator: true })
             out.push({ label: "Copy path", icon: Theme.icClipboard, action: function () { Quickshell.execDetached(["wl-copy", "--", item.path]); Shell.toast("Path copied") } })
         } else return []

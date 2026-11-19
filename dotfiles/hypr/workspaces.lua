@@ -241,7 +241,14 @@ function M.launch_matches(class, hint)
     if #h >= 4 and c:find(h, 1, true) then return true end
     return false
 end
-function M.launched(hint) launch = { at = os.time(), hint = tostring(hint or "") } end
+-- `here` (0.43.1): the launch asked for THIS workspace — the desktop's "Open
+-- terminal here", Files' "Open in Terminal" (ewe-terminal-here). Its window
+-- stays where you are, focused, even when a Window Rule sends that app to
+-- another workspace (the owner's kitty → 3 carried both off, unfocused, so
+-- they looked like they did nothing).
+function M.launched(hint, here)
+    launch = { at = os.time(), hint = tostring(hint or ""), here = here == true }
+end
 _G.ewe_launched = M.launched
 -- launch(cmd[, hint]): the dispatcher for a bind that starts an app; the hint
 -- is the command's program unless given ("" = the next window of any app)
@@ -256,12 +263,14 @@ function M.launch(cmd, hint)
     end
 end
 _G.ewe_launch = M.launch
+-- the pending launch this window spends (nil when it was not asked for)
 local function take_launch(win)
-    if not launch then return false end
-    if os.time() - launch.at > LAUNCH_SECS then launch = nil; return false end
-    if not M.launch_matches(win.class or win.initial_class, launch.hint) then return false end
+    if not launch then return nil end
+    if os.time() - launch.at > LAUNCH_SECS then launch = nil; return nil end
+    if not M.launch_matches(win.class or win.initial_class, launch.hint) then return nil end
+    local l = launch
     launch = nil
-    return true
+    return l
 end
 
 -- a window opening: Settings → Window Rules tag it `ewe-ws-N` (ewe-conf) —
@@ -292,6 +301,8 @@ function M.place(win)
     if not win or not win.monitor or not win.workspace or win.workspace.special then return end
     if shown_everywhere(win) then return end
     local asked = take_launch(win)
+    -- "open it here": no rule moves it; it opens where you are, focused
+    if asked and asked.here then focus_on_open[win.address] = true; return end
     if slots[win.monitor.name] == nil then return end   -- a display still settling
     local k = slots[win.monitor.name]
     local n

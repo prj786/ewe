@@ -3191,7 +3191,7 @@ Scope {
                     Card {
                         visible: Cloud.probed && !Cloud.signedIn
                         TBody { width: parent.width; color: Theme.textSecondary; wrapMode: Text.WordWrap
-                            text: "Sign in to your Nextcloud, a server you run or a hosted account (Murena, Disroot, Infomaniak…), and ewe works with it: this machine kept as one file, your apps restorable in Komble, your calendar in Quick settings and your files in ~/Nextcloud. ewe never sees your password: the server gives it an app password you can revoke at any time." }
+                            text: "Sign in to your Nextcloud, a server you run or a hosted account (Murena, Disroot, Infomaniak…), and ewe works with it: this machine kept as one file, your apps restorable in Komble, your calendar in Quick settings and your files in ~/Nextcloud. ewe keeps only an app password from the server, which you can revoke at any time; your password itself is never stored." }
                         Item {
                             width: parent.width; height: Theme.controlMd
                             FieldBox {

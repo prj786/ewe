@@ -39,12 +39,12 @@ for f in \
     /usr/lib/ewe-browser/ewe-browser /usr/lib/ewe-browser/resources.pak \
     /usr/lib/ewe-browser/resources/app.asar \
     /usr/lib/libwebkitgtk-6.0.so* /usr/lib/libwebkit2gtk-4.1.so* \
-    /usr/bin/nemo /usr/lib/libnemo-private.so* \
+    /usr/bin/ewe-files-app /usr/bin/ewe-player /usr/bin/ewe-viewer \
     /usr/bin/komble /usr/bin/ewe-settings /usr/bin/ewe-sync \
     /usr/lib/libgtk-3.so* /usr/lib/libgtk-4.so* /usr/lib/libglib-2.0.so* \
     /usr/lib/libQt6Core.so* /usr/lib/libQt6Gui.so* /usr/lib/libQt6Qml.so* \
-    /usr/bin/kitty /usr/bin/zathura /usr/bin/imv /usr/bin/galculator \
+    /usr/bin/kitty /usr/bin/galculator \
     /usr/bin/zeditor \
-    /usr/bin/engrampa /usr/bin/guvcview ; do
+    /usr/bin/guvcview ; do
     warm "$f"
 done

@@ -420,7 +420,8 @@ cat ~/.icons/default/index.theme   # Inherits=Mocu-…
 
 "Open in Terminal" runs the terminal GSettings names, and Cinnamon's default
 (`velocitty` since cinnamon-desktop 6.8) is not installed. ewe's defaults
-(kitty; no Delete beside Move to Trash; thumbnails up to 50 MB; Compress →
+(`ewe-terminal-here` — kitty on the workspace you are on, whatever a Window
+Rule says; no Delete beside Move to Trash; thumbnails up to 50 MB; Compress →
 .zip; the broken "Mount archive" hidden) are a dconf system db that only
 `install.sh` installed before 0.43 — the package does now. The right-click
 actions (Compress…, Extract Here, Extract To…, Set as Wallpaper) are copied
@@ -428,12 +429,15 @@ per account by `ewe-setup` at the next login. Check:
 
 ```sh
 ls /etc/dconf/db/ewe.d/ && cat /etc/dconf/profile/user   # system-db:ewe
-gsettings get org.cinnamon.desktop.default-applications.terminal exec   # 'kitty'
+gsettings get org.cinnamon.desktop.default-applications.terminal exec   # 'ewe-terminal-here'
 ls ~/.local/share/nemo/actions/
 ```
 
+Still `'velocitty'` on 0.43.0: that release wrote the key under
+`/org/cinnamon/desktop/default-applications/terminal/`, but the schema's path
+is `/org/cinnamon/desktop/applications/terminal/` — 0.43.1 fixes the path.
 A value you once set yourself (`dconf read
-/org/cinnamon/desktop/default-applications/terminal/exec`) wins over ewe's;
+/org/cinnamon/desktop/applications/terminal/exec`) wins over ewe's;
 `dconf reset` it to follow the default. RAR archives need `unarchiver`, and
 "Open With" a terminal program needs `xdg-terminal-exec` (both dependencies
 since 0.43).

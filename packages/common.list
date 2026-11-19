@@ -13,14 +13,14 @@ xdg-desktop-portal-gtk
 polkit
 gnome-keyring
 libsecret               # secret-tool — Google refresh token lives in the keyring
-kdeconnect              # phone integration daemon (Quick Settings "Mobile" card drives it over D-Bus)
+# kdeconnect: NOT here since 0.44 — the Phone plugin (ewe.phone) `requires` it and Komble
+# installs it with the plugin; it pulled ~165 MB of KDE Frameworks into every install.
 accountsservice         # user icon store (greeter avatar; Settings writes it via busctl)
 plocate                 # launcher file search (Super+D); phase 30 enables the updatedb timer
 python-dbus             # logind-bridge.py, bt-agent.py and the phone add-on's kdeconnect-bridge.py (D-Bus side)
 python-gobject          # those two bridges' GLib loop (also the optional EDS helper)
 openssh                 # ssh + a per-user sshd: Remote (RFC-009, ewe-remote) and the SSH plugin
 python-spake2           # Remote pairing: the 8-digit code is checked with SPAKE2 (no offline guessing)
-qt5-wayland
 qt6-wayland
 qt6-svg
 qt6-5compat
@@ -72,7 +72,8 @@ avahi                   # mDNS — Chromecast / Google TV discovery (phase 30 en
 wireless-regdb          # regulatory database; phase 30 sets the country. Without it the kernel runs the
                         # "world" domain: 5 GHz is receive-only, so hotspot / Wi-Fi Direct (Miracast) are
                         # pinned to crowded 2.4 GHz — the "laggy / frozen mirror" of 2026-08-21
-gst-plugin-va           # vah264enc — hardware H.264 for Cast to TV (gnome-network-displays prefers it over
+gst-plugin-va           # VA-API in GStreamer: hardware DECODING for ewe Player / ewe Viewer video, and
+                        # vah264enc — hardware H.264 for Cast to TV (gnome-network-displays prefers it over
                         # x264); Intel iHD + AMD Mesa both expose it via VA-API
 gst-plugins-bad         # fdkaacenc / faac — the AAC encoders Cast to TV needs for the audio half of the
                         # stream. Without one the daemon casts video only; it used to route the user's
@@ -111,39 +112,40 @@ bat                      # syntax-highlighting cat/pager (not aliased — cat st
 zoxide                   # smarter cd that remembers where you go
 fastfetch                # the neofetch replacement (neofetch is gone from the repos)
 
-# ── file manager + utility apps = traditional GTK (NOT libadwaita) ────────────
-#    Nemo/Engrampa/Zathura use a normal menubar/toolbar + server-side decorations,
-#    so under Hyprland (no titlebar) they render with ONLY our accent border — the
-#    no-titlebar borderless look — while theming via GTK (adw-gtk3 + gsettings, see
-#    scripts/colorscheme.sh). Unlike GNOME/libadwaita apps they have no unhideable
-#    client-side headerbar. Defaults are managed the standard way: ONE
-#    ~/.config/mimeapps.list, read natively by GIO — no KDE ksycoca cache, so
-#    "Open With" always sees the installed apps. ──────────────────────────────
-nemo                    # file manager (GTK3; custom right-click via .nemo_action)
-engrampa                # archive manager (GTK3, no headerbar) — create / extract
-imv                     # image viewer (Wayland-native, decorationless)
-zathura                 # PDF / document viewer (keyboard-driven, fully themeable)
-zathura-pdf-mupdf
-tesseract-data-eng      # libmupdf → tesseract needs A data pack; unpinned, pacman's
-                        # resolver picks the first provider alphabetically — which is
-                        # AFRIKAANS. Pin English; users add languages via Komble.       # PDF backend for zathura
-mpv                     # video player (decorationless, themeless — ideal)
-mpv-mpris               # mpv → MPRIS bridge, so the dock's now-playing popup sees it
+# ── files, media and documents = ewe's own apps (0.44) ───────────────────────
+#    ewe Files (folders + archives), ewe Player (video + music) and ewe Viewer
+#    (PDF, books, documents, pictures) come in the `ewe-apps` package from the
+#    [ewe] repo (a dependency of the ewe package, see packaging/PKGBUILD) — the
+#    ewe Browser look, the design-system tokens, nothing resident. They replaced
+#    Nemo, Engrampa, imv, Zathura (+ mupdf/tesseract) and mpv as the defaults
+#    (2026-11-19). mpv itself stays installed: mpvpaper (aur.list) links libmpv.
+#    Defaults stay the standard way: ONE ~/.config/mimeapps.list, read natively
+#    by GIO (packaging/ewe-setup, phase 60). ─────────────────────────────────────
+# Codecs. ewe Player and ewe Viewer play through WebKitGTK → GStreamer: base +
+# good (containers, VP8/9, FLAC, Opus…), bad (AV1, HEVC via libde265, DTS, AAC),
+# ugly (MPEG-2, AC-3, MP3 encoders), libav (FFmpeg — WMV/WMA, DivX/Xvid, ALAC,
+# APE, and everything else; without it a lot of real-world video says "no
+# decoder"), va (hardware decoding on Intel/AMD through VA-API).
+gst-plugins-base
+gst-plugins-good
+gst-plugins-ugly
+gst-libav
+ffmpeg                  # ffprobe/ffmpeg: video thumbnails, stream info, the screenshot of a frame
 guvcview                # camera app (photos + video) — tiny traditional GTK,
                         # the cheese-shaped hole in the default set
 galculator              # calculator (GTK3, menubar — follows adw-gtk3 + accent)
 mate-system-monitor     # task manager / resources (GTK3, menubar, no headerbar)
-ffmpegthumbnailer       # video thumbnails in Nemo
-# mounting + filesystem access for GTK apps (trash, network, MTP; cloud via GOA later)
+ffmpegthumbnailer       # video thumbnails in ewe Files (and the freedesktop cache other apps share)
+# mounting + filesystem access (trash, network, MTP) — ewe Files goes through GIO
 gvfs
 gvfs-mtp
 gvfs-smb
-rclone                  # ~/Google Drive mount (ewe-drive: one sign-in, files too)
+rclone                  # ~/Nextcloud (ewe-files) and ~/Google Drive (ewe-drive) mounts
 fuse3                   # rclone mount's engine
 udisks2
 unzip
 7zip                     # provides 7z (p7zip was dropped from the Arch repos)
-unarchiver               # unar/lsar — RAR for Engrampa (Arch's 7zip has no RAR codec; LGPL, not unrar's licence)
+unarchiver               # unar/lsar — RAR for ewe Files (Arch's 7zip has no RAR codec; LGPL, not unrar's licence)
 xdg-terminal-exec        # GIO runs Terminal=true apps through it: "Open With → micro" failed with "no terminal" (kitty is the one found)
 
 # ── browser + editor ──────────────────────────────────────────────────────────
@@ -193,7 +195,6 @@ adobe-source-han-sans-otc-fonts  # Chinese, Japanese and Korean (2026-11-08: no 
                          # same design as Noto Sans CJK at 112 MB instead of 299 MB
                          # (no serif); fontconfig picks the right regional variant
                          # (dotfiles/fontconfig/fonts.conf)
-ttf-jetbrains-mono-nerd
 ttf-nerd-fonts-symbols-mono  # Nerd glyphs for the prompt, now that kitty sets Geist Mono
 # The DE faces, Geist and Geist Mono (OFL), are NOT in the Arch repos: the
 # variable fonts ship in dotfiles/quickshell/fonts/geist/ and dotfiles/fontconfig
@@ -214,6 +215,8 @@ git                     # VCS — user-facing + the AUR (paru) bootstrap needs i
 # opt-in — see packages/gaming.list, installed only with `install.sh --gaming`.
 mesa
 vulkan-icd-loader
+vulkan-swrast           # claims the `vulkan-driver` virtual (zed asks for one) before phase 40 adds the real
+                        # driver — unclaimed, pacman picked nvidia-utils (1 GB) on Intel and AMD machines too
 pciutils                # lspci — GPU/driver introspection (phase 40 'in use: xe' guard)
 libva-utils             # vainfo — VAAPI verification (phase 90 postcheck, real HW)
 vulkan-tools            # vulkaninfo — Vulkan device verification (phase 90 postcheck)
@@ -221,10 +224,11 @@ vulkan-tools            # vulkaninfo — Vulkan device verification (phase 90 po
 # ── system tuning ────────────────────────────────────────────────────────────
 zram-generator
 
-# ── build deps (AUR builds; paru bootstrap) ──────────────────────────────────
-# base-devel is required by makepkg/paru. cmake/meson moved to dev.list (--dev) —
-# paru pulls them as makedepends on demand for any AUR build that needs them.
-base-devel
+# ── package tools ────────────────────────────────────────────────────────────
+# base-devel (gcc, make, … ~410 MB) is NOT here since 0.44: only an AUR build
+# needs it. Komble installs it right before its first AUR build, phase 10 does
+# when it has to build paru from source, and everything in aur.list is served
+# prebuilt from the [ewe] repo. cmake/meson are in dev.list (--dev).
 pacman-contrib          # checkupdates — the only safe update listing (Komble Updates view needs it)
 expac                   # fast sync-DB dump — Komble's Browse descriptions come from it
 nextcloud-client        # RFC-005/006: nextcloudcmd is the folder-sync engine of the first-party account app (ewe-sync); the client's own GUI is not used

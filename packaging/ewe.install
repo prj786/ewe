@@ -104,8 +104,10 @@ _ewe_network_defaults() {
 # Desktop defaults from phase 30 that a pacman or ISO install never got
 # (0.43 — the Ubuntu-parity audit found them missing on package installs):
 #  * the GSettings system db (system/dconf): Nemo's "Open in Terminal" opens
-#    kitty (Cinnamon's schema default is a terminal ewe does not install —
-#    `velocitty` since cinnamon-desktop 6.8 — so the item did nothing), no
+#    kitty where you are (ewe-terminal-here, /usr/bin; Cinnamon's schema
+#    default is a terminal ewe does not install — `velocitty` since
+#    cinnamon-desktop 6.8 — so the item did nothing; 0.43 wrote the key to a
+#    path nothing reads, fixed in 0.43.1), no
 #    "Delete" next to "Move to Trash", thumbnails for photos over 1 MiB, the
 #    broken "Mount archive" item hidden, Compress… makes a .zip. The profile
 #    is written only when absent or already ours (it orders every GSettings

@@ -30,7 +30,7 @@ QtObject {
     // Project version — the shell's runtime copy. Keep in sync with the repo-root
     // VERSION file (the canonical source used for git tags / releases). Semver, with
     // an -alpha/-beta pre-release suffix until the first stable cut.
-    readonly property string version: "0.43.0-beta"
+    readonly property string version: "0.44.0-beta"
 
     // ── event sounds (GNOME-style; the freedesktop sound theme, one toggle) ──
     // playSound("message-new-instant") etc — names are theme event ids from
@@ -140,9 +140,11 @@ QtObject {
     // through the dispatch socket: no process. `hint` names the app whose
     // window spends the launch (StartupWMClass, desktop id or binary) — kept
     // to [A-Za-z0-9._-], so a desktop id can never become Lua.
-    function markLaunch(hint) {
+    // here = true: open it on THIS workspace, whatever a Window Rule says
+    // ("Open terminal here"; workspaces.lua M.launched)
+    function markLaunch(hint, here) {
         var h = String(hint || "").replace(/[^A-Za-z0-9._-]/g, "")
-        Hyprland.dispatch('function() if ewe_launched then ewe_launched("' + h + '") end end')
+        Hyprland.dispatch('function() if ewe_launched then ewe_launched("' + h + '"' + (here === true ? ', true' : '') + ') end end')
     }
 
     function openSettings() {

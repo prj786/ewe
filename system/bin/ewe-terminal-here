@@ -1,0 +1,20 @@
+#!/bin/sh
+# ewe-terminal-here — the terminal Files (Nemo) opens: kitty, in the folder
+# Nemo starts it in, on the workspace you are on.
+#
+# Nemo's "Open in Terminal" runs whatever GSettings
+# org.cinnamon.desktop.default-applications.terminal `exec` names (ewe's
+# dconf system db: system/dconf/ewe.d/10-terminal names this). A bare
+# `kitty` there obeyed the Window Rules — "kitty opens on workspace 3" took
+# it to workspace 3 without focus, so the click seemed to do nothing. This
+# marks the launch "here" first (workspaces.lua `ewe_launched(hint, true)`,
+# a Lua function dispatched to Hyprland, no process), the same way the
+# desktop's "Open terminal here" does.
+#
+# Running a program (Nemo's `exec-arg`, "-e"): `ewe-terminal-here -e CMD…`
+# → `kitty CMD…`.
+if [ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ] && command -v hyprctl >/dev/null 2>&1; then
+    hyprctl dispatch 'function() if ewe_launched then ewe_launched("kitty", true) end end' >/dev/null 2>&1 || true
+fi
+[ "${1:-}" = "-e" ] && shift
+exec kitty "$@"

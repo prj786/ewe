@@ -27,7 +27,7 @@ pkgname=ewe
 # <repo>-<tag without the leading v>, so both the source URL and the directory
 # below follow _tag, never pkgver. ewe-repo's publish workflow rewrites both.
 _tag=v0.22.0-beta
-pkgver=0.43.0beta
+pkgver=0.44.0beta
 pkgrel=1
 pkgdesc="ewe — a clean, dark Hyprland + Quickshell desktop environment"
 arch=('any')
@@ -40,10 +40,13 @@ license=('GPL-2.0-only')
 # reversal/mocu are served from the [ewe] repo (ewe-repo pkgbuilds/);
 # phase 20's source install is only the non-repo fallback.
 depends=('pipewire-jack'            # claims 'jack' before ffmpeg/mpv/portaudio ask
-         'tesseract-data-eng'       # claims 'tessdata' before libmupdf asks (else: Afrikaans)
-         'komble-arch' 'ewe-settings' 'ewe-cast'
+         'vulkan-swrast'            # claims 'vulkan-driver' before zed asks — unpinned, pacman took
+                                    # nvidia-utils (1 GB, blacklists nouveau) on EVERY machine: the
+                                    # installer adds the real per-vendor driver only after `ewe`
+         'komble-arch' 'ewe-settings'
          'ewe-sync'                 # the account app (RFC-006), served from [ewe]
-         'ewe-browser'              # THE browser (web, files, music), served from [ewe]
+         'ewe-browser'              # THE browser, served from [ewe]
+         'ewe-apps'                 # ewe Files, ewe Player, ewe Viewer (0.44), served from [ewe]
          'reversal-icon-theme' 'mocu-cursor-theme'
          'python')   # ewe-conf; + the lists, appended in package()
 # The IPsec backend moved from strongswan to libreswan (packages/aur.list —
@@ -71,7 +74,7 @@ package() {
     # skip entries already front-pinned above — no duplicate depends
     mapfile -t -O "${#depends[@]}" depends \
         < <(sed 's/#.*//' packages/common.list packages/aur.list | awk 'NF{print $1}' \
-            | grep -vxF -e pipewire-jack -e tesseract-data-eng)
+            | grep -vxF -e pipewire-jack -e vulkan-swrast)
     mapfile -t optdepends \
         < <(sed 's/#.*//' packages/gaming.list | awk 'NF{print $1": gaming stack (install.sh --gaming)"}')
 
@@ -110,4 +113,7 @@ package() {
     # Game mode, balanced or Ultra (0.42): the tile, Settings, Shaun and
     # GameMode's own hooks all come through it
     install -Dm755 bin/ewe-game "$pkgdir/usr/bin/ewe-game"
+    # Files' "Open in Terminal" (the dconf default, system/dconf/ewe.d/10-terminal):
+    # kitty on the workspace you are on, whatever a Window Rule says (0.43.1)
+    install -Dm755 system/bin/ewe-terminal-here "$pkgdir/usr/bin/ewe-terminal-here"
 }

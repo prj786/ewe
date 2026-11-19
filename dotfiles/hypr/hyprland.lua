@@ -17,7 +17,7 @@ local scripts  = home .. "/.config/hypr/scripts"
 
 -- Core programs (mirror the old settings.py defaults) ------------------------
 local terminal    = "kitty"
-local fileManager = "nemo"
+local fileManager = "ewe-files-app"   -- ewe Files (ewe-apps, 0.44; Nemo before)
 -- Open whatever the user set as the default web browser (Settings → Default Apps
 -- writes it via `xdg-settings set default-web-browser`). We resolve the .desktop
 -- and launch it with `gio launch` (glib2, always present); fall back to ewe browser.

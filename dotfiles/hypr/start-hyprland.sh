@@ -37,7 +37,7 @@ if [ -f "$_hs_apps/ewe-browser.desktop" ] && [ -f /usr/share/applications/ewe-br
     if [ -f "$_hs_mimeapps" ]; then
         if [ "$(awk -F= '/^\[/{s=($0=="[Default Applications]")} s && $1=="inode/directory" {sub(/;.*/,"",$2); print $2; exit}' "$_hs_mimeapps")" = ewe-browser.desktop ]; then
             if [ -f "$_hs_apps/ewe-browser-folders.desktop" ]; then _hs_dir_app=ewe-browser-folders.desktop
-            else _hs_dir_app=nemo.desktop; fi
+            else _hs_dir_app=ewe-files-app.desktop; fi
             xdg-mime default "$_hs_dir_app" inode/directory 2>/dev/null
         fi
         # the old entry's "Open with" association goes with it
@@ -140,7 +140,8 @@ unset _x11scale
 # default (8×cores). 4 is the sweet spot measured for desktop workloads —
 # every session process inherits this.
 export MALLOC_ARENA_MAX=4
-# First-party apps are GTK now (Nemo/Engrampa/Zathura/imv), themed via GTK below.
+# Stray GTK apps are themed via GTK below; ewe's own apps (ewe Files / Player / Viewer,
+# 0.44) follow theme-tokens.json themselves.
 # qt6ct is just a fallback so any stray Qt app you install gets a dark Fusion
 # palette instead of blinding white — there are no KDE apps, so no plasma-integration
 # / "kde" platform theme. (The shell itself is Quickshell/Qt, themed by Theme.qml.)

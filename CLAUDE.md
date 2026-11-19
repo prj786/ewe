@@ -463,13 +463,24 @@ written. Called live by Settings → Theme, at shell startup, and by phase 60.
 
 ### Key design decisions (don't relitigate)
 
-- **First-party apps are traditional GTK** (Nemo, Engrampa, imv, Zathura, mpv) — not
-  KDE/Qt, not GNOME/libadwaita. Traditional GTK apps use a menubar + server-side
-  decorations, so under Hyprland (no titlebar) they render borderless; only
-  libadwaita forces an unhideable headerbar. Going all-GTK also makes one
-  `~/.config/mimeapps.list` (read natively by GIO) the single source for default
-  apps — no KDE `ksycoca` cache. Do not propose reverting to Qt/KDE apps or
-  `plasma-integration`.
+- **Folders, media and documents are ewe's own apps (0.44, decision 56)** — ewe
+  Files (`ewe-files-app`), ewe Player (`ewe-player`), ewe Viewer (`ewe-viewer`),
+  repo `prj786/ewe-apps` (Tauri + Solid, ewe Browser's UI), package `ewe-apps`, a
+  dependency of `ewe`. They replaced the traditional-GTK set (Nemo, Engrampa,
+  imv, Zathura, mpv); what still stands from that decision: one
+  `~/.config/mimeapps.list` read by GIO is the single source for default apps
+  (no KDE `ksycoca` cache), no libadwaita, no Qt/KDE apps or
+  `plasma-integration`. Defaults are seeded by `packaging/ewe-setup` and phase 60;
+  a type still pointing at a retired default moves once
+  (`default-apps-0.44.done`). Launch flags are `--key=value`
+  (`ewe-files-app --select=<path>`, `--open-with=<path>`).
+- **The package diet (0.44, decision 57)** — `vulkan-swrast` is front-pinned in
+  `packaging/PKGBUILD` and listed in common.list: zed needs a `vulkan-driver`
+  and, unclaimed, pacman picked nvidia-utils (1 GB) on every machine because the
+  installer runs `pacman -S ewe` before it adds the GPU driver. base-devel,
+  kdeconnect, gnome-network-displays, ewe-cast, qt5-wayland, the JetBrains Nerd
+  font and the old apps are not dependencies any more (Komble installs
+  base-devel before the first AUR build; plugins `require` their packages).
 - **Toolkit theming env is exported in `dotfiles/hypr/start-hyprland.sh` before
   `exec Hyprland`**, not via `hl.env()` in `hyprland.lua` — `hl.env` propagation to
   on-demand-launched apps is unreliable.
