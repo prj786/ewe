@@ -28,6 +28,8 @@ BarModule 1.0 BarModule.qml
 BarSep 1.0 BarSep.qml
 BarStatusGlyph 1.0 BarStatusGlyph.qml
 AnchoredPopup 1.0 AnchoredPopup.qml
+BarPopup 1.0 BarPopup.qml
+PopupHead 1.0 PopupHead.qml
 ContextMenu 1.0 ContextMenu.qml
 Tooltip 1.0 Tooltip.qml
 FileDropTarget 1.0 FileDropTarget.qml

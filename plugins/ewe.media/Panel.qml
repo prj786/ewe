@@ -4,15 +4,15 @@ import Quickshell.Io
 import qs
 
 // ewe.media — the now-playing card (design system: Media player, the "full"
-// variant). An AnchoredPopup: above the dock when the dock item opens it,
-// under the bar when the bar widget does; Esc or a click outside closes.
+// variant). The shell's BarPopup (ewe 0.45): above the dock when the dock
+// item opens it, under the bar when the bar widget does; Esc or a click
+// outside closes.
 //
-//   card      panelSm wide, surfaceRaised with a borderWidth1 borderSubtle
-//             outline, the radiusRounded corner, the shadowFloat elevation
-//             and spaceS + spaceXs (12) of padding
+//   card      the bar card every dropdown shares: grow(panelSm) wide, 12 of
+//             padding, the head "Now playing" with the player's name
+//             ("Spotify", "mpv") under it
 //   art       icon4xl (64) on the radiusPrimary corner, or the ewellow
 //             gradient with a music glyph when the player publishes none
-//   source    the app's name in caption textMuted
 //   title     h4 (15, semibold) · artist body in textSecondary, both elided
 //   times     the mono caption, tabular, under the seek slider
 //   controls  previous · play/pause (accent, round, controlXl) · next,
@@ -104,17 +104,21 @@ Scope {
         onTriggered: root.player.positionChanged()
     }
 
-    AnchoredPopup {
+    // the shell's BarPopup (ewe 0.45): the same card as every bar dropdown —
+    // "Now playing" in the head, the player's name under it
+    BarPopup {
         id: pop
         name: "mediaplayer"                 // layer namespace quickshell:mediaplayer, as before (hyprland.lua rules)
         owner: "ewe.media"                  // Shell.closePopups("ewe.media") spares it; any other popup opening closes it
         action: "ewe.media.toggle"
-        implicitWidth: Theme.panelSm
-        implicitHeight: col.implicitHeight + 2 * (Theme.spaceS + Theme.spaceXs)
+        title: "Now playing"
+        glyph: Theme.icMusic
+        subtitle: root.player ? (root.player.identity || root.player.desktopEntry || "") : ""
 
         Item {
             id: box
-            anchors.fill: parent
+            width: parent.width
+            implicitHeight: col.implicitHeight
             readonly property var pl: root.player
             readonly property bool hasArt: pl !== null && pl.trackArtUrl !== undefined && String(pl.trackArtUrl) !== ""
             // Browser MPRIS drops length/positionSupported for a moment right
@@ -133,8 +137,7 @@ Scope {
 
             Column {
                 id: col
-                anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top
-                anchors.margins: Theme.spaceS + Theme.spaceXs
+                width: parent.width
                 spacing: Theme.spaceS + Theme.spaceXs
 
                 Row {
@@ -176,16 +179,8 @@ Scope {
                         width: parent.width - art.width - parent.spacing
                         anchors.verticalCenter: parent.verticalCenter
                         spacing: Theme.spaceXxs
-                        // the playing source (player identity: "Spotify", "mpv", …)
-                        Text {
-                            width: parent.width
-                            text: box.pl ? (box.pl.identity || box.pl.desktopEntry || "Media") : ""
-                            color: Theme.textMuted
-                            font.family: Theme.type.caption.family
-                            font.pixelSize: Theme.type.caption.size
-                            font.weight: Theme.type.caption.weight
-                            elide: Text.ElideRight
-                        }
+                        // (the playing source — "Spotify", "mpv" — is the
+                        //  head's subtitle)
                         Text {
                             width: parent.width
                             text: box.pl ? (box.pl.trackTitle || "—") : ""

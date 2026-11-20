@@ -4,7 +4,7 @@ Quick settings is the control center that opens from the status module: account,
 
 ## Anatomy
 1. Panel: 360px wide (`panel-sm`), `surface-raised`, 1px `border-subtle`, `rounded` radius, `shadow-float`, 12px padding and 12px between sections.
-2. Header: avatar, name and uptime, then screenshot, settings, lock and power Icon buttons.
+2. Header: avatar, name and uptime, then settings, lock and power Icon buttons. (No screenshot: a capture starts from the bar's camera or the Print keys, 0.45.)
 3. Tiles: a two-column grid of Quick settings tiles, 8px apart, then a row of small tiles.
 4. Sliders: volume and brightness, each with its icon and value.
 5. Media: the compact Media player, when something plays.

@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "id": "ewe.dock",
   "name": "Dock",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "apiVersion": 3,
-  "description": "A centred bottom dock on the main screen: app launcher, Overview, Komble, one box per workspace with its windows, your minimized windows, downloads from ewe Browser, and the dock items other plugins provide.",
+  "description": "A centred bottom dock: app launcher, Overview, Komble, one box per workspace with its windows, your minimized windows, downloads from ewe Browser, and the dock items other plugins provide. On the main screen, on every screen, or on none.",
   "homepage": "https://github.com/prj786/ewe-plugin-dock",
   "author": "prj786",
   "icon": "icApps",
@@ -36,6 +36,18 @@
       "label": "Icon size",
       "description": "How big the dock buttons and workspace groups are: 40, 48 or 64 px.",
       "legacy": "desktop.dock.icon_size"
+    },
+    {
+      "key": "display",
+      "type": "choice",
+      "default": "primary",
+      "choices": [
+        "primary",
+        "all",
+        "none"
+      ],
+      "label": "Show the dock on",
+      "description": "Primary: the main screen only. All: every screen; the others get a small dock with that screen's workspaces and the windows minimized there. None: no dock."
     }
   ],
   "requires": {

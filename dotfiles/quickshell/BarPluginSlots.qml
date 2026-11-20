@@ -28,6 +28,10 @@ Row {
     // narrow output the right cluster can reach the middle, and the centre
     // yields rather than draw over it
     property bool fits: true
+    // the bar's fold (0.45): "foldable" = the widgets that go behind the
+    // chevron (manifest barWidget.collapsible not false), "pinned" = the
+    // ones that stay out, "all" = both (every section but the folding one)
+    property string fold: "all"
     spacing: Theme.spaceXs
     // an empty visible Row would still cost the parent Row one `spacing`
     visible: fits && rep.count > 0 && implicitWidth > 0
@@ -35,7 +39,9 @@ Row {
     Repeater {
         id: rep
         model: PluginHost.barWidgets.filter(function (w) {
-            return ((w.barWidget && w.barWidget.defaultSection) || "right") === slots.section
+            if (((w.barWidget && w.barWidget.defaultSection) || "right") !== slots.section) return false
+            var foldable = !(w.barWidget && w.barWidget.collapsible === false)
+            return slots.fold === "all" || (slots.fold === "foldable") === foldable
         })
         delegate: Loader {
             required property var modelData

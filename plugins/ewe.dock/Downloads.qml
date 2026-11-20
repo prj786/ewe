@@ -163,127 +163,114 @@ Scope {
     function close() { pop.close() }
 
     readonly property int rowH: Theme.control2xl
-    AnchoredPopup {
+    // the shell's one card look (BarPopup, ewe 0.45 — the card every bar
+    // button opens): the download glyph and "Downloads" in its head, the
+    // folder and Clear on the right, the list below, scrolling when a short
+    // screen needs it
+    BarPopup {
         id: pop
         name: "downloads"
         owner: "ewe.dock.downloads"
         action: "ewe.dock.downloads"
-        implicitWidth: Theme.panelSm
-        implicitHeight: Theme.spaceS + Theme.controlLg + Theme.spaceXs
-                        + Math.max(1, dl.recent.length) * (dl.rowH + Theme.spaceXxs) + Theme.spaceS
+        title: "Downloads"
+        glyph: Theme.icDownload
+        scrollable: true
+        headActions: [
+            QsIconButton { ic: Theme.icFolder; onGo: dl.openFolder(); Accessible.name: "Open the Downloads folder" },
+            QsButton { variant: "ghost"; label: "Clear"; visible: dl.recent.length > dl.running.length; onGo: dl.clear() }
+        ]
 
-        Item {
-            anchors.fill: parent
-            anchors.margins: Theme.spaceS
+        // the rows sit closer than the card's own spacing
+        Column {
+            width: parent.width
+            spacing: Theme.spaceXxs
 
-            Item {
-                id: head
-                width: parent.width; height: Theme.controlLg
-                TextStrong {
-                    anchors.left: parent.left; anchors.leftMargin: Theme.spaceS
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: "Downloads"
-                }
-                Row {
-                    anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
-                    spacing: Theme.spaceXs
-                    QsIconButton { ic: Theme.icFolder; onGo: dl.openFolder(); Accessible.name: "Open the Downloads folder" }
-                    QsButton { variant: "ghost"; label: "Clear"; visible: dl.recent.length > dl.running.length; onGo: dl.clear() }
+            Repeater {
+                model: dl.recent
+                delegate: Item {
+                    id: row
+                    required property var modelData
+                    readonly property bool running: modelData.status === "progressing" || modelData.status === "paused"
+                    readonly property bool done: modelData.status === "completed"
+                    readonly property bool failed: modelData.status === "cancelled" || modelData.status === "interrupted"
+                    width: parent.width; height: dl.rowH
+
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: Theme.radiusPrimary
+                        color: rowMa.containsMouse ? Theme.surfaceHover : "transparent"
+                        Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
+                    }
+                    MouseArea {
+                        id: rowMa
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: row.failed ? Qt.ArrowCursor : Qt.PointingHandCursor
+                        onClicked: row.done ? dl.openFile(row.modelData) : row.running ? dl.toBrowser() : undefined
+                    }
+                    Image {
+                        id: fileIcon
+                        anchors.left: parent.left; anchors.leftMargin: Theme.spaceS
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: Theme.iconXl; height: Theme.iconXl
+                        sourceSize.width: 2 * Theme.iconXl; sourceSize.height: 2 * Theme.iconXl; mipmap: true
+                        source: dl.iconFor(row.modelData)
+                        opacity: row.failed ? Theme.opacityGlass : 1
+                    }
+                    Column {
+                        anchors.left: fileIcon.right; anchors.leftMargin: Theme.spaceS
+                        anchors.right: revealBtn.left; anchors.rightMargin: Theme.spaceXs
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: Theme.spaceXxs
+                        TextBody {
+                            width: parent.width
+                            text: row.modelData.filename || "Download"
+                            elide: Text.ElideMiddle
+                            color: row.failed ? Theme.textSecondary : Theme.textPrimary
+                        }
+                        // the bar only while it runs (Progress bar card: track
+                        // surfaceHover, accent fill; paused keeps its place)
+                        Rectangle {
+                            visible: row.running
+                            width: parent.width; height: Theme.borderWidth2 * 2
+                            radius: Theme.radiusFull
+                            color: Theme.surfaceHover
+                            Rectangle {
+                                height: parent.height; radius: Theme.radiusFull
+                                width: row.modelData.total > 0 ? Math.round(parent.width * Math.min(1, row.modelData.received / row.modelData.total)) : 0
+                                color: row.modelData.status === "paused" ? Theme.textMuted : Theme.accent
+                                Behavior on width { NumberAnimation { duration: Theme.durSlow; easing.type: Theme.ease } }
+                            }
+                        }
+                        TextCaption {
+                            width: parent.width
+                            text: dl.status(row.modelData)
+                            color: row.failed ? Theme.danger : Theme.textSecondary
+                            font.features: ({ "tnum": 1 })
+                        }
+                    }
+                    QsIconButton {
+                        id: revealBtn
+                        anchors.right: parent.right; anchors.rightMargin: Theme.spaceXs
+                        anchors.verticalCenter: parent.verticalCenter
+                        visible: row.done
+                        ic: Theme.icFolder
+                        onGo: dl.reveal(row.modelData)
+                        Accessible.name: "Show in folder"
+                    }
+                    Accessible.role: Accessible.Button
+                    Accessible.name: (row.modelData.filename || "Download") + ", " + dl.status(row.modelData)
                 }
             }
 
-            Column {
-                anchors.top: head.bottom; anchors.topMargin: Theme.spaceXs
-                width: parent.width
-                spacing: Theme.spaceXxs
-
-                Repeater {
-                    model: dl.recent
-                    delegate: Item {
-                        id: row
-                        required property var modelData
-                        readonly property bool running: modelData.status === "progressing" || modelData.status === "paused"
-                        readonly property bool done: modelData.status === "completed"
-                        readonly property bool failed: modelData.status === "cancelled" || modelData.status === "interrupted"
-                        width: parent.width; height: dl.rowH
-
-                        Rectangle {
-                            anchors.fill: parent
-                            radius: Theme.radiusPrimary
-                            color: rowMa.containsMouse ? Theme.surfaceHover : "transparent"
-                            Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
-                        }
-                        MouseArea {
-                            id: rowMa
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: row.failed ? Qt.ArrowCursor : Qt.PointingHandCursor
-                            onClicked: row.done ? dl.openFile(row.modelData) : row.running ? dl.toBrowser() : undefined
-                        }
-                        Image {
-                            id: fileIcon
-                            anchors.left: parent.left; anchors.leftMargin: Theme.spaceS
-                            anchors.verticalCenter: parent.verticalCenter
-                            width: Theme.iconXl; height: Theme.iconXl
-                            sourceSize.width: 2 * Theme.iconXl; sourceSize.height: 2 * Theme.iconXl; mipmap: true
-                            source: dl.iconFor(row.modelData)
-                            opacity: row.failed ? Theme.opacityGlass : 1
-                        }
-                        Column {
-                            anchors.left: fileIcon.right; anchors.leftMargin: Theme.spaceS
-                            anchors.right: revealBtn.left; anchors.rightMargin: Theme.spaceXs
-                            anchors.verticalCenter: parent.verticalCenter
-                            spacing: Theme.spaceXxs
-                            TextBody {
-                                width: parent.width
-                                text: row.modelData.filename || "Download"
-                                elide: Text.ElideMiddle
-                                color: row.failed ? Theme.textSecondary : Theme.textPrimary
-                            }
-                            // the bar only while it runs (Progress bar card: track
-                            // surfaceHover, accent fill; paused keeps its place)
-                            Rectangle {
-                                visible: row.running
-                                width: parent.width; height: Theme.borderWidth2 * 2
-                                radius: Theme.radiusFull
-                                color: Theme.surfaceHover
-                                Rectangle {
-                                    height: parent.height; radius: Theme.radiusFull
-                                    width: row.modelData.total > 0 ? Math.round(parent.width * Math.min(1, row.modelData.received / row.modelData.total)) : 0
-                                    color: row.modelData.status === "paused" ? Theme.textMuted : Theme.accent
-                                    Behavior on width { NumberAnimation { duration: Theme.durSlow; easing.type: Theme.ease } }
-                                }
-                            }
-                            TextCaption {
-                                width: parent.width
-                                text: dl.status(row.modelData)
-                                color: row.failed ? Theme.danger : Theme.textSecondary
-                                font.features: ({ "tnum": 1 })
-                            }
-                        }
-                        QsIconButton {
-                            id: revealBtn
-                            anchors.right: parent.right; anchors.rightMargin: Theme.spaceXs
-                            anchors.verticalCenter: parent.verticalCenter
-                            visible: row.done
-                            ic: Theme.icFolder
-                            onGo: dl.reveal(row.modelData)
-                            Accessible.name: "Show in folder"
-                        }
-                        Accessible.role: Accessible.Button
-                        Accessible.name: (row.modelData.filename || "Download") + ", " + dl.status(row.modelData)
-                    }
-                }
-
-                // cleared while nothing runs: one quiet line
-                TextBody {
-                    visible: dl.recent.length === 0
-                    width: parent.width; height: dl.rowH
-                    verticalAlignment: Text.AlignVCenter
-                    horizontalAlignment: Text.AlignHCenter
-                    text: "No recent downloads"
-                    color: Theme.textSecondary
-                }
+            // cleared while nothing runs: one quiet line
+            TextBody {
+                visible: dl.recent.length === 0
+                width: parent.width; height: dl.rowH
+                verticalAlignment: Text.AlignVCenter
+                horizontalAlignment: Text.AlignHCenter
+                text: "No recent downloads"
+                color: Theme.textSecondary
             }
         }
     }

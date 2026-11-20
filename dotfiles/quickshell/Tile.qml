@@ -39,14 +39,18 @@ Rectangle {
     property bool disabled: false
     property bool small: false           // icon only, control2xl tall
     property int gap: Theme.spaceS       // the grid gap, when the parent has none
+    // the whole row instead of half of it — set by a grid for the last tile
+    // of an odd run, so no row is ever half empty (0.45; additive)
+    property bool wide: false
     signal clicked()                     // body
     signal menu()                        // detail zone
 
     readonly property int _detail: Theme.controlMd
     readonly property color _ink: tile.disabled ? Theme.textDisabled : Theme.textPrimary
 
-    width: parent ? (parent.width - (parent.spacing !== undefined ? parent.spacing : tile.gap)) / 2
-                  : Theme.panelSm / 2
+    width: !parent ? Theme.panelSm / 2
+         : tile.wide ? parent.width
+         : (parent.width - (parent.spacing !== undefined ? parent.spacing : tile.gap)) / 2
     // Text size (Accessibility modes): a tile GROWS to fit its text instead
     // of clipping it. The title wraps to two lines and the status to two;
     // the tile is its resting height or its text plus spaceS above and

@@ -30,7 +30,7 @@ QtObject {
     // Project version — the shell's runtime copy. Keep in sync with the repo-root
     // VERSION file (the canonical source used for git tags / releases). Semver, with
     // an -alpha/-beta pre-release suffix until the first stable cut.
-    readonly property string version: "0.44.0-beta"
+    readonly property string version: "0.45.0-beta"
 
     // ── event sounds (GNOME-style; the freedesktop sound theme, one toggle) ──
     // playSound("message-new-instant") etc — names are theme event ids from
@@ -541,6 +541,11 @@ QtObject {
     property string barIconSize: "normal"   // status glyph size: "small" | "normal" | "large" (relative to the theme's icon size)
     property var barShow: ({})              // { tray, screenshot, clipboard, tiling, keyboard, sound, mic, wifi, bluetooth, power, battery } — absent = shown
     function barShows(key) { return !(barShow && barShow[key] === false) }
+    // the fold (0.45, `desktop.bar.collapse`): the tray, the plugins' bar
+    // widgets and the tiling switch sit behind a chevron; barExtrasOpen is
+    // whether they are out right now — per session, every screen's bar alike
+    property bool barCollapse: false
+    property bool barExtrasOpen: false
 
     // ── Screensaver (persisted in user-theme.json; hypridle owns the timing via
     // the generated hypridle.conf — see Settings.writeIdleConf) ────────────────
@@ -792,6 +797,7 @@ QtObject {
                     if (j && j.barEnabled !== undefined) g.barVisible = j.barEnabled !== false
                     if (j && j.barIconSize) g.barIconSize = j.barIconSize
                     if (j && j.barShow && typeof j.barShow === "object") g.barShow = j.barShow
+                    if (j && j.barCollapse !== undefined) g.barCollapse = j.barCollapse === true
                     if (j && j.animationSpeed !== undefined) g.animationSpeed = j.animationSpeed
                     // a persisted "colorScheme" is ignored: the scheme's variant decides
                     if (j && j.avatarShape) g.avatarShape = j.avatarShape

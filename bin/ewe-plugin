@@ -452,6 +452,10 @@ def validate_manifest(d, m, expect_dirname=None, allow_reserved=False):
         p.append("barWidget must be an object")
     elif isinstance(bw, dict) and "defaultSection" in bw and bw["defaultSection"] not in ("left", "center", "right"):
         p.append("barWidget.defaultSection must be left, center or right")
+    # 0.45: false keeps a right-section widget out of the bar's fold (it
+    # stays beside the chevron when the user folds the extras away)
+    if isinstance(bw, dict) and "collapsible" in bw and not isinstance(bw["collapsible"], bool):
+        p.append("barWidget.collapsible must be true or false")
     # Show in bar (the host's switch, `ewe-plugin bar`): defaultShown is the
     # state before the user picks; toggle false = the plugin's own settings
     # say where it shows (a "button: bar/dock" choice), so no host switch

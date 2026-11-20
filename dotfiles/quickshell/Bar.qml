@@ -99,6 +99,8 @@ Scope {
         function toggle(): void { Globals.barVisible = !Globals.barVisible }
         function show(): void { Globals.barVisible = true }
         function hide(): void { Globals.barVisible = false }
+        // the fold (0.45, additive): show / hide the folded extras
+        function extras(): void { Globals.barExtrasOpen = !Globals.barExtrasOpen }
     }
     // Super+Shift+B — `hl.dsp.global("ewe:bar")` in hyprland.lua: delivered
     // over the global-shortcuts protocol, no process per press (Launcher.qml)
@@ -411,93 +413,138 @@ Scope {
                     anchors.verticalCenter: parent.verticalCenter
                     spacing: Theme.spaceXs
 
-                    // system tray, then the plugins' bar widgets (defaultSection =
-                    // right, the default) — one row, so a widget sits in the
-                    // tray's rhythm: barIcon glyphs, spaceXs apart, the same
-                    // gap as every other module in the cluster (Bar card #5)
-                    Row {
+                    // ── the fold (0.45, Settings → Layout → Top bar → Fold the
+                    //    extras; `desktop.bar.collapse`, off by default). The
+                    //    tray, the plugins' right-section widgets (manifest
+                    //    barWidget.collapsible not false) and the tiling switch
+                    //    sit behind a chevron; a click slides them out to its
+                    //    right and back. Off: the group is simply always out and
+                    //    the bar is what it always was (a widget that opts out,
+                    //    collapsible: false, sits after the tiling switch —
+                    //    no first-party plugin does). Never folded: the
+                    //    workspace chip, the app, updates, the keyboard layout
+                    //    and the Quick settings pill.
+                    BarModule {
+                        id: foldBtn
                         anchors.verticalCenter: parent.verticalCenter
-                        spacing: Theme.spaceXs
+                        visible: Globals.barCollapse && foldInner.implicitWidth > 0
+                        glyph: Globals.barExtrasOpen ? Theme.icChevronRight : Theme.icChevronLeft
+                        a11yName: Globals.barExtrasOpen ? "Hide the extra icons" : "Show the hidden icons"
+                        active: Globals.barExtrasOpen
+                        onActivated: Globals.barExtrasOpen = !Globals.barExtrasOpen
+                    }
+                    Item {
+                        id: foldGroup
+                        readonly property bool out: !Globals.barCollapse || Globals.barExtrasOpen
+                        anchors.verticalCenter: parent.verticalCenter
+                        height: foldInner.implicitHeight
+                        // the content keeps its own width; only the window onto
+                        // it narrows, from the chevron's side (Reduce motion:
+                        // no slide, the fade alone)
+                        width: out ? foldInner.implicitWidth : 0
+                        // an empty group must not cost the Row a spacing
+                        visible: width > 0
+                        clip: true
+                        opacity: out ? 1 : 0
+                        Behavior on width { enabled: !Theme.reduceMotion; NumberAnimation { duration: Theme.durBase; easing.type: Theme.ease } }
+                        Behavior on opacity { NumberAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
                         Row {
-                        visible: Globals.barShows("tray") && SystemTray.items.values.length > 0
-                        anchors.verticalCenter: parent.verticalCenter
-                        spacing: Theme.spaceXs
-                        Repeater {
-                            model: SystemTray.items
-                            delegate: Item {
-                                id: trayDelegate
-                                required property var modelData
-                                // a module-sized cell, like the plugins' widgets
-                                // beside it: barModule cells spaceXs apart is the
-                                // one rhythm of the whole cluster
-                                width: Theme.barModule; height: Theme.barModule
-                                Rectangle {
-                                    anchors.fill: parent
-                                    radius: Theme.radiusPrimary
-                                    color: trayMa.containsMouse ? Theme.barHoverFill : "transparent"
-                                    Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
-                                }
-                                TrayIcon {
-                                    anchors.centerIn: parent
-                                    px: Theme.barIcon
-                                    source: modelData.icon
-                                }
-                                // the app's own tooltip title, else its name (Tooltip card)
-                                Tooltip { text: trayDelegate.modelData.tooltipTitle || trayDelegate.modelData.title || "" }
-                                // Open the app's context menu (SNI DBusMenu) in our own
-                                // themed popup (TrayMenu.qml), anchored under the icon.
-                                function openMenu() {
-                                    Globals.trayMenuHandle = trayDelegate.modelData.menu
-                                    Globals.trayMenuAnchorX = trayDelegate.mapToItem(null, trayDelegate.width / 2, 0).x
-                                    Globals.trayMenuOpen = true
-                                }
-                                MouseArea {
-                                    id: trayMa
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    cursorShape: Qt.PointingHandCursor
-                                    acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
-                                    onClicked: function (m) {
-                                        var it = trayDelegate.modelData
-                                        if (m.button === Qt.RightButton) {
-                                            if (it.hasMenu) trayDelegate.openMenu()
-                                        } else if (m.button === Qt.MiddleButton) {
-                                            it.secondaryActivate()   // SNI SecondaryActivate — the item's own middle-click (menu-on-left apps: their window)
-                                        } else {
-                                            // left-click: primary activate; menu-only items
-                                            // (Steam, 1Password) have no activate → show menu.
-                                            // Some Qt apps answer Activate by opening their OWN
-                                            // menu as a stray toplevel, which lands centred and
-                                            // dead under a layer-shell tray (Nextcloud client,
-                                            // metal 2026-09-02) — for those the themed menu is
-                                            // the left-click too; middle-click still activates.
-                                            var key = String(it.id || it.title || "").toLowerCase()
-                                            var menuOnLeft = ["nextcloud"].some(function (k) { return key.indexOf(k) >= 0 })
-                                            if (it.hasMenu && (it.onlyMenu || menuOnLeft)) trayDelegate.openMenu()
-                                            else bar.trayActivate(it)
+                            id: foldInner
+                            anchors.right: parent.right
+                            anchors.verticalCenter: parent.verticalCenter
+                            spacing: Theme.spaceXs
+                            // system tray, then the plugins' bar widgets (defaultSection =
+                            // right, the default) — one row, so a widget sits in the
+                            // tray's rhythm: barIcon glyphs, spaceXs apart, the same
+                            // gap as every other module in the cluster (Bar card #5)
+                            Row {
+                                anchors.verticalCenter: parent.verticalCenter
+                                spacing: Theme.spaceXs
+                                Row {
+                                visible: Globals.barShows("tray") && SystemTray.items.values.length > 0
+                                anchors.verticalCenter: parent.verticalCenter
+                                spacing: Theme.spaceXs
+                                Repeater {
+                                    model: SystemTray.items
+                                    delegate: Item {
+                                        id: trayDelegate
+                                        required property var modelData
+                                        // a module-sized cell, like the plugins' widgets
+                                        // beside it: barModule cells spaceXs apart is the
+                                        // one rhythm of the whole cluster
+                                        width: Theme.barModule; height: Theme.barModule
+                                        Rectangle {
+                                            anchors.fill: parent
+                                            radius: Theme.radiusPrimary
+                                            color: trayMa.containsMouse ? Theme.barHoverFill : "transparent"
+                                            Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
+                                        }
+                                        TrayIcon {
+                                            anchors.centerIn: parent
+                                            px: Theme.barIcon
+                                            source: modelData.icon
+                                        }
+                                        // the app's own tooltip title, else its name (Tooltip card)
+                                        Tooltip { text: trayDelegate.modelData.tooltipTitle || trayDelegate.modelData.title || "" }
+                                        // Open the app's context menu (SNI DBusMenu) in our own
+                                        // themed popup (TrayMenu.qml), anchored under the icon.
+                                        function openMenu() {
+                                            Globals.trayMenuHandle = trayDelegate.modelData.menu
+                                            Globals.trayMenuAnchorX = trayDelegate.mapToItem(null, trayDelegate.width / 2, 0).x
+                                            Globals.trayMenuOpen = true
+                                        }
+                                        MouseArea {
+                                            id: trayMa
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
+                                            onClicked: function (m) {
+                                                var it = trayDelegate.modelData
+                                                if (m.button === Qt.RightButton) {
+                                                    if (it.hasMenu) trayDelegate.openMenu()
+                                                } else if (m.button === Qt.MiddleButton) {
+                                                    it.secondaryActivate()   // SNI SecondaryActivate — the item's own middle-click (menu-on-left apps: their window)
+                                                } else {
+                                                    // left-click: primary activate; menu-only items
+                                                    // (Steam, 1Password) have no activate → show menu.
+                                                    // Some Qt apps answer Activate by opening their OWN
+                                                    // menu as a stray toplevel, which lands centred and
+                                                    // dead under a layer-shell tray (Nextcloud client,
+                                                    // metal 2026-09-02) — for those the themed menu is
+                                                    // the left-click too; middle-click still activates.
+                                                    var key = String(it.id || it.title || "").toLowerCase()
+                                                    var menuOnLeft = ["nextcloud"].some(function (k) { return key.indexOf(k) >= 0 })
+                                                    if (it.hasMenu && (it.onlyMenu || menuOnLeft)) trayDelegate.openMenu()
+                                                    else bar.trayActivate(it)
+                                                }
+                                            }
+                                            onWheel: function (w) { trayDelegate.modelData.scroll(w.angleDelta.y, false) }
                                         }
                                     }
-                                    onWheel: function (w) { trayDelegate.modelData.scroll(w.angleDelta.y, false) }
                                 }
+                                }
+                                BarPluginSlots { section: "right"; fold: "foldable"; screen: win.screen; barWindow: win; anchors.verticalCenter: parent.verticalCenter }
+                            }
+
+                            // tiling ⇄ floating — the icon IS the state (grid = tiling,
+                            // stacked windows = floating). Globals.setTiling goes
+                            // through ewe-conf, which regenerates user.lua and reloads
+                            // Hyprland; the icon follows when the reload poke lands.
+                            // Assigning Globals.tilingEnabled here instead only worked
+                            // while the Settings panel happened to be loaded.
+                            BarModule {
+                                anchors.verticalCenter: parent.verticalCenter
+                                visible: Globals.barShows("tiling")
+                                glyph: Globals.tilingEnabled ? Theme.icTiling : Theme.icFloating
+                                a11yName: Globals.tilingEnabled ? "Tiling, on" : "Tiling, off"
+                                onActivated: Globals.setTiling(!Globals.tilingEnabled)
                             }
                         }
-                        }
-                        BarPluginSlots { section: "right"; screen: win.screen; barWindow: win; anchors.verticalCenter: parent.verticalCenter }
                     }
-
-                    // tiling ⇄ floating — the icon IS the state (grid = tiling,
-                    // stacked windows = floating). Globals.setTiling goes
-                    // through ewe-conf, which regenerates user.lua and reloads
-                    // Hyprland; the icon follows when the reload poke lands.
-                    // Assigning Globals.tilingEnabled here instead only worked
-                    // while the Settings panel happened to be loaded.
-                    BarModule {
-                        anchors.verticalCenter: parent.verticalCenter
-                        visible: Globals.barShows("tiling")
-                        glyph: Globals.tilingEnabled ? Theme.icTiling : Theme.icFloating
-                        a11yName: Globals.tilingEnabled ? "Tiling, on" : "Tiling, off"
-                        onActivated: Globals.setTiling(!Globals.tilingEnabled)
-                    }
+                    // the right-section widgets that never fold (manifest
+                    // barWidget.collapsible: false) — beside the chevron
+                    BarPluginSlots { section: "right"; fold: "pinned"; screen: win.screen; barWindow: win; anchors.verticalCenter: parent.verticalCenter }
 
                     // ── Komble — shown while there is something to say, whether
                     // or not the app has ever run: accent arrow-up-circle + count
