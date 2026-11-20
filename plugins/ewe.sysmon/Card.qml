@@ -2,11 +2,11 @@ import QtQuick
 import QtQuick.Layouts
 import qs
 
-// Card — what the bar readout opens (Panel.qml puts it in an AnchoredPopup):
+// Card — what the bar readout opens (Panel.qml puts it in the shell's
+// BarPopup, whose head is the activity glyph, "System monitor" and the
+// options cog — Komble → Plugins):
 //
-//   head      the activity glyph in accentText, "System monitor" semibold,
-//             the options cog (Komble → Plugins) on the right
-//   CPU       a well: the figure, the last minute as a sparkline, "8 cores ·
+//   CPU      a well: the figure, the last minute as a sparkline, "8 cores ·
 //             last 60 seconds"
 //   Memory    a well: "6.1 GB of 15.5 GB", a Level, "39% in use · swap empty"
 //   Internet  a well: the link it uses ("Wi-Fi · home-5G", "Ethernet",
@@ -61,24 +61,8 @@ Column {
         TextCaption { text: spd.caption }
     }
 
-    // ── head ──
-    RowLayout {
-        width: parent.width
-        spacing: Theme.spaceS
-        Glyph { text: SysMon.icActivity; color: Theme.accentText; Layout.alignment: Qt.AlignVCenter }
-        TextStrong {
-            Layout.fillWidth: true
-            Layout.alignment: Qt.AlignVCenter
-            text: "System monitor"
-            font.weight: Theme.fontWeightSemibold
-        }
-        QsIconButton {
-            Layout.alignment: Qt.AlignVCenter
-            ic: Theme.icCog
-            Accessible.name: "System monitor options"
-            onGo: card.options()
-        }
-    }
+    // (the head — glyph, "System monitor", the options cog — is the
+    //  BarPopup's PopupHead since 2.1.0: Panel.qml)
 
     // ── CPU ──
     Well {

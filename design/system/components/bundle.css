@@ -506,6 +506,8 @@
 .ewe-row__trail > .ewe-icon { width: var(--icon-md); height: var(--icon-md); }
 .ewe-row--interactive { cursor: pointer; }
 .ewe-row--interactive:hover, .ewe-row.is-hover { background: var(--surface-hover); }
+/* a lead tile wears surface-hover — the hovered row's own fill — so it steps to surface-pressed with the row (0.45; it melted into the row before) */
+.ewe-row--interactive:hover .ewe-row__lead--tile, .ewe-row.is-hover .ewe-row__lead--tile { background: var(--surface-pressed); }
 .ewe-row.is-pressed { background: var(--surface-pressed); }
 .ewe-row.is-selected { background: var(--accent-subtle); }
 .ewe-row.is-selected .ewe-row__lead { color: var(--accent-text); }

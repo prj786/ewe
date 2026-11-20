@@ -33,22 +33,26 @@ Scope {
         function hide(): void { pop.close() }
     }
 
-    AnchoredPopup {
+    // the shell's BarPopup (ewe 0.45): every bar card shares this look —
+    // the head is its PopupHead (glyph, title, the options cog)
+    BarPopup {
         id: pop
         name: "sysmon"                      // layer namespace quickshell:sysmon
         owner: "ewe.sysmon"
         action: "ewe.sysmon.toggle"
-        readonly property int pad: Theme.spaceS + Theme.spaceXs
-        implicitWidth: Theme.grow(Theme.panelSm)
-        implicitHeight: card.implicitHeight + 2 * pop.pad
-        onOpenChanged: SysMon.hold(root, pop.open, true)
+        title: "System monitor"
+        glyph: SysMon.icActivity
+        onOpened: SysMon.hold(root, true, true)
+        onClosed: SysMon.hold(root, false, true)
+        headActions: QsIconButton {
+            ic: Theme.icCog
+            Accessible.name: "System monitor options"
+            onGo: { pop.close(); Shell.openStore("addons") }
+        }
 
         Card {
-            id: card
-            x: pop.pad; y: pop.pad
-            width: parent.width - 2 * pop.pad
+            width: parent.width
             inBits: SysMon.bits(root.settings)
-            onOptions: { pop.close(); Shell.openStore("addons") }
         }
     }
 }

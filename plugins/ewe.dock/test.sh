@@ -31,13 +31,41 @@ assert m["ipcAliases"] == ["launcher"], m["ipcAliases"]
 assert m["entryPoints"]["panel"] == "Dock.qml"
 # the settings live here since 1.1.0, carried over from [desktop.dock]
 s = {o["key"]: o for o in m["settings"]}
-assert set(s) == {"autohide", "icon_size"}, set(s)
+assert set(s) == {"autohide", "icon_size", "display"}, set(s)
 assert s["autohide"]["legacy"] == "desktop.dock.autohide" and s["icon_size"]["legacy"] == "desktop.dock.icon_size"
 assert s["icon_size"]["choices"] == ["small", "normal", "large"]
-print("ok   manifest fields + settings")
+# 1.5.0: which displays have a dock — the default is the old behaviour, so
+# nothing migrates (and no legacy key: there never was one)
+d = s["display"]
+assert d["type"] == "choice" and d["choices"] == ["primary", "all", "none"], d
+assert d["default"] == "primary" and "legacy" not in d, d
+print("ok   manifest fields + settings (display: primary · all · none, default primary)")
 PY
 grep -q 'property var settings' Dock.qml && grep -q 'root.settings.autohide' Dock.qml && grep -q 'root.settings.icon_size' Dock.qml \
+  && grep -q 'root.settings.display' Dock.qml \
   && ok "Dock.qml reads its own settings" || bad "Dock.qml does not read its settings"
+# display: primary → the primary only; all → every screen, the others
+# reduced; none → no window and the inset withdrawn
+grep -q 'showHere: root.shown && (root.showOn === "all" || win.isPrimary)' Dock.qml \
+  && grep -q 'reduced: win.showHere && !win.isPrimary' Dock.qml && grep -q 'visible: win.showHere' Dock.qml \
+  && ok "display: one window per screen, shown by the setting" || bad "display: window visibility"
+grep -q 'publishedInset: root.shown ? root.clearance : 0' Dock.qml && grep -q 'shown: root.enabled && root.showOn !== "none"' Dock.qml \
+  && ok "display none withdraws the inset" || bad "display none keeps the inset"
+# a reduced dock: no sheep, Overview, Komble, plugin items or Downloads
+[ "$(grep -c 'visible: !win.reduced' Dock.qml)" -ge 4 ] && grep -q 'model: win.reduced ? \[\] : (Shell.dockItems' Dock.qml \
+  && grep -q 'showDownloads: downloads.shown && !win.reduced' Dock.qml \
+  && ok "reduced dock: workspaces + minimized only" || bad "reduced dock shows the full dock's buttons"
+# each dock its own workspaces and minimized windows
+grep -q 'model: win.wsList' Dock.qml && grep -q 'model: win.minHere' Dock.qml && grep -q 'function wsListFor(' Dock.qml \
+  && ok "per-display workspace boxes and minimized tiles" || bad "docks share one workspace/minimized list"
+# the minimized windows' displays survive a shell restart: kept in the
+# host-injected stateDir. Injected properties must stay WRITABLE — a readonly
+# one makes PluginHost.inject() throw before it hands over the settings
+grep -q '^    property string stateDir: ""' Dock.qml && grep -q 'root.stateDir + "/minimized.json"' Dock.qml \
+  && ok "minimized displays kept in the plugin's stateDir" || bad "minimized displays not kept in stateDir"
+if grep -nE 'readonly property [a-z]+ (pluginId|pluginDir|stateDir|settings)\b' Dock.qml; then bad "an injected property is readonly"; else ok "injected properties writable"; fi
+# Rule: the reserve is the numeric zone only — never exclusionMode at runtime
+if grep -nE '^[^/]*exclusionMode *:' Dock.qml; then bad "exclusionMode set (flip the numeric zone instead)"; else ok "no exclusionMode flips"; fi
 
 # 2 — Rule 8 -------------------------------------------------------------------
 # a hex colour, a named colour other than "transparent", a duration or a pixel

@@ -14,6 +14,7 @@ The bar runs along the top of every screen: the focused workspace and app on the
 4. Plugin slots: start (after the app), center, and end (after the tray). Plugins sit in install order.
 5. Tray: app icons 20px wide with 4px between them — the same `space-xs` rhythm as every other gap in the right cluster. Single-color icons are tinted `text-secondary`; colored icons keep their colors.
 6. Tiling toggle: `layout-grid` while tiling, `app-window` while floating.
+6a. Fold (optional, Settings → Layout → Top bar → Fold the extras; off by default): a `chevron-left` module ahead of the tray. Folded, the tray, the end plugin slots and the tiling toggle are hidden behind it; open, they sit to its right and the chevron turns `chevron-right`. The workspace chip, the app, updates, the keyboard layout and the Quick settings button never fold. A plugin keeps its widget out of the fold with `barWidget.collapsible: false`.
 7. Updates: `download` in `accent-text` with a count Badge; `check` in `text-muted` when everything is current; a spinning `refresh-cw` while updating.
 8. Keyboard layout: two capitals ("US", "GE"), 12px weight 600.
 9. Divider: 1px × 16px `border-subtle`, 4px margin on each side.
@@ -71,6 +72,8 @@ The bar's size follows its icons (`[desktop.bar] icon_size`). It has no height o
 - Updates: click opens Komble's updates (or the store); middle-click checks now.
 - Keyboard layout: click switches to the next layout.
 - Tray: left-click activates the app (or opens its menu if that is all it has), right-click opens its menu, middle-click activates, scroll passes through.
+- Fold: click the chevron to show or hide the folded modules — they slide out from under it at `dur-base` (a fade only with Reduce motion). It stays as you leave it until you sign out, and every display's bar follows.
+- Every popup a bar module opens is one card (BarPopup, 0.45): `panel-sm` wide (it grows with Text size), 12px padding, spaced 4px under the bar, `surface-raised` with a `border-subtle` line and the `rounded` corner, headed by the module's glyph in `accent-text` and its name in semibold with any actions on the right.
 - Only one popup is open at a time; Esc or a second click closes it.
 
 ## Accessibility

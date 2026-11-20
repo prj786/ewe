@@ -23,7 +23,7 @@ import Quickshell.Bluetooth
 //            durFast; a page change resizes at durFast; OutCubic, and nothing
 //            moves under Reduce motion
 //   home     the head: you (avatar, name, today's date — opens ewe Sync),
-//            then Screenshot · Settings · Lock · Power. The tiles (Tile.qml,
+//            then Settings · Lock · Power. The tiles (Tile.qml,
 //            every one with its icon circle, on or off), two to a row; the
 //            shortcut row of small tiles (Calendar, then every plugin page
 //            no tile already opens); volume (its chevron opens the output
@@ -252,17 +252,8 @@ Scope {
         if (Globals.syncAppInstalled) Globals.openSync()
         else Globals.openSettings()
     }
-    // Screenshot: the screenshot plugin's region capture, once the panel is
-    // out of the way. No plugin → no button (it is what owns the Print keys).
-    readonly property var shotPlugin: {
-        var o = PluginHost.instances["ewe.screenshot"]
-        return (o && o.panel && typeof o.panel.shoot === "function") ? o.panel : null
-    }
-    function screenshot() {
-        Globals.quickSettingsOpen = false
-        shotTimer.restart()
-    }
-    Timer { id: shotTimer; interval: Math.max(1, Theme.durBase + Theme.durSlow); onTriggered: if (root.shotPlugin) root.shotPlugin.shoot("region") }
+    // No Screenshot button (0.45): a capture starts from the bar's camera or
+    // the Print keys — both the screenshot plugin's — and nowhere else.
 
     // ── the shortcut row ──────────────────────────────────────────────────
     // Calendar, then every plugin page (quickPage) in manifest order — minus
@@ -701,6 +692,9 @@ Scope {
                 // a Behavior never animates a property's initial value — so
                 // `shown` starts false and takes the live binding a beat later
                 property bool shown: false
+                // the home grid's odd-run check (fixRuns) also runs on every
+                // open: with no plugin tiles nothing else would trigger it
+                onShownChanged: if (shown) Qt.callLater(panel.readTiles)
                 Component.onCompleted: Qt.callLater(function () { panel.shown = Qt.binding(function () { return Globals.quickSettingsOpen }) })
                 // which plugin tiles open their own page (read off the home grid while it
                 // shows — a slot's `visible` is the effective one, so a hidden home says
@@ -714,6 +708,7 @@ Scope {
                         m[s.modelData.id] = s.visible && !!s.item && s.item.hasMenu === true
                     }
                     if (JSON.stringify(m) !== JSON.stringify(root.tileOpens)) root.tileOpens = m
+                    homeGrid.fixRuns()
                 }
                 readonly property int pad: Theme.spaceS + Theme.spaceXs
                 readonly property bool onHome: root.tab === "home"
@@ -1062,8 +1057,8 @@ Scope {
                     spacing: panel.pad
 
                     // ══ the head (home): you — the avatar, your name and today's
-                    //    date, a door to ewe Sync — then Screenshot · Settings ·
-                    //    Lock · Power ══
+                    //    date, a door to ewe Sync — then Settings · Lock ·
+                    //    Power ══
                     Item {
                         id: head
                         visible: panel.onHome
@@ -1117,13 +1112,6 @@ Scope {
                             id: headActs
                             anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
                             spacing: Theme.spaceXs
-                            QsIconButton {
-                                id: shotBtn
-                                visible: root.shotPlugin !== null
-                                size: "md"; ic: Theme.icCamera
-                                onGo: root.screenshot()
-                                onHoveredChanged: panel.hint(shotBtn, hovered, "Take a screenshot")
-                            }
                             QsIconButton {
                                 id: setBtn
                                 size: "md"; ic: Theme.icCog
@@ -1180,6 +1168,26 @@ Scope {
                                 Flow {
                                     id: homeGrid
                                     width: parent.width; spacing: Theme.spaceS
+                                    // no half-empty row: the last half-width tile of
+                                    // an odd run (before a span-2 tile, or at the end)
+                                    // takes the whole row. Run from readTiles, which
+                                    // every slot's show/hide and load already calls.
+                                    function fixRuns() {
+                                        var kids = homeGrid.children, run = [], wide = []
+                                        function close() { if (run.length % 2 === 1) wide.push(run[run.length - 1]); run = [] }
+                                        for (var i = 0; i < kids.length; i++) {
+                                            var k = kids[i]
+                                            if (!("wide" in k) || !k.visible) continue
+                                            // a plugin slot that is not loaded (or failed) takes
+                                            // no room in the Flow — nor in a run
+                                            if (k.status !== undefined && (k.status !== Loader.Ready || k.height <= 0)) continue
+                                            if (k.modelData && k.modelData.span >= 2) close()
+                                            else run.push(k)
+                                        }
+                                        close()
+                                        for (var j = 0; j < kids.length; j++)
+                                            if ("wide" in kids[j]) kids[j].wide = wide.indexOf(kids[j]) >= 0
+                                    }
                                     Tile {
                                         // follows the link that CARRIES traffic (NetState):
                                         // the cable's glyph when a cable is the default route
@@ -1260,10 +1268,13 @@ Scope {
                                     Repeater {
                                         id: tileRep
                                         model: PluginHost.quickTiles
+                                        // a plugin turned off while the panel lingers
+                                        onCountChanged: Qt.callLater(panel.readTiles)
                                         delegate: Loader {
                                             id: tileSlot
                                             required property var modelData
-                                            width: modelData.span >= 2 ? parent.width : Math.floor((parent.width - Theme.spaceS) / 2)
+                                            property bool wide: false        // homeGrid.fixRuns
+                                            width: modelData.span >= 2 || wide ? parent.width : Math.floor((parent.width - Theme.spaceS) / 2)
                                             source: "file://" + modelData.entry
                                             readonly property bool shown: Globals.quickSettingsOpen && root.tab === "home"
                                             onShownChanged: if (status === Loader.Ready && item && ("panelOpen" in item)) item.panelOpen = tileSlot.shown
@@ -1285,13 +1296,19 @@ Scope {
                                     width: parent.width; spacing: Theme.spaceS
                                     readonly property int cols: Math.max(4, Math.min(6, root.shortcuts.length))
                                     readonly property real cell: Math.floor((width - (cols - 1) * spacing) / cols)
+                                    // one or two shortcuts (Calendar alone, most
+                                    // machines): full tiles with their names, the
+                                    // grid's two-up rhythm — not a lone square
+                                    readonly property bool roomy: root.shortcuts.length <= 2
                                     Repeater {
                                         model: root.shortcuts
                                         delegate: Tile {
                                             id: shortTile
                                             required property var modelData
-                                            small: true
-                                            width: shortRow.cell
+                                            small: !shortRow.roomy
+                                            wide: shortRow.roomy && root.shortcuts.length === 1
+                                            width: !shortRow.roomy ? shortRow.cell
+                                                 : wide ? shortRow.width : Math.floor((shortRow.width - shortRow.spacing) / 2)
                                             ic: modelData.icon
                                             label: modelData.label
                                             onClicked: root.setTab(modelData.key)
@@ -1361,11 +1378,23 @@ Scope {
                                             QsButton { visible: root.noteCount > 0; variant: "ghost"; label: "Clear all"; onGo: root.clearAll() }
                                         }
                                     }
-                                    TextCaption {
+                                    // nothing new: a quiet bell and one line, muted
+                                    Row {
                                         visible: root.noteCount === 0
                                         width: parent.width
-                                        wrapMode: Text.Wrap
-                                        text: Globals.dnd ? "No notifications. Banners are hidden while Do not disturb is on." : "No notifications"
+                                        spacing: Theme.spaceS
+                                        Glyph {
+                                            id: noNoteGlyph
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            text: Globals.dnd ? Theme.icDnd : Theme.icBell
+                                            color: Theme.textMuted
+                                        }
+                                        TextCaption {
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            width: parent.width - noNoteGlyph.width - parent.spacing
+                                            wrapMode: Text.Wrap
+                                            text: Globals.dnd ? "No notifications. Banners are hidden while Do not disturb is on." : "No notifications"
+                                        }
                                     }
                                     Repeater {
                                         model: root.tab === "home" ? root.noteGroups.slice(0, 2) : []

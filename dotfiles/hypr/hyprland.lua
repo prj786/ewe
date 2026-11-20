@@ -224,6 +224,20 @@ hl.config({
     },
 })
 
+-- No automatic HDR / wide colour in fullscreen (2026-11-20). Hyprland's
+-- default (cm_auto_hdr = 1) switches a display's colour management when a
+-- fullscreen window asks for an HDR or wide-gamut image (a video, a game):
+-- the output is committed again with the new colour mode, an external
+-- monitor drops its signal (black for a second, then back), and an 8-bit
+-- output shows "wide color gamut is enabled but the display is not in
+-- 10-bit mode". ewe's displays run 8-bit sRGB (Settings → Displays writes
+-- bitdepth explicitly), so the switch only ever costs a blink.
+hl.config({
+    render = {
+        cm_auto_hdr = 0,
+    },
+})
+
 
 -- ╭───────────────────────────────────────────────────────────────╮
 -- │ WINDOW GROUPS (tabbed stacks) — themed to match Theme.qml       │

@@ -4,7 +4,8 @@
 fresh machine (ewe 0.25: plugins are opt-in). Upgraders who had the dock keep it:
 `ewe-plugin migrate` installs it unless `[desktop.dock] enabled = false`.
 
-A small, centred dock at the bottom of the main screen:
+A small, centred dock at the bottom of the main screen (or of every screen,
+or of none — see *Which screens*):
 
     [ apps ] [ overview ] [ komble ] [ music ] [ places ] … | [ 1: ▢ ▢ ] [ 2: empty ] | [▣] [▣] [ ◔ ]
 
@@ -40,6 +41,35 @@ A small, centred dock at the bottom of the main screen:
   polling, no process; "Clear" is a local mark in
   `~/.local/state/ewe/dock-downloads.json`, never ewe.conf.
 
+## Which screens (1.5.0)
+
+The `display` setting — **Show the dock on**, three buttons in Komble:
+
+- **Primary** (the default, and how it always was) — the whole dock on the
+  main screen only. With several displays its workspace boxes are the ones
+  of the display you are working on, and it lists every minimized window.
+- **All** — the whole dock on the main screen, and a small dock on every
+  other screen: that screen's own workspace boxes (with their windows) and
+  the windows minimized from that screen, nothing else — no sheep,
+  Overview, Komble, plugin buttons or Downloads. Each dock then shows its
+  own screen's workspaces, and a click on a minimized window brings it back
+  to that dock's screen. A window minimized on a screen that has since been
+  unplugged shows on the main screen's dock.
+- **None** — no dock on any screen. Nothing keeps space for it at the
+  bottom, so windows and popups use the whole height. The app launcher
+  (Super+D) is the shell's and stays; the dock's pinned-apps popup still
+  opens with `qs ipc call launcher toggle`.
+
+The main screen is the one ewe calls primary (`Shell.primaryScreenName`:
+your display profile's primary, else the first screen).
+
+All screens share one `special:minimized` workspace in Hyprland, so it
+cannot say which screen a window was minimized from; the dock remembers it.
+With **All** that record is kept in
+`~/.local/state/ewe/plugins/ewe.dock/minimized.json` (this machine only,
+never ewe.conf, never synced; good for the current session only), so a
+shell restart keeps every minimized window on its own screen's dock.
+
 It slides out of view while the Overview is open and comes back when the
 cards have gone; with auto-hide on it ducks when the current workspace has a
 tiled or fullscreen window and returns when the pointer reaches the bottom
@@ -58,19 +88,22 @@ Its own, since 1.1.0 — Komble → Plugins → Dock → Options, or
 
     ewe-plugin set ewe.dock autohide true
     ewe-plugin set ewe.dock icon_size small      # small · normal · large
+    ewe-plugin set ewe.dock display all          # primary · all · none
 
 stored in ewe.conf `[plugins.settings]."ewe.dock"`. Until one is set, the old
 `[desktop.dock]` value stands (the settings' `legacy` keys), so an upgrade
-changes nobody's dock. Turning the dock off is the plugin's own switch in
+changes nobody's dock; `display` is new in 1.5.0 and starts at `primary`,
+which is the old behaviour. Turning the dock off is the plugin's own switch in
 Komble (`ewe-plugin disable ewe.dock`); ewe Settings no longer has a Dock section.
 
 ## What it tells the shell
 
 `Shell.setBottomInset("ewe.dock", px, reserved)` — the strip the dock takes
 from the bottom of the screen (dock + `windowGap`), reserved as an exclusive
-zone when auto-hide is off. Toasts, the OSD and every popup that opens above
-the dock read `Shell.bottomInset`; it is 0 again the moment this plugin is
-removed, so nothing leaves a gap without a dock.
+zone when auto-hide is off (on every screen that has a dock). Toasts, the OSD
+and every popup that opens above the dock read `Shell.bottomInset`; it is 0
+with `display` = none and again the moment this plugin is removed, so nothing
+leaves a gap without a dock.
 
 ## IPC
 

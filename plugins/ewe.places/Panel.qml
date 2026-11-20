@@ -292,7 +292,8 @@ Scope {
             readonly property int topGap: Theme.barHeight + Theme.spaceXs
             readonly property real ax: root.anchor ? root.anchor.x : parent.width / 2
             x: Math.round(Math.max(edgeGap, Math.min(parent.width - width - edgeGap, ax - width / 2)))
-            width: Theme.panelMd
+            // the bar card's width (ewe 0.45: every bar dropdown is one width)
+            width: Theme.grow(Theme.panelSm)
             // at most panelMd + controlXl + spaceMd + spaceXs (a dozen rows)
             // tall — what it has always been — and never past the screen
             height: Math.min(Theme.panelMd + Theme.controlXl + Theme.spaceMd + Theme.spaceXs,
@@ -336,13 +337,15 @@ Scope {
                 }
             }
 
-            // ── a md ghost Icon button (back / home / pin) ──
+            // ── a sm ghost Icon button (back / home / pin) — the size of the
+            //    head actions on every bar card (PopupHead) ──
             component IconBtn: Rectangle {
                 property string glyph: ""
                 property bool enabledState: true
                 property bool selected: false      // a selected ghost button: accentSubtle, accentText glyph
+                property string tip: ""
                 signal act()
-                width: Theme.controlMd; height: Theme.controlMd
+                width: Theme.controlSm; height: Theme.controlSm
                 radius: Theme.radiusPrimary
                 color: !enabledState ? "transparent"
                      : selected ? Theme.accentSubtle
@@ -351,11 +354,13 @@ Scope {
                 Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
                 Text {
                     anchors.centerIn: parent; text: parent.glyph
-                    font.family: Theme.fontIcons; font.pixelSize: Theme.iconMd
+                    font.family: Theme.fontIcons; font.pixelSize: Theme.iconSm
                     color: !parent.enabledState ? Theme.textDisabled
-                         : parent.selected ? Theme.accentText : Theme.textPrimary
+                         : parent.selected ? Theme.accentText
+                         : ibMa.containsMouse ? Theme.textPrimary : Theme.textSecondary
                 }
                 MouseArea { id: ibMa; anchors.fill: parent; hoverEnabled: true; enabled: parent.enabledState; cursorShape: Qt.PointingHandCursor; onClicked: parent.act() }
+                Tooltip { text: parent.tip }
             }
 
             // ── one filesystem row (browse entry OR pinned item) ──
@@ -455,33 +460,20 @@ Scope {
             Column {
                 anchors.fill: parent
                 anchors.margins: Theme.spaceS + Theme.spaceXs
-                spacing: Theme.spaceS
+                spacing: Theme.spaceS + Theme.spaceXs
 
-                // ── address row: back · home · path · pin-current ──
-                Row {
+                // ── the head (every bar card's: PopupHead) — the folder's name
+                //    over its path, then back · home · pin ──
+                PopupHead {
                     id: addressRow
-                    width: parent.width; height: Theme.controlMd; spacing: Theme.spaceXs
-                    IconBtn { glyph: Theme.icBack; enabledState: root.cwd !== "/" && root.cwd !== ""; anchors.verticalCenter: parent.verticalCenter; onAct: root.enter(root.parentOf(root.cwd)) }
-                    IconBtn { glyph: Theme.icHome; anchors.verticalCenter: parent.verticalCenter; onAct: root.enter(root.home) }
-                    // the path in a small field: the Text field box (sunken,
-                    // borderStrong), the mono style (Places card #2)
-                    Rectangle {
-                        width: parent.width - 3 * Theme.controlMd - 3 * Theme.spaceXs
-                        height: Theme.controlMd; radius: Theme.radiusPrimary
-                        anchors.verticalCenter: parent.verticalCenter
-                        color: Theme.surfaceSunken
-                        border.color: Theme.borderStrong; border.width: Theme.fieldBorderWidth
-                        Text {
-                            anchors.left: parent.left; anchors.right: parent.right
-                            anchors.leftMargin: Theme.spaceS; anchors.rightMargin: Theme.spaceS
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: root.tilde(root.cwd); color: Theme.textPrimary
-                            font.family: Theme.type.mono.family
-                            font.pixelSize: Theme.type.mono.size
-                            elide: Text.ElideLeft
-                        }
-                    }
-                    IconBtn { glyph: (root.isPinned(root.cwd) ? Theme.icPinOff : Theme.icPin); selected: root.isPinned(root.cwd); enabledState: root.cwd !== ""; anchors.verticalCenter: parent.verticalCenter; onAct: root.togglePin(root.cwd) }
+                    width: parent.width
+                    glyph: Theme.icFolder
+                    title: root.cwd === "" ? "Places" : root.cwd === root.home ? "Home" : root.cwd === "/" ? "/" : root.baseName(root.cwd)
+                    subtitle: root.cwd === "" || root.cwd === root.home ? "" : root.tilde(root.cwd)
+                    IconBtn { glyph: Theme.icBack; tip: "Up one folder"; enabledState: root.cwd !== "/" && root.cwd !== ""; onAct: root.enter(root.parentOf(root.cwd)) }
+                    IconBtn { glyph: Theme.icHome; tip: "Home"; onAct: root.enter(root.home) }
+                    IconBtn { glyph: (root.isPinned(root.cwd) ? Theme.icPinOff : Theme.icPin); tip: root.isPinned(root.cwd) ? "Unpin this folder" : "Pin this folder"
+                              selected: root.isPinned(root.cwd); enabledState: root.cwd !== ""; onAct: root.togglePin(root.cwd) }
                 }
 
                 Flickable {

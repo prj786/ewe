@@ -529,6 +529,7 @@ QtObject {
     readonly property string icChevronDown:  ic(0xE06D)  // chevron-down
     readonly property string icChevronUp:    ic(0xE070)  // chevron-up
     readonly property string icChevronRight: ic(0xE06F)  // chevron-right
+    readonly property string icChevronLeft:  ic(0xE06E)  // chevron-left — the bar's fold
     readonly property string icWifi:         ic(0xE1AE)  // wifi
     readonly property string icWifiMed:      ic(0xE5F7)  // wifi-high
     readonly property string icWifiLow:      ic(0xE5F8)  // wifi-low
@@ -544,6 +545,7 @@ QtObject {
     readonly property string icWeb:          ic(0xE0E8)  // globe — browse / port-forward
     readonly property string icCamera:       ic(0xE064)  // camera
     readonly property string icClipboard:    ic(0xE085)  // clipboard — clipboard history (scissors read as "cut")
+    readonly property string icSmile:        ic(0xE164)  // smile — the clipboard's emoji tab
     readonly property string icCopy:         ic(0xE09E)  // copy — Shaun: copy to the clipboard
     readonly property string icTrash:        ic(0xE18E)  // trash-2
     readonly property string icPencil:       ic(0xE1F9)  // pencil

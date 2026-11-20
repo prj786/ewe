@@ -26,6 +26,12 @@ Scope {
     property int implicitWidth: Theme.panelSm
     property int implicitHeight: Theme.panelSm
     property var anchor: null             // { screen, x, y, edge } from Shell.anchorFor()
+    // Exclusive keyboard while open (0.45, additive): a card whose first act
+    // is typing (the clipboard's search) — a click on the BAR opened it, and
+    // OnDemand never hands this surface the keys until it is clicked itself.
+    // Never for a card that focuses a window while open (Hyprland refuses
+    // window focus while a layer holds the keyboard exclusively).
+    property bool exclusiveKeyboard: false
     default property alias content: card.data
     signal opened()
     signal closed()
@@ -36,9 +42,18 @@ Scope {
     function openAt(a) { if (a) pop.anchor = a; Shell.closePopups(pop._token); pop.open = true }
     function toggleAt(a) { if (pop.open) pop.close(); else pop.openAt(a) }
     function close() { pop.open = false }
+    // the window and the card's focus come FIRST, then opened(): a card
+    // that focuses its own field in onOpened (a search, with
+    // exclusiveKeyboard) keeps it — 0.45; before, the card took focus back
     onOpenChanged: {
         if (pop.action !== "") Shell.setActive(pop.action, pop.open)
-        if (pop.open) pop.opened(); else pop.closed()
+        if (pop.open) {
+            closeTimer.stop(); win.held = true; card.forceActiveFocus()
+            pop.opened()
+        } else {
+            closeTimer.restart()
+            pop.closed()
+        }
     }
     Connections {
         target: Shell
@@ -57,17 +72,14 @@ Scope {
         exclusionMode: ExclusionMode.Ignore
         WlrLayershell.layer: WlrLayer.Overlay
         WlrLayershell.namespace: "quickshell:" + pop.name
-        WlrLayershell.keyboardFocus: pop.open ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+        WlrLayershell.keyboardFocus: !pop.open ? WlrKeyboardFocus.None
+                                   : pop.exclusiveKeyboard ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.OnDemand
         anchors { top: true; bottom: true; left: true; right: true }
 
         // `held` keeps the window mapped through the close fade (the same
         // idiom as the Quick settings panel)
         property bool held: false
         Timer { id: closeTimer; interval: Math.max(1, Theme.durBase); onTriggered: win.held = false }
-        Connections { target: pop; function onOpenChanged() {
-            if (pop.open) { closeTimer.stop(); win.held = true; card.forceActiveFocus() }
-            else closeTimer.restart()
-        } }
         MouseArea { anchors.fill: parent; onClicked: pop.close() }
 
         Rectangle {

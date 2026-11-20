@@ -25,9 +25,16 @@ import qs
 // when there is something in them. The Pen (special:pen) is gone: what was
 // left in it counts as minimized.
 //
+// Which displays have one (1.5.0, setting `display`): `primary` (the
+// default, as before) — the whole dock on the main screen; `all` — the
+// whole dock on the main screen and, on every other display, a reduced one:
+// that display's own workspace boxes and the windows minimized from it,
+// nothing else (no sheep, Overview, Komble, plugin items or Downloads);
+// `none` — no dock anywhere, and the bottom inset withdrawn.
+//
 // Its settings are its own (manifest `settings`, Komble → Plugins → Dock →
-// Options; ewe.conf [plugins.settings]."ewe.dock"): `autohide` and
-// `icon_size`. Until they are set, ewe-plugin hands over the old
+// Options; ewe.conf [plugins.settings]."ewe.dock"): `autohide`,
+// `icon_size` and `display`. Until they are set, ewe-plugin hands over the old
 // [desktop.dock] values (the settings' `legacy` keys), so nobody's dock
 // changed when Settings → Layout → Dock went away. On/off is the plugin's
 // own switch in Komble. Shell.dockPrefs is only the fallback for a shell
@@ -45,8 +52,11 @@ import qs
 Scope {
     id: root
     property string pluginId: "ewe.dock"
-    // injected by the host (PluginHost.inject / reload): {autohide, icon_size}
+    // injected by the host (PluginHost.inject / reload): {autohide, icon_size, display}
     property var settings: ({})
+    // injected too: ~/.local/state/ewe/plugins/ewe.dock (made on first ask) —
+    // where the minimized windows' displays are kept for `display` all
+    property string stateDir: ""
 
     // ── prefs: the plugin's settings; Shell.dockPrefs / Globals before them ─
     readonly property var prefs: ("dockPrefs" in Shell && Shell.dockPrefs)
@@ -57,6 +67,14 @@ Scope {
     readonly property bool autohide: (root.settings && typeof root.settings.autohide === "boolean")
                                      ? root.settings.autohide : root.prefs.autohide === true
     readonly property string iconSize: String((root.settings && root.settings.icon_size) || root.prefs.iconSize || "normal")
+    // where the dock shows (1.5.0): "primary" (default) · "all" · "none" —
+    // anything else reads as the default, so nothing migrates
+    readonly property string showOn: {
+        var v = String((root.settings && root.settings.display) || "primary")
+        return (v === "all" || v === "none") ? v : "primary"
+    }
+    // a dock on some display at all: `none` withdraws the inset too
+    readonly property bool shown: root.enabled && root.showOn !== "none"
 
     // Icon size (Dock card, "Sizes"): the cell is the button/box edge —
     // small 40 · normal 48 · large 64 — the generator's `dock` block, which
@@ -71,15 +89,16 @@ Scope {
     readonly property int clearance: root.dockH + Theme.windowGap
 
     // ── the published inset (Shell.bottomInset): the strip plus windowGap
-    //    while enabled, 0 when off — and whether the strip is a layer-shell
-    //    exclusive zone (autohide off), which bottom-anchored surfaces read
-    //    as Shell.bottomReserved. Withdrawn when this plugin goes. ─────────
-    readonly property int publishedInset: root.enabled ? root.clearance : 0
-    readonly property bool publishedReserved: root.enabled && !root.autohide
+    //    while a dock shows, 0 when off or `display` is none — and whether
+    //    the strip is a layer-shell exclusive zone (autohide off), which
+    //    bottom-anchored surfaces read as Shell.bottomReserved. Withdrawn
+    //    when this plugin goes. ─────────────────────────────────────────────
+    readonly property int publishedInset: root.shown ? root.clearance : 0
+    readonly property bool publishedReserved: root.shown && !root.autohide
     function publishInset() { Shell.setBottomInset(root.pluginId, root.publishedInset, root.publishedReserved) }
     onPublishedInsetChanged: root.publishInset()
     onPublishedReservedChanged: root.publishInset()
-    Component.onCompleted: { root.publishInset(); root.minWins = root.minWinsNow }
+    Component.onCompleted: { root.publishInset(); root.minWins = root.minWinsNow; root.mergeHomes() }
     Component.onDestruction: Shell.setBottomInset(root.pluginId, 0, false)
 
     // ── the pinned-apps popup (PinnedApps.qml) ─────────────────────────────
@@ -212,26 +231,27 @@ Scope {
     function minimizeWin(t) { root.dispatchWin(t, 'hl.dsp.window.move({ workspace = "special:minimized", window = "address:%a", follow = false })') }
     function moveWinTo(t, ws) { root.dispatchWin(t, 'hl.dsp.window.move({ workspace = ' + ws + ', window = "address:%a", follow = false })') }
     // a NEW workspace of this display: the number after the last one in use
-    // in its block of ten, the lowest free once 10 is taken (the Overview's rule)
-    function moveWinToNew(t) {
-        var cur = Hyprland.focusedWorkspace ? Hyprland.focusedWorkspace.id : 1
-        var block = root.wsBlock(cur), used = {}, last = 0
-        for (var i = 0; i < root.wsList.length; i++) { var n = root.wsList[i].num; used[n] = true; last = Math.max(last, n) }
+    // in its block of ten, the lowest free once 10 is taken (the Overview's
+    // rule). `list` and `block` are the workspaces of the dock the menu
+    // opened from (each dock has its own display's since 1.5.0).
+    function moveWinToNew(t, list, block) {
+        var used = {}, last = 0
+        for (var i = 0; i < list.length; i++) { var n = list[i].num; used[n] = true; last = Math.max(last, n) }
         var target = 0
         if (last < 10) target = last + 1
         else for (var k = 1; k <= 10; k++) if (!used[k]) { target = k; break }
         if (target === 0) { Shell.toast("Every workspace of this display is in use", "warning"); return }
         root.moveWinTo(t, block * 10 + target)
     }
-    function tileMenu(t) {
+    function tileMenu(t, list, block) {
         var e = root.entryOf(t), did = e ? String(e.id).replace(/\.desktop$/, "") + ".desktop" : ""
         var pinned = did !== "" && root.isPinned(did)
         var here = (t && t.workspace) ? t.workspace.id : -1, ws = []
-        for (var i = 0; i < root.wsList.length; i++) (function (w) {
+        for (var i = 0; i < list.length; i++) (function (w) {
             ws.push({ label: "Workspace " + w.num, checked: w.id === here, action: function () { root.moveWinTo(t, w.id) } })
-        })(root.wsList[i])
+        })(list[i])
         ws.push({ separator: true })
-        ws.push({ label: "New workspace", icon: Theme.icPlus, action: function () { root.moveWinToNew(t) } })
+        ws.push({ label: "New workspace", icon: Theme.icPlus, action: function () { root.moveWinToNew(t, list, block) } })
         return [
             { header: (e && e.name) ? e.name : (root.clsOf(t) || "Window") },
             { label: "New window", icon: Theme.icPlus, disabled: !e, action: function () { Globals.launchEntry(e, true) } },
@@ -271,13 +291,87 @@ Scope {
         out.sort(function (a, b) { return order.indexOf(root.addrOf(a)) - order.indexOf(root.addrOf(b)) })
         return out
     }
-    // back to the workspace you are on, focused
-    function restore(t) {
+    // back to the workspace the dock that was clicked stands for (the
+    // focused one on the main dock in `primary`, else that display's own),
+    // focused
+    function restore(t, ws) {
         var a = root.addrOf(t)
         if (a === "") return
-        var ws = Hyprland.focusedWorkspace ? Hyprland.focusedWorkspace.id : 1
+        if (!(ws >= 1)) ws = Hyprland.focusedWorkspace ? Hyprland.focusedWorkspace.id : 1
         Hyprland.dispatch('hl.dsp.window.move({ workspace = ' + ws + ', window = "address:' + a + '", follow = false })')
         Hyprland.dispatch('hl.dsp.focus({ window = "address:' + a + '" })')
+    }
+
+    // ── which display a minimized window was put away from (1.5.0, for
+    //    `display` = all: each dock lists its own display's). Hyprland can't
+    //    say: special:minimized is ONE workspace living on one monitor, and
+    //    a window moved there takes that monitor (`hyprctl clients` reports
+    //    it, not the one the window left — seen in the nest). So the dock
+    //    remembers every window's display while it sits on a normal
+    //    workspace and keeps the last one while it is minimized. With `all`
+    //    the minimized windows' records are kept in a local state file,
+    //    minimized.json in the plugin's stateDir (~/.local/state/ewe/
+    //    plugins/ewe.dock, never ewe.conf, never synced), for this
+    //    compositor session only (addresses mean nothing in another), so a
+    //    shell restart — a plugin install, an update — finds them again. A
+    //    window with no record, and one whose display has gone, belongs to
+    //    the main screen's dock. ───────────────────────────────────────────
+    readonly property var homeNow: {
+        var m = {}
+        var tls = Hyprland.toplevels ? Hyprland.toplevels.values : []
+        for (var i = 0; i < tls.length; i++) {
+            var w = tls[i].workspace
+            if (w && w.id >= 1 && w.monitor) m[root.addrOf(tls[i])] = String(w.monitor.name)
+        }
+        return m
+    }
+    property var homes: ({})                  // address -> display name
+    property var savedHomes: ({})             // the state file's, this session's
+    function mergeHomes() {
+        var now = root.homeNow, old = root.homes, saved = root.savedHomes, live = {}, m = {}, changed = false
+        var tls = Hyprland.toplevels ? Hyprland.toplevels.values : []
+        for (var i = 0; i < tls.length; i++) live[root.addrOf(tls[i])] = true
+        for (var k in old) { if (live[k]) m[k] = old[k]; else changed = true }   // closed: forgotten
+        for (var s in saved) if (live[s] && m[s] === undefined) { m[s] = saved[s]; changed = true }
+        for (var n in now) if (m[n] !== now[n]) { m[n] = now[n]; changed = true }
+        if (changed) root.homes = m
+    }
+    onHomeNowChanged: root.mergeHomes()
+    onSavedHomesChanged: root.mergeHomes()
+
+    readonly property string session: Quickshell.env("HYPRLAND_INSTANCE_SIGNATURE") || ""
+    property bool homesRead: false            // never write before the old file is read
+    FileView {
+        id: homesFile
+        // empty until the host injects stateDir — no read, no write before
+        path: root.stateDir !== "" ? root.stateDir + "/minimized.json" : ""
+        printErrors: false
+        onLoaded: {
+            var o = null
+            try { o = JSON.parse(homesFile.text()) } catch (e) { o = null }
+            if (o && o.session === root.session && o.homes && typeof o.homes === "object") root.savedHomes = o.homes
+            root.homesRead = true
+        }
+        onLoadFailed: root.homesRead = true
+    }
+    // what is written: the minimized windows' displays, only with `all`
+    // (the one place they are used) and only when that set changes
+    readonly property string homesText: {
+        if (root.showOn !== "all" || root.session === "") return ""
+        var o = {}
+        for (var i = 0; i < root.minWins.length; i++) {
+            var a = root.addrOf(root.minWins[i])
+            if (root.homes[a]) o[a] = root.homes[a]
+        }
+        return JSON.stringify({ session: root.session, homes: o })
+    }
+    function saveHomes() { if (root.homesRead && root.homesText !== "") homesFile.setText(root.homesText + "\n") }
+    onHomesTextChanged: root.saveHomes()
+    onHomesReadChanged: root.saveHomes()
+    function screenHere(name) {
+        var ss = Quickshell.screens
+        for (var i = 0; i < ss.length; i++) if (ss[i].name === name) return true
+        return false
     }
 
     // One still picture per minimized window, taken as it arrives: the
@@ -313,10 +407,13 @@ Scope {
     function wsNum(id) { return root.wsKnowsDisplays ? Shell.workspaceNumber(id) : id }
     function wsBlock(id) { return (root.wsKnowsDisplays && id >= 1) ? Math.floor((id - 1) / 10) : 0 }
 
-    // workspaces (id>0) that have windows, plus the focused one — sorted by
-    // number, each with its toplevels and the id a click goes to
-    readonly property var wsList: {
-        var fid = Hyprland.focusedWorkspace ? Hyprland.focusedWorkspace.id : 1
+    // the workspaces (id>0) of one display's block that have windows, plus
+    // `fid`, the one that dock stands for — sorted by number, each with its
+    // toplevels and the id a click goes to (in `block`, so in shared mode a
+    // click switches that dock's own display). Each dock asks for its own
+    // (1.5.0): the main dock in `primary` for the focused display's, as
+    // before; every dock in `all` for its own display's.
+    function wsListFor(fid) {
         var block = root.wsBlock(fid)
         var byNum = {}
         var tls = Hyprland.toplevels ? Hyprland.toplevels.values : []
@@ -378,10 +475,11 @@ Scope {
         }
     }
 
-    // One window per screen, visible only on the primary — NOT a single window
-    // with a screen: binding. Rebinding screen mid-hotplug (the primary name
-    // going stale while the output detaches) could resolve to null and destroy
-    // the window for good; per-screen windows are created/destroyed by the
+    // One window per screen, shown on the primary (`display` primary), on
+    // every screen (all) or on none — NOT a single window with a screen:
+    // binding. Rebinding screen mid-hotplug (the primary name going stale
+    // while the output detaches) could resolve to null and destroy the
+    // window for good; per-screen windows are created/destroyed by the
     // screen model itself, so the dock always lands on whatever remains.
     Variants {
         model: Quickshell.screens
@@ -398,11 +496,53 @@ Scope {
                 if (ss[i].name === root.primaryName) return win.modelData.name === root.primaryName
             return ss.length > 0 && win.modelData === ss[0]
         }
-        // Only on the primary, and only while the dock is enabled — the dock
-        // is not a surface of the Overview (the Overview owns the whole
-        // screen and the dock slides out of view instead).
-        visible: win.isPrimary && root.enabled
+        // On the primary, or on every screen with `display` all, and only
+        // while the dock is enabled — the dock is not a surface of the
+        // Overview (the Overview owns the whole screen and the dock slides
+        // out of view instead). A dock that is not the primary's is the
+        // REDUCED one: this display's workspace boxes and the windows
+        // minimized from it, nothing else.
+        readonly property bool showHere: root.shown && (root.showOn === "all" || win.isPrimary)
+        readonly property bool reduced: win.showHere && !win.isPrimary
+        visible: win.showHere
         color: "transparent"
+
+        // the workspace this dock stands for: the focused one on the main
+        // dock in `primary` (it serves every display, as since 1.3.0),
+        // otherwise this display's own active workspace
+        readonly property int curWs: {
+            var f = Hyprland.focusedWorkspace ? Hyprland.focusedWorkspace.id : 1
+            if (root.showOn !== "all") return f
+            return (win.hyMon && win.hyMon.activeWorkspace) ? win.hyMon.activeWorkspace.id : f
+        }
+        readonly property int wsBlockHere: root.wsBlock(win.curWs)
+        readonly property var wsList: win.showHere ? root.wsListFor(win.curWs) : []
+
+        // the minimized windows this dock lists: every one on the only dock
+        // (`primary`); with `all`, the ones put away from this display — and
+        // on the main screen's dock also those with no display left (or no
+        // record, minimized before the shell started). A hidden dock lists
+        // none, so it makes no tile and captures nothing. Replaced only when
+        // the set or order changes (a new array rebuilds every tile).
+        readonly property var minHereNow: {
+            if (!win.showHere) return []
+            if (root.showOn !== "all") return root.minWins
+            var me = String(win.modelData.name), out = []
+            for (var i = 0; i < root.minWins.length; i++) {
+                var h = root.homes[root.addrOf(root.minWins[i])] || ""
+                if (h === me || (win.isPrimary && !root.screenHere(h))) out.push(root.minWins[i])
+            }
+            return out
+        }
+        property var minHere: []
+        onMinHereNowChanged: {
+            var a = win.minHereNow, b = win.minHere, same = a.length === b.length
+            for (var i = 0; same && i < a.length; i++) same = a[i] === b[i]
+            if (!same) win.minHere = a
+        }
+        Component.onCompleted: win.minHere = win.minHereNow
+        // Downloads belongs to the full dock only
+        readonly property bool showDownloads: downloads.shown && !win.reduced
         // Always-visible dock reserves its strip so windows tile/maximize ABOVE it
         // instead of sliding underneath; intelligent-hide keeps zero reserve so
         // windows get the full height and the dock overlays only when revealed.
@@ -410,7 +550,9 @@ Scope {
         // exclusionMode at runtime — a live Normal→Ignore switch was not always
         // recommitted to the compositor, leaving a ghost strip that windows
         // refused to use until the dock was toggled off and on.
-        exclusiveZone: (root.enabled && !root.autohide) ? win.dockH + Theme.windowGap : 0
+        // A reduced dock (another display, `display` all) reserves its strip
+        // the same way.
+        exclusiveZone: (win.showHere && !root.autohide) ? win.dockH + Theme.windowGap : 0
         // Always Top. The dock used to hop to Overlay so it drew above the
         // Overview; the Overview now owns the whole screen and the dock slides
         // out of view instead.
@@ -590,9 +732,11 @@ Scope {
                 anchors.centerIn: parent
                 spacing: Theme.spaceS
 
-                DockBtn { id: launchBtn; a11yName: "Apps"; image: Qt.resolvedUrl("assets/ewe-mark.svg"); activeState: root.launcherOpen; anchors.verticalCenter: parent.verticalCenter; onGo: root.toggleLauncher(launchBtn) }
-                DockBtn { a11yName: "Overview"; glyph: Theme.icStack; activeState: Shell.overviewOpen; anchors.verticalCenter: parent.verticalCenter; onGo: root.toggleOverview() }
-                DockBtn { id: storeBtn; a11yName: "Komble"; glyph: Theme.icStore; activeState: root.storeOpenState; anchors.verticalCenter: parent.verticalCenter; onGo: root.storeGo(storeBtn) }
+                // the full dock's own buttons — a reduced dock (another
+                // display, `display` all) has none of them
+                DockBtn { id: launchBtn; visible: !win.reduced; a11yName: "Apps"; image: Qt.resolvedUrl("assets/ewe-mark.svg"); activeState: root.launcherOpen; anchors.verticalCenter: parent.verticalCenter; onGo: root.toggleLauncher(launchBtn) }
+                DockBtn { visible: !win.reduced; a11yName: "Overview"; glyph: Theme.icStack; activeState: Shell.overviewOpen; anchors.verticalCenter: parent.verticalCenter; onGo: root.toggleOverview() }
+                DockBtn { id: storeBtn; visible: !win.reduced; a11yName: "Komble"; glyph: Theme.icStore; activeState: root.storeOpenState; anchors.verticalCenter: parent.verticalCenter; onGo: root.storeGo(storeBtn) }
                 // ── plugin dock items (API 3 dock-item): after the built-in
                 //    buttons, in manifest order — Music, Places and whatever
                 //    else is installed. A click runs the manifest's action
@@ -601,9 +745,10 @@ Scope {
                 //    `qs ipc call <id> toggle`. Lit while the action's popup
                 //    reports itself open. A plugin hides its own item at
                 //    runtime through Shell.setDockItemShown (Music with no
-                //    player) — shown unless it says otherwise. ──
+                //    player) — shown unless it says otherwise. The full dock
+                //    only. ──
                 Repeater {
-                    model: Shell.dockItems || []
+                    model: win.reduced ? [] : (Shell.dockItems || [])
                     delegate: DockBtn {
                         id: pluginBtn
                         required property var modelData
@@ -621,16 +766,19 @@ Scope {
                     }
                 }
 
-                // spaceS shorter than the items beside it (Dock card #3)
-                Rectangle { anchors.verticalCenter: parent.verticalCenter; width: Theme.borderWidth1; height: win.cell - Theme.spaceS; color: Theme.dockOutline }
+                // spaceS shorter than the items beside it (Dock card #3);
+                // a reduced dock starts at its workspace boxes
+                Rectangle { visible: !win.reduced; anchors.verticalCenter: parent.verticalCenter; width: Theme.borderWidth1; height: win.cell - Theme.spaceS; color: Theme.dockOutline }
 
-                // ── workspace boxes ──
+                // ── workspace boxes — this dock's (win.wsList) ──
                 Repeater {
-                    model: root.wsList
+                    model: win.wsList
                     delegate: Rectangle {
                         id: wsBox
                         required property var modelData
-                        readonly property bool focused: Hyprland.focusedWorkspace && Hyprland.focusedWorkspace.id === modelData.id
+                        // the workspace the dock stands for: the focused one
+                        // (`primary`), this display's active one (`all`)
+                        readonly property bool focused: win.curWs === modelData.id
                         // a window here wants attention (Hyprland's urgent
                         // state — Quickshell clears it when the window is focused)
                         readonly property bool urgent: {
@@ -714,7 +862,7 @@ Scope {
                                         anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
                                         acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
                                         onClicked: function (m) {
-                                            if (m.button === Qt.RightButton) { tileMenu.items = root.tileMenu(modelData); tileMenu.openAt(tileMa, m.x, m.y) }
+                                            if (m.button === Qt.RightButton) { tileMenu.items = root.tileMenu(modelData, win.wsList, win.wsBlockHere); tileMenu.openAt(tileMa, m.x, m.y) }
                                             else if (m.button === Qt.MiddleButton) root.closeWin(modelData)
                                             else root.focusToplevel(modelData)
                                         }
@@ -729,7 +877,7 @@ Scope {
 
                 // a second divider: what is put away comes after the workspaces
                 Rectangle {
-                    visible: root.minWins.length > 0 || dlBtn.visible
+                    visible: win.minHere.length > 0 || win.showDownloads
                     anchors.verticalCenter: parent.verticalCenter
                     width: Theme.borderWidth1; height: win.cell - Theme.spaceS
                     color: Theme.dockOutline
@@ -738,9 +886,11 @@ Scope {
                 // ── Minimized — one tile per window Super+Z put away, oldest
                 //    first and the newest at the right end (macOS's dock):
                 //    the window's picture with the app's icon on its corner.
-                //    A click brings it back to the workspace you are on. ──
+                //    A click brings it back to the workspace this dock
+                //    stands for. This dock's own (win.minHere): with
+                //    `display` all, the windows minimized from its display. ──
                 Repeater {
-                    model: root.minWins
+                    model: win.minHere
                     delegate: Item {
                         id: mini
                         required property var modelData
@@ -751,11 +901,12 @@ Scope {
                         property bool gaveUp: false
                         readonly property bool capturing: !mini.shot && !mini.gaveUp
                         Timer { interval: Math.max(1, Theme.durDim); running: mini.capturing; onTriggered: mini.gaveUp = true }
-                        // only the dock that is on screen takes it: the other
-                        // screens' docks are hidden windows (visible: isPrimary),
-                        // where a grab has no scene ("item is not attached to a
-                        // window") and the capture is a GPU copy for nothing —
-                        // thumbs is shared, so they show the picture all the same
+                        // only a dock that is on screen takes it: a hidden
+                        // window (visible: showHere) has no scene for a grab
+                        // ("item is not attached to a window") and the capture
+                        // is a GPU copy for nothing. Since 1.5.0 a hidden dock
+                        // lists no tile at all and each window is listed by
+                        // one dock only; thumbs is shared, keyed by address
                         function take() {
                             if (!win.visible) return
                             var aspect = mini.aspect
@@ -854,7 +1005,7 @@ Scope {
                             anchors.fill: parent
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: root.restore(mini.modelData)
+                            onClicked: root.restore(mini.modelData, win.curWs)
                         }
                         Accessible.role: Accessible.Button
                         Accessible.name: "Minimized: " + root.titleOf(mini.modelData)
@@ -862,10 +1013,11 @@ Scope {
                 }
 
                 // ── Downloads — the ewe browser's: a progress ring round the
-                //    glyph while one runs, the day's list on a click ──
+                //    glyph while one runs, the day's list on a click. The
+                //    full dock only ──
                 DockBtn {
                     id: dlBtn
-                    visible: downloads.shown
+                    visible: win.showDownloads
                     a11yName: downloads.busy ? "Downloads, " + (downloads.progress >= 0 ? Math.round(downloads.progress * 100) + "%" : "in progress") : "Downloads"
                     // the glyph steps down inside the ring while it runs
                     glyph: downloads.busy ? "" : Theme.icDownload

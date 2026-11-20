@@ -2,9 +2,10 @@
 
 `ewe.clipboard` — first-party, shipped with ewe, removable.
 
-A scissors icon in the top bar. Click it: your clipboard history (via
+A clipboard icon in the top bar. Click it: your clipboard history (via
 [cliphist](https://github.com/sentriz/cliphist)) and an emoji grid, click to
-copy. A service records every text and image copy — except passwords: a copy
+copy — in the same card every bar button opens (ewe 0.45's BarPopup: the
+System monitor's look), with the search ready for typing. A service records every text and image copy — except passwords: a copy
 marked by a password manager, a copy made while a password manager window is
 focused, or one made by ewe's own fill picker never enters the history.
 
