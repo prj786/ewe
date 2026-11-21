@@ -1,0 +1,836 @@
+#!/usr/bin/env python3
+"""ewe-ime — typing in other languages (fcitx5, on demand).
+
+Prints ONE JSON object per call and exits 0 (errors are {"ok": false,
+"error": "<plain words>", "code": "<machine word>"}). ewe Settings →
+Keyboard and mouse → "Typing in other languages", the bar's layout
+indicator and (later) Shaun all come through here, so there is one input
+method with one state.
+
+  status                 {ok, enabled, installed, running, engines:[…],
+                         missing:[packages], current, active, glyph, layout,
+                         needs_signout, catalog:[…]}
+  catalog                every language ewe offers: id (fcitx5's input
+                         method name), language, native, method, package,
+                         glyph, installed
+  current                {ok, running, im, active, glyph, label} — what the
+                         bar shows (cheap: one fcitx5-remote call)
+  add <id>               add a language and turn typing in other languages on
+  remove <id>            take one away; the last one turns it off (the
+                         packages stay installed — Komble removes them)
+  enable | disable       the switch, keeping the list
+  apply [--login]        make the session match ewe.conf: fcitx5's profile and
+                         config, the candidate window's theme, the session
+                         environment, the Chromium/Electron flags, fcitx5
+                         started or stopped. --login: autostart.sh at sign-in
+                         (the environment came from start-hyprland.sh)
+  toggle                 the engine on/off — what Ctrl+Space does
+  configure              open fcitx5's own settings (fcitx5-configtool)
+
+THE PREFS ([desktop.ime] in ewe.conf, written through ewe-conf — rule 1):
+
+  enabled = true|false   the switch
+  engines = ["pinyin", "mozc", "m17n_hi_inscript2", …]
+
+They sync with ewe.conf. On a computer where fcitx5 (or an engine) is not
+installed nothing breaks: no environment is set, fcitx5 is not started, and
+`status` lists what to install (`missing`) for ewe Settings' Install button.
+
+HOW IT FITS HYPRLAND (docs/SETTINGS-BACKEND.md "Typing in other languages"):
+
+  · Super+Space keeps switching the KEYBOARD LAYOUT (Hyprland's xkb); fcitx5
+    never sees it (its own group keys are cleared too). Ctrl+Space toggles
+    the language engine (fcitx5's trigger; hold Ctrl and tap Space again to
+    step through several).
+  · fcitx5 has ONE group: its layout is ewe's FIRST keyboard layout, its
+    first item that layout's keyboard, then the engines. A keyboard item whose
+    layout equals the group's never converts keys, so whatever layout
+    Hyprland has switched to is what you type. An engine on a computer whose
+    first layout is not Latin (ru, ge, gr …) gets layout "us", so pinyin
+    reads Latin letters whatever Hyprland shows.
+  · The session: XMODIFIERS=@im=fcitx (X11 apps), QT_IM_MODULE=fcitx (Qt 5),
+    QT_IM_MODULES="wayland;fcitx" (Qt ≥ 6.7: the compositor's text-input,
+    then the fcitx plugin), SDL_IM_MODULE=fcitx — from the generated
+    hypr/generated/ime.env, read by start-hyprland.sh at sign-in and pushed
+    into the systemd/D-Bus activation environment when it changes. GTK and
+    kitty use the Wayland text-input protocol: no GTK_IM_MODULE. Chromium /
+    Electron get --enable-wayland-ime --wayland-text-input-version=3 in their
+    flags files (a marked block; removed when off).
+
+Tests: EWE_IME_ROOT (the /usr to look for packages in), EWE_IME_CONF (the
+ewe-conf tool), EWE_IME_NO_SESSION=1 (never touch the systemd/D-Bus
+environment), EWE_IME_NO_SCOPE=1 (start fcitx5 without systemd-run), and
+PATH shims for fcitx5, fcitx5-remote, dbus-update-activation-environment,
+systemctl. tests/ewe-ime-test.sh.
+"""
+
+import fcntl
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import time
+
+try:
+    import tomllib
+except ImportError:  # python < 3.11 never ships with ewe, but stay JSON
+    tomllib = None
+
+HOME = os.path.expanduser("~")
+CFG = os.environ.get("XDG_CONFIG_HOME") or os.path.join(HOME, ".config")
+DATA = os.environ.get("XDG_DATA_HOME") or os.path.join(HOME, ".local", "share")
+RUNTIME = os.environ.get("XDG_RUNTIME_DIR") or "/tmp"
+ROOT = os.environ.get("EWE_IME_ROOT") or "/usr"
+CONF = os.path.join(CFG, "ewe", "ewe.conf")
+HYPR_GEN = os.path.join(CFG, "hypr", "generated")
+ENV_FILE = os.path.join(HYPR_GEN, "ime.env")
+FCITX_DIR = os.path.join(CFG, "fcitx5")
+PROFILE = os.path.join(FCITX_DIR, "profile")
+GLOBAL = os.path.join(FCITX_DIR, "config")
+STAMP = os.path.join(RUNTIME, "ewe", "ime.json")   # this boot's session env state
+LOCK = os.path.join(RUNTIME, "ewe", "ime.lock")
+
+ID_RE = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
+M17N_RE = re.compile(r"^m17n_([a-z]{2,3})_([A-Za-z0-9.-]+)$")
+
+# fcitx5 itself + the toolkit glue + its own settings app (brief, 2026-11-21)
+CORE = [
+    ("fcitx5", "bin/fcitx5"),
+    ("fcitx5-gtk", "lib/gtk-3.0/3.0.0/immodules/im-fcitx5.so"),
+    ("fcitx5-qt", "lib/qt6/plugins/platforminputcontexts/libfcitx5platforminputcontextplugin.so"),
+    ("fcitx5-configtool", "bin/fcitx5-configtool"),
+]
+
+# The languages ewe offers. id = fcitx5's input method name (the m17n ones
+# are "m17n_<lang>_<name>" for /usr/share/m17n/<lang>-<name>.mim). Every
+# package is in the official repos ([extra]); fcitx5-mozc too (2026-11).
+# glyph = what the bar shows while that engine is on.
+CATALOG = [
+    ("pinyin", "Chinese", "中文", "Pinyin", "fcitx5-chinese-addons", "拼"),
+    ("mozc", "Japanese", "日本語", "Mozc", "fcitx5-mozc", "あ"),
+    ("hangul", "Korean", "한국어", "Hangul", "fcitx5-hangul", "한"),
+    ("unikey", "Vietnamese", "Tiếng Việt", "Telex (Unikey)", "fcitx5-unikey", "VI"),
+    ("m17n_hi_inscript2", "Hindi", "हिन्दी", "InScript", "fcitx5-m17n", "हि"),
+    ("m17n_hi_itrans", "Hindi", "हिन्दी", "Type as it sounds (ITRANS)", "fcitx5-m17n", "हि"),
+    ("m17n_bn_inscript2", "Bengali", "বাংলা", "InScript", "fcitx5-m17n", "বা"),
+    ("m17n_ta_tamil99", "Tamil", "தமிழ்", "Tamil99", "fcitx5-m17n", "த"),
+    ("m17n_te_inscript2", "Telugu", "తెలుగు", "InScript", "fcitx5-m17n", "తె"),
+    ("m17n_mr_inscript2", "Marathi", "मराठी", "InScript", "fcitx5-m17n", "म"),
+    ("m17n_gu_inscript2", "Gujarati", "ગુજરાતી", "InScript", "fcitx5-m17n", "ગુ"),
+    ("m17n_pa_inscript2-guru", "Punjabi", "ਪੰਜਾਬੀ", "InScript", "fcitx5-m17n", "ਪੰ"),
+    ("m17n_kn_inscript2", "Kannada", "ಕನ್ನಡ", "InScript", "fcitx5-m17n", "ಕ"),
+    ("m17n_ml_inscript2", "Malayalam", "മലയാളം", "InScript", "fcitx5-m17n", "മ"),
+    ("m17n_or_inscript2", "Odia", "ଓଡ଼ିଆ", "InScript", "fcitx5-m17n", "ଓ"),
+    ("m17n_ne_rom", "Nepali", "नेपाली", "Romanized", "fcitx5-m17n", "ने"),
+    ("m17n_si_wijesekara", "Sinhala", "සිංහල", "Wijesekara", "fcitx5-m17n", "සි"),
+    ("m17n_th_kesmanee", "Thai", "ไทย", "Kedmanee", "fcitx5-m17n", "ก"),
+    ("m17n_am_sera", "Amharic", "አማርኛ", "Type as it sounds (SERA)", "fcitx5-m17n", "አ"),
+    ("m17n_bo_ewts", "Tibetan", "བོད་ཡིག", "EWTS", "fcitx5-m17n", "བོ"),
+    ("m17n_km_yannis", "Khmer", "ខ្មែរ", "Yannis", "fcitx5-m17n", "ក"),
+    ("m17n_ur_phonetic", "Urdu", "اردو", "Phonetic", "fcitx5-m17n", "ار"),
+]
+BY_ID = {c[0]: c for c in CATALOG}
+
+# xkb layouts that do not type Latin letters: an engine needs "us" under them
+NON_LATIN = {
+    "ru", "ua", "by", "bg", "mk", "rs", "kz", "kg", "mn", "tj", "ge", "am",
+    "gr", "il", "ara", "iq", "sy", "ir", "af", "pk", "in", "bd", "np", "lk",
+    "th", "la", "kh", "mm", "et", "bt", "mv", "jp", "kr", "cn", "tw", "eg",
+}
+
+ENV = [("XMODIFIERS", "@im=fcitx"), ("QT_IM_MODULE", "fcitx"),
+       ("QT_IM_MODULES", "wayland;fcitx"), ("SDL_IM_MODULE", "fcitx")]
+ENV_KEYS = [k for k, _ in ENV]
+
+# Chromium/Electron read these at start; the block is ours, the rest the user's.
+FLAGS = ["--enable-wayland-ime", "--wayland-text-input-version=3"]
+FLAG_A = "# >>> ewe: typing in other languages (ewe-ime writes this block) >>>"
+FLAG_B = "# <<< ewe: typing in other languages <<<"
+# flags file → the programs that read it (a file is managed when it exists
+# or one of them is installed)
+FLAG_FILES = [
+    ("electron-flags.conf", ["electron"]),
+    ("chromium-flags.conf", ["chromium"]),
+    ("chrome-flags.conf", ["google-chrome-stable", "google-chrome"]),
+    ("code-flags.conf", ["code"]),
+    ("brave-flags.conf", ["brave"]),
+    ("helium-browser-flags.conf", []),     # helium-theme.sh writes it; we add the block
+]
+
+TRIGGER = "Ctrl+Space"
+
+
+# ── plumbing ────────────────────────────────────────────────────────────────
+
+def out(obj):
+    print(json.dumps(obj, ensure_ascii=False))
+    sys.exit(0)
+
+
+def fail(msg, code="failed"):
+    out({"ok": False, "error": msg, "code": code})
+
+
+def run(argv, timeout=8, env=None):
+    """(ok, stdout) — never raises, never hangs past `timeout`."""
+    try:
+        r = subprocess.run(argv, capture_output=True, text=True, timeout=timeout,
+                           stdin=subprocess.DEVNULL, env=env)
+        return r.returncode == 0, r.stdout.strip()
+    except (OSError, subprocess.TimeoutExpired):
+        return False, ""
+
+
+def have(rel):
+    return os.path.exists(os.path.join(ROOT, rel))
+
+
+def write_if_changed(path, text):
+    """True when the file changed. Atomic (tmp + rename)."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            if f.read() == text:
+                return False
+    except OSError:
+        pass
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = path + ".ewe-tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write(text)
+    os.replace(tmp, path)
+    return True
+
+
+def remove(path):
+    try:
+        os.unlink(path)
+        return True
+    except OSError:
+        return False
+
+
+# ── prefs (read straight from ewe.conf; writes go through ewe-conf) ──────────
+
+def load_conf():
+    if tomllib is None:
+        return {}
+    try:
+        with open(CONF, "rb") as f:
+            return tomllib.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
+def prefs(doc=None):
+    doc = load_conf() if doc is None else doc
+    ime = ((doc.get("desktop") or {}).get("ime")) or {}
+    if not isinstance(ime, dict):
+        ime = {}
+    engines = []
+    for e in ime.get("engines") or []:
+        if isinstance(e, str) and ID_RE.match(e) and e not in engines:
+            engines.append(e)
+    return {"enabled": ime.get("enabled") is True, "engines": engines}
+
+
+def first_layout(doc=None):
+    """ewe's first keyboard layout as fcitx5 names it: "us", "de-nodeadkeys"."""
+    doc = load_conf() if doc is None else doc
+    inp = ((doc.get("desktop") or {}).get("input")) or {}
+    lay, var = inp.get("kb_layout"), inp.get("kb_variant", "")
+    if not isinstance(lay, str) or not lay.strip():
+        # a machine that never saved [desktop.input]: the generated file, if any
+        try:
+            with open(os.path.join(HYPR_GEN, "input.lua"), encoding="utf-8") as f:
+                t = f.read()
+            m = re.search(r'kb_layout = "([^"]*)"', t)
+            lay = m.group(1) if m else "us"
+            m = re.search(r'kb_variant = "([^"]*)"', t)
+            var = m.group(1) if m else ""
+        except OSError:
+            lay, var = "us", ""
+    code = (lay.split(",")[0].strip() or "us")
+    variant = (str(var or "").split(",")[0].strip())
+    if not re.match(r"^[A-Za-z0-9_]+$", code):
+        code = "us"
+    if variant and not re.match(r"^[A-Za-z0-9_]+$", variant):
+        variant = ""
+    return code + ("-" + variant if variant else "")
+
+
+def conf_tool():
+    for c in (os.environ.get("EWE_IME_CONF"),
+              os.path.join(os.path.dirname(os.path.realpath(__file__)), "ewe-conf"),
+              os.path.join(CFG, "quickshell", "..", "..", "bin", "ewe-conf"),
+              shutil.which("ewe-conf")):
+        if c and os.path.isfile(c) and os.access(c, os.X_OK):
+            return c
+    return None
+
+
+def save_prefs(p):
+    """one write of the whole [desktop.ime] table through ewe-conf (rule 1);
+    EWE_IME_SELF keeps ewe-conf from calling back into this tool — the
+    caller applies right after."""
+    tool = conf_tool()
+    if not tool:
+        fail("ewe-conf is not installed", "no-ewe-conf")
+    env = dict(os.environ, EWE_IME_SELF="1")
+    ok, _ = run([tool, "set", "--no-hooks", "desktop.ime",
+                 json.dumps({"enabled": bool(p["enabled"]), "engines": p["engines"]})],
+                timeout=20, env=env)
+    if not ok:
+        fail("could not save the setting (ewe-conf set desktop.ime)", "conf-write")
+
+
+# ── what is installed ───────────────────────────────────────────────────────
+
+def core_installed():
+    return have("bin/fcitx5")
+
+
+def engine_package(eid):
+    c = BY_ID.get(eid)
+    if c:
+        return c[4]
+    if M17N_RE.match(eid):
+        return "fcitx5-m17n"
+    return None
+
+
+def engine_installed(eid):
+    m = M17N_RE.match(eid)
+    if m:
+        return (have("share/fcitx5/addon/m17n.conf")
+                and have("share/m17n/%s-%s.mim" % (m.group(1), m.group(2))))
+    if eid in BY_ID:
+        return have("share/fcitx5/inputmethod/%s.conf" % eid)
+    return False
+
+
+def engine_info(eid):
+    c = BY_ID.get(eid)
+    if c:
+        _id, lang, native, method, pkg, glyph = c
+    else:
+        m = M17N_RE.match(eid)
+        lang = m.group(1) if m else eid
+        native, method, pkg = "", (m.group(2) if m else ""), engine_package(eid)
+        glyph = (m.group(1) if m else eid[:2]).upper()
+    return {"id": eid, "language": lang, "native": native, "method": method,
+            "label": lang + (" — " + method if method else ""),
+            "package": pkg, "glyph": glyph, "installed": engine_installed(eid),
+            "known": eid in BY_ID}
+
+
+def missing_packages(engines):
+    miss = [pkg for pkg, rel in CORE if not have(rel)]
+    for e in engines:
+        pkg = engine_package(e)
+        if pkg and not engine_installed(e) and pkg not in miss:
+            miss.append(pkg)
+    return miss
+
+
+# ── fcitx5 at run time ──────────────────────────────────────────────────────
+
+def remote(*args, timeout=4):
+    if not shutil.which("fcitx5-remote"):
+        return False, ""
+    return run(["fcitx5-remote", *args], timeout=timeout)
+
+
+def running():
+    ok, _ = remote("--check")
+    return ok
+
+
+def current_im():
+    ok, v = remote("-n")
+    return v if ok else ""
+
+
+def wait_for(state, seconds=4.0):
+    end = time.monotonic() + seconds
+    while time.monotonic() < end:
+        if running() == state:
+            return True
+        time.sleep(0.1)
+    return running() == state
+
+
+def session():
+    """a graphical session to start fcitx5 in and to push the env into"""
+    return bool(os.environ.get("WAYLAND_DISPLAY"))
+
+
+def start():
+    if not session() or not shutil.which("fcitx5"):
+        return False
+    argv = ["fcitx5", "-d", "--replace"]
+    # its own scope: a process started here would otherwise join the
+    # caller's cgroup (Settings, Shaun's unit) and die with it
+    if os.environ.get("EWE_IME_NO_SCOPE") != "1" and shutil.which("systemd-run"):
+        argv = ["systemd-run", "--user", "--scope", "--quiet", "--collect", "--"] + argv
+    try:
+        subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                         stderr=subprocess.DEVNULL, start_new_session=True)
+    except OSError:
+        return False
+    return wait_for(True)
+
+
+def stop():
+    """ask it to exit (it saves its profile on the way out), then make sure"""
+    remote("-e")
+    if wait_for(False, 3.0):
+        return True
+    run(["pkill", "-u", str(os.getuid()), "-x", "fcitx5"], timeout=3)
+    return wait_for(False, 2.0)
+
+
+# ── generated files ─────────────────────────────────────────────────────────
+
+HEAD = ("# Written by ewe (ewe-ime) from ewe.conf [desktop.ime] — ewe Settings →\n"
+        "# Keyboard and mouse → Typing in other languages. Changes here are\n"
+        "# replaced the next time that setting changes.\n")
+
+
+def profile_text(layout, engines):
+    base = layout.split("-")[0]
+    engine_layout = "us" if base in NON_LATIN else ""
+    items = [("keyboard-" + layout, "")] + [(e, engine_layout) for e in engines]
+    out_ = [HEAD, "[Groups/0]", "# Group Name", "Name=Default", "# Layout",
+            "Default Layout=" + layout, "# Default Input Method",
+            "DefaultIM=" + (engines[0] if engines else "keyboard-" + layout), ""]
+    for i, (name, lay) in enumerate(items):
+        out_ += ["[Groups/0/Items/%d]" % i, "# Name", "Name=" + name, "# Layout",
+                 "Layout=" + lay, ""]
+    out_ += ["[GroupOrder]", "0=Default", ""]
+    return "\n".join(out_)
+
+
+def global_text():
+    # Every key not written keeps fcitx5's default. The group keys
+    # (Super+Space, Shift+Super+Space by default) are cleared: a group switch
+    # is ewe's layout switch, and Hyprland owns Super+Space.
+    return HEAD + "\n".join([
+        "[Hotkey]",
+        "# Hold Ctrl and tap Space again to step through several languages",
+        "EnumerateWithTriggerKeys=True",
+        "EnumerateSkipFirst=False",
+        "",
+        "[Hotkey/TriggerKeys]",
+        "0=Control+space",
+        "1=Zenkaku_Hankaku",
+        "2=Hangul",
+        "",
+        "[Hotkey/EnumerateGroupForwardKeys]",
+        "",
+        "[Hotkey/EnumerateGroupBackwardKeys]",
+        "",
+        "[Behavior]",
+        "# one state for every window, like the keyboard layout",
+        "ShareInputState=All",
+        "ActiveByDefault=False",
+        "PreeditEnabledByDefault=True",
+        "ShowInputMethodInformation=True",
+        "CompactInputMethodInformation=True",
+        "ShowFirstInputMethodInformation=True",
+        "DefaultPageSize=5",
+        "OverrideXkbOption=False",
+        "",
+    ])
+
+
+def env_text():
+    return ("# AUTO-GENERATED by ewe-ime (Settings → Keyboard and mouse → Typing in other\n"
+            "# languages). start-hyprland.sh exports these at sign-in. Do not edit.\n"
+            + "".join("%s=%s\n" % kv for kv in ENV))
+
+
+def theme_script():
+    for c in (os.path.join(CFG, "quickshell", "scripts", "fcitx5-theme.sh"),
+              os.path.join(os.path.dirname(os.path.realpath(__file__)), "..",
+                           "dotfiles", "quickshell", "scripts", "fcitx5-theme.sh")):
+        if os.path.isfile(c):
+            return c
+    return None
+
+
+def apply_theme():
+    s = theme_script()
+    if s:
+        run(["bash", s], timeout=20)
+
+
+def _strip_block(text):
+    lines, keep, inside = text.splitlines(), [], False
+    for ln in lines:
+        if ln.strip() == FLAG_A:
+            inside = True
+            continue
+        if ln.strip() == FLAG_B:
+            inside = False
+            continue
+        if not inside:
+            keep.append(ln)
+    return keep
+
+
+def flag_files():
+    """the flags files to manage: present, or read by an installed program
+    (electronNN-flags.conf files that exist win over electron-flags.conf in
+    Arch's wrapper, so they get the block too)"""
+    names = []
+    for name, progs in FLAG_FILES:
+        path = os.path.join(CFG, name)
+        if os.path.exists(path) or any(
+                have("bin/" + p) or (p == "electron" and _any_electron()) for p in progs):
+            names.append(path)
+    try:
+        for f in sorted(os.listdir(CFG)):
+            if re.match(r"^electron\d+-flags\.conf$", f):
+                names.append(os.path.join(CFG, f))
+    except OSError:
+        pass
+    return names
+
+
+def _any_electron():
+    try:
+        return any(re.match(r"^electron\d*$", f) for f in os.listdir(os.path.join(ROOT, "bin")))
+    except OSError:
+        return False
+
+
+def sync_flags(on):
+    changed = []
+    for path in flag_files():
+        try:
+            with open(path, encoding="utf-8") as f:
+                text = f.read()
+        except OSError:
+            text = None
+        keep = _strip_block(text or "")
+        if on:
+            body = "\n".join(keep).rstrip("\n")
+            new = (body + "\n" if body else "") + FLAG_A + "\n" + "\n".join(FLAGS) + "\n" + FLAG_B + "\n"
+        else:
+            if text is None:
+                continue
+            body = "\n".join(keep).strip("\n")
+            new = body + "\n" if body.strip() else None
+        if new is None:
+            if remove(path):
+                changed.append(os.path.basename(path))
+        elif new != text:
+            write_if_changed(path, new)
+            changed.append(os.path.basename(path))
+    return changed
+
+
+# ── the session environment ────────────────────────────────────────────────
+
+def load_stamp():
+    try:
+        with open(STAMP, encoding="utf-8") as f:
+            d = json.load(f)
+        return d if isinstance(d, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def save_stamp(d):
+    try:
+        os.makedirs(os.path.dirname(STAMP), exist_ok=True)
+        tmp = STAMP + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(d, f)
+        os.replace(tmp, STAMP)
+    except OSError:
+        pass
+
+
+def env_in(environ):
+    return all(environ.get(k) == v for k, v in ENV)
+
+
+def push_env(on):
+    """apps started from now on (D-Bus activated, systemd units, a restarted
+    shell) see the change; the session's own processes keep what they had."""
+    if os.environ.get("EWE_IME_NO_SESSION") == "1" or not session():
+        return False
+    if on:
+        run(["dbus-update-activation-environment", "--systemd"]
+            + ["%s=%s" % kv for kv in ENV], timeout=8)
+    else:
+        run(["systemctl", "--user", "unset-environment"] + ENV_KEYS, timeout=8)
+        # the D-Bus activation environment cannot unset: empty is "not set"
+        # for every toolkit that reads these
+        run(["dbus-update-activation-environment"] + ["%s=" % k for k in ENV_KEYS], timeout=8)
+    return True
+
+
+# ── the one entry point that makes things true ─────────────────────────────
+
+class Locked:
+    """one apply at a time: Settings, autostart.sh and ewe-conf (a layout
+    change) can arrive together. Waits up to 10 s, then goes ahead."""
+
+    def __enter__(self):
+        self.f = None
+        try:
+            os.makedirs(os.path.dirname(LOCK), exist_ok=True)
+            self.f = open(LOCK, "w")
+        except OSError:
+            return self
+        end = time.monotonic() + 10
+        while True:
+            try:
+                fcntl.flock(self.f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                return self
+            except OSError:
+                if time.monotonic() > end:
+                    return self
+                time.sleep(0.1)
+
+    def __exit__(self, *a):
+        if self.f:
+            try:
+                fcntl.flock(self.f, fcntl.LOCK_UN)
+            finally:
+                self.f.close()
+
+
+def do_apply(login=False):
+    with Locked():
+        return _apply(login)
+
+
+def _apply(login):
+    doc = load_conf()
+    p = prefs(doc)
+    layout = first_layout(doc)
+    core = core_installed()
+    ready = [e for e in p["engines"] if engine_installed(e)]
+    on = bool(p["enabled"] and core and ready)
+    did = []
+
+    is_running = running() if core else False
+    if core and (on or p["engines"]):
+        prof = profile_text(layout, ready)
+        glob = global_text()
+        stale = []
+        for path, text in ((PROFILE, prof), (GLOBAL, glob)):
+            try:
+                with open(path, encoding="utf-8") as f:
+                    if f.read() != text:
+                        stale.append((path, text))
+            except OSError:
+                stale.append((path, text))
+        if stale:
+            # fcitx5 writes its profile when it exits: stop it first, or it
+            # puts the old list back over the new one
+            if is_running:
+                stop()
+                is_running = False
+                did.append("stopped")
+            for path, text in stale:
+                write_if_changed(path, text)
+            did.append("config")
+    if on:
+        # the look follows every scheme change through colorscheme.sh; here
+        # only when fcitx5 is about to start or has never been dressed
+        if not is_running or not os.path.exists(os.path.join(DATA, "fcitx5", "themes", "ewe", "theme.conf")):
+            apply_theme()
+            did.append("theme")
+        if write_if_changed(ENV_FILE, env_text()):
+            did.append("env-file")
+    elif remove(ENV_FILE):
+        did.append("env-file-removed")
+    fl = sync_flags(on)
+    if fl:
+        did.append("flags:" + ",".join(fl))
+
+    if on and not is_running:
+        if start():
+            did.append("started")
+    elif not on and is_running:
+        stop()
+        did.append("stopped")
+
+    st = load_stamp()
+    if login or "login" not in st:
+        # the environment this session started with (start-hyprland.sh read
+        # ime.env before Hyprland): autostart.sh runs us right after sign-in
+        st["login"] = env_in(os.environ)
+        st["pushed"] = st["login"]
+    if st.get("pushed") != on:
+        if push_env(on):
+            st["pushed"] = on
+            did.append("env-pushed")
+    save_stamp(st)
+    return {"ok": True, "on": on, "did": did}
+
+
+# ── answers ─────────────────────────────────────────────────────────────────
+
+def glyph_for(im):
+    if im in BY_ID:
+        return BY_ID[im][5]
+    m = M17N_RE.match(im or "")
+    if m:
+        return m.group(1).upper()
+    return ""
+
+
+def current():
+    if not core_installed() or not running():
+        return {"ok": True, "running": False, "im": "", "active": False, "glyph": "", "label": ""}
+    im = current_im()
+    active = bool(im) and not im.startswith("keyboard-")
+    info = engine_info(im) if active else None
+    return {"ok": True, "running": True, "im": im, "active": active,
+            "glyph": glyph_for(im) if active else "",
+            "label": info["label"] if info else ""}
+
+
+def status():
+    p = prefs()
+    core = core_installed()
+    engines = [engine_info(e) for e in p["engines"]]
+    cur = current() if core else {"running": False, "im": "", "active": False, "glyph": ""}
+    st = load_stamp()
+    on = bool(p["enabled"] and core and any(e["installed"] for e in engines))
+    login = st.get("login")
+    return {
+        "ok": True,
+        "enabled": p["enabled"],
+        "installed": core,
+        "on": on,
+        "running": cur["running"],
+        "engines": engines,
+        "missing": missing_packages(p["engines"]) if p["engines"] else [],
+        "current": cur["im"],
+        "active": cur["active"],
+        "glyph": cur["glyph"],
+        "layout": first_layout(),
+        "trigger": TRIGGER,
+        # apps that read the environment at start (X11 and Qt 5 apps) follow
+        # a change after the next sign-in
+        "needs_signout": login is not None and login != on,
+        "configtool": shutil.which("fcitx5-configtool") is not None,
+        "catalog": catalog(),
+    }
+
+
+def catalog():
+    core = core_installed()
+    return [dict(engine_info(c[0]), core=core,
+                 packages=[pkg for pkg, rel in CORE if not have(rel)]
+                 + ([] if engine_installed(c[0]) else [c[4]]))
+            for c in CATALOG]
+
+
+def check_id(args):
+    if not args:
+        fail("which language? (an id from `ewe-ime catalog`)", "no-id")
+    eid = args[0]
+    if not ID_RE.match(eid) or not (eid in BY_ID or M17N_RE.match(eid)):
+        fail("unknown language: %s" % eid, "bad-id")
+    return eid
+
+
+def do_add(args):
+    eid = check_id(args)
+    p = prefs()
+    if eid not in p["engines"]:
+        p["engines"].append(eid)
+    p["enabled"] = True
+    save_prefs(p)
+    res = do_apply()
+    return dict(status(), did=res["did"])
+
+
+def do_remove(args):
+    eid = check_id(args)
+    p = prefs()
+    p["engines"] = [e for e in p["engines"] if e != eid]
+    last = not p["engines"]
+    if last:
+        p["enabled"] = False
+    save_prefs(p)
+    res = do_apply()
+    r = dict(status(), did=res["did"])
+    if last:
+        # plainly: off, and nothing was uninstalled
+        r["note"] = ("Typing in other languages is off. Its programs stay installed — "
+                     "Komble can remove them.")
+    return r
+
+
+def do_enable(on):
+    p = prefs()
+    p["enabled"] = bool(on)
+    save_prefs(p)
+    res = do_apply()
+    return dict(status(), did=res["did"])
+
+
+def do_toggle():
+    if not core_installed() or not running():
+        fail("typing in other languages is not running", "not-running")
+    remote("-t")
+    return current()
+
+
+def do_configure():
+    if not shutil.which("fcitx5-configtool"):
+        fail("fcitx5-configtool is not installed", "no-configtool")
+    try:
+        subprocess.Popen(["fcitx5-configtool"], stdin=subprocess.DEVNULL,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                         start_new_session=True)
+    except OSError as e:
+        fail("could not open fcitx5's settings: %s" % e, "spawn")
+    return {"ok": True}
+
+
+def main(argv):
+    if not argv or argv[0] in ("-h", "--help", "help"):
+        print(__doc__.strip())
+        return
+    verb, args = argv[0], argv[1:]
+    if verb == "status":
+        out(status())
+    if verb == "catalog":
+        out({"ok": True, "catalog": catalog()})
+    if verb == "current":
+        out(current())
+    if verb == "add":
+        out(do_add(args))
+    if verb == "remove":
+        out(do_remove(args))
+    if verb in ("enable", "on"):
+        out(do_enable(True))
+    if verb in ("disable", "off"):
+        out(do_enable(False))
+    if verb == "apply":
+        out(do_apply(login="--login" in args))
+    if verb == "toggle":
+        out(do_toggle())
+    if verb == "configure":
+        out(do_configure())
+    fail("unknown verb: " + verb, "bad-verb")
+
+
+if __name__ == "__main__":
+    try:
+        main(sys.argv[1:])
+    except SystemExit:
+        raise
+    except Exception as e:      # the contract: JSON, exit 0
+        fail("ewe-ime: %s" % e, "internal")

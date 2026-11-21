@@ -633,6 +633,11 @@ def do_apply(doc, only=None, hooks=True):
             # trailing extra \n matches the shell's heredoc atomicWrite
             _wtext(os.path.join(HYPR_GEN, "input.lua"),
                    gen_input_lua(st, devices) + "\n")
+    # typing in other languages: fcitx5's group follows the FIRST keyboard
+    # layout, so a layout change re-applies it too (not a hook — Settings
+    # writes desktop.input with --no-hooks and fcitx5 must still follow)
+    if want("ime") or want("input"):
+        apply_ime(doc)
 
     if hooks:
         if want("theme"):
@@ -656,6 +661,76 @@ def do_apply(doc, only=None, hooks=True):
                 subprocess.run(["hyprctl", "reload"], capture_output=True, timeout=10)
             except (OSError, subprocess.TimeoutExpired):
                 pass
+
+
+# ── desktop.ime — typing in other languages (fcitx5, on demand). bin/ewe-ime
+# ── owns everything it generates (fcitx5's profile/config, the candidate
+# ── theme, hypr/generated/ime.env, the Chromium flags blocks, the process);
+# ── this only hands it the file after a write. ────────────────────────────
+
+IME_ID = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
+
+
+def _ime_tool():
+    for c in (os.path.join(os.path.dirname(os.path.realpath(__file__)), "ewe-ime"),
+              os.path.join(QS, "..", "..", "bin", "ewe-ime"),
+              shutil.which("ewe-ime")):
+        if c and os.path.isfile(c) and os.access(c, os.X_OK):
+            return c
+    return None
+
+
+def apply_ime(doc):
+    """`ewe-ime apply` when this machine has (or had) [desktop.ime] — never
+    for a machine that never used it, so a layout change there spawns
+    nothing. EWE_IME_SELF=1: ewe-ime itself is writing and applies next."""
+    if os.environ.get("EWE_IME_SELF") == "1":
+        return
+    node, last = dig(doc, "desktop.ime")
+    used = bool(node and isinstance(node.get(last), dict) and node[last])
+    if not used and not os.path.exists(os.path.join(HYPR_GEN, "ime.env")):
+        return
+    tool = _ime_tool()
+    if not tool:
+        return
+    try:
+        subprocess.run([tool, "apply"], capture_output=True, timeout=30)
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+
+
+def _validate_ime(key, value):
+    def engines_ok(v):
+        return isinstance(v, list) and all(isinstance(e, str) and IME_ID.match(e) for e in v)
+
+    def bool_of(v):
+        if isinstance(v, bool):
+            return v
+        s = str(v).strip().lower()
+        return {"1": True, "true": True, "yes": True, "on": True,
+                "0": False, "false": False, "no": False, "off": False}.get(s)
+
+    if key == "desktop.ime.enabled":
+        b = bool_of(value)
+        return (True, b) if b is not None else (False, "desktop.ime.enabled must be true or false")
+    if key == "desktop.ime.engines":
+        if not engines_ok(value):
+            return False, "desktop.ime.engines must be a list of input method names"
+        return True, list(dict.fromkeys(value))
+    # the whole table (ewe-ime writes it in one go)
+    if not isinstance(value, dict):
+        return False, "desktop.ime must be a table {enabled, engines}"
+    out = dict(value)
+    if "enabled" in out:
+        b = bool_of(out["enabled"])
+        if b is None:
+            return False, "desktop.ime.enabled must be true or false"
+        out["enabled"] = b
+    if "engines" in out:
+        if not engines_ok(out["engines"]):
+            return False, "desktop.ime.engines must be a list of input method names"
+        out["engines"] = list(dict.fromkeys(out["engines"]))
+    return True, out
 
 
 # ── Phase-4 generators: static lua/conf artifacts derived purely from the ──
@@ -2378,6 +2453,8 @@ def validate(key, value):
     rest alone."""
     if key == "desktop.animations.detail":
         return True, no_overshoot(value)
+    if key in ("desktop.ime", "desktop.ime.enabled", "desktop.ime.engines"):
+        return _validate_ime(key, value)
     if key == "network.ssh.hosts":
         # data, never code (ssh_host_clean): a host that could open a new
         # line or a pattern is refused; options that run something are
@@ -2568,6 +2645,8 @@ def _domain(dotted):
                 "wallpapers": "wallpapers", "input": "input",
                 "layout": "layout", "keybinds": "keybinds",
                 "workspaces": "workspaces",
+                # typing in other languages: bin/ewe-ime applies it
+                "ime": "ime",
                 # cursor: the theme hook runs colorscheme.sh, its one writer;
                 # game: user-theme.json carries it to the shell
                 "cursor": "theme", "game": "theme",
