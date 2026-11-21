@@ -21,10 +21,12 @@ otherwise; **Super+A** brings it out. It is one size whatever it says:
     Settings, Komble, lock);
   - a chat line for questions and commands. It knows ewe (the daemon's
     knowledge pack), and an answer about a place comes with a button that
-    opens it. It opens apps the way the launcher does ("open nemo", "open
+    opens it. It opens apps the way the launcher does ("open ewe files", "open
     kitty in documents"), and it shows a shell command it proposes exactly as
     it will run, with **Run** and **In terminal**: nothing runs without that
-    click.
+    click. An answer from a model appears as it is written (*Claude Code is
+    writing*), and the first letter you type gets the model ready, so the
+    answer starts sooner (0.6.0, with ewe-companion 0.3).
   - what a command found, as a list under its answer: ewe Safe's logins ("copy
     my GitHub password" when several fit: a click copies that one), files
     and folders ("find my resume": **Open**, and small buttons for **Show in
@@ -33,7 +35,11 @@ otherwise; **Super+A** brings it out. It is one size whatever it says:
     **Show in folder**) and workspaces (**Switch**), paired Bluetooth
     devices (**Connect**), and timers (**Cancel**). A locked ewe Safe gets
     an **Unlock ewe Safe** button that opens ewe Safe's own window for the
-    master password.
+    master password. From 0.7.0 (with ewe-companion 0.3's knowledge 2.0):
+    songs from your library (**Play**, **Show in folder**), your own notes
+    (**Open**), ArchWiki pages (**Read**), earlier releases' notes, and the
+    file a "why won't this play" is about (**Open with another app**); ewe
+    Player and ewe Files start from the shell with what to play or show.
 
 | kind | file | what |
 |---|---|---|
