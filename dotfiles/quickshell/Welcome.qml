@@ -653,7 +653,7 @@ Scope {
                     Title { text: "Your desktop is in your account" }
                     Body {
                         text: "A backup from “" + (Cloud.cloudInfo ? Cloud.cloudInfo.device : "another computer") + "”"
-                            + (Cloud.cloudInfo && Cloud.cloudInfo.updatedAt ? " (saved " + Qt.formatDateTime(new Date(Cloud.cloudInfo.updatedAt), "d MMMM, h:mm AP") + ")" : "")
+                            + (Cloud.cloudInfo && Cloud.cloudInfo.updatedAt ? " (saved " + Qt.formatDateTime(new Date(Cloud.cloudInfo.updatedAt), "d MMMM, " + Globals.timeFormat(false)) + ")" : "")
                             + " is waiting. Restore it and your layout, theme, keybinds and network profiles come back to this computer, the folders you sync come down by themselves, your browser brings back its bookmarks and tabs, and your apps line up in Komble, one click from reinstalled."
                     }
                     Row {

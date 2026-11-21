@@ -213,8 +213,8 @@
   --opacity-glass: 0.8;
   --opacity-app: 0.85;
   --opacity-inactive: 0.97;
-  --font-sans: "Geist", "Noto Sans Georgian", system-ui, sans-serif;
-  --font-mono: "Geist Mono", "Noto Sans Georgian", ui-monospace, monospace;
+  --font-sans: "Geist", "Noto Sans Georgian", "Noto Sans Arabic UI", "Noto Sans Hebrew", sans-serif;
+  --font-mono: "Geist Mono", "Noto Sans Georgian", "Noto Sans Arabic UI", "Noto Sans Hebrew", monospace;
 }
 .display-xl { font-family: var(--font-sans); font-size: 64px; line-height: 72px; font-weight: 300; letter-spacing: -0.03em; }
 .display-lg { font-family: var(--font-sans); font-size: 48px; line-height: 56px; font-weight: 400; letter-spacing: -0.025em; }

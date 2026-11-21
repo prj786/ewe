@@ -12,7 +12,7 @@ Column {
 
     function since(ts) {
         if (!ts) return ""
-        return "since " + Qt.formatTime(new Date(ts * 1000), "hh:mm")
+        return "since " + Globals.formatTime(new Date(ts * 1000), false)
     }
 
     QsPageHead {

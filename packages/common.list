@@ -131,6 +131,10 @@ gst-plugins-good
 gst-plugins-ugly
 gst-libav
 ffmpeg                  # ffprobe/ffmpeg: video thumbnails, stream info, the screenshot of a frame
+libdvdcss               # reads encrypted (CSS) DVDs — gst-plugins-ugly's dvdread opens the disc, this
+                        # unlocks it; without it a bought film DVD shows nothing (50 KB)
+webp-pixbuf-loader      # WebP in GTK3 apps (blueman, pavucontrol's dialogs, file pickers' previews…):
+                        # gdk-pixbuf has no WebP loader of its own, so those apps showed a broken image
 guvcview                # camera app (photos + video) — tiny traditional GTK,
                         # the cheese-shaped hole in the default set
 galculator              # calculator (GTK3, menubar — follows adw-gtk3 + accent)
@@ -202,6 +206,14 @@ ttf-nerd-fonts-symbols-mono  # Nerd glyphs for the prompt, now that kitty sets G
 sound-theme-freedesktop  # event chimes (notifications, volume, shutter) — Globals.playSound
 ttf-ubuntu-font-family  # the pre-2026-09 DE face; kept installed for now so documents
                         # and configs that still name Ubuntu keep rendering
+
+# ── spell checking ───────────────────────────────────────────────────────────
+# enchant (already pulled in by WebKitGTK) finds hunspell dictionaries in
+# /usr/share/hunspell; with none installed nothing could check spelling. US
+# English ships everywhere; other languages are installed ON DEMAND from
+# Settings → Language → Spell checking (hunspell-de, -ru, -fr…), never here.
+hunspell                # the spell-check engine enchant and LibreOffice use
+hunspell-en_us          # US English dictionary — the fallback every machine has
 
 # ── version control (always) ─────────────────────────────────────────────────
 # The front-end dev toolchain (git-delta, lazygit, github-cli, mise + the Node/LSP

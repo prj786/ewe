@@ -368,6 +368,7 @@ RED_HUE = 27.0              # where "toward red" points (OKLCH)
 
 FONT_SANS = ["Geist", "Noto Sans Georgian"]
 FONT_MONO = ["Geist Mono", "Noto Sans Georgian"]
+FONT_RTL = ["Noto Sans Arabic UI", "Noto Sans Hebrew"]
 FONT_SIZE = {"xs": 11, "s": 12, "md": 13, "lg": 15, "xl": 18, "2xl": 22, "3xl": 28,
              "4xl": 36, "5xl": 48, "6xl": 64}
 LINE_HEIGHT = {"xs": 14, "s": 16, "md": 18, "lg": 20, "lg-relaxed": 22, "xl": 24, "2xl": 28,
@@ -1071,9 +1072,13 @@ def tokens(cfg):
     for name, (fam, fs, lh, w, tr, it) in TYPE_STYLES.items():
         styles[name] = {"family": fam, "size": _scale(fs, ts), "lineHeight": _scale(lh, ts),
                         "weight": w, "tracking": tr, "italic": it}
+    # the CSS stacks name the right-to-left scripts' fonts after Georgian:
+    # `system-ui` is no family on Arch, so WebKit (ewe Settings, the apps)
+    # drew Arabic unjoined in FreeMono; sans-serif then reaches fontconfig's
+    # alias, which knows the rest (dotfiles/fontconfig/fonts.conf)
     typ = {"sans": FONT_SANS, "mono": FONT_MONO,
-           "css": {"sans": ", ".join('"%s"' % f for f in FONT_SANS) + ", system-ui, sans-serif",
-                   "mono": ", ".join('"%s"' % f for f in FONT_MONO) + ", ui-monospace, monospace"},
+           "css": {"sans": ", ".join('"%s"' % f for f in FONT_SANS + FONT_RTL) + ", sans-serif",
+                   "mono": ", ".join('"%s"' % f for f in FONT_MONO + FONT_RTL) + ", monospace"},
            "weight": {"font-weight-" + k: v for k, v in FONT_WEIGHT.items()},
            "tracking": {"tracking-" + k: v for k, v in TRACKING.items()},
            "scale": ts, "styles": styles}

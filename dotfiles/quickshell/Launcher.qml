@@ -199,14 +199,18 @@ Scope {
         return out
     }
 
+    // `name` is in the session's language (Name[ka]); the untranslated Name
+    // (Globals.englishName, from desktop-entries.py) scores the same, so an
+    // app is found by either — "Files" and "ფაილები" both find ewe Files
     function scoreEntry(e, q) {
         var name = (e.name || "").toLowerCase()
+        var en   = Globals.englishName(e).toLowerCase()
         var gen  = (e.genericName || "").toLowerCase()
         var com  = (e.comment || "").toLowerCase()
-        if (name === q) return 1000
-        if (name.indexOf(q) === 0) return 850
-        if (name.indexOf(" " + q) >= 0) return 700      // word start
-        if (name.indexOf(q) >= 0) return 500
+        if (name === q || en === q) return 1000
+        if (name.indexOf(q) === 0 || (en !== "" && en.indexOf(q) === 0)) return 850
+        if (name.indexOf(" " + q) >= 0 || (en !== "" && en.indexOf(" " + q) >= 0)) return 700      // word start
+        if (name.indexOf(q) >= 0 || (en !== "" && en.indexOf(q) >= 0)) return 500
         if (gen.indexOf(q) >= 0) return 280
         if (com.indexOf(q) >= 0) return 120
         return 0
@@ -403,6 +407,10 @@ Scope {
                                 id: input
                                 width: parent.width - Theme.iconLg - escHint.width - 2 * Theme.spaceS
                                 anchors.verticalCenter: parent.verticalCenter
+                                // typed Arabic or Hebrew starts by the search
+                                // glyph like everything else, not across the
+                                // field by the Esc key
+                                horizontalAlignment: TextInput.AlignLeft
                                 color: Theme.textPrimary
                                 font.family: Theme.type.bodyLg.family
                                 font.pixelSize: Theme.type.bodyLg.size
@@ -500,10 +508,20 @@ Scope {
                                     mipmap: true
                                     source: row.modelData.iconSource || Quickshell.iconPath("application-x-executable")
                                 }
+                                // name and line beside the icon, both stopping
+                                // short of the Enter key and set from the icon
+                                // side whatever the script: Arabic or Hebrew
+                                // used to slide right, under the key (a row is
+                                // not a paragraph; ewe's chrome is not mirrored)
                                 Column {
+                                    readonly property real textW: row.width - 2 * Theme.spaceMd - Theme.icon2xl
+                                                                  - parent.spacing - enterKey.width - Theme.spaceS
                                     anchors.verticalCenter: parent.verticalCenter
                                     Text {
                                         text: row.modelData.name || ""
+                                        width: Math.min(implicitWidth, parent.textW)
+                                        horizontalAlignment: Text.AlignLeft
+                                        elide: Text.ElideRight
                                         color: Theme.textPrimary
                                         font.family: Theme.type.bodyStrong.family
                                         font.pixelSize: Theme.type.bodyStrong.size
@@ -515,13 +533,15 @@ Scope {
                                         color: Theme.textMuted
                                         font.family: Theme.type.caption.family
                                         font.pixelSize: Theme.type.caption.size
+                                        horizontalAlignment: Text.AlignLeft
                                         elide: Text.ElideRight
-                                        width: list.width - Theme.icon2xl - 4 * Theme.spaceMd
+                                        width: parent.textW
                                     }
                                 }
                             }
                             // the trailing hint: the key that runs the selection
                             Kbd {
+                                id: enterKey
                                 anchors.right: parent.right; anchors.rightMargin: Theme.spaceMd
                                 anchors.verticalCenter: parent.verticalCenter
                                 visible: row.sel

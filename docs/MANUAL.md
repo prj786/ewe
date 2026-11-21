@@ -445,6 +445,9 @@ picks the Japanese, Korean or Traditional Chinese cut when the text says its
 language, Simplified Chinese otherwise. Georgian comes from Noto Sans
 Georgian.
 
+Arabic, Hebrew and Armenian come from Noto Sans (Arabic UI, Hebrew,
+Armenian), right after Georgian.
+
 **Typing** Chinese, Japanese, Korean, Vietnamese, Hindi and other scripts:
 ewe Settings → Keyboard and mouse → **Typing in other languages** → Add a
 language. The first one installs fcitx5 and the language's engine (one
@@ -464,6 +467,25 @@ The pointer's **size** (24, 36, 48 or 72 px) and **colour** (automatic —
 white on a dark scheme, black on a light one —, white or black) are in ewe
 Settings → Keyboard and mouse → Cursor, or `ewe-conf set desktop.cursor.size
 48`. Apps that were already open keep the old pointer until they restart.
+
+### Spelling, formats and your apps' language
+
+ewe Settings → **Language** holds the display language, **Spell checking**
+and **Also for your apps**. Spelling languages are kept in your ewe.conf
+(`[desktop.language] spellcheck`, synced; `check_spelling` turns it off) and
+ewe Browser follows them as you change them. US English ships with ewe;
+"Add a language…" downloads another dictionary (one password prompt), or
+opens Komble when only the AUR has it (Georgian, Ukrainian, Portuguese…).
+ewe Browser checks with Chromium's own dictionaries, so a few languages
+(Georgian among them) are not checked there yet — the page says which.
+"Also for your apps" offers the language packs of Firefox, Thunderbird and
+LibreOffice for the display language — only for the ones you have.
+
+ewe Settings → Time and place → **Formats** picks how dates, times,
+numbers, money, measurements and paper are written, separately from the
+language (an English desktop with German formats: 24-hour clock, weeks
+from Monday, 1.234,5). The bar, the calendar and the lock screen follow it
+after you sign out and back in.
 
 ## Game mode
 

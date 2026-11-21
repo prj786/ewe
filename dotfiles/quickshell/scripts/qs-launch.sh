@@ -18,6 +18,23 @@ if [ ! -d /sys/module/nvidia ]; then
     done
 fi
 
+# ── Apps with Windows line ends (2026-11-21) ──
+# Quickshell drops a .desktop file written with CRLF (LinOffice's Word, Excel,
+# Outlook, OneNote, PowerPoint): "[Desktop Entry]\r" is no group header, so
+# those apps were missing from the launcher, dock and Overview. desktop-entries.py
+# writes LF copies (never touching the user's files) under the cache; that
+# folder goes into the SHELL's data dirs — after XDG_DATA_HOME, which always
+# comes first, and a broken file there does not shadow the copy. The shell
+# re-runs the script whenever its app list changes (Globals.qml).
+_de="$(dirname "$(readlink -f "$0")")/desktop-entries.py"
+if [ -r "$_de" ] && command -v python3 >/dev/null 2>&1; then
+    _dedir="$(timeout 10 python3 "$_de" --dir 2>/dev/null)"
+    case ":${XDG_DATA_DIRS:-}:" in
+        *":$_dedir:"*) ;;
+        *) [ -n "$_dedir" ] && export XDG_DATA_DIRS="$_dedir:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}" ;;
+    esac
+fi
+
 # ── Come back after a compositor kick ──
 # qs exits 255 for three different things: no display, a config that fails to
 # load, and a Wayland connection the compositor severed. ewe.service refuses to
