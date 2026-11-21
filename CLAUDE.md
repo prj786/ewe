@@ -268,8 +268,11 @@ since Dock 1.1.0 (`desktop.dock.*` is only their `legacy` fallback,
   (ewe Settings' `install_packages`, one polkit prompt). The display language
   (LANG) and the regional formats (LC_TIME, LC_NUMERIC, LC_MONETARY,
   LC_MEASUREMENT, LC_PAPER — Settings → Time and place → Formats) are the
-  machine's locale (`localectl`), never ewe.conf; a sign-in picks them up
-  (greetd's login shell sources /etc/locale.conf when LANG is unset).
+  machine's locale (`localectl`), never ewe.conf. The session runs
+  /etc/profile (its env has MOTD_SHOWN, DEBUGINFOD_URLS), whose locale.sh
+  reads /etc/locale.conf only while LANG is unset — whether a sign-out is
+  enough or it takes a reboot (PID 1 reads locale.conf at boot) is NOT
+  verified yet; Settings says "Applies after you sign out".
   **The clock:** `Globals.clock24` reads the region's short time pattern
   (`Qt.locale()` on Unix reads the LC_* categories) and
   `Globals.formatTime(d, padded)` / `timeFormat(padded)` are the ONE answer
