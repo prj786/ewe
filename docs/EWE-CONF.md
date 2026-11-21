@@ -323,6 +323,22 @@ profile, natural scroll, scroll factors, the eight touchpad switches, and
 `apply` generates both `hypr/generated/input.lua` and
 `quickshell/input-devices.json` from this.
 
+### `[desktop.ime]` — typing in other languages
+
+`enabled` (bool) · `engines` (fcitx5 input method names, in order:
+`"pinyin"`, `"mozc"`, `"hangul"`, `"unikey"`, `"m17n_hi_inscript2"` …; the
+catalogue is `ewe-ime catalog`). Settings → Keyboard and mouse → Typing in
+other languages writes it through `ewe-ime` (one write of the whole table);
+`set` refuses anything but a boolean and a list of plain names. Its own
+table on purpose: `[desktop.input]` is written whole by the Keyboard pane
+and rebuilt by `import`, which would drop keys kept inside it.
+
+`apply` hands it to `bin/ewe-ime apply` — after a `[desktop.input]` change
+too, because fcitx5's one group follows the FIRST keyboard layout (never for
+a machine that never had `[desktop.ime]`). It syncs like any other key. On a
+computer without fcitx5 nothing happens: no session environment, no fcitx5,
+and `ewe-ime status` lists the packages to install.
+
 ### `[desktop.layout]`
 
 Four numbers — `gaps_in`, `gaps_out`, `border_size`, `rounding` — and the

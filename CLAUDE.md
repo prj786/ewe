@@ -327,6 +327,29 @@ since Dock 1.1.0 (`desktop.dock.*` is only their `legacy` fallback,
   `EWE_GAME_TOOL` to a wrapper with fake busctl/systemctl/gamemoded and
   `EWE_GAME_NO_SCOPE=1` — a real toggle there changes the LIVE power
   profile and closes the LIVE ewe Sync and browser.
+- **Typing in other languages (0.46, `ImeState.qml` + `bin/ewe-ime`)** —
+  fcitx5 ON DEMAND (never a dependency): ewe Settings → Keyboard and mouse
+  adds a language through its `install_packages` (one pkexec) then
+  `ewe-ime add <im>`; `[desktop.ime]` {enabled, engines} goes through
+  ewe-conf (its own table — `[desktop.input]` is written whole), and
+  ewe-conf re-runs `ewe-ime apply` after a `desktop.input` write too.
+  `apply` writes fcitx5's profile (ONE group on ewe's FIRST layout:
+  `keyboard-<it>` then the engines — no key conversion, so Super+Space stays
+  Hyprland's xkb switch; fcitx5's group keys cleared; Ctrl+Space toggles the
+  engine) — stopping a running fcitx5 FIRST, it rewrites the profile on
+  exit —, `hypr/generated/ime.env` (XMODIFIERS, QT_IM_MODULE,
+  QT_IM_MODULES=wayland;fcitx, SDL_IM_MODULE; read by start-hyprland.sh
+  only with fcitx5 installed; no GTK_IM_MODULE), the Chromium/Electron flags
+  blocks, the candidate theme (`scripts/fcitx5-theme.sh`, tokens; also run by
+  colorscheme.sh) and the systemd/D-Bus env push. A synced ewe.conf on a
+  computer without fcitx5 does nothing. The bar's layout module shows the
+  engine's mark (fcitx5's tray icon is filtered out; ImeState listens to
+  that item's icon changes, no polling). A text field's placeholder must
+  check `preeditText` too, or it shows through the letters being composed.
+  Test: `tests/ewe-ime-test.sh` (fakes); in the nest run fcitx5 from a
+  `pacman -Sp` root overlaid on /usr with the shell's PRIVATE bus
+  (`HS_PRIVATE_BUS=1`), `DISPLAY` unset, `EWE_IME_NO_SCOPE=1
+  EWE_IME_NO_SESSION=1` — never against the live bus or X server.
 - **`HyprMon.qml`** — display manager: per-monitor-set profiles
   (`display-profiles.json` → `hypr/generated/monitors.lua`), live apply via
   `hyprctl eval 'hl.monitor{…}'`, re-assert on hotplug/AC events. The Settings

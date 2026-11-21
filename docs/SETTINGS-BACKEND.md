@@ -211,6 +211,55 @@ Phase 30 also tunes `/etc/bluetooth/main.conf`: `JustWorksRepairing = always`
 (a device paired elsewhere re-pairs instead of failing), `Experimental = true`
 (battery levels), `AutoEnable = true` (adapter on at boot).
 
+## Typing in other languages — fcitx5 on demand, `ewe-ime`
+
+Chinese (Pinyin), Japanese (Mozc), Korean (Hangul), Vietnamese (Unikey) and
+the m17n scripts (Hindi, Bengali, Tamil, Thai, Amharic …) through **fcitx5**,
+installed only when someone adds a language — never a dependency of `ewe`
+(RAM, ISO size). Every package is in the official repos.
+
+The Keyboard and mouse pane's **Typing in other languages** group talks to
+**`bin/ewe-ime`** (one JSON object per call, exit 0) and to the app's
+`install_packages` command:
+
+| verb | does |
+|---|---|
+| `status` | `enabled`, `installed` (fcitx5), `on`, `running`, `engines` [{id, language, native, method, label, glyph, package, installed}], `missing` (packages this computer lacks for them), `current`, `active`, `layout`, `needs_signout`, `catalog` |
+| `add <id>` · `remove <id>` | the list in `[desktop.ime]` (through ewe-conf); adding turns it on, removing the last turns it off — the packages stay |
+| `enable` · `disable` | the switch, keeping the list |
+| `apply [--login]` | make the session match the file (below) |
+| `current` · `toggle` | the bar's reading / Ctrl+Space |
+| `configure` | opens `fcitx5-configtool` (engine options) |
+
+Adding a language that is not installed: the pane calls
+`install_packages(["fcitx5", "fcitx5-gtk", "fcitx5-qt", "fcitx5-configtool",
+"<engine package>"])` — `pkexec pacman -S --needed --noconfirm` behind ONE
+polkit prompt, names checked against the allow-list — then `ewe-ime add`.
+
+What `apply` makes true (everything regenerated whole; ewe.conf is the truth):
+
+| File / state | Contents |
+|---|---|
+| `~/.config/fcitx5/profile` | ONE group: layout = ewe's first keyboard layout (`us`, `de-nodeadkeys`), items `keyboard-<that layout>` then the engines (an engine gets `Layout=us` under a non-Latin first layout). fcitx5 rewrites this file when it exits, so a running fcitx5 is stopped BEFORE it is written, then started again. |
+| `~/.config/fcitx5/config` | Ctrl+Space (+ Zenkaku_Hankaku, Hangul) toggles the engine; the group keys (fcitx5's default Super+Space) are cleared — Super+Space is Hyprland's layout switch; `ShareInputState=All` |
+| `~/.config/fcitx5/conf/classicui.conf` + `~/.local/share/fcitx5/themes/ewe/` | the candidate window, from the design tokens (`scripts/fcitx5-theme.sh`; `colorscheme.sh` re-runs it on every scheme change while fcitx5 is installed) |
+| `~/.config/hypr/generated/ime.env` | `XMODIFIERS=@im=fcitx`, `QT_IM_MODULE=fcitx`, `QT_IM_MODULES=wayland;fcitx`, `SDL_IM_MODULE=fcitx` — only while on. `start-hyprland.sh` exports them at sign-in (whitelisted names, only with fcitx5 installed). No `GTK_IM_MODULE`: GTK, kitty and Qt ≥ 6.7 speak the compositor's text-input protocol. |
+| systemd / D-Bus activation env | the same four, pushed (`dbus-update-activation-environment --systemd`) or unset on change |
+| `~/.config/{electron,electronNN,chromium,chrome,code,brave,helium-browser}-flags.conf` | a marked block `--enable-wayland-ime --wayland-text-input-version=3` (files that exist or whose program is installed; removed when off, a file that only held it is deleted) |
+| fcitx5 | started (`fcitx5 -d` in its own scope) or stopped; `autostart.sh` runs `ewe-ime apply --login` when fcitx5 is installed |
+
+What follows at once and what needs a sign-out: GTK, Qt 6, kitty, ewe's own
+apps and the shell's fields use the Wayland text-input protocol, so they type
+the new language as soon as fcitx5 runs; Chromium/Electron apps at their next
+start (flags files). X11 and Qt 5 apps read the environment when they start,
+and the shell hands its own environment to what it launches — those follow
+after the next sign-in (`needs_signout` in `status`, said in the pane).
+
+The bar: ONE indicator. `ImeState.qml` watches fcitx5's tray item (id
+`Fcitx`, hidden from the tray) and asks `ewe-ime current` on every icon
+change; the keyboard layout module shows the engine's mark (拼 あ 한) while
+one is on.
+
 ## Network state + Tailscale — `NetState.qml`, `ewe-tailscale`
 
 The bar and Quick settings read ONE network state, `NetState.qml`: on every

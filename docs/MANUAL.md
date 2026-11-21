@@ -445,6 +445,18 @@ picks the Japanese, Korean or Traditional Chinese cut when the text says its
 language, Simplified Chinese otherwise. Georgian comes from Noto Sans
 Georgian.
 
+**Typing** Chinese, Japanese, Korean, Vietnamese, Hindi and other scripts:
+ewe Settings → Keyboard and mouse → **Typing in other languages** → Add a
+language. The first one installs fcitx5 and the language's engine (one
+password prompt; nothing of it is on a computer until someone adds a
+language). **Ctrl+Space** switches between your keyboard layout and the
+language (hold Ctrl and tap Space again to step through several);
+**Super+Space** still changes the keyboard layout. While a language is on,
+the layout letters in the bar show its mark — 拼, あ, 한. Most apps follow
+at once; older X11 apps after you sign out and back in. Removing the last
+language turns it off; the programs stay installed (Komble removes them).
+`ewe-ime status` shows what is on.
+
 The pointer's **size** (24, 36, 48 or 72 px) and **colour** (automatic —
 white on a dark scheme, black on a light one —, white or black) are in ewe
 Settings → Keyboard and mouse → Cursor, or `ewe-conf set desktop.cursor.size
@@ -705,7 +717,9 @@ Set expectations before you daily-drive it:
 - **The session lock is a young component**, not battle-tested hyprlock. It
   works, but it's the youngest security-relevant piece — report anything off.
 - **Multi-monitor hotplug is lightly tested.**
-- **No input method (IME) yet** — CJK / complex-script input isn't wired.
+- **Typing in other languages (fcitx5) is new** — verified in the nested
+  harness (GTK, Qt, kitty, the launcher), not yet on real hardware with a
+  physical keyboard; X11 apps need a sign-out after it is first turned on.
 - Real-hardware coverage is still thin. Issues and PRs welcome.
 
 ## Roadmap
