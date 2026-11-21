@@ -177,6 +177,24 @@ export XCURSOR_SIZE="$_cursz"
 export HYPRCURSOR_SIZE="$_cursz"
 unset _cur _cursz _gtkini _v
 export GDK_BACKEND="wayland,x11"
+
+# ── Typing in other languages (fcitx5, on demand — Settings → Keyboard and
+#    mouse). bin/ewe-ime writes hypr/generated/ime.env only while it is on:
+#    XMODIFIERS for X11 apps, QT_IM_MODULE(S) for Qt, SDL_IM_MODULE. GTK and
+#    kitty speak the Wayland text-input protocol and need nothing (no
+#    GTK_IM_MODULE). Read, never sourced — only these names, one KEY=value a
+#    line — and only while fcitx5 is installed: ewe.conf syncs, so a computer
+#    without it must not get an input method nobody answers.
+_ime_env="${XDG_CONFIG_HOME:-$HOME/.config}/hypr/generated/ime.env"
+if [ -r "$_ime_env" ] && command -v fcitx5 >/dev/null 2>&1; then
+    while IFS='=' read -r _k _v; do
+        case "$_k" in
+            XMODIFIERS|QT_IM_MODULE|QT_IM_MODULES|SDL_IM_MODULE)
+                case "$_v" in *[!A-Za-z0-9@=\;_.-]*) ;; *) export "$_k=$_v" ;; esac ;;
+        esac
+    done < "$_ime_env"
+fi
+unset _ime_env _k _v
 export SDL_VIDEODRIVER=wayland
 export CLUTTER_BACKEND=wayland
 export MOZ_ENABLE_WAYLAND=1

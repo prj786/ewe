@@ -1,0 +1,257 @@
+#!/bin/bash
+# fcitx5-theme.sh — dress fcitx5's candidate window (typing in other
+# languages: Chinese, Japanese, Korean …) as a part of ewe. Called by
+# colorscheme.sh on every theme change while fcitx5 is installed, and by
+# bin/ewe-ime when typing in other languages is turned on.
+#
+# Everything comes from the design tokens ewe-theme built from ewe.conf
+# (quickshell/theme-tokens.json), so light and dark follow the scheme's
+# variant with nothing hard-coded here: the window is a Menu card
+# (design/system/components/Menu: surface-overlay, 1px border-subtle,
+# `rounded` corners, space-xs padding); the candidate you would pick is the
+# accent fill with on-accent text, `secondary` corners nesting inside it;
+# numbers and notes are text-muted. Rounded corners need images in fcitx5's
+# classic UI, so the card and the highlight are small generated SVGs it
+# nine-slices by their corner size.
+#
+# Writes (regenerated whole each time):
+#   ~/.local/share/fcitx5/themes/ewe/{theme.conf,panel.svg,highlight.svg,
+#                                     menu.svg,prev.svg,next.svg,arrow.svg,radio.svg}
+#   ~/.config/fcitx5/conf/classicui.conf   (Theme=ewe, the font from the tokens)
+# and asks a running fcitx5 to reload its classic UI.
+#
+# `set -u` (not -e), like colorscheme.sh: a stray non-zero line never stops
+# the rest from being written.
+set -u
+
+CFG="${XDG_CONFIG_HOME:-$HOME/.config}"
+DATA="${XDG_DATA_HOME:-$HOME/.local/share}"
+TOK="$CFG/quickshell/theme-tokens.json"
+THEME="$DATA/fcitx5/themes/ewe"
+
+tok() {  # tok <role> <fallback-6hex> → 6 hex chars, no '#' (alpha dropped)
+    local v
+    v="$(sed -n "s/.*\"$1\": *\"#\([0-9a-fA-F]*\)\".*/\1/p" "$TOK" 2>/dev/null | head -n1)"
+    case "${#v}" in 8) v="${v:2}";; 6) ;; *) v="$2";; esac
+    printf '%s' "$v"
+}
+num() {  # num <key> <fallback> → the first integer value of "<key>": N
+    local v
+    v="$(sed -n "s/.*\"$1\": *\([0-9][0-9]*\).*/\1/p" "$TOK" 2>/dev/null | head -n1)"
+    [ -n "$v" ] || v="$2"
+    printf '%s' "$v"
+}
+# px → Pango points (96 dpi: 0.75 pt per px), one decimal
+pt() { awk -v p="$1" 'BEGIN { printf "%.2f", p * 0.75 }' | sed 's/0$//; s/\.0$//'; }
+
+# fallbacks are Ewe Dark's (design/tokens.css), used only without a token file
+BG="$(tok surface-overlay 201f1b)"
+STROKE="$(tok border-subtle 2c2a26)"
+FG="$(tok text-primary faf9f6)"
+MUTED="$(tok text-muted a8a49d)"
+HOVER="$(tok surface-hover 2c2a26)"
+ACC="$(tok accent eeb407)"
+ONACC="$(tok on-accent 020202)"
+R_CARD="$(num rounded 10)"
+R_ITEM="$(num secondary 6)"
+BW="$(num border-width-1 1)"
+SXS="$(num space-xs 4)"
+SS="$(num space-s 8)"
+SXXS="$(num space-xxs 2)"
+F_CAND="$(num font-size-lg 15)"
+F_MENU="$(num font-size-md 13)"
+FAMILY="$(sed -n '/"sans": *\[/{n;s/.*"\([^"]*\)".*/\1/p;q}' "$TOK" 2>/dev/null)"
+[ -n "$FAMILY" ] || FAMILY="Geist"
+
+mkdir -p "$THEME" "$CFG/fcitx5/conf"
+
+# ── the images: a card and a highlight, nine-sliced at their corner size ────
+# A card image is (2·corner + 1) square plus the border, so the middle row
+# and column stretch and the corners stay round.
+card_svg() {  # card_svg <fill> <stroke> <radius> <border>
+    local s=$(( 2 * $3 + 2 * $4 + 2 )) h
+    h="$(awk -v b="$4" 'BEGIN { printf "%.1f", b / 2 }')"
+    printf '<svg xmlns="http://www.w3.org/2000/svg" width="%d" height="%d" viewBox="0 0 %d %d">' "$s" "$s" "$s" "$s"
+    if [ "$4" -gt 0 ]; then
+        printf '<rect x="%s" y="%s" width="%s" height="%s" rx="%s" fill="#%s" stroke="#%s" stroke-width="%s"/>' \
+            "$h" "$h" "$((s - $4))" "$((s - $4))" "$3" "$1" "$2" "$4"
+    else
+        printf '<rect width="%s" height="%s" rx="%s" fill="#%s"/>' "$s" "$s" "$3" "$1"
+    fi
+    printf '</svg>\n'
+}
+chevron_svg() {  # chevron_svg <colour> <left|right|down>
+    local d
+    case "$2" in
+        left)  d="M10 4 6 8l4 4" ;;
+        right) d="M6 4l4 4-4 4" ;;
+        *)     d="M4 6l4 4 4-4" ;;
+    esac
+    printf '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><path d="%s" fill="none" stroke="#%s" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>\n' "$d" "$1"
+}
+card_svg "$BG" "$STROKE" "$R_CARD" "$BW" > "$THEME/panel.svg"
+card_svg "$BG" "$STROKE" "$R_CARD" "$BW" > "$THEME/menu.svg"
+card_svg "$ACC" "$ACC" "$R_ITEM" 0 > "$THEME/highlight.svg"
+card_svg "$HOVER" "$HOVER" "$R_ITEM" 0 > "$THEME/menu-highlight.svg"
+chevron_svg "$MUTED" left > "$THEME/prev.svg"
+chevron_svg "$MUTED" right > "$THEME/next.svg"
+chevron_svg "$MUTED" right > "$THEME/arrow.svg"
+printf '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="8" r="3" fill="#%s"/></svg>\n' "$ACC" > "$THEME/radio.svg"
+
+# the slice margins: the corner plus the border, so nothing round stretches
+M_CARD=$(( R_CARD + BW ))
+M_ITEM=$R_ITEM
+# text inside an item: space-s at the sides, and (control-md − line) / 2
+# above and below — the Menu card's 28px item
+PAD_V="$(( ( $(num control-md 28) - $(num line-height-md 18) ) / 2 ))"
+
+cat > "$THEME/theme.conf" <<EOF
+# Generated by ewe (fcitx5-theme.sh) from theme-tokens.json — regenerated on
+# every theme change. Edit the scheme in ewe Settings instead of this file.
+[Metadata]
+Name=ewe
+Version=1
+Author=ewe
+Description=ewe's look, from the design tokens
+ScaleWithDPI=True
+
+[InputPanel]
+NormalColor=#$FG
+HighlightCandidateColor=#$ONACC
+HighlightColor=#$ONACC
+HighlightBackgroundColor=#$ACC
+CandidateLabelColor=#$MUTED
+HighlightCandidateLabelColor=#$ONACC
+CandidateCommentColor=#$MUTED
+HighlightCandidateCommentColor=#$ONACC
+EnableBlur=False
+FullWidthHighlight=True
+PageButtonAlignment=Center
+
+[InputPanel/Background]
+Image=panel.svg
+Color=#$BG
+BorderColor=#$STROKE
+BorderWidth=$BW
+
+[InputPanel/Background/Margin]
+Left=$M_CARD
+Right=$M_CARD
+Top=$M_CARD
+Bottom=$M_CARD
+
+[InputPanel/ContentMargin]
+Left=$SXS
+Right=$SXS
+Top=$SXS
+Bottom=$SXS
+
+[InputPanel/TextMargin]
+Left=$SS
+Right=$SS
+Top=$PAD_V
+Bottom=$PAD_V
+
+[InputPanel/Highlight]
+Image=highlight.svg
+Color=#$ACC
+
+[InputPanel/Highlight/Margin]
+Left=$M_ITEM
+Right=$M_ITEM
+Top=$M_ITEM
+Bottom=$M_ITEM
+
+[InputPanel/PrevPage]
+Image=prev.svg
+
+[InputPanel/PrevPage/ClickMargin]
+Left=$SXS
+Right=$SXS
+Top=$SXS
+Bottom=$SXS
+
+[InputPanel/NextPage]
+Image=next.svg
+
+[InputPanel/NextPage/ClickMargin]
+Left=$SXS
+Right=$SXS
+Top=$SXS
+Bottom=$SXS
+
+[Menu]
+NormalColor=#$FG
+HighlightCandidateColor=#$FG
+Spacing=$SXXS
+
+[Menu/Background]
+Image=menu.svg
+Color=#$BG
+BorderColor=#$STROKE
+BorderWidth=$BW
+
+[Menu/Background/Margin]
+Left=$M_CARD
+Right=$M_CARD
+Top=$M_CARD
+Bottom=$M_CARD
+
+[Menu/ContentMargin]
+Left=$SXS
+Right=$SXS
+Top=$SXS
+Bottom=$SXS
+
+[Menu/Highlight]
+Image=menu-highlight.svg
+Color=#$HOVER
+
+[Menu/Highlight/Margin]
+Left=$M_ITEM
+Right=$M_ITEM
+Top=$M_ITEM
+Bottom=$M_ITEM
+
+[Menu/Separator]
+Color=#$STROKE
+
+[Menu/CheckBox]
+Image=radio.svg
+
+[Menu/SubMenu]
+Image=arrow.svg
+
+[Menu/TextMargin]
+Left=$SS
+Right=$SS
+Top=$PAD_V
+Bottom=$PAD_V
+EOF
+
+# ── the classic UI: our theme for light AND dark (the theme itself follows
+#    the scheme — it is rewritten on every change), no system accent (the
+#    accent is ewe's, baked in above), the design system's face and sizes
+cat > "$CFG/fcitx5/conf/classicui.conf" <<EOF
+# Generated by ewe (fcitx5-theme.sh). Edit the look in ewe Settings instead.
+Vertical Candidate List=False
+WheelForPaging=True
+Font="$FAMILY $(pt "$F_CAND")"
+MenuFont="$FAMILY $(pt "$F_MENU")"
+TrayFont="$FAMILY Semibold $(pt "$F_MENU")"
+PreferTextIcon=False
+ShowLayoutNameInIcon=True
+UseInputMethodLanguageToDisplayText=True
+Theme=ewe
+DarkTheme=ewe
+UseDarkTheme=False
+UseAccentColor=False
+EnableFractionalScale=True
+EOF
+
+# a running fcitx5 re-reads its classic UI (theme + font) — best effort
+if command -v fcitx5-remote >/dev/null 2>&1 && fcitx5-remote --check >/dev/null 2>&1; then
+    busctl --user call org.fcitx.Fcitx5 /controller org.fcitx.Fcitx.Controller1 \
+        ReloadAddonConfig s classicui >/dev/null 2>&1 || true
+fi
+exit 0

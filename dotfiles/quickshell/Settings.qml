@@ -2307,7 +2307,7 @@ Scope {
                                 color: Theme.textPrimary; font.family: Theme.type.body.family; font.pixelSize: Theme.type.body.size
                                 onTextChanged: kbPane.kbQuery = text
                                 onAccepted: { var f = kbPane.filtered(); if (f.length) { root.kbAdd(f[0].c); text = "" } }
-                                TBody { anchors.verticalCenter: parent.verticalCenter; visible: kbSearch.text.length === 0; text: "Search layouts to add"; color: Theme.textMuted }
+                                TBody { anchors.verticalCenter: parent.verticalCenter; visible: kbSearch.text.length === 0 && kbSearch.preeditText.length === 0; text: "Search layouts to add"; color: Theme.textMuted }
                             }
                         }
                         Rectangle {
@@ -3032,7 +3032,7 @@ Scope {
                                 verticalAlignment: TextInput.AlignVCenter; clip: true
                                 color: Theme.textPrimary; font.family: Theme.type.body.family; font.pixelSize: Theme.type.body.size
                                 onTextChanged: root.startupQuery = text
-                                TBody { anchors.verticalCenter: parent.verticalCenter; visible: saSearch.text.length === 0; text: "Search apps or type a command"; color: Theme.textMuted }
+                                TBody { anchors.verticalCenter: parent.verticalCenter; visible: saSearch.text.length === 0 && saSearch.preeditText.length === 0; text: "Search apps or type a command"; color: Theme.textMuted }
                             }
                         }
                         Column {

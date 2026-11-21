@@ -461,7 +461,10 @@ Scope {
                                 anchors.verticalCenter: parent.verticalCenter
                                 spacing: Theme.spaceXs
                                 Row {
-                                visible: Globals.barShows("tray") && SystemTray.items.values.length > 0
+                                // fcitx5's own icon never shows: the keyboard
+                                // layout module is its indicator (ImeState)
+                                visible: Globals.barShows("tray")
+                                         && SystemTray.items.values.some(function (it) { return !ImeState.isImeItem(it) })
                                 anchors.verticalCenter: parent.verticalCenter
                                 spacing: Theme.spaceXs
                                 Repeater {
@@ -469,6 +472,7 @@ Scope {
                                     delegate: Item {
                                         id: trayDelegate
                                         required property var modelData
+                                        visible: !ImeState.isImeItem(modelData)
                                         // a module-sized cell, like the plugins' widgets
                                         // beside it: barModule cells spaceXs apart is the
                                         // one rhythm of the whole cluster
@@ -590,16 +594,29 @@ Scope {
                         }
                     }
 
-                    // keyboard layout — two capitals (US / GE); click cycles it
+                    // keyboard layout — two capitals (US / GE); click cycles it.
+                    // Typing in other languages (ImeState): while an engine is
+                    // on it shows the engine's mark instead ("拼", "あ", "한") —
+                    // one indicator, fcitx5's tray icon is hidden. A click then
+                    // goes back to the plain layout; right-click turns the
+                    // engine on and off (Ctrl+Space).
                     BarModule {
                         id: kbMod
-                        a11yName: "Keyboard layout, " + bar.kbLayout
+                        a11yName: ImeState.active ? "Typing " + ImeState.label + ", " + ImeState.glyph
+                                                  : "Keyboard layout, " + bar.kbLayout
+                        tip: ImeState.active ? ImeState.label + " · Ctrl+Space switches back"
+                           : ImeState.running ? "Keyboard layout, " + bar.kbLayout + " · Ctrl+Space types another language"
+                           : kbMod.a11yName
                         anchors.verticalCenter: parent.verticalCenter
                         visible: Globals.barShows("keyboard")
-                        onActivated: Quickshell.execDetached(["hyprctl", "switchxkblayout", bar.kbDevice || "current", "next"])
+                        onActivated: {
+                            if (ImeState.active) ImeState.off()
+                            else Quickshell.execDetached(["hyprctl", "switchxkblayout", bar.kbDevice || "current", "next"])
+                        }
+                        onSecondary: if (ImeState.running) ImeState.toggle()
                         Text {
                             anchors.verticalCenter: parent.verticalCenter
-                            text: bar.kbLayout
+                            text: ImeState.active && ImeState.glyph !== "" ? ImeState.glyph : bar.kbLayout
                             color: kbMod.hovered ? Theme.textPrimary : Theme.textSecondary
                             font.family: Theme.type.label.family
                             font.pixelSize: Theme.barLarge ? Theme.fontSizeMd : Theme.fontSizeS

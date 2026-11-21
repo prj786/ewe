@@ -571,4 +571,13 @@ if [ -x "$HT" ] && command -v helium-browser >/dev/null 2>&1; then
     fi
 fi
 
+# ── fcitx5 (typing in other languages), when installed: the candidate window
+# from the same tokens (fcitx5-theme.sh reads theme-tokens.json itself, so the
+# variant and the accent follow with nothing passed). A machine without fcitx5
+# never grows its config.
+FT="$(dirname "$0")/fcitx5-theme.sh"
+if [ -f "$FT" ] && command -v fcitx5 >/dev/null 2>&1; then
+    bash "$FT" || true
+fi
+
 exit 0

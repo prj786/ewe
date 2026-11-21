@@ -411,7 +411,7 @@ Scope {
                                 clip: true
                                 onTextChanged: { root.query = text; root.selected = 0 }
                                 Text {
-                                    visible: input.text.length === 0
+                                    visible: input.text.length === 0 && input.preeditText.length === 0
                                     anchors.verticalCenter: parent.verticalCenter
                                     text: "Search apps, settings and files"
                                     color: Theme.textMuted

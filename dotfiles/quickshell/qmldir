@@ -19,6 +19,7 @@ singleton AudioState 1.0 AudioState.qml
 singleton NetState 1.0 NetState.qml
 singleton GlobalShortcuts 1.0 GlobalShortcuts.qml
 singleton RemoteState 1.0 RemoteState.qml
+singleton ImeState 1.0 ImeState.qml
 singleton TooltipHost 1.0 TooltipHost.qml
 Elevation 1.0 Elevation.qml
 Spinner 1.0 Spinner.qml

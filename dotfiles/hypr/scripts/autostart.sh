@@ -89,6 +89,21 @@ fi
 # Quickshell (NotificationServer + the bar's own modules) — no swaync, no
 # nm-applet/blueman-applet tray icons (those duplicated the bar).
 
+# ── Typing in other languages: fcitx5, only when it is on and installed ─────
+# (Settings → Keyboard and mouse). ewe-ime reads ewe.conf [desktop.ime],
+# regenerates fcitx5's profile from the first keyboard layout, and starts it
+# — or does nothing. Guarded by fcitx5 itself so a computer without it never
+# runs the tool at all. After the env export above: fcitx5 must reach the
+# session bus and the activation environment the apps get.
+if command -v fcitx5 >/dev/null 2>&1; then
+    _ime="$(command -v ewe-ime 2>/dev/null)"
+    [ -n "$_ime" ] || for _d in "$HOME/.config/quickshell/../../bin/ewe-ime" \
+                               "$HOME/.local/share/ewe/bin/ewe-ime"; do
+        [ -x "$_d" ] && { _ime="$_d"; break; }
+    done
+    [ -n "$_ime" ] && "$_ime" apply --login >/dev/null 2>&1 &
+fi
+
 # ── Per-window keyboard layout (GNOME-style): remembers the layout per window ─
 # and restores it on focus. Self-contained Python daemon (no extra deps).
 # Settings → Keyboard & Mouse toggles it via the .disabled flag file.
