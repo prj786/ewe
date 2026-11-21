@@ -339,6 +339,20 @@ a machine that never had `[desktop.ime]`). It syncs like any other key. On a
 computer without fcitx5 nothing happens: no session environment, no fcitx5,
 and `ewe-ime status` lists the packages to install.
 
+### `[desktop.language]` — spell checking
+
+`spellcheck` (list of hunspell dictionary names, e.g. `["en_US", "ka_GE"]`;
+unset = the display language's dictionary when it is installed, plus
+`en_US` — each reader decides) · `check_spelling` (bool, default `true`;
+`get` answers it while unset). ewe Settings → Language → Spell checking
+writes both; ewe Browser follows them live with Chromium's own dictionaries.
+A name with no dictionary on a machine is skipped there (the file syncs).
+Their own `_domain`: a `set` here applies nothing else — no theme rebuild,
+no `hyprctl reload`. The display language (`LANG`) and the regional formats
+(`LC_TIME`, `LC_NUMERIC`, `LC_MONETARY`, `LC_MEASUREMENT`, `LC_PAPER`) are
+the machine's locale (`localectl`, Settings → Language and Time and place →
+Formats), never ewe.conf.
+
 ### `[desktop.layout]`
 
 Four numbers — `gaps_in`, `gaps_out`, `border_size`, `rounding` — and the
