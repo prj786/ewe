@@ -199,14 +199,18 @@ Scope {
         return out
     }
 
+    // `name` is in the session's language (Name[ka]); the untranslated Name
+    // (Globals.englishName, from desktop-entries.py) scores the same, so an
+    // app is found by either — "Files" and "ფაილები" both find ewe Files
     function scoreEntry(e, q) {
         var name = (e.name || "").toLowerCase()
+        var en   = Globals.englishName(e).toLowerCase()
         var gen  = (e.genericName || "").toLowerCase()
         var com  = (e.comment || "").toLowerCase()
-        if (name === q) return 1000
-        if (name.indexOf(q) === 0) return 850
-        if (name.indexOf(" " + q) >= 0) return 700      // word start
-        if (name.indexOf(q) >= 0) return 500
+        if (name === q || en === q) return 1000
+        if (name.indexOf(q) === 0 || (en !== "" && en.indexOf(q) === 0)) return 850
+        if (name.indexOf(" " + q) >= 0 || (en !== "" && en.indexOf(" " + q) >= 0)) return 700      // word start
+        if (name.indexOf(q) >= 0 || (en !== "" && en.indexOf(q) >= 0)) return 500
         if (gen.indexOf(q) >= 0) return 280
         if (com.indexOf(q) >= 0) return 120
         return 0

@@ -296,6 +296,36 @@ QtObject {
         target: DesktopEntries.applications
         function onValuesChanged() { g._clsCache = ({}) }
     }
+    // ── What Quickshell's entry reader can't do (scripts/desktop-entries.py) ──
+    // LF copies of CRLF .desktop files (LinOffice's Word, Excel…: dropped by
+    // Quickshell, so missing everywhere) in a folder qs-launch.sh puts in the
+    // shell's XDG_DATA_DIRS, and the untranslated Name of every translated
+    // entry: the launcher matches "Files" on a Georgian desktop too.
+    // Re-run whenever the app list changes (an install, a new CRLF file);
+    // the script rewrites a copy only when it would change, so the rescan
+    // its own write causes ends there.
+    property var appEnglishNames: ({})
+    function englishName(e) {
+        var id = e && e.id ? String(e.id).replace(/\.desktop$/, "") : ""
+        return id !== "" && Object.prototype.hasOwnProperty.call(g.appEnglishNames, id) ? g.appEnglishNames[id] : ""
+    }
+    property Process _deProc: Process {
+        running: true
+        command: ["python3", Qt.resolvedUrl("scripts/desktop-entries.py").toString().replace(/^file:\/\//, "")]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                try {
+                    var j = JSON.parse(this.text)
+                    if (j && j.english) g.appEnglishNames = j.english
+                } catch (err) {}
+            }
+        }
+    }
+    property Timer _deTimer: Timer { interval: 1500; onTriggered: if (!g._deProc.running) g._deProc.running = true }
+    property Connections _deWatch: Connections {
+        target: DesktopEntries.applications
+        function onValuesChanged() { g._deTimer.restart() }
+    }
     function entryForClass(cls) {
         var c = String(cls || "")
         if (c === "") return null
