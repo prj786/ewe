@@ -1129,7 +1129,7 @@ Scope {
     }
     function fmtSyncTime(iso) {
         var d = new Date(iso)
-        return isNaN(d.getTime()) ? (iso || "—") : Qt.formatDateTime(d, "d MMM · h:mm AP")
+        return isNaN(d.getTime()) ? (iso || "—") : Qt.formatDateTime(d, "d MMM · " + Globals.timeFormat(false))
     }
 
     // (the packages-from-backup review surface retired in 0.6 — Komble's

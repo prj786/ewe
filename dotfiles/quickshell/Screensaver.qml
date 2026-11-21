@@ -258,7 +258,7 @@ Scope {
                         spacing: Theme.spaceS
                         Text {
                             anchors.horizontalCenter: parent.horizontalCenter
-                            text: Qt.formatTime(clockRoot.now, "h:mm")
+                            text: Qt.formatTime(clockRoot.now, Globals.clock24 ? "HH:mm" : "h:mm")
                             // Ewe Dark, whatever the scheme: the neutral ramp
                             // is scheme-independent, so its dark steps are the
                             // honest way to say "always dark" in tokens

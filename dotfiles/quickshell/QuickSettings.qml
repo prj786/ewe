@@ -124,8 +124,11 @@ Scope {
     property int calYear:  today.getFullYear()
     property int calMonth: today.getMonth()
     property int calDate:  today.getDate()
-    // the week starts where the locale says (Sunday = 0, as in JS Date)
+    // the week starts where the region's formats say (LC_TIME — Qt.locale()
+    // reads it; Sunday = 0, as in JS Date); the day NAMES come from the
+    // display language (Qt.locale().name is LANG's), like the rest of the shell
     readonly property int firstDow: Qt.locale().firstDayOfWeek
+    readonly property var nameLocale: Qt.locale(Qt.locale().name)
     readonly property int firstW: (new Date(calYear, calMonth, 1).getDay() - firstDow + 7) % 7
     readonly property int daysIn: new Date(calYear, calMonth + 1, 0).getDate()
     readonly property var monthNames: ["January","February","March","April","May","June","July","August","September","October","November","December"]
@@ -180,7 +183,7 @@ Scope {
     function fmtEventStart(e) {
         if (e.allDay) return "All day"
         var d = new Date(e.start)
-        return isNaN(d.getTime()) ? "" : Qt.formatTime(d, "hh:mm AP")
+        return isNaN(d.getTime()) ? "" : Globals.formatTime(d, true)
     }
     function eventNow(e) {
         if (e.allDay) return false
@@ -369,7 +372,7 @@ Scope {
         if (mins < 1) return "now"
         if (mins < 60) return mins + " min"
         var d = new Date(t), today = new Date(root.nowMs)
-        return d.toDateString() === today.toDateString() ? Qt.formatTime(d, "hh:mm") : Qt.formatDateTime(d, "d MMM")
+        return d.toDateString() === today.toDateString() ? Globals.formatTime(d, false) : Qt.formatDateTime(d, "d MMM")
     }
     // The app's actions as buttons: everything but "default" (the card's own
     // click), the first two — the Notification card's limit.
@@ -1894,7 +1897,7 @@ Scope {
                                             width: calGrid.cellW; height: Theme.controlSm
                                             TextCaption {
                                                 anchors.centerIn: parent
-                                                text: Qt.locale().dayName((root.firstDow + index) % 7, Locale.ShortFormat).slice(0, 2)
+                                                text: root.nameLocale.dayName((root.firstDow + index) % 7, Locale.ShortFormat).slice(0, 2)
                                             }
                                         }
                                     }

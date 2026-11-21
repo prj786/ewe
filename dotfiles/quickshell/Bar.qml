@@ -112,14 +112,14 @@ Scope {
 
     // ── clock: date and time as two fields spaceS apart, shown inside the
     //    Quick settings button (Bar card #10) ──────────────────────────────
-    //    12-hour, as before: the shell has no 12/24-hour setting yet ────────
+    //    12- or 24-hour as the region's formats say (Globals.clock24) ───────
     property string clockDate: ""
     property string clockTime: ""
     readonly property string clockText: bar.clockDate + "  " + bar.clockTime
     function updateClock() {
         var now = new Date()
         bar.clockDate = Qt.formatDateTime(now, "ddd dd MMM")
-        bar.clockTime = Qt.formatDateTime(now, "hh:mm AP")
+        bar.clockTime = Globals.formatTime(now, true)
         bar.updateCalSoon()
     }
     // Tick on the minute, not every second — the format only shows minutes, so a

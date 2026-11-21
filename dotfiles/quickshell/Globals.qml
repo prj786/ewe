@@ -708,6 +708,16 @@ QtObject {
     // ── Avatar (~/.face) — shared by Settings (account card) and the lock screen.
     // faceUrl is THE avatar image source everywhere: "" while no ~/.face exists,
     // and cache-busted (?v=) after Settings saves a new one.
+    // ── 12- or 24-hour: the region's formats (Settings → Time and place →
+    // Formats = LC_TIME). On Unix Qt.locale() reads the LC_* categories, so
+    // its short time pattern has an AM/PM marker ("h:mm AP") only where the
+    // region uses one; quoted literal text is ignored. The ewe date strings
+    // stay English (the shell is not translated), only the hour cycle and
+    // the calendar's first weekday (QuickSettings) follow the region.
+    readonly property bool clock24: !/[aA]/.test(String(Qt.locale().timeFormat(Locale.ShortFormat)).replace(/'[^']*'/g, ""))
+    // padded: "02:05 PM" (the bar's fixed-width look) vs "2:05 PM"
+    function timeFormat(padded) { return g.clock24 ? "HH:mm" : (padded ? "hh:mm AP" : "h:mm AP") }
+    function formatTime(d, padded) { return Qt.formatDateTime(d, g.timeFormat(padded)) }
     property bool hasFace: false
     property int avatarVersion: 0
     property string avatarShape: "circle"   // "circle" | "rounded" | "square" — Avatar.qml masks to this; persisted in user-theme.json
