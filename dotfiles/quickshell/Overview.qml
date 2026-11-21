@@ -828,12 +828,20 @@ Scope {
                         }
 
                         // the title, under the card while it is pointed at or
-                        // selected (macOS shows it the same way)
+                        // selected (macOS shows it the same way). The widths
+                        // come from the title's natural width and the card,
+                        // never from each other: the old Row ↔ pill binding
+                        // loop left the title 0 wide, so the pill hugged the
+                        // icon and the text spilled out of it — to the right
+                        // for Latin, back over the icon for Arabic and Hebrew
+                        // (right-aligned text in a 0-wide box). 2026-11-21.
                         Rectangle {
+                            id: titleChip
+                            readonly property real maxW: Math.max(card.width, Theme.panelSm)
                             anchors.horizontalCenter: parent.horizontalCenter
                             anchors.top: parent.bottom; anchors.topMargin: Theme.spaceS
                             visible: (card.seld || card.hot) && !cardMa.drag.active
-                            width: Math.min(chip.implicitWidth + 2 * Theme.spaceS, Math.max(card.width, Theme.panelSm))
+                            width: Math.min(titleText.implicitWidth + Theme.iconMd + Theme.spaceXs + 2 * Theme.spaceS, maxW)
                             height: Theme.controlMd
                             radius: Theme.radiusFull
                             color: Theme.glassRaised
@@ -841,7 +849,6 @@ Scope {
                             Row {
                                 id: chip
                                 anchors.centerIn: parent
-                                width: Math.min(implicitWidth, parent.width - 2 * Theme.spaceS)
                                 spacing: Theme.spaceXs
                                 Image {
                                     anchors.verticalCenter: parent.verticalCenter
@@ -850,8 +857,9 @@ Scope {
                                     source: root.iconFor(card.modelData)
                                 }
                                 Text {
+                                    id: titleText
                                     anchors.verticalCenter: parent.verticalCenter
-                                    width: Math.min(implicitWidth, chip.parent.width - Theme.iconMd - 3 * Theme.spaceS)
+                                    width: Math.min(implicitWidth, titleChip.maxW - Theme.iconMd - Theme.spaceXs - 2 * Theme.spaceS)
                                     text: root.titleOf(card.modelData)
                                     elide: Text.ElideRight
                                     color: Theme.textPrimary

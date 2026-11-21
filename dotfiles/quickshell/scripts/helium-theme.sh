@@ -119,6 +119,16 @@ cat > "$CFG/helium-browser-flags.conf" <<EOF
 # Edit desktop.browser.* in ewe.conf instead of this file.
 --load-extension=$STATE/theme,$STATE/ntp
 EOF
+# typing in other languages (bin/ewe-ime) is on: keep its block — the same
+# one ewe-ime writes into the other Chromium/Electron flags files
+if [ -s "$CFG/hypr/generated/ime.env" ]; then
+    cat >> "$CFG/helium-browser-flags.conf" <<'EOF'
+# >>> ewe: typing in other languages (ewe-ime writes this block) >>>
+--enable-wayland-ime
+--wayland-text-input-version=3
+# <<< ewe: typing in other languages <<<
+EOF
+fi
 
 # ── 4 · profile preferences (only while the browser is closed) ───────────────
 layout="vertical"

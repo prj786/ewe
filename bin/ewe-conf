@@ -98,6 +98,7 @@ SECTION_NOTES = {
     "desktop.layout": "gaps/border/corner radius — user.lua is generated from these + theme",
     "desktop.keybinds": "your own launch bindings: {combo, exec} records",
     "desktop.cursor": "the pointer: size = 24 | 36 | 48 | 60 | 72 | 96 (px); color = auto (white on dark, black on light) | white | black",
+    "desktop.language": "spelling: spellcheck = the dictionaries apps check with (hunspell names, e.g. [\"en_US\", \"ka_GE\"]; unset = the system language's dictionary + en_US; a name with no dictionary on this machine is skipped there); check_spelling = check as you type (bool, default true). The display language and the regional formats are the machine's locale (localectl), never here",
     "desktop.game": "Game mode (ewe-game): level = ultra | balanced; auto = on while a game runs; close_apps = Ultra closes ewe's background apps until it ends",
     "passwords": "the fill picker (Super+P): provider = auto | ewe | 1password | bitwarden | pass; press_enter; type_delay_ms",
     "desktop.wallpapers": "per-output wallpaper map (image/GIF/video)",
@@ -633,6 +634,11 @@ def do_apply(doc, only=None, hooks=True):
             # trailing extra \n matches the shell's heredoc atomicWrite
             _wtext(os.path.join(HYPR_GEN, "input.lua"),
                    gen_input_lua(st, devices) + "\n")
+    # typing in other languages: fcitx5's group follows the FIRST keyboard
+    # layout, so a layout change re-applies it too (not a hook — Settings
+    # writes desktop.input with --no-hooks and fcitx5 must still follow)
+    if want("ime") or want("input"):
+        apply_ime(doc)
 
     if hooks:
         if want("theme"):
@@ -656,6 +662,76 @@ def do_apply(doc, only=None, hooks=True):
                 subprocess.run(["hyprctl", "reload"], capture_output=True, timeout=10)
             except (OSError, subprocess.TimeoutExpired):
                 pass
+
+
+# ── desktop.ime — typing in other languages (fcitx5, on demand). bin/ewe-ime
+# ── owns everything it generates (fcitx5's profile/config, the candidate
+# ── theme, hypr/generated/ime.env, the Chromium flags blocks, the process);
+# ── this only hands it the file after a write. ────────────────────────────
+
+IME_ID = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
+
+
+def _ime_tool():
+    for c in (os.path.join(os.path.dirname(os.path.realpath(__file__)), "ewe-ime"),
+              os.path.join(QS, "..", "..", "bin", "ewe-ime"),
+              shutil.which("ewe-ime")):
+        if c and os.path.isfile(c) and os.access(c, os.X_OK):
+            return c
+    return None
+
+
+def apply_ime(doc):
+    """`ewe-ime apply` when this machine has (or had) [desktop.ime] — never
+    for a machine that never used it, so a layout change there spawns
+    nothing. EWE_IME_SELF=1: ewe-ime itself is writing and applies next."""
+    if os.environ.get("EWE_IME_SELF") == "1":
+        return
+    node, last = dig(doc, "desktop.ime")
+    used = bool(node and isinstance(node.get(last), dict) and node[last])
+    if not used and not os.path.exists(os.path.join(HYPR_GEN, "ime.env")):
+        return
+    tool = _ime_tool()
+    if not tool:
+        return
+    try:
+        subprocess.run([tool, "apply"], capture_output=True, timeout=30)
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+
+
+def _validate_ime(key, value):
+    def engines_ok(v):
+        return isinstance(v, list) and all(isinstance(e, str) and IME_ID.match(e) for e in v)
+
+    def bool_of(v):
+        if isinstance(v, bool):
+            return v
+        s = str(v).strip().lower()
+        return {"1": True, "true": True, "yes": True, "on": True,
+                "0": False, "false": False, "no": False, "off": False}.get(s)
+
+    if key == "desktop.ime.enabled":
+        b = bool_of(value)
+        return (True, b) if b is not None else (False, "desktop.ime.enabled must be true or false")
+    if key == "desktop.ime.engines":
+        if not engines_ok(value):
+            return False, "desktop.ime.engines must be a list of input method names"
+        return True, list(dict.fromkeys(value))
+    # the whole table (ewe-ime writes it in one go)
+    if not isinstance(value, dict):
+        return False, "desktop.ime must be a table {enabled, engines}"
+    out = dict(value)
+    if "enabled" in out:
+        b = bool_of(out["enabled"])
+        if b is None:
+            return False, "desktop.ime.enabled must be true or false"
+        out["enabled"] = b
+    if "engines" in out:
+        if not engines_ok(out["engines"]):
+            return False, "desktop.ime.engines must be a list of input method names"
+        out["engines"] = list(dict.fromkeys(out["engines"]))
+    return True, out
 
 
 # ── Phase-4 generators: static lua/conf artifacts derived purely from the ──
@@ -2371,6 +2447,9 @@ ENUMS = {
     "safe.ssh_confirm": ("once", "first-use", "every-time", "never"),
 }
 THEME_DEFAULTS = {ck: dflt for ck, _jk, dflt in THEME_MAP}
+# keys outside THEME_MAP whose unset value `get` still answers
+GET_DEFAULTS = {"desktop.language.check_spelling": True}
+_DICT_NAME = re.compile(r"^[a-z]{2,3}(_[A-Z]{2})?(-[A-Za-z0-9]{2,12})?$")
 
 
 def validate(key, value):
@@ -2378,6 +2457,8 @@ def validate(key, value):
     rest alone."""
     if key == "desktop.animations.detail":
         return True, no_overshoot(value)
+    if key in ("desktop.ime", "desktop.ime.enabled", "desktop.ime.engines"):
+        return _validate_ime(key, value)
     if key == "network.ssh.hosts":
         # data, never code (ssh_host_clean): a host that could open a new
         # line or a pattern is refused; options that run something are
@@ -2426,6 +2507,25 @@ def validate(key, value):
         if s in ("1", "true", "yes", "on", "0", "false", "no", "off"):
             return True, s in ("1", "true", "yes", "on")
         return False, "%s must be true or false" % key
+    if key == "desktop.language.check_spelling":
+        s = str(value).strip().lower()
+        if isinstance(value, bool) or s in ("1", "true", "yes", "on", "0", "false", "no", "off"):
+            return True, value if isinstance(value, bool) else s in ("1", "true", "yes", "on")
+        return False, "desktop.language.check_spelling must be true or false"
+    if key == "desktop.language.spellcheck":
+        # hunspell dictionary names: en_US, de_DE, es, ro_RO-ante1993 — data
+        # that reaches pacman package names and file paths, so a tight shape
+        if isinstance(value, str):
+            value = [x for x in re.split(r"[\s,]+", value) if x]
+        if not isinstance(value, list) or len(value) > 16:
+            return False, "desktop.language.spellcheck must be a list of up to 16 dictionary names"
+        out = []
+        for d in value:
+            if not isinstance(d, str) or not _DICT_NAME.match(d):
+                return False, "not a dictionary name: %r" % (d,)
+            if d not in out:
+                out.append(d)
+        return True, out
     if key == "remote.sharing":
         s = str(value).strip().lower()
         if isinstance(value, bool) or s in ("1", "true", "yes", "on", "0", "false", "no", "off"):
@@ -2477,10 +2577,10 @@ def main(argv):
     elif cmd == "get" and len(argv) == 2:
         node, last = dig(load(), argv[1])
         if node is None or last not in node:
-            if argv[1] in THEME_DEFAULTS:
+            if argv[1] in THEME_DEFAULTS or argv[1] in GET_DEFAULTS:
                 # a theme/bar/accessibility key that was never written IS
                 # its default — the same value ewe-theme and the shell use
-                v = THEME_DEFAULTS[argv[1]]
+                v = THEME_DEFAULTS.get(argv[1], GET_DEFAULTS.get(argv[1]))
                 print(json.dumps(v) if isinstance(v, (dict, list, bool)) else v)
                 return 0
             # exit 1 stays (Komble keys on it); stderr says WHICH failure so
@@ -2568,9 +2668,14 @@ def _domain(dotted):
                 "wallpapers": "wallpapers", "input": "input",
                 "layout": "layout", "keybinds": "keybinds",
                 "workspaces": "workspaces",
+                # typing in other languages: bin/ewe-ime applies it
+                "ime": "ime",
                 # cursor: the theme hook runs colorscheme.sh, its one writer;
                 # game: user-theme.json carries it to the shell
                 "cursor": "theme", "game": "theme",
+                # spelling: read by the apps themselves (ewe Browser watches
+                # the file) — nothing to generate, no theme rebuild
+                "language": "language",
                 }.get(parts[1], None)
     if parts[0] == "apps":
         return "apps"

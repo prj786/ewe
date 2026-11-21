@@ -256,6 +256,46 @@ since Dock 1.1.0 (`desktop.dock.*` is only their `legacy` fallback,
   pushes `settings` into every instance that declares the property. Inside
   a Scope use `Variants`, never `Repeater` (needs an Item parent — silently
   creates nothing). Test: `tests/ewe-plugin-test.sh`.
+- **Languages (wave A+L, 2026-11-21, ewe 0.46)** — `[desktop.language]` in
+  ewe.conf: `spellcheck` (hunspell names, e.g. `["en_US", "ka_GE"]`; unset =
+  the display language's dictionary when installed + `en_US`, decided by each
+  reader; a name with no dictionary on a machine is skipped there, the file
+  syncs) and `check_spelling` (bool, default true; `ewe-conf get` answers it
+  unset). Both have their own `_domain` ("language"): a set applies nothing
+  else (no theme rebuild, no `hyprctl reload`). ewe Settings → Language writes
+  them, ewe Browser follows them live (Chromium's own dictionaries); hunspell
+  + `hunspell-en_us` ship (common.list), other dictionaries are on demand
+  (ewe Settings' `install_packages`, one polkit prompt). The display language
+  (LANG) and the regional formats (LC_TIME, LC_NUMERIC, LC_MONETARY,
+  LC_MEASUREMENT, LC_PAPER — Settings → Time and place → Formats) are the
+  machine's locale (`localectl`), never ewe.conf. The session runs
+  /etc/profile (its env has MOTD_SHOWN, DEBUGINFOD_URLS), whose locale.sh
+  reads /etc/locale.conf only while LANG is unset — whether a sign-out is
+  enough or it takes a reboot (PID 1 reads locale.conf at boot) is NOT
+  verified yet; Settings says "Applies after you sign out".
+  **The clock:** `Globals.clock24` reads the region's short time pattern
+  (`Qt.locale()` on Unix reads the LC_* categories) and
+  `Globals.formatTime(d, padded)` / `timeFormat(padded)` are the ONE answer
+  for every clock (bar, lock, screensaver, agenda, notifications, Remote) —
+  never hard-code `"hh:mm AP"` again. Date strings stay English (the shell
+  is not translated); the calendar starts the week where LC_TIME says and
+  names the days in the display language. **Apps in the launcher:**
+  `scripts/desktop-entries.py` (run by `qs-launch.sh` before qs and by
+  Globals whenever `DesktopEntries.applications` changes) writes LF copies of
+  CRLF `.desktop` files — Quickshell drops "[Desktop Entry]\r" entirely, so
+  LinOffice's Word/Excel/… were missing everywhere — to
+  `$XDG_CACHE_HOME/ewe/desktop-entries/applications` (in the shell's
+  XDG_DATA_DIRS, after XDG_DATA_HOME; the user's files are never touched;
+  Quickshell still logs its "invalid line" warning for the originals), and
+  reports the untranslated `Name` of translated entries
+  (`Globals.englishName(e)`): the launcher matches either. The harness does
+  the same (sandbox only). Test: `tests/ewe-desktop-entries-test.sh`.
+  **Right-to-left text:** paragraphs (notification bodies) follow their own
+  direction; short labels in rows (launcher, Overview chips) sit by their
+  icon (`AlignLeft`) and stop before trailing keys; LayoutMirroring stays
+  off. Fonts: every Geist stack names Noto Sans Arabic UI, Noto Sans Hebrew,
+  Noto Sans Armenian and Noto Sans after Georgian (Arabic drew unjoined in
+  FreeMono before) and the CSS stacks drop `system-ui` (no family on Arch).
 - **`AudioState.qml`** — where sound goes (headset / headphones / external /
   built-in, from the default sink's PipeWire properties), the level, whether an
   app has the mic open (a link from the default source to a stream — Quickshell
@@ -327,6 +367,34 @@ since Dock 1.1.0 (`desktop.dock.*` is only their `legacy` fallback,
   `EWE_GAME_TOOL` to a wrapper with fake busctl/systemctl/gamemoded and
   `EWE_GAME_NO_SCOPE=1` — a real toggle there changes the LIVE power
   profile and closes the LIVE ewe Sync and browser.
+- **Typing in other languages (0.46, `ImeState.qml` + `bin/ewe-ime`)** —
+  fcitx5 ON DEMAND (never a dependency): ewe Settings → Keyboard and mouse
+  adds a language through its `install_packages` (one pkexec) then
+  `ewe-ime add <im>`; `[desktop.ime]` {enabled, engines} goes through
+  ewe-conf (its own table — `[desktop.input]` is written whole), and
+  ewe-conf re-runs `ewe-ime apply` after a `desktop.input` write too.
+  `apply` writes fcitx5's profile (ONE group on ewe's FIRST layout:
+  `keyboard-<it>` then the engines — no key conversion, so Super+Space stays
+  Hyprland's xkb switch; fcitx5's group keys cleared; Ctrl+Space toggles the
+  engine) — stopping a running fcitx5 FIRST, it rewrites the profile on
+  exit —, `hypr/generated/ime.env` (XMODIFIERS, QT_IM_MODULE,
+  QT_IM_MODULES=wayland;fcitx, SDL_IM_MODULE; read by start-hyprland.sh
+  only with fcitx5 installed; no GTK_IM_MODULE), the Chromium/Electron flags
+  blocks, the candidate theme (`scripts/fcitx5-theme.sh`, tokens; also run by
+  colorscheme.sh) and the systemd/D-Bus env push. A synced ewe.conf on a
+  computer without fcitx5 does nothing. The bar's layout module shows the
+  engine's mark (fcitx5's tray icon is filtered out; ImeState listens to
+  that item's icon changes, no polling). A text field's placeholder must
+  check `preeditText` too, or it shows through the letters being composed.
+  Privacy: `apply` seeds `conf/pinyin.conf` with `CloudPinyinEnabled=False`
+  + `FirstRun=False` (only absent keys — the engine's cloud question never
+  shows). The bar's tray delegate for fcitx5's item loads NO icon (a
+  Loader): an icon name the theme lacks (`fcitx-rime`) crashed Quickshell
+  0.3.2 in the nest (QSocketNotifier from another thread).
+  Test: `tests/ewe-ime-test.sh` (fakes); in the nest run fcitx5 from a
+  `pacman -Sp` root overlaid on /usr with the shell's PRIVATE bus
+  (`HS_PRIVATE_BUS=1`), `DISPLAY` unset, `EWE_IME_NO_SCOPE=1
+  EWE_IME_NO_SESSION=1` — never against the live bus or X server.
 - **`HyprMon.qml`** — display manager: per-monitor-set profiles
   (`display-profiles.json` → `hypr/generated/monitors.lua`), live apply via
   `hyprctl eval 'hl.monitor{…}'`, re-assert on hotplug/AC events. The Settings

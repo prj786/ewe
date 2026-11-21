@@ -80,8 +80,8 @@
   --glass-border: rgba(254, 253, 252, 0.1);
   --glass-hover: rgba(254, 253, 252, 0.08);
   --glass-pressed: rgba(254, 253, 252, 0.14);
-  --font-sans: "Geist", "Noto Sans Georgian", system-ui, sans-serif;
-  --font-mono: "Geist Mono", "Noto Sans Georgian", ui-monospace, monospace;
+  --font-sans: "Geist", "Noto Sans Georgian", "Noto Sans Arabic UI", "Noto Sans Hebrew", sans-serif;
+  --font-mono: "Geist Mono", "Noto Sans Georgian", "Noto Sans Arabic UI", "Noto Sans Hebrew", monospace;
   --font-size-xs: 11px;
   --font-size-s: 12px;
   --font-size-md: 13px;

@@ -347,7 +347,7 @@ Scope {
                         }
                         Keys.onEscapePressed: Globals.storeOpen = false
                         onAccepted: { searchDebounce.stop(); root.doSearch() }
-                        TBody { anchors.verticalCenter: parent.verticalCenter; visible: storeIn.text.length === 0; text: "Search apps"; color: Theme.textMuted }
+                        TBody { anchors.verticalCenter: parent.verticalCenter; visible: storeIn.text.length === 0 && storeIn.preeditText.length === 0; text: "Search apps"; color: Theme.textMuted }
                     }
                 }
 

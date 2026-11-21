@@ -112,14 +112,14 @@ Scope {
 
     // ── clock: date and time as two fields spaceS apart, shown inside the
     //    Quick settings button (Bar card #10) ──────────────────────────────
-    //    12-hour, as before: the shell has no 12/24-hour setting yet ────────
+    //    12- or 24-hour as the region's formats say (Globals.clock24) ───────
     property string clockDate: ""
     property string clockTime: ""
     readonly property string clockText: bar.clockDate + "  " + bar.clockTime
     function updateClock() {
         var now = new Date()
         bar.clockDate = Qt.formatDateTime(now, "ddd dd MMM")
-        bar.clockTime = Qt.formatDateTime(now, "hh:mm AP")
+        bar.clockTime = Globals.formatTime(now, true)
         bar.updateCalSoon()
     }
     // Tick on the minute, not every second — the format only shows minutes, so a
@@ -461,7 +461,10 @@ Scope {
                                 anchors.verticalCenter: parent.verticalCenter
                                 spacing: Theme.spaceXs
                                 Row {
-                                visible: Globals.barShows("tray") && SystemTray.items.values.length > 0
+                                // fcitx5's own icon never shows: the keyboard
+                                // layout module is its indicator (ImeState)
+                                visible: Globals.barShows("tray")
+                                         && SystemTray.items.values.some(function (it) { return !ImeState.isImeItem(it) })
                                 anchors.verticalCenter: parent.verticalCenter
                                 spacing: Theme.spaceXs
                                 Repeater {
@@ -469,6 +472,7 @@ Scope {
                                     delegate: Item {
                                         id: trayDelegate
                                         required property var modelData
+                                        visible: !ImeState.isImeItem(modelData)
                                         // a module-sized cell, like the plugins' widgets
                                         // beside it: barModule cells spaceXs apart is the
                                         // one rhythm of the whole cluster
@@ -479,10 +483,18 @@ Scope {
                                             color: trayMa.containsMouse ? Theme.barHoverFill : "transparent"
                                             Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
                                         }
-                                        TrayIcon {
+                                        // fcitx5's hidden item loads NO image: its icon
+                                        // changes with every input method, and a name the
+                                        // theme lacks ("fcitx-rime") sent Quickshell 0.3.2's
+                                        // tray image path off its thread — the shell
+                                        // crashed (nest, 2026-11-21)
+                                        Loader {
                                             anchors.centerIn: parent
-                                            px: Theme.barIcon
-                                            source: modelData.icon
+                                            active: !ImeState.isImeItem(trayDelegate.modelData)
+                                            sourceComponent: TrayIcon {
+                                                px: Theme.barIcon
+                                                source: trayDelegate.modelData.icon
+                                            }
                                         }
                                         // the app's own tooltip title, else its name (Tooltip card)
                                         Tooltip { text: trayDelegate.modelData.tooltipTitle || trayDelegate.modelData.title || "" }
@@ -590,16 +602,29 @@ Scope {
                         }
                     }
 
-                    // keyboard layout — two capitals (US / GE); click cycles it
+                    // keyboard layout — two capitals (US / GE); click cycles it.
+                    // Typing in other languages (ImeState): while an engine is
+                    // on it shows the engine's mark instead ("拼", "あ", "한") —
+                    // one indicator, fcitx5's tray icon is hidden. A click then
+                    // goes back to the plain layout; right-click turns the
+                    // engine on and off (Ctrl+Space).
                     BarModule {
                         id: kbMod
-                        a11yName: "Keyboard layout, " + bar.kbLayout
+                        a11yName: ImeState.active ? "Typing " + ImeState.label + ", " + ImeState.glyph
+                                                  : "Keyboard layout, " + bar.kbLayout
+                        tip: ImeState.active ? ImeState.label + " · Ctrl+Space switches back"
+                           : ImeState.running ? "Keyboard layout, " + bar.kbLayout + " · Ctrl+Space types another language"
+                           : kbMod.a11yName
                         anchors.verticalCenter: parent.verticalCenter
                         visible: Globals.barShows("keyboard")
-                        onActivated: Quickshell.execDetached(["hyprctl", "switchxkblayout", bar.kbDevice || "current", "next"])
+                        onActivated: {
+                            if (ImeState.active) ImeState.off()
+                            else Quickshell.execDetached(["hyprctl", "switchxkblayout", bar.kbDevice || "current", "next"])
+                        }
+                        onSecondary: if (ImeState.running) ImeState.toggle()
                         Text {
                             anchors.verticalCenter: parent.verticalCenter
-                            text: bar.kbLayout
+                            text: ImeState.active && ImeState.glyph !== "" ? ImeState.glyph : bar.kbLayout
                             color: kbMod.hovered ? Theme.textPrimary : Theme.textSecondary
                             font.family: Theme.type.label.family
                             font.pixelSize: Theme.barLarge ? Theme.fontSizeMd : Theme.fontSizeS

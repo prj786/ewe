@@ -277,6 +277,12 @@ except Exception: pass" 2>/dev/null)"
   fi
   ( sandbox_env
     export PATH="$qs_path"
+    # what qs-launch.sh does before qs (ewe.service): LF copies of CRLF
+    # .desktop files, their folder in the shell's XDG_DATA_DIRS
+    # (sandbox only: it writes under XDG_CACHE_HOME)
+    _dedir=""
+    [ "$SANDBOX" = "1" ] && _dedir="$(python3 "$QSDIR/scripts/desktop-entries.py" --dir 2>/dev/null)"
+    [ -n "$_dedir" ] && export XDG_DATA_DIRS="$_dedir:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
     exec env WAYLAND_DISPLAY="$nestwd" HYPRLAND_INSTANCE_SIGNATURE="$nestsig" QT_QPA_PLATFORM=wayland \
       "${qs_wrap[@]}" qs -p "$QSDIR" ) > "$WORK/qs.log" 2>&1 &
   local qpid=$!

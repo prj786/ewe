@@ -27,7 +27,7 @@ pkgname=ewe
 # <repo>-<tag without the leading v>, so both the source URL and the directory
 # below follow _tag, never pkgver. ewe-repo's publish workflow rewrites both.
 _tag=v0.22.0-beta
-pkgver=0.45.0beta
+pkgver=0.46.0beta
 pkgrel=1
 pkgdesc="ewe — a clean, dark Hyprland + Quickshell desktop environment"
 arch=('any')
@@ -113,6 +113,9 @@ package() {
     # Game mode, balanced or Ultra (0.42): the tile, Settings, Shaun and
     # GameMode's own hooks all come through it
     install -Dm755 bin/ewe-game "$pkgdir/usr/bin/ewe-game"
+    # typing in other languages (fcitx5, on demand — never a dependency):
+    # Settings → Keyboard and mouse, the bar's layout indicator and Shaun
+    install -Dm755 bin/ewe-ime "$pkgdir/usr/bin/ewe-ime"
     # Files' "Open in Terminal" (the dconf default, system/dconf/ewe.d/10-terminal):
     # kitty on the workspace you are on, whatever a Window Rule says (0.43.1)
     install -Dm755 system/bin/ewe-terminal-here "$pkgdir/usr/bin/ewe-terminal-here"

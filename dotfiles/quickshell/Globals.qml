@@ -30,7 +30,7 @@ QtObject {
     // Project version — the shell's runtime copy. Keep in sync with the repo-root
     // VERSION file (the canonical source used for git tags / releases). Semver, with
     // an -alpha/-beta pre-release suffix until the first stable cut.
-    readonly property string version: "0.45.0-beta"
+    readonly property string version: "0.46.0-beta"
 
     // ── event sounds (GNOME-style; the freedesktop sound theme, one toggle) ──
     // playSound("message-new-instant") etc — names are theme event ids from
@@ -295,6 +295,36 @@ QtObject {
     property Connections _clsCacheWatch: Connections {
         target: DesktopEntries.applications
         function onValuesChanged() { g._clsCache = ({}) }
+    }
+    // ── What Quickshell's entry reader can't do (scripts/desktop-entries.py) ──
+    // LF copies of CRLF .desktop files (LinOffice's Word, Excel…: dropped by
+    // Quickshell, so missing everywhere) in a folder qs-launch.sh puts in the
+    // shell's XDG_DATA_DIRS, and the untranslated Name of every translated
+    // entry: the launcher matches "Files" on a Georgian desktop too.
+    // Re-run whenever the app list changes (an install, a new CRLF file);
+    // the script rewrites a copy only when it would change, so the rescan
+    // its own write causes ends there.
+    property var appEnglishNames: ({})
+    function englishName(e) {
+        var id = e && e.id ? String(e.id).replace(/\.desktop$/, "") : ""
+        return id !== "" && Object.prototype.hasOwnProperty.call(g.appEnglishNames, id) ? g.appEnglishNames[id] : ""
+    }
+    property Process _deProc: Process {
+        running: true
+        command: ["python3", Qt.resolvedUrl("scripts/desktop-entries.py").toString().replace(/^file:\/\//, "")]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                try {
+                    var j = JSON.parse(this.text)
+                    if (j && j.english) g.appEnglishNames = j.english
+                } catch (err) {}
+            }
+        }
+    }
+    property Timer _deTimer: Timer { interval: 1500; onTriggered: if (!g._deProc.running) g._deProc.running = true }
+    property Connections _deWatch: Connections {
+        target: DesktopEntries.applications
+        function onValuesChanged() { g._deTimer.restart() }
     }
     function entryForClass(cls) {
         var c = String(cls || "")
@@ -678,6 +708,16 @@ QtObject {
     // ── Avatar (~/.face) — shared by Settings (account card) and the lock screen.
     // faceUrl is THE avatar image source everywhere: "" while no ~/.face exists,
     // and cache-busted (?v=) after Settings saves a new one.
+    // ── 12- or 24-hour: the region's formats (Settings → Time and place →
+    // Formats = LC_TIME). On Unix Qt.locale() reads the LC_* categories, so
+    // its short time pattern has an AM/PM marker ("h:mm AP") only where the
+    // region uses one; quoted literal text is ignored. The ewe date strings
+    // stay English (the shell is not translated), only the hour cycle and
+    // the calendar's first weekday (QuickSettings) follow the region.
+    readonly property bool clock24: !/[aA]/.test(String(Qt.locale().timeFormat(Locale.ShortFormat)).replace(/'[^']*'/g, ""))
+    // padded: "02:05 PM" (the bar's fixed-width look) vs "2:05 PM"
+    function timeFormat(padded) { return g.clock24 ? "HH:mm" : (padded ? "hh:mm AP" : "h:mm AP") }
+    function formatTime(d, padded) { return Qt.formatDateTime(d, g.timeFormat(padded)) }
     property bool hasFace: false
     property int avatarVersion: 0
     property string avatarShape: "circle"   // "circle" | "rounded" | "square" — Avatar.qml masks to this; persisted in user-theme.json

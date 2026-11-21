@@ -75,7 +75,7 @@ QtObject {
                 dirty = true
                 var when = new Date(start)
                 var lead = ev.reminders[r]
-                var body = (lead <= 0 ? "Now" : "In " + lead + " min") + " · " + Qt.formatTime(when, "hh:mm AP")
+                var body = (lead <= 0 ? "Now" : "In " + lead + " min") + " · " + Globals.formatTime(when, true)
                          + (ev.location ? "\n" + ev.location : "")
                          + (ev.video ? "\n" + ev.video : "")
                 Quickshell.execDetached(["notify-send", "-a", "Calendar", "-i", "x-office-calendar", ev.summary, body])

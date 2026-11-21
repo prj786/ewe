@@ -54,7 +54,7 @@ Scope {
     property string dateStr: ""
     function tick() {
         var d = new Date()
-        root.clock = Qt.formatDateTime(d, "h:mm AP")
+        root.clock = Globals.formatTime(d, false)
         root.dateStr = Qt.formatDateTime(d, "dddd, d MMMM")
     }
 
