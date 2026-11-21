@@ -28,6 +28,10 @@ QtObject {
     // the chat: the last few turns, as the island shows them
     property var messages: []         // [{id, who: "you"|"companion", kind, text, undo}]
     property bool thinking: false
+    // the answer while it streams in (a `partial` chat.reply): drawn on its
+    // own line under the conversation, so the list is not rebuilt for each
+    // piece; the whole answer then joins `messages` under the same id
+    property string streamText: ""
 
     readonly property int asking: {
         var n = 0
@@ -72,7 +76,14 @@ QtObject {
         if (t === "") return
         st.addMessage({ id: "you-" + Date.now(), who: "you", kind: "you", text: t })
         st.thinking = true
+        st.streamText = ""
         st.send({ type: "chat.send", text: t })
+    }
+    // the user started typing: a question is coming, so the daemon gets
+    // whoever answers ready (Claude Code takes seconds to start). Cheap to
+    // repeat: the daemon keeps one waiting at most
+    function warm() {
+        if (st.chat && st.chat.ready) st.send({ type: "chat.warm" })
     }
     function addMessage(m) {
         var ms = st.messages.filter(function (x) { return x.id !== m.id })

@@ -48,6 +48,9 @@ Column {
                 width: Math.min(implicitWidth, ch.width - (undo.visible ? undo.width + Theme.spaceS : 0))
                 anchors.right: msg.mine ? parent.right : undefined
                 text: msg.modelData.text
+                // never rich text: "ewe-player <url>" lost its "<url>", and a
+                // model's or a page's words must not style themselves (C4)
+                textFormat: Text.PlainText
                 wrapMode: Text.Wrap
                 elide: Text.ElideNone
                 horizontalAlignment: msg.mine ? Text.AlignRight : Text.AlignLeft
@@ -172,7 +175,12 @@ Column {
              : a.command === "launch_app" ? "terminal"
              : a.command === "open_url" ? "web"
              : a.command === "browser_download" && a.args && a.args.action === "show" ? "folder"
-             : a.command === "timer_cancel" ? "close" : ""
+             : a.command === "timer_cancel" || a.command === "forget" ? "close"
+             : a.command === "empty_trash" ? "trash"
+             // 0.7: ewe Files, another app, ewe Player
+             : a.command === "show_file" ? "folder"
+             : a.command === "open_with" ? "external"
+             : a.command === "play_local" ? "play" : ""
     }
     function glyphOf(name) {
         switch (name) {
@@ -188,15 +196,47 @@ Column {
         case "timer": return Theme.icTimer
         case "bluetooth": return Theme.icBluetooth
         case "close": return Theme.icClose
+        // 0.6: what this computer is doing, and what Shaun remembers
+        case "battery": return Theme.icBatt50
+        case "cpu": return Theme.icCpu
+        case "memory": return Theme.icMemory
+        case "disk": return Theme.icFolder
+        case "network": return Theme.icNetwork
+        case "trash": return Theme.icTrash
+        case "remember": return Theme.icStar
+        // 0.7: songs, the user's notes, a wiki page, release notes, an app
+        case "music": return Theme.icMusic
+        case "play": return Theme.icPlay
+        case "note": return Theme.icPen
+        case "book": return Theme.icFile
+        case "news": return Theme.icMessage
+        case "external": return Theme.icExternal
         default: return Theme.icChevronRight
         }
+    }
+
+    // ── the answer while it streams in: one line that grows, so the
+    //    conversation above is not rebuilt for each piece ──
+    TextBody {
+        width: ch.width
+        visible: CompanionState.thinking && CompanionState.streamText !== ""
+        text: CompanionState.streamText
+        textFormat: Text.PlainText
+        wrapMode: Text.Wrap
+        elide: Text.ElideNone
+        color: Theme.textPrimary
     }
 
     Row {
         visible: CompanionState.thinking
         spacing: Theme.spaceS
         Spinner { size: Theme.iconSm; anchors.verticalCenter: parent.verticalCenter }
-        TextCaption { text: ch.chat.label ? ch.chat.label + " is thinking" : "Working on it"; anchors.verticalCenter: parent.verticalCenter }
+        TextCaption {
+            readonly property string who: ch.chat.label ? ch.chat.label : ""
+            text: who === "" ? "Working on it"
+                 : who + (CompanionState.streamText !== "" ? " is writing" : " is thinking")
+            anchors.verticalCenter: parent.verticalCenter
+        }
     }
 
 }

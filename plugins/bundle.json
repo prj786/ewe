@@ -19,8 +19,8 @@
       "repo": "https://github.com/prj786/ewe-plugin-companion",
       "default": false,
       "migrate": false,
-      "commit": "27e591ce1f6042842dee8ecec00ccaa60a70a7ad",
-      "version": "0.5.2"
+      "commit": "d78fa4675cfbac21198e561786c1cfc40dac3004",
+      "version": "0.7.0"
     },
     "ewe.dock": {
       "repo": "https://github.com/prj786/ewe-plugin-dock",

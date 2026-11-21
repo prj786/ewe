@@ -70,7 +70,11 @@ Column {
             anchors.leftMargin: Theme.spaceS
             anchors.rightMargin: Theme.spaceS
             placeholder: "Ask anything"
-            onAccepted: { CompanionState.ask(text); text = "" }
+            // the first letter of a question gets whoever answers ready
+            // (chat.warm): Claude Code starts while the rest is typed
+            property bool warmed: false
+            onTextChanged: if (text !== "" && !field.warmed) { field.warmed = true; CompanionState.warm() }
+            onAccepted: { CompanionState.ask(text); text = ""; field.warmed = false }
             Keys.onEscapePressed: CompanionState.dropOpen = false
         }
     }

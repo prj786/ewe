@@ -131,6 +131,8 @@ Scope {
                 target: CompanionState
                 function onMessagesChanged() { win.followEnd = true; followTimer.restart(); Qt.callLater(win.scrollToEnd) }
                 function onThinkingChanged() { if (CompanionState.thinking) { win.followEnd = true; followTimer.restart(); Qt.callLater(win.scrollToEnd) } }
+                // an answer streaming in keeps its newest line in view
+                function onStreamTextChanged() { if (CompanionState.streamText !== "") Qt.callLater(win.scrollToEnd) }
             }
             Connections {
                 target: stack
