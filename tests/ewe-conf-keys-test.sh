@@ -41,4 +41,22 @@ bin/ewe-conf unset 'plugins.settings."ewe.passwords".press_enter' || no "unset t
 bin/ewe-conf get 'plugins.settings."ewe.passwords".press_enter' >/dev/null 2>&1 \
   && no "unset left the key" || ok "unset through a quoted id"
 [ "$(bin/ewe-conf get desktop.theme.accent)" != "" ] && ok "plain keys still work" || no "a plain key broke"
+
+# [desktop.language] (2026-11-21): spelling dictionaries + the on/off switch
+[ "$(bin/ewe-conf get desktop.language.check_spelling)" = "true" ] \
+  && ok "check_spelling defaults to true" || no "check_spelling has no default"
+bin/ewe-conf get desktop.language.spellcheck >/dev/null 2>&1 \
+  && no "spellcheck has a value before it was set" || ok "spellcheck unset = automatic"
+: > "$S/calls.log"
+bin/ewe-conf set desktop.language.spellcheck '["en_US", "ka_GE", "en_US", "ro_RO-ante1993", "es"]' \
+  || no "setting the dictionaries failed"
+[ "$(bin/ewe-conf get desktop.language.spellcheck)" = '["en_US", "ka_GE", "ro_RO-ante1993", "es"]' ] \
+  && ok "dictionaries kept in order, duplicates dropped" || no "spellcheck: $(bin/ewe-conf get desktop.language.spellcheck)"
+grep -q 'hyprctl' "$S/calls.log" && no "a language key reloaded Hyprland (full apply)" || ok "a language key applies nothing else"
+for bad in '["en_US; rm -rf /"]' '["../x"]' '["EN"]' '"en_US"x'; do
+  bin/ewe-conf set desktop.language.spellcheck "$bad" 2>/dev/null && no "accepted a bad dictionary list: $bad" || ok "refused: $bad"
+done
+bin/ewe-conf set desktop.language.check_spelling off || no "check_spelling off failed"
+[ "$(bin/ewe-conf get desktop.language.check_spelling)" = "false" ] && ok "check_spelling off" || no "check_spelling not off"
+bin/ewe-conf set desktop.language.check_spelling maybe 2>/dev/null && no "check_spelling took 'maybe'" || ok "check_spelling refuses non-bools"
 exit $fail
