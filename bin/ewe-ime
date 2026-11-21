@@ -13,6 +13,9 @@ method with one state.
   catalog                every language ewe offers: id (fcitx5's input
                          method name), language, native, method, package,
                          glyph, installed
+  sizes                  {ok, sizes: {id: bytes to download or null}} — what
+                         each language downloads on THIS computer (pacman -Sp
+                         --needed; cached until the package databases change)
   current                {ok, running, im, active, glyph, label} — what the
                          bar shows (cheap: one fcitx5-remote call)
   add <id>               add a language and turn typing in other languages on
@@ -57,7 +60,13 @@ HOW IT FITS HYPRLAND (docs/SETTINGS-BACKEND.md "Typing in other languages"):
     Electron get --enable-wayland-ime --wayland-text-input-version=3 in their
     flags files (a marked block; removed when off).
 
-Tests: EWE_IME_ROOT (the /usr to look for packages in), EWE_IME_CONF (the
+PRIVACY: the Pinyin engine's "cloud Pinyin" (what you type sent to an online
+service for suggestions) stays off and its first-run question never shows —
+conf/pinyin.conf gets CloudPinyinEnabled=False and FirstRun=False, only
+where those keys are absent, so a later choice of the user's stands.
+
+Tests: EWE_IME_ROOT (the /usr to look for packages in), EWE_IME_PACDB (the
+pacman database dir whose changes empty the size cache), EWE_IME_CONF (the
 ewe-conf tool), EWE_IME_NO_SESSION=1 (never touch the systemd/D-Bus
 environment), EWE_IME_NO_SCOPE=1 (start fcitx5 without systemd-run), and
 PATH shims for fcitx5, fcitx5-remote, dbus-update-activation-environment,
@@ -91,6 +100,10 @@ PROFILE = os.path.join(FCITX_DIR, "profile")
 GLOBAL = os.path.join(FCITX_DIR, "config")
 STAMP = os.path.join(RUNTIME, "ewe", "ime.json")   # this boot's session env state
 LOCK = os.path.join(RUNTIME, "ewe", "ime.lock")
+PINYIN_CONF = os.path.join(FCITX_DIR, "conf", "pinyin.conf")
+CACHE = os.environ.get("XDG_CACHE_HOME") or os.path.join(HOME, ".cache")
+SIZES = os.path.join(CACHE, "ewe", "ime-sizes.json")
+PACDB = os.environ.get("EWE_IME_PACDB") or "/var/lib/pacman"
 
 ID_RE = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
 M17N_RE = re.compile(r"^m17n_([a-z]{2,3})_([A-Za-z0-9.-]+)$")
@@ -532,6 +545,116 @@ def sync_flags(on):
     return changed
 
 
+# ── what you type stays here ───────────────────────────────────────────────
+# fcitx5-chinese-addons can send what you type to an online service for
+# suggestions ("cloud Pinyin"), and asks once, in a notification, whether to.
+# ewe answers for you: off, and the question already asked (its hidden
+# FirstRun key — fcitx5 sets it itself when it shows the question). Only keys
+# that are ABSENT are added: a choice made later (Language options, or
+# Ctrl+Alt+Shift+C) is fcitx5's to write and is never undone here.
+PRIVACY = [("CloudPinyinEnabled", "False"), ("FirstRun", "False")]
+
+
+def _top_key(text, key):
+    """the value of an uncommented top-level `key=` (before any [section])"""
+    for ln in text.splitlines():
+        t = ln.strip()
+        if t.startswith("["):
+            break
+        if t.startswith("#") or "=" not in t:
+            continue
+        k, v = t.split("=", 1)
+        if k.strip() == key:
+            return v.strip()
+    return None
+
+
+def pinyin_seeded(existing):
+    add = [(k, v) for k, v in PRIVACY if _top_key(existing, k) is None]
+    if not add:
+        return existing
+    return ("# ewe: what you type stays on this computer — cloud Pinyin is off and its\n"
+            "# question is answered (ewe-ime adds these only when they are missing)\n"
+            + "".join("%s=%s\n" % kv for kv in add) + existing)
+
+
+def cloud_pinyin():
+    """None when the Pinyin engine is not installed, else whether it is on"""
+    if not have("share/fcitx5/addon/pinyin.conf"):
+        return None
+    try:
+        with open(PINYIN_CONF, encoding="utf-8") as f:
+            return (_top_key(f.read(), "CloudPinyinEnabled") or "").lower() == "true"
+    except OSError:
+        return False
+
+
+# ── download sizes, for "Add a language…" ──────────────────────────────────
+# What each choice downloads on THIS computer: `pacman -Sp --needed` resolves
+# the missing packages and their new dependencies from the sync databases (no
+# root, ~0.2 s), one call per engine package, all at once. Cached until the
+# package databases change (a sync or an install).
+
+def _db_stamp():
+    st = []
+    for d in (os.path.join(PACDB, "sync"), os.path.join(PACDB, "local")):
+        try:
+            st.append(int(os.stat(d).st_mtime_ns))
+            st.extend(int(os.stat(os.path.join(d, f)).st_mtime_ns)
+                      for f in sorted(os.listdir(d)) if f.endswith(".db"))
+        except OSError:
+            st.append(0)
+    return st
+
+
+def sizes():
+    stamp = _db_stamp()
+    try:
+        with open(SIZES, encoding="utf-8") as f:
+            c = json.load(f)
+        if c.get("stamp") == stamp and isinstance(c.get("sizes"), dict):
+            return {"ok": True, "sizes": c["sizes"], "cached": True}
+    except (OSError, ValueError):
+        pass
+    if not shutil.which("pacman"):
+        return {"ok": True, "sizes": {}, "cached": False}
+    core = [pkg for pkg, _rel in CORE]
+    pkgs = sorted({c[4] for c in CATALOG})
+    procs = {}
+    for pkg in pkgs:
+        try:
+            procs[pkg] = subprocess.Popen(
+                ["pacman", "-Sp", "--needed", "--print-format", "%s %n", *core, pkg],
+                stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                text=True, env=dict(os.environ, LANG="C", LC_ALL="C"))
+        except OSError:
+            pass
+    by_pkg = {}
+    for pkg, pr in procs.items():
+        try:
+            o, _ = pr.communicate(timeout=20)
+        except subprocess.TimeoutExpired:
+            pr.kill()
+            continue
+        if pr.returncode != 0:
+            continue
+        total = 0
+        for ln in o.splitlines():
+            n = ln.split(" ", 1)[0]
+            if n.isdigit():
+                total += int(n)
+        by_pkg[pkg] = total
+    res = {c[0]: by_pkg.get(c[4]) for c in CATALOG}
+    try:
+        os.makedirs(os.path.dirname(SIZES), exist_ok=True)
+        with open(SIZES + ".tmp", "w", encoding="utf-8") as f:
+            json.dump({"stamp": stamp, "sizes": res}, f)
+        os.replace(SIZES + ".tmp", SIZES)
+    except OSError:
+        pass
+    return {"ok": True, "sizes": res, "cached": False}
+
+
 # ── the session environment ────────────────────────────────────────────────
 
 def load_stamp():
@@ -641,6 +764,19 @@ def _apply(login):
             for path, text in stale:
                 write_if_changed(path, text)
             did.append("config")
+        # privacy first: cloud Pinyin off, its question answered — before
+        # fcitx5 starts; a running one re-reads the engine's config (no restart)
+        if have("share/fcitx5/addon/pinyin.conf"):
+            try:
+                with open(PINYIN_CONF, encoding="utf-8") as f:
+                    pc = f.read()
+            except OSError:
+                pc = ""
+            if write_if_changed(PINYIN_CONF, pinyin_seeded(pc)):
+                did.append("privacy")
+                if is_running:
+                    run(["busctl", "--user", "call", "org.fcitx.Fcitx5", "/controller",
+                         "org.fcitx.Fcitx.Controller1", "ReloadAddonConfig", "s", "pinyin"], timeout=5)
     if on:
         # the look follows every scheme change through colorscheme.sh; here
         # only when fcitx5 is about to start or has never been dressed
@@ -723,6 +859,8 @@ def status():
         # a change after the next sign-in
         "needs_signout": login is not None and login != on,
         "configtool": shutil.which("fcitx5-configtool") is not None,
+        # null without the Pinyin engine; false = what you type stays here
+        "cloud_pinyin": cloud_pinyin(),
         "catalog": catalog(),
     }
 
@@ -808,6 +946,8 @@ def main(argv):
         out(status())
     if verb == "catalog":
         out({"ok": True, "catalog": catalog()})
+    if verb == "sizes":
+        out(sizes())
     if verb == "current":
         out(current())
     if verb == "add":

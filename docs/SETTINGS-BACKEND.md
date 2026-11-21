@@ -228,6 +228,7 @@ The Keyboard and mouse pane's **Typing in other languages** group talks to
 | `add <id>` · `remove <id>` | the list in `[desktop.ime]` (through ewe-conf); adding turns it on, removing the last turns it off — the packages stay |
 | `enable` · `disable` | the switch, keeping the list |
 | `apply [--login]` | make the session match the file (below) |
+| `sizes` | `{id: bytes}` each language downloads on THIS computer — `pacman -Sp --needed` per engine package (no root, ~0.2 s, run in parallel), cached in `~/.cache/ewe/ime-sizes.json` until the pacman databases change; the Add sheet shows "About 170 MB to download" |
 | `current` · `toggle` | the bar's reading / Ctrl+Space |
 | `configure` | opens `fcitx5-configtool` (engine options) |
 
@@ -247,6 +248,7 @@ What `apply` makes true (everything regenerated whole; ewe.conf is the truth):
 | systemd / D-Bus activation env | the same four, pushed (`dbus-update-activation-environment --systemd`) or unset on change |
 | `~/.config/{electron,electronNN,chromium,chrome,code,brave,helium-browser}-flags.conf` | a marked block `--enable-wayland-ime --wayland-text-input-version=3` (files that exist or whose program is installed; removed when off, a file that only held it is deleted) |
 | fcitx5 | started (`fcitx5 -d` in its own scope) or stopped; `autostart.sh` runs `ewe-ime apply --login` when fcitx5 is installed |
+| `~/.config/fcitx5/conf/pinyin.conf` | **privacy**: `CloudPinyinEnabled=False` + `FirstRun=False` (the Pinyin engine's "Enable Cloudpinyin?" question never shows; what you type is not sent to an online service). Added only where the keys are ABSENT, before fcitx5 starts; a later choice of the user's (Language options, Ctrl+Alt+Shift+C) is never undone. `status.cloud_pinyin` reports it; the pane says "Online suggestions are off". |
 
 What follows at once and what needs a sign-out: GTK, Qt 6, kitty, ewe's own
 apps and the shell's fields use the Wayland text-input protocol, so they type

@@ -346,6 +346,11 @@ since Dock 1.1.0 (`desktop.dock.*` is only their `legacy` fallback,
   engine's mark (fcitx5's tray icon is filtered out; ImeState listens to
   that item's icon changes, no polling). A text field's placeholder must
   check `preeditText` too, or it shows through the letters being composed.
+  Privacy: `apply` seeds `conf/pinyin.conf` with `CloudPinyinEnabled=False`
+  + `FirstRun=False` (only absent keys — the engine's cloud question never
+  shows). The bar's tray delegate for fcitx5's item loads NO icon (a
+  Loader): an icon name the theme lacks (`fcitx-rime`) crashed Quickshell
+  0.3.2 in the nest (QSocketNotifier from another thread).
   Test: `tests/ewe-ime-test.sh` (fakes); in the nest run fcitx5 from a
   `pacman -Sp` root overlaid on /usr with the shell's PRIVATE bus
   (`HS_PRIVATE_BUS=1`), `DISPLAY` unset, `EWE_IME_NO_SCOPE=1

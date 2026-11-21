@@ -96,9 +96,10 @@ check "no fcitx5 config written without fcitx5" "[ ! -e '$SB/cfg/fcitx5/profile'
 # ── 2. installed: on, the files, started, env pushed ───────────────────────
 install_core
 : > "$SB/usr/share/fcitx5/inputmethod/pinyin.conf"
+: > "$SB/usr/share/fcitx5/addon/pinyin.conf"     # the Pinyin engine (chinese-addons)
 : > "$SB/usr/bin/chromium"                       # a Chromium to give flags to
 printf -- '--force-dark-mode\n' > "$SB/cfg/code-flags.conf"   # the user's own line
-R="$("$IME" apply)"
+R="$("$IME" apply)"; APPLY1="$R"
 check "apply: on" "[ \"\$(j '$R' 'd[\"on\"]')\" = True ]"
 P="$SB/cfg/fcitx5/profile"
 check "profile: one group on the first layout" "grep -qx 'Default Layout=us' '$P' && grep -qx 'DefaultIM=pinyin' '$P'"
@@ -124,6 +125,58 @@ check "status: on + running, needs sign-out (this session started without it)" "
 : > "$LOG"
 R="$("$IME" apply)"
 check "apply again: nothing to do (no restart, no push, no re-theme)" "! grep -q '^fcitx5 ' '$LOG' && ! grep -q -- '-e' '$LOG' && ! grep -q dbus-update '$LOG' && ! grep -q busctl '$LOG'"
+
+# ── 2b. privacy: cloud Pinyin off, its first-run question never asked ──────
+PC="$SB/cfg/fcitx5/conf/pinyin.conf"
+check "pinyin.conf: cloud Pinyin off, question answered" "grep -qx 'CloudPinyinEnabled=False' '$PC' && grep -qx 'FirstRun=False' '$PC'"
+check "…seeded before fcitx5 started" \
+  "python3 -c 'import json,sys; d=json.loads(sys.argv[1])[\"did\"]; sys.exit(0 if d.index(\"privacy\") < d.index(\"started\") else 1)' '$APPLY1'"
+R="$("$IME" status)"
+check "status: cloud Pinyin off" "[ \"\$(j '$R' 'd[\"cloud_pinyin\"]')\" = False ]"
+# the user turns it on later (fcitx5 rewrites the whole file, defaults commented)
+printf '# Enable Cloud Pinyin\nCloudPinyinEnabled=True\n# FirstRun\nFirstRun=False\n\n[Fuzzy]\n# VE_UE=True\n' > "$PC"
+cp "$PC" "$SB/pc.user"
+: > "$LOG"
+"$IME" apply >/dev/null
+check "a later choice of the user's is never undone" "cmp -s '$PC' '$SB/pc.user'"
+check "…and touching nothing restarts nothing" "! grep -q '^fcitx5 ' '$LOG' && ! grep -q -- '-e' '$LOG'"
+R="$("$IME" status)"
+check "status: cloud Pinyin on (the user's)" "[ \"\$(j '$R' 'd[\"cloud_pinyin\"]')\" = True ]"
+# …and back off: fcitx5 writes the default commented out → ewe states it again,
+# keeps the user's sections, and only asks the running engine to re-read
+printf '# Enable Cloud Pinyin\n# CloudPinyinEnabled=False\n# FirstRun\nFirstRun=False\n\n[Fuzzy]\nV_U=True\n' > "$PC"
+: > "$LOG"
+"$IME" apply >/dev/null
+check "commented default → stated off again, sections kept, no restart" \
+  "grep -qx 'CloudPinyinEnabled=False' '$PC' && [ \"\$(grep -c '^FirstRun=' '$PC')\" = 1 ] && grep -qx 'V_U=True' '$PC' && awk '/^\\[/{exit} /^CloudPinyinEnabled=False/{f=1} END{exit !f}' '$PC' && ! grep -q '^fcitx5 ' '$LOG' && grep -q 'ReloadAddonConfig s pinyin' '$LOG'"
+
+# ── 2c. download sizes for "Add a language…" (pacman -Sp, cached) ───────────
+mkdir -p "$SB/pacdb/sync" "$SB/pacdb/local"; : > "$SB/pacdb/sync/extra.db"
+export EWE_IME_PACDB="$SB/pacdb"
+cat > "$SB/bin/pacman" <<EOF
+#!/bin/sh
+echo "pacman \$*" >> "$LOG"
+for a in "\$@"; do
+  case "\$a" in
+    fcitx5-chinese-addons) echo "100000000 qt6-webengine"; echo "5000000 fcitx5-chinese-addons" ;;
+    fcitx5-mozc) echo "15000000 fcitx5-mozc" ;;
+    fcitx5|fcitx5-gtk|fcitx5-qt|fcitx5-configtool|fcitx5-hangul|fcitx5-unikey|fcitx5-m17n) echo "1000000 \$a" ;;
+  esac
+done
+EOF
+chmod +x "$SB/bin/pacman"
+: > "$LOG"
+R="$("$IME" sizes)"
+check "sizes: per language, missing packages + new dependencies" \
+  "[ \"\$(j '$R' 'd[\"sizes\"][\"pinyin\"], d[\"sizes\"][\"mozc\"], d[\"sizes\"][\"m17n_hi_inscript2\"], d[\"cached\"]')\" = '(109000000, 19000000, 5000000, False)' ]"
+check "sizes: --needed, no root" "grep -q 'pacman -Sp --needed --print-format' '$LOG' && ! grep -q pkexec '$LOG'"
+: > "$LOG"
+R="$("$IME" sizes)"
+check "sizes: cached while the databases are unchanged" "[ \"\$(j '$R' 'd[\"cached\"]')\" = True ] && ! grep -q pacman '$LOG'"
+sleep 0.01; touch "$SB/pacdb/local"
+R="$("$IME" sizes)"
+check "sizes: an install (local db changed) recomputes" "[ \"\$(j '$R' 'd[\"cached\"]')\" = False ]"
+rm -f "$SB/bin/pacman"
 
 # ── 3. the bar's reading ───────────────────────────────────────────────────
 R="$("$IME" current)"

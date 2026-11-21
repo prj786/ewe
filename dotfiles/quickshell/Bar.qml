@@ -483,10 +483,18 @@ Scope {
                                             color: trayMa.containsMouse ? Theme.barHoverFill : "transparent"
                                             Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
                                         }
-                                        TrayIcon {
+                                        // fcitx5's hidden item loads NO image: its icon
+                                        // changes with every input method, and a name the
+                                        // theme lacks ("fcitx-rime") sent Quickshell 0.3.2's
+                                        // tray image path off its thread — the shell
+                                        // crashed (nest, 2026-11-21)
+                                        Loader {
                                             anchors.centerIn: parent
-                                            px: Theme.barIcon
-                                            source: modelData.icon
+                                            active: !ImeState.isImeItem(trayDelegate.modelData)
+                                            sourceComponent: TrayIcon {
+                                                px: Theme.barIcon
+                                                source: trayDelegate.modelData.icon
+                                            }
                                         }
                                         // the app's own tooltip title, else its name (Tooltip card)
                                         Tooltip { text: trayDelegate.modelData.tooltipTitle || trayDelegate.modelData.title || "" }

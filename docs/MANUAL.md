@@ -455,6 +455,9 @@ language (hold Ctrl and tap Space again to step through several);
 the layout letters in the bar show its mark — 拼, あ, 한. Most apps follow
 at once; older X11 apps after you sign out and back in. Removing the last
 language turns it off; the programs stay installed (Komble removes them).
+Chinese Pinyin's online suggestions ("cloud Pinyin", which would send what
+you type to an online service) are off and never asked about; turn them on
+in Language options if you want them.
 `ewe-ime status` shows what is on.
 
 The pointer's **size** (24, 36, 48 or 72 px) and **colour** (automatic —
