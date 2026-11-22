@@ -82,10 +82,18 @@ Scope {
     // very first index (none on disk yet) runs on open, so the first search
     // has something to answer; until it exists the system index answers.
     // Lowest CPU and I/O priority: the desktop must not notice it.
+    // Hidden folders in $HOME (~/.local, ~/.config, ~/.var …) are left out
+    // of the index, as Spotlight and GNOME search do: they are apps' insides
+    // (container storage, Steam, browser profiles, AppImage prefixes — the
+    // owner's "firefox" found 300k podman files, 2026-11-22), and leaving
+    // them out also makes the 10-minute re-index far cheaper. Dotfiles at the
+    // top (~/.zshrc) stay in. A folder name with a space can't be passed to
+    // updatedb; the search filter below hides it instead.
     readonly property string fileDb: "${XDG_CACHE_HOME:-$HOME/.cache}/ewe/files.db"
     readonly property string indexScript: "db=\"" + fileDb + "\"; mkdir -p \"${db%/*}\"; "
         + "if [ ! -s \"$db\" ] || [ -n \"$(find \"$db\" -mmin +10 2>/dev/null)\" ]; then "
-        + "nice -n 19 ionice -c 3 updatedb -l 0 --prune-bind-mounts no -U \"$HOME\" -o \"$db.new\" --prunenames \".git .cache node_modules .cargo .rustup .npm .gradle\" 2>/dev/null "
+        + "hide=; for d in \"$HOME\"/.[!.]* \"$HOME\"/..?*; do [ -d \"$d\" ] && [ ! -L \"$d\" ] && case \"$d\" in *\" \"*) ;; *) hide=\"$hide $d\";; esac; done; "
+        + "nice -n 19 ionice -c 3 updatedb -l 0 --prune-bind-mounts no -U \"$HOME\" -o \"$db.new\" --prunenames \".git .cache node_modules .cargo .rustup .npm .gradle\" --add-prunepaths \"$hide\" 2>/dev/null "
         + "&& mv -f \"$db.new\" \"$db\"; fi"
     property bool indexed: false
     Process { id: indexProc; command: ["sh", "-c", root.indexScript]; onExited: root.indexed = true }
@@ -95,7 +103,10 @@ Scope {
     // on screen (a killed run still flushes its partial output — 2026-09-20)
     readonly property string fileScript: "db=\"" + fileDb + "\"; printf \"q\\t%s\\n\" \"$1\"; "
         + "if [ -s \"$db\" ]; then plocate -d \"$db\" -i -b -l 2000 -- \"$1\"; else plocate -i -b -l 2000 -- \"$1\"; fi 2>/dev/null"
-        + " | grep \"^$HOME/\" | grep -vE \"/(\\.cache|\\.git|\\.cargo|\\.rustup|\\.npm|\\.gradle|\\.mozilla|node_modules)/|/\\.var/app/[^/]+/cache/|/\\.local/share/Trash/\""
+        // Anything inside a hidden folder only when the query itself starts
+        // with a dot (".zshrc", ".env"): then the old noise list still applies.
+        + " | grep \"^$HOME/\" | { case \"$1\" in .*) grep -vE \"/(\\.cache|\\.git|\\.cargo|\\.rustup|\\.npm|\\.gradle|\\.mozilla|node_modules)/|/\\.var/app/[^/]+/cache/|/\\.local/share/Trash/\";;"
+        + " *) grep -vE \"^$HOME/(.*/)?\\.[^/]+/|/node_modules/\";; esac; }"
         + " | head -25 | while IFS= read -r p; do if [ -d \"$p\" ]; then printf \"d\\t%s\\n\" \"$p\"; else printf \"f\\t%s\\n\" \"$p\"; fi; done"
 
     Timer { id: fileDebounce; interval: 140; onTriggered: root.runFileSearch() }
