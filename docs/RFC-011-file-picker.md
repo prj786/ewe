@@ -1,7 +1,7 @@
 # RFC-011 (draft) — One file picker: ewe draws every Open / Save / Open With dialog
 
-**Status:** BUILT 2026-11-22 on branch `file-picker` (ewe + the five app repos),
-not committed or released. The owner said "go"; the two open questions were
+**Status:** RELEASED 2026-11-22 in ewe 0.48.0-beta, with Komble 0.25.1, ewe
+Settings 0.26.1, ewe Sync 0.17.2, ewe Safe 0.5.2 and ewe apps 0.2.1. The owner said "go"; the two open questions were
 settled as proposed (dimmed screen, Open with in the same wave). §12 records
 what Phase 0 found and how each part was tested.
 **Repos touched:** `ewe` (most of it), plus a one-line change in `komble-arch`,
