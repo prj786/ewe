@@ -426,6 +426,18 @@ since Dock 1.1.0 (`desktop.dock.*` is only their `legacy` fallback,
   app also generates `hypr/generated/input.lua` and `wallpapers.conf`. See
   `docs/SETTINGS-BACKEND.md` for the full write-through contract.
 
+**Apps are cards (0.49, RFC-010):** `ewe` depends on **eep** (`prj786/eep`
+→ `/usr/bin/eep`, pulls `extra/nix`). Every app in the launcher has a card
+in `~/Applications`: eep's own apps (from the Nix binary cache) and every
+app already installed (pacman, Komble's AppImages, Steam games, the user's
+own entries, ewe's apps — `source = "system"` cards, `sys-<desktop id>`).
+Removing a found app's card HIDES it (eep writes a `NoDisplay` copy of its
+entry marked `X-Eep-Hides=<id>` into `~/.local/share/applications`; file
+types keep opening with it); restoring the card shows it again. The
+launcher's file search leaves `~/Applications/*.eep` out (the app is
+already a result); a card elsewhere opens through `application/x-eep` →
+`eep open`. The contract is `eep/docs/CARD.md`.
+
 Two first-party apps live in their own repos and are installed by phase 20 from
 prebuilt GitHub releases: **Komble** (`prj786/komble-arch` — THE software
 manager: pacman + AUR + AppImages) and **ewe-settings**

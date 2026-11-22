@@ -107,6 +107,11 @@ Scope {
         // with a dot (".zshrc", ".env"): then the old noise list still applies.
         + " | grep \"^$HOME/\" | { case \"$1\" in .*) grep -vE \"/(\\.cache|\\.git|\\.cargo|\\.rustup|\\.npm|\\.gradle|\\.mozilla|node_modules)/|/\\.var/app/[^/]+/cache/|/\\.local/share/Trash/\";;"
         + " *) grep -vE \"^$HOME/(.*/)?\\.[^/]+/|/node_modules/\";; esac; }"
+        // An eep card in ~/Applications IS an app (eep gives every app one,
+        // 0.49): the app is already in the list above, its card file is not
+        // a result. A card anywhere else (Downloads) stays a file, and opens
+        // through eep (application/x-eep → `eep open`).
+        + " | grep -vE \"^$HOME/Applications/[^/]+\\.[eE][eE][pP]$\""
         + " | head -25 | while IFS= read -r p; do if [ -d \"$p\" ]; then printf \"d\\t%s\\n\" \"$p\"; else printf \"f\\t%s\\n\" \"$p\"; fi; done"
 
     Timer { id: fileDebounce; interval: 140; onTriggered: root.runFileSearch() }

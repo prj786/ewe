@@ -47,6 +47,9 @@ depends=('pipewire-jack'            # claims 'jack' before ffmpeg/mpv/portaudio 
          'ewe-sync'                 # the account app (RFC-006), served from [ewe]
          'ewe-browser'              # THE browser, served from [ewe]
          'ewe-apps'                 # ewe Files, ewe Player, ewe Viewer (0.44), served from [ewe]
+         'eep'                      # every app is a card in ~/Applications (0.49, RFC-010): apps from
+                                    # the Nix cache + a card for every app already installed; pulls
+                                    # extra/nix. Served from [ewe]
          'reversal-icon-theme' 'mocu-cursor-theme'
          'python')   # ewe-conf; + the lists, appended in package()
 # The IPsec backend moved from strongswan to libreswan (packages/aur.list —
