@@ -147,6 +147,12 @@ export MALLOC_ARENA_MAX=4
 # / "kde" platform theme. (The shell itself is Quickshell/Qt, themed by Theme.qml.)
 export QT_QPA_PLATFORMTHEME=qt6ct
 export QT_STYLE_OVERRIDE=Fusion
+# One file picker for every app (RFC-011): GTK 3's "native" chooser — Firefox,
+# WebKitGTK's <input type=file> inside ewe's own apps, most GTK 3 apps — asks
+# the portal instead of drawing GTK's dialog in the app, and the portal hands
+# it to ewe-portal (the shell's picker). GTK 4 asks the portal by itself; Qt
+# apps do it through qt6ct (colorscheme.sh: standard_dialogs).
+export GTK_USE_PORTAL=1
 export QT_WAYLAND_DISABLE_WINDOWDECORATION=1
 export QT_AUTO_SCREEN_SCALE_FACTOR=1
 # One cursor everywhere (XWayland + every toolkit). colorscheme.sh decides it
