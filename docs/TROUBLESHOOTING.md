@@ -402,6 +402,29 @@ X11 apps such as Steam only mark their window urgent: a dot in the bar and
 the dock). A plain click opens a link in kitty; inside a program that uses
 the mouse (vim, htop, some TUIs) hold `Ctrl` + `Shift` while clicking.
 
+## A file dialog looks like GTK again, or opens behind the app
+
+Since RFC-011 every app's Open, Save and "Open with" is ewe's own picker,
+drawn by the shell above every window. A GTK dialog means one of three things:
+
+- **The shell couldn't answer** (it was restarting, or a QML error), so
+  `ewe-portal` handed that one request to the GTK dialog on purpose. The next
+  dialog should be ewe's again.
+- **The app never asks the portal.** GIMP, JetBrains IDEs, Steam, Wine and
+  Java apps draw their own dialogs; nothing outside the app can change that.
+  Firefox and GTK 3 apps need `GTK_USE_PORTAL=1` (a new session after
+  upgrading), and Qt apps need qt6ct's `standard_dialogs=xdgdesktopportal`
+  (colorscheme.sh writes it).
+- **The routing isn't in place.** Check it:
+
+```sh
+ewe-portal status            # routing.ewe must be true, backend_activatable true
+journalctl --user -u ewe-portal -n 20   # "GTK dialog for … — <why>"
+```
+
+`routing.ewe = false`: run `ewe-setup` (or `install.sh`), then
+`systemctl --user restart xdg-desktop-portal`.
+
 ## The pointer did not change after Settings → Cursor
 
 Apps kept the cursor theme the session started with. Since 0.43 the session
