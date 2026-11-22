@@ -470,6 +470,10 @@ SCHEME="$COLORS/ewe-dark.conf"
 # migrate: drop the pre-rename scheme files (and the deleted light scheme) so
 # qt6ct never lists a stale entry
 rm -f "$COLORS/hyprshell-dark.conf" "$COLORS/hyprshell-light.conf" "$COLORS/ewe-light.conf" 2>/dev/null
+# standard_dialogs=xdgdesktopportal: a Qt app's Open/Save goes through the
+# portal, so it gets ewe's file picker like every other app (RFC-011). qt6ct
+# loads Qt's own xdgdesktopportal theme for the dialogs only; without that
+# plugin (qt5) it falls back to Qt's dialog.
 for q in qt6ct qt5ct; do
     mkdir -p "$CFG/$q"
     cat > "$CFG/$q/$q.conf" <<EOF
@@ -477,7 +481,7 @@ for q in qt6ct qt5ct; do
 custom_palette=true
 color_scheme_path=$SCHEME
 icon_theme=$ICONS
-standard_dialogs=default
+standard_dialogs=xdgdesktopportal
 style=Fusion
 EOF
 done

@@ -1,0 +1,8 @@
+# D-Bus activation for ewe's portal backend (RFC-011), deployed per user to
+# ~/.local/share/dbus-1/services/. The session bus starts ewe-portal.service
+# (systemd) the first time xdg-desktop-portal needs a file dialog; Exec is
+# only a placeholder for buses without systemd activation.
+[D-BUS Service]
+Name=org.freedesktop.impl.portal.desktop.ewe
+Exec=/bin/false
+SystemdService=ewe-portal.service

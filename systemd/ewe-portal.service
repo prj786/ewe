@@ -1,0 +1,17 @@
+# ewe-portal — the file picker and "Open with" for every app (RFC-011).
+# Started on demand by the session bus (system/portal/
+# org.freedesktop.impl.portal.desktop.ewe.service) the first time an app asks
+# xdg-desktop-portal for a file. bin/ewe-portal is linked into ~/.local/bin by
+# lib/deploy.sh on both install paths. It asks the running shell to draw the
+# picker and hands the request to xdg-desktop-portal-gtk when the shell can't.
+[Unit]
+Description=ewe file picker (xdg-desktop-portal backend)
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Type=dbus
+BusName=org.freedesktop.impl.portal.desktop.ewe
+ExecStart=%h/.local/bin/ewe-portal serve
+Restart=on-failure
+RestartSec=1

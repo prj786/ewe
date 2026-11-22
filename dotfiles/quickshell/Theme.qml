@@ -632,4 +632,17 @@ QtObject {
     readonly property string icCloudOff:     ic(0xE08D)  // cloud-off — signed out or unreachable
     readonly property string icCloudAlert:   ic(0xE633)  // cloud-alert — a conflict needs a decision
     readonly property string icPlus:         ic(0xE13D)  // plus
+    // the file picker (FilePicker.qml, RFC-011)
+    readonly property string icArrowUp:      ic(0xE04A)  // arrow-up — the folder above
+    readonly property string icForward:      ic(0xE049)  // arrow-right — forward
+    readonly property string icList:         ic(0xE106)  // list — list view
+    readonly property string icGrid:         ic(0xE0FF)  // layout-grid — grid view
+    readonly property string icFolderPlus:   ic(0xE0D9)  // folder-plus — new folder
+    readonly property string icDrive:        ic(0xE0ED)  // hard-drive — a removable drive
+    readonly property string icVideo:        ic(0xE1A5)  // video — a video file, Videos
+    readonly property string icFileText:     ic(0xE0CC)  // file-text — a document, Documents
+    readonly property string icFileCode:     ic(0xE0C3)  // file-code — source code
+    readonly property string icArchive:      ic(0xE30D)  // file-archive — zip, tar
+    readonly property string icHistory:      ic(0xE1F5)  // history — Recent
+    readonly property string icCloud:        ic(0xE088)  // cloud — your account's folders
 }

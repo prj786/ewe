@@ -177,6 +177,31 @@ since Dock 1.1.0 (`desktop.dock.*` is only their `legacy` fallback,
   design system v3, `design/system/`); `design/check-spec.sh` holds the
   generated `design/tokens.css` to `design/system/tokens.json` and
   `design/check-contrast.sh` holds the derivation to the contrast rules.
+- **`FilePicker.qml` + `AppChooser.qml` + `bin/ewe-portal`** (RFC-011,
+  2026-11-22) — ONE Open / Save / Select folder / Open with for every app.
+  `dotfiles/xdg-desktop-portal/hyprland-portals.conf` (linked to
+  `~/.config/xdg-desktop-portal` by `deploy_portal` in lib/deploy.sh, with
+  the user-level `ewe.portal`, D-Bus activation file and
+  `ewe-portal.service`; x-d-p 1.22 reads all of them per user, no root)
+  routes the portal's FileChooser + AppChooser to `ewe-portal` (Python,
+  dbus-python). It writes the request to `$XDG_RUNTIME_DIR/ewe-portal/<id>.json`
+  and calls `qs ipc call filepicker|appchooser open <file>`. The shell draws an
+  Overlay layer (above every window, fullscreen included; Exclusive keyboard
+  only while the LazyLoader window exists) and answers on the daemon's bus
+  name, `org.ewe.Portal1.Answer(id, json)`; `b false` keeps the picker open.
+  No `ok` from `open`, or two missed `ping`s, and the request goes to
+  xdg-desktop-portal-gtk, so a file dialog never breaks. Apps are made to ask:
+  `GTK_USE_PORTAL=1` (start-hyprland.sh), qt6ct
+  `standard_dialogs=xdgdesktopportal` (colorscheme.sh), and the Tauri apps'
+  `tauri-plugin-dialog` with `xdg-portal` instead of `gtk3`. `qs ipc call` to a
+  missing target prints "Target not found." and EXITS 0: every verb returns a
+  word and the daemon checks the word. Test: `tests/ewe-portal-test.sh`
+  (helpers + the real frontend on a private bus with a fake `qs`). In the nest:
+  `HS_PRIVATE_BUS=1 HS_HEADLESS=1 driver.sh up`, then run `ewe-portal serve`
+  and `ewe-portal test <kind> --direct` with the nested qs's environment and
+  `EWE_QS_IPC="--pid <qs pid>"` (it goes between `ipc` and `call`).
+  Editing a QML file reloads the nested shell and drops an open picker; that
+  is the GTK fallback working, not a bug.
 - **`BtAgent.qml`** — the bluez pairing agent (`scripts/bt-agent.py`, default
   `org.bluez.Agent1`, NDJSON over stdio like the Phone plugin’s bridge); `BtPairing.qml`
   is its dialog. Device state still comes from `Quickshell.Bluetooth`; pairing
@@ -414,7 +439,7 @@ writes the same generated files as the in-shell panel (see
 External control (keybinds, scripts) uses **`qs ipc call <target> <fn>`** against an
 `IpcHandler { target: "<name>" }` in a component — core targets: `bar picker quicksettings
 lock osd overview settings applauncher store updates plugins widgets sync cloud google
-display power saver welcome toast game` (plus each plugin's own, `ewe.clipboard ewe.screenshot
+display power saver welcome toast game filepicker appchooser` (plus each plugin's own, `ewe.clipboard ewe.screenshot
 ewe.passwords ewe.safe ewe.companion ewe.slack`…; the legacy targets `cast launcher places player mail` are the first-party
 plugins' `ipcAliases` now — present only while that plugin is installed). Most expose
 `toggle`/`show`/`hide`. Gotcha: `qs ipc call <t> show` collides with the `qs ipc

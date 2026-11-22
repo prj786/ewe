@@ -1,0 +1,1084 @@
+#!/usr/bin/env python3
+"""ewe-portal — the file picker and "Open with" for every app (RFC-011).
+
+xdg-desktop-portal hands apps' "pick a file" and "open with" requests to the
+backend portals.conf names. ewe routes FileChooser and AppChooser here
+(~/.config/xdg-desktop-portal/hyprland-portals.conf) and this daemon asks the
+RUNNING ewe shell to draw the picker: FilePicker.qml, a layer-shell overlay
+that sits above every window, the one that asked included — the stock GTK
+dialog was an ordinary window and could open underneath its app. When the
+shell cannot answer (not running, too old to know the verb, restarted in the
+middle of a pick) the SAME request goes to xdg-desktop-portal-gtk's backend,
+so a file dialog never breaks.
+
+  ewe-portal serve           the D-Bus backend (ewe-portal.service runs it)
+  ewe-portal status          routing, backend, shell — one JSON object
+  ewe-portal test <kind> …   ask the REAL portal the way an app does and print
+                             what came back. Kinds: open · folder · save ·
+                             saves · app. Options: --multiple --title T
+                             --accept L --filter "Name:*.a;*.b"
+                             --mime "Name:image/*;text/plain"
+                             --choice "id|Label|a=A,b=B|a" (no options = a
+                             checkbox: "id|Label||true") --name N --folder DIR
+                             --file PATH --files a,b --uri URI --choices a,b
+                             --last ID --direct (call this backend itself, no
+                             frontend) --timeout S
+
+The shell protocol (the IPC verbs are public API — Rule 4):
+  1. the request is written to $XDG_RUNTIME_DIR/ewe-portal/<id>.json (0600)
+  2. qs ipc call filepicker open <file>    → "ok"      (appchooser for Open with)
+  3. the shell answers on THIS daemon's bus name, object /org/ewe/Portal:
+       org.ewe.Portal1.Answer(id, json)
+       {"ok": false}                                      cancelled
+       {"ok": true, "paths": [...], "choices": {id: value}, "filter": n,
+        "remember": {"key", "folder", "view", "hidden", "sort"}}
+       {"ok": true, "folder": "/dir"}                     SaveFiles
+       {"ok": true, "choice": "<desktop id>"}             Open with
+  4. qs ipc call filepicker close <id>     the app gave up (Request.Close)
+     qs ipc call filepicker ping <id>      "open" while the shell shows it;
+                                           two misses in a row = the shell
+                                           lost it → the GTK dialog takes over
+  EWE_PORTAL_MODE=gtk sends everything to GTK (debugging); EWE_QS_IPC adds
+  arguments between `qs ipc` and `call` (the nested dev shell: "--pid <qs pid>").
+
+Every CLI verb prints ONE JSON object and exits 0; problems are
+{"ok": false, "error": ...}. Pure helpers (filters, places, recent files,
+URIs) live at module level so tests/ewe-portal-test.sh can load them.
+"""
+
+import json
+import os
+import shlex
+import sys
+import uuid
+
+BUS_NAME = "org.freedesktop.impl.portal.desktop.ewe"
+OBJ_PATH = "/org/freedesktop/portal/desktop"
+FC_IFACE = "org.freedesktop.impl.portal.FileChooser"
+AC_IFACE = "org.freedesktop.impl.portal.AppChooser"
+REQ_IFACE = "org.freedesktop.impl.portal.Request"
+GTK_NAME = "org.freedesktop.impl.portal.desktop.gtk"
+PRIV_IFACE = "org.ewe.Portal1"
+PRIV_PATH = "/org/ewe/Portal"
+GTK_TIMEOUT = 7 * 24 * 3600          # a dialog may stay open as long as you like
+PING_EVERY = 2                        # seconds between "still showing it?" checks
+MISSES_TO_GIVE_UP = 2
+
+HOME = os.path.expanduser("~")
+
+
+def _env_dir(name, *default):
+    v = os.environ.get(name)
+    return v if v else os.path.join(HOME, *default)
+
+
+def xdg_config():
+    return _env_dir("XDG_CONFIG_HOME", ".config")
+
+
+def xdg_data():
+    return _env_dir("XDG_DATA_HOME", ".local", "share")
+
+
+def xdg_state():
+    return _env_dir("XDG_STATE_HOME", ".local", "state")
+
+
+def runtime_dir():
+    return os.path.join(os.environ.get("XDG_RUNTIME_DIR") or "/tmp", "ewe-portal")
+
+
+def state_file():
+    return os.path.join(xdg_state(), "ewe", "filepicker.json")
+
+
+def log(*parts):
+    print("ewe-portal:", *parts, file=sys.stderr, flush=True)
+
+
+# ── MIME types → glob patterns ───────────────────────────────────────────────
+# The shell lists folders with FolderListModel, which filters by name pattern
+# only. An app's filter may name MIME types ("image/*", "application/pdf"), so
+# they are turned into the globs shared-mime-info lists for them — including
+# every subclass, the way GTK matches (text/plain also shows .py, .md …).
+
+def mime_dirs():
+    if os.environ.get("EWE_PORTAL_MIME_DIRS"):
+        return [d for d in os.environ["EWE_PORTAL_MIME_DIRS"].split(":") if d]
+    data_dirs = os.environ.get("XDG_DATA_DIRS") or "/usr/local/share:/usr/share"
+    return [os.path.join(xdg_data(), "mime")] + [os.path.join(d, "mime") for d in data_dirs.split(":") if d]
+
+
+def load_mime_db(dirs=None):
+    globs, children, aliases = {}, {}, {}
+    for d in reversed(dirs if dirs is not None else mime_dirs()):
+        try:
+            with open(os.path.join(d, "globs2"), encoding="utf-8") as f:
+                for line in f:
+                    if line.startswith("#"):
+                        continue
+                    parts = line.rstrip("\n").split(":")
+                    if len(parts) >= 3:
+                        globs.setdefault(parts[1].lower(), []).append(parts[2])
+        except OSError:
+            pass
+        for name in ("subclasses", "aliases"):
+            try:
+                with open(os.path.join(d, name), encoding="utf-8") as f:
+                    for line in f:
+                        a = line.split()
+                        if len(a) != 2:
+                            continue
+                        if name == "subclasses":
+                            children.setdefault(a[1].lower(), set()).add(a[0].lower())
+                        else:
+                            aliases[a[0].lower()] = a[1].lower()
+            except OSError:
+                pass
+    return {"globs": globs, "children": children, "aliases": aliases}
+
+
+def _dedupe(items):
+    seen, out = set(), []
+    for x in items:
+        k = x.lower()
+        if k not in seen:
+            seen.add(k)
+            out.append(x)
+    return out
+
+
+def mime_globs(mime, db):
+    m = str(mime).strip().lower()
+    m = db["aliases"].get(m, m)
+    if m in ("application/octet-stream", "*/*", "*"):
+        return ["*"]
+    if m.endswith("/*"):
+        prefix = m[:-1]
+        roots = [k for k in db["globs"] if k.startswith(prefix)]
+        roots += [k for k in db["children"] if k.startswith(prefix)]
+    else:
+        roots = [m]
+    seen, stack, out = set(), list(roots), []
+    while stack:
+        cur = stack.pop()
+        if cur in seen:
+            continue
+        seen.add(cur)
+        out.extend(db["globs"].get(cur, []))
+        stack.extend(sorted(db["children"].get(cur, ())))
+    return _dedupe(out)
+
+
+def normalize_filters(filters, current, db):
+    """a(sa(us)) + (sa(us)) → ([{name, globs, raw}], index of the current one)."""
+    out = []
+    for f in filters or []:
+        name = str(f[0])
+        raw = [[int(t), str(p)] for t, p in f[1]]
+        globs = []
+        for t, p in raw:
+            globs.extend([p] if t == 0 else mime_globs(p, db))
+        out.append({"name": name or "Files", "globs": _dedupe(globs) or ["*"], "raw": raw})
+    idx = -1
+    if current is not None and len(current) == 2:
+        cname = str(current[0])
+        craw = [[int(t), str(p)] for t, p in current[1]]
+        for i, f in enumerate(out):
+            if f["name"] == cname and f["raw"] == craw:
+                idx = i
+                break
+        if idx < 0:
+            more, _ = normalize_filters([(cname, craw)], None, db)
+            out.extend(more)
+            idx = len(out) - 1
+    if out and idx < 0:
+        idx = 0
+    return out, idx
+
+
+def normalize_choices(choices):
+    """a(ssa(ss)s) → [{id, label, kind (select · toggle), options, value}]."""
+    out = []
+    for c in choices or []:
+        cid, label, initial = str(c[0]), str(c[1]), str(c[3])
+        opts = [{"id": str(o[0]), "label": str(o[1])} for o in c[2]]
+        if opts:
+            ids = [o["id"] for o in opts]
+            out.append({"id": cid, "label": label, "kind": "select", "options": opts,
+                        "value": initial if initial in ids else ids[0]})
+        else:
+            out.append({"id": cid, "label": label, "kind": "toggle", "options": [],
+                        "value": "true" if initial == "true" else "false"})
+    return out
+
+
+def bytes_path(v):
+    """An `ay` option (NUL-terminated file name) → str ("" when absent)."""
+    if v is None:
+        return ""
+    try:
+        b = bytes(bytearray(int(x) for x in v)).rstrip(b"\0")
+    except (TypeError, ValueError):
+        return ""
+    return os.fsdecode(b) if b else ""
+
+
+def path_to_uri(path):
+    try:
+        from gi.repository import GLib
+        return GLib.filename_to_uri(path, None)
+    except Exception:  # no gi: the same escaping GLib uses for paths
+        import urllib.parse
+        return "file://" + urllib.parse.quote(os.fsencode(path), safe="/!$&'()*+,-.:=@_~")
+
+
+def uri_to_path(uri):
+    import urllib.parse
+    u = urllib.parse.urlparse(uri)
+    if u.scheme != "file" or u.netloc not in ("", "localhost"):
+        return ""
+    return os.fsdecode(urllib.parse.unquote_to_bytes(u.path))
+
+
+# ── what the picker's sidebar lists ─────────────────────────────────────────
+
+USER_DIRS = [("DESKTOP", "Desktop", "desktop"), ("DOCUMENTS", "Documents", "documents"),
+             ("DOWNLOAD", "Downloads", "downloads"), ("MUSIC", "Music", "music"),
+             ("PICTURES", "Pictures", "pictures"), ("VIDEOS", "Videos", "videos")]
+
+
+def user_dirs():
+    out = {}
+    try:
+        with open(os.path.join(xdg_config(), "user-dirs.dirs"), encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line.startswith("XDG_") or "=" not in line:
+                    continue
+                k, v = line.split("=", 1)
+                v = v.strip().strip('"').replace("$HOME", HOME)
+                out[k[4:-4]] = os.path.normpath(v)          # XDG_<KEY>_DIR
+    except OSError:
+        pass
+    for key, name, _ in USER_DIRS:
+        out.setdefault(key, os.path.join(HOME, name))
+    return out
+
+
+def _read_json(path):
+    try:
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return None
+
+
+def _conf_places():
+    try:
+        import tomllib
+        with open(os.path.join(xdg_config(), "ewe", "ewe.conf"), "rb") as f:
+            v = tomllib.load(f).get("apps", {}).get("places", [])
+        return [str(p) for p in v if isinstance(p, str)]
+    except Exception:
+        return []
+
+
+def places():
+    """[{name, path, icon, group}] — group: places · cloud · pinned · drives."""
+    out, seen = [], set()
+
+    def add(name, path, icon, group):
+        if not path or not os.path.isdir(path):
+            return
+        real = os.path.realpath(path)
+        if real in seen:
+            return
+        seen.add(real)
+        out.append({"name": name, "path": os.path.normpath(path), "icon": icon, "group": group})
+
+    add("Home", HOME, "home", "places")
+    dirs = user_dirs()
+    for key, name, icon in USER_DIRS:
+        p = dirs.get(key, "")
+        if os.path.normpath(p) != os.path.normpath(HOME):
+            add(os.path.basename(p) or name, p, icon, "places")
+
+    sync = _read_json(os.path.join(xdg_state(), "ewe", "sync-folders.json"))
+    if isinstance(sync, dict):
+        acc = (sync.get("account_folder") or {}).get("path")
+        if acc:
+            add(os.path.basename(acc.rstrip("/")) or "Nextcloud", acc, "cloud", "cloud")
+        for f in sync.get("folders") or []:
+            if isinstance(f, dict) and f.get("local"):
+                add(f.get("name") or os.path.basename(f["local"].rstrip("/")), f["local"], "cloud", "cloud")
+    add("Nextcloud", os.environ.get("EWE_FILES_MOUNT") or os.path.join(HOME, "Nextcloud"), "cloud", "cloud")
+
+    for p in _conf_places():
+        add(os.path.basename(p.rstrip("/")) or p, os.path.expanduser(p), "pin", "pinned")
+    try:
+        with open(os.path.join(xdg_config(), "gtk-3.0", "bookmarks"), encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line.startswith("file://"):
+                    continue
+                uri, _, label = line.partition(" ")
+                p = uri_to_path(uri)
+                if p:
+                    add(label or os.path.basename(p.rstrip("/")) or p, p, "folder", "pinned")
+    except OSError:
+        pass
+
+    user = os.environ.get("USER") or os.path.basename(HOME)
+    media = os.environ.get("EWE_PORTAL_MEDIA") or os.path.join("/run/media", user)
+    try:
+        for name in sorted(os.listdir(media)):
+            add(name, os.path.join(media, name), "drive", "drives")
+    except OSError:
+        pass
+    return out
+
+
+def recent(limit=80):
+    """Files from recently-used.xbel (what GTK apps and ewe Files record), newest first."""
+    import xml.etree.ElementTree as ET
+    from datetime import datetime
+    try:
+        root = ET.parse(os.path.join(xdg_data(), "recently-used.xbel")).getroot()
+    except (OSError, ET.ParseError):
+        return []
+    items = {}
+    for b in root.iter("bookmark"):
+        p = uri_to_path(b.get("href", ""))
+        if not p:
+            continue
+        stamp = 0.0
+        for attr in ("visited", "modified", "added"):
+            s = b.get(attr)
+            if s:
+                try:
+                    stamp = datetime.fromisoformat(s.replace("Z", "+00:00")).timestamp()
+                    break
+                except ValueError:
+                    pass
+        if stamp > items.get(p, -1):
+            items[p] = stamp
+    out = [{"path": p, "time": int(t)} for p, t in sorted(items.items(), key=lambda kv: -kv[1])
+           if os.path.isfile(p)]
+    return out[:limit]
+
+
+# ── remembered per app: last folder, list or grid, hidden files, sort ───────
+
+def load_state():
+    s = _read_json(state_file())
+    if not isinstance(s, dict):
+        s = {}
+    if not isinstance(s.get("folders"), dict):
+        s["folders"] = {}
+    if not isinstance(s.get("order"), list):
+        s["order"] = []
+    return s
+
+
+def save_state(s):
+    path = state_file()
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(s, f, indent=1)
+        os.replace(tmp, path)
+    except OSError as e:
+        log("could not save", path, e)
+
+
+def remember(s, r):
+    """Fold the shell's `remember` block into the state (at most 100 apps)."""
+    if not isinstance(r, dict):
+        return s
+    if r.get("view") in ("list", "grid"):
+        s["view"] = r["view"]
+    if isinstance(r.get("hidden"), bool):
+        s["hidden"] = r["hidden"]
+    if r.get("sort") in ("name", "modified", "size"):
+        s["sort"] = r["sort"]
+    key, folder = str(r.get("key") or ""), str(r.get("folder") or "")
+    if key and folder and os.path.isabs(folder):
+        s["folders"][key] = folder
+        s["order"] = [k for k in s["order"] if k != key] + [key]
+        while len(s["order"]) > 100:
+            s["folders"].pop(s["order"].pop(0), None)
+    return s
+
+
+# ── a portal call → the request file the shell reads ───────────────────────
+
+def build_request(rid, kind, args, db=None):
+    """args are the D-Bus method's arguments, as received."""
+    if kind == "app":
+        _, app_id, parent, choices, opts = args
+        return {
+            "version": 1, "id": rid, "kind": "app", "app_id": str(app_id),
+            "parent_window": str(parent), "title": "",
+            "choices": [str(c) for c in choices],
+            "last_choice": str(opts.get("last_choice", "")),
+            "content_type": str(opts.get("content_type", "")),
+            "uri": str(opts.get("uri", "")), "filename": str(opts.get("filename", "")),
+        }
+    _, app_id, parent, title, opts = args
+    st = load_state()
+    filters, fidx = normalize_filters(opts.get("filters"), opts.get("current_filter"),
+                                      db if db is not None else load_mime_db())
+    return {
+        "version": 1, "id": rid, "kind": kind, "app_id": str(app_id),
+        "parent_window": str(parent), "title": str(title),
+        "accept_label": str(opts.get("accept_label", "")),
+        "multiple": bool(opts.get("multiple", False)),
+        "filters": [{"name": f["name"], "globs": f["globs"]} for f in filters],
+        "filter": fidx,
+        "choices": normalize_choices(opts.get("choices")),
+        "current_name": str(opts.get("current_name", "")),
+        "current_folder": _existing_dir(bytes_path(opts.get("current_folder"))),
+        "current_file": bytes_path(opts.get("current_file")),
+        "files": [os.path.basename(bytes_path(f)) for f in (opts.get("files") or [])],
+        "places": places(), "recent": recent() if kind in ("open", "folder") else [],
+        "remembered": {k: v for k, v in st["folders"].items() if isinstance(v, str) and os.path.isdir(v)},
+        "view": st.get("view", "list"),
+        "hidden": bool(st.get("hidden", False)), "sort": st.get("sort", "name"),
+        "home": HOME,
+    }
+
+
+def _existing_dir(p):
+    return p if p and os.path.isdir(p) else ""
+
+
+def build_results(req, raw_filters, ans):
+    """The shell's answer → the portal's results (plain Python; serve() wraps
+    them in D-Bus types). Raises ValueError for an answer that cannot be used."""
+    kind = req["kind"]
+    if kind == "app":
+        c = str(ans.get("choice") or "")
+        if not c:
+            raise ValueError("no app chosen")
+        return {"choice": c}
+    if kind == "saves":
+        folder = str(ans.get("folder") or "")
+        if not os.path.isabs(folder) or not os.path.isdir(folder):
+            raise ValueError("not a folder: %r" % folder)
+        paths = [os.path.join(folder, f) for f in req["files"]]
+    else:
+        paths = [str(p) for p in (ans.get("paths") or []) if isinstance(p, str)]
+        if not paths:
+            raise ValueError("nothing picked")
+        if not req.get("multiple"):
+            paths = paths[:1]
+        for p in paths:
+            if not os.path.isabs(p):
+                raise ValueError("not an absolute path: %r" % p)
+            if kind == "open" and not os.path.exists(p):
+                raise ValueError("no such file: %r" % p)
+            if kind == "folder" and not os.path.isdir(p):
+                raise ValueError("not a folder: %r" % p)
+            if kind == "save" and not os.path.isdir(os.path.dirname(p)):
+                raise ValueError("no such folder: %r" % os.path.dirname(p))
+    res = {"uris": [path_to_uri(os.path.normpath(p)) for p in paths]}
+    if req.get("choices"):
+        picked = ans.get("choices") if isinstance(ans.get("choices"), dict) else {}
+        res["choices"] = [[c["id"], str(picked.get(c["id"], c["value"]))] for c in req["choices"]]
+    fi = ans.get("filter", req.get("filter", -1))
+    if isinstance(fi, int) and not isinstance(fi, bool) and 0 <= fi < len(raw_filters):
+        res["current_filter"] = [raw_filters[fi]["name"], raw_filters[fi]["raw"]]
+    return res
+
+
+def write_request(req):
+    d = runtime_dir()
+    os.makedirs(d, mode=0o700, exist_ok=True)
+    path = os.path.join(d, req["id"] + ".json")
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        json.dump(req, f)
+    return path
+
+
+def qs_argv(*args):
+    return ["qs", "ipc"] + shlex.split(os.environ.get("EWE_QS_IPC", "")) + ["call"] + [str(a) for a in args]
+
+
+# ── routing as xdg-desktop-portal sees it (status) ──────────────────────────
+
+def routing():
+    import configparser
+    desktops = [d.lower() for d in (os.environ.get("XDG_CURRENT_DESKTOP") or "").split(":") if d]
+    dirs = [os.path.join(xdg_config(), "xdg-desktop-portal")]
+    dirs += [os.path.join(d, "xdg-desktop-portal")
+             for d in (os.environ.get("XDG_CONFIG_DIRS") or "/etc/xdg").split(":") if d]
+    dirs += ["/etc/xdg-desktop-portal", os.path.join(xdg_data(), "xdg-desktop-portal")]
+    dirs += [os.path.join(d, "xdg-desktop-portal")
+             for d in (os.environ.get("XDG_DATA_DIRS") or "/usr/local/share:/usr/share").split(":") if d]
+    for d in dirs:
+        for name in ["%s-portals.conf" % x for x in desktops] + ["portals.conf"]:
+            f = os.path.join(d, name)
+            if not os.path.isfile(f):
+                continue
+            cp = configparser.ConfigParser(interpolation=None)
+            cp.optionxform = str
+            try:
+                cp.read(f, encoding="utf-8")
+            except configparser.Error:
+                return {"file": f, "error": "unreadable"}
+            pref = cp["preferred"] if cp.has_section("preferred") else {}
+            default = pref.get("default", "")
+
+            def chain(iface):
+                return [x for x in pref.get("org.freedesktop.impl.portal." + iface, default).split(";") if x]
+            fc, ac = chain("FileChooser"), chain("AppChooser")
+            return {"file": f, "file_chooser": fc, "app_chooser": ac,
+                    "ewe": bool(fc) and fc[0] == "ewe"}
+    return {"file": "", "file_chooser": [], "app_chooser": [], "ewe": False}
+
+
+def portal_file():
+    dirs = [xdg_data()] + (os.environ.get("XDG_DATA_DIRS") or "/usr/local/share:/usr/share").split(":")
+    for d in dirs:
+        f = os.path.join(d, "xdg-desktop-portal", "portals", "ewe.portal")
+        if d and os.path.isfile(f):
+            return f
+    return ""
+
+
+# ── the daemon ──────────────────────────────────────────────────────────────
+
+def serve():
+    try:
+        import dbus
+        import dbus.service
+        from dbus.mainloop.glib import DBusGMainLoop
+        from gi.repository import Gio, GLib
+    except ImportError as e:
+        log("missing python deps (python-dbus, python-gobject):", e)
+        return 1
+    DBusGMainLoop(set_as_default=True)
+    bus = dbus.SessionBus()
+    mode = os.environ.get("EWE_PORTAL_MODE", "shell")
+    mime_db = {}
+
+    def db():
+        if "db" not in mime_db:
+            mime_db["db"] = load_mime_db()
+        return mime_db["db"]
+
+    def to_dbus(results):
+        out = {}
+        if "uris" in results:
+            out["uris"] = dbus.Array(results["uris"], signature="s")
+        if "choices" in results:
+            out["choices"] = dbus.Array([dbus.Struct((a, b), signature="ss") for a, b in results["choices"]],
+                                        signature="(ss)")
+        if "current_filter" in results:
+            name, raw = results["current_filter"]
+            out["current_filter"] = dbus.Struct(
+                (name, dbus.Array([dbus.Struct((dbus.UInt32(t), p), signature="us") for t, p in raw],
+                                  signature="(us)")), signature="sa(us)")
+        if "choice" in results:
+            out["choice"] = dbus.String(results["choice"])
+        return out
+
+    def run_async(argv, cb, timeout=10):
+        """Run argv; cb(success, output) once, on the main loop."""
+        try:
+            proc = Gio.Subprocess.new(argv, Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_MERGE)
+        except GLib.Error as e:
+            cb(False, str(e))
+            return
+        timer = {"id": 0}
+
+        def kill():
+            timer["id"] = 0
+            proc.force_exit()
+            return False
+        timer["id"] = GLib.timeout_add_seconds(timeout, kill)
+
+        def done(p, res):
+            if timer["id"]:
+                GLib.source_remove(timer["id"])
+                timer["id"] = 0
+            try:
+                _, out, _ = p.communicate_utf8_finish(res)
+                cb(p.get_successful(), out or "")
+            except GLib.Error as e:
+                cb(False, str(e))
+        proc.communicate_utf8_async(None, None, done)
+
+    class Pending:
+        def __init__(self, iface, method, kind, args, reply, error):
+            self.id = uuid.uuid4().hex[:16]
+            self.iface, self.method, self.kind = iface, method, kind
+            self.args, self.reply, self.error = list(args), reply, error
+            self.handle = str(args[0])
+            self.state = "queued"          # queued · opening · shown · gtk · done
+            self.req, self.raw_filters, self.file, self.obj = None, [], "", None
+            self.misses = 0
+
+        @property
+        def target(self):
+            return "appchooser" if self.kind == "app" else "filepicker"
+
+    class Request(dbus.service.Object):
+        def __init__(self, path, on_close):
+            dbus.service.Object.__init__(self, bus, path)
+            self._on_close = on_close
+
+        @dbus.service.method(REQ_IFACE, in_signature="", out_signature="")
+        def Close(self):
+            self._on_close()
+
+    class Portal(dbus.service.Object):
+        def __init__(self):
+            dbus.service.Object.__init__(self, bus, OBJ_PATH)
+            self.queue, self.current = [], None
+            self.fallbacks = 0
+            GLib.timeout_add_seconds(PING_EVERY, self._tick)
+
+        # FileChooser
+        @dbus.service.method(FC_IFACE, in_signature="osssa{sv}", out_signature="ua{sv}",
+                             async_callbacks=("reply", "error"))
+        def OpenFile(self, handle, app_id, parent_window, title, options, reply, error):
+            kind = "folder" if bool(options.get("directory", False)) else "open"
+            self._begin(FC_IFACE, "OpenFile", kind, (handle, app_id, parent_window, title, options), reply, error)
+
+        @dbus.service.method(FC_IFACE, in_signature="osssa{sv}", out_signature="ua{sv}",
+                             async_callbacks=("reply", "error"))
+        def SaveFile(self, handle, app_id, parent_window, title, options, reply, error):
+            self._begin(FC_IFACE, "SaveFile", "save", (handle, app_id, parent_window, title, options), reply, error)
+
+        @dbus.service.method(FC_IFACE, in_signature="osssa{sv}", out_signature="ua{sv}",
+                             async_callbacks=("reply", "error"))
+        def SaveFiles(self, handle, app_id, parent_window, title, options, reply, error):
+            self._begin(FC_IFACE, "SaveFiles", "saves", (handle, app_id, parent_window, title, options), reply, error)
+
+        # AppChooser
+        @dbus.service.method(AC_IFACE, in_signature="ossasa{sv}", out_signature="ua{sv}",
+                             async_callbacks=("reply", "error"))
+        def ChooseApplication(self, handle, app_id, parent_window, choices, options, reply, error):
+            self._begin(AC_IFACE, "ChooseApplication", "app",
+                        (handle, app_id, parent_window, choices, options), reply, error)
+
+        @dbus.service.method(AC_IFACE, in_signature="oas", out_signature="")
+        def UpdateChoices(self, handle, choices):
+            p = self._find(str(handle))
+            if not p:
+                return
+            p.args[3] = choices
+            if p.state == "gtk":
+                self._gtk_call(p, "UpdateChoices", (handle, choices), None)
+            elif p.req is not None:
+                p.req["choices"] = [str(c) for c in choices]
+                try:
+                    write_request(p.req)
+                except OSError:
+                    return
+                if p.state == "shown":
+                    run_async(qs_argv(p.target, "update", p.file), lambda ok, out: None)
+
+        # ── bookkeeping ──
+        def _find(self, handle):
+            for p in ([self.current] if self.current else []) + self.queue:
+                if p.handle == handle:
+                    return p
+            return None
+
+        def _begin(self, iface, method, kind, args, reply, error):
+            p = Pending(iface, method, kind, args, reply, error)
+            try:
+                p.obj = Request(p.handle, lambda: self._close(p))
+            except Exception as e:                     # never block the app over it
+                log("request object", p.handle, e)
+            if mode == "gtk":
+                self._to_gtk(p, "EWE_PORTAL_MODE=gtk")
+                return
+            self.queue.append(p)
+            self._pump()
+
+        def _pump(self):
+            while self.current is None and self.queue:
+                p = self.queue.pop(0)
+                if p.state != "queued":
+                    continue
+                self.current = p
+                self._show(p)
+            return False
+
+        def _show(self, p):
+            try:
+                p.req = build_request(p.id, p.kind, p.args, db() if p.kind != "app" else None)
+                if p.kind != "app":
+                    p.raw_filters, _ = normalize_filters(p.args[4].get("filters"),
+                                                         p.args[4].get("current_filter"), db())
+                p.file = write_request(p.req)
+            except Exception as e:
+                log("could not prepare the request:", e)
+                self._release(p)
+                self._to_gtk(p, "request: %s" % e)
+                return
+            p.state = "opening"
+
+            def opened(ok, out):
+                if p.state != "opening":
+                    return
+                if out.strip() == "ok":
+                    p.state, p.misses = "shown", 0
+                else:
+                    self._release(p)
+                    self._to_gtk(p, "shell: %s" % (out.strip()[:200] or "no answer"))
+            run_async(qs_argv(p.target, "open", p.file), opened)
+
+        def _release(self, p):
+            if self.current is p:
+                self.current = None
+                GLib.idle_add(self._pump)
+
+        def _tick(self):
+            p = self.current
+            if p is None or p.state != "shown":
+                return True
+
+            def pinged(ok, out):
+                if p.state != "shown":
+                    return
+                if out.strip() == "open":
+                    p.misses = 0
+                    return
+                p.misses += 1
+                if p.misses >= MISSES_TO_GIVE_UP:
+                    self._release(p)
+                    self._to_gtk(p, "the shell lost the picker (%s)" % (out.strip()[:200] or "no answer"))
+            run_async(qs_argv(p.target, "ping", p.id), pinged, timeout=PING_EVERY)
+            return True
+
+        def _close(self, p):                      # the app gave up
+            if p.state in ("done", "relaying"):
+                return
+            if p.state == "gtk":
+                self._gtk_call(p, "Close", (), None, iface=REQ_IFACE, path=p.handle)
+                return
+            if p.state in ("opening", "shown"):
+                run_async(qs_argv(p.target, "close", p.id), lambda ok, out: None)
+            if p in self.queue:
+                self.queue.remove(p)
+            self._finish(p, 2, {})
+
+        def _cleanup(self, p):
+            if p.obj is not None:
+                try:
+                    p.obj.remove_from_connection()
+                except Exception:
+                    pass
+                p.obj = None
+            if p.file:
+                try:
+                    os.unlink(p.file)
+                except OSError:
+                    pass
+                p.file = ""
+
+        def _finish(self, p, code, results):
+            if p.state == "done":
+                return
+            p.state = "done"
+            try:
+                p.reply(dbus.UInt32(code), dbus.Dictionary(results, signature="sv"))
+            except Exception as e:
+                log("reply failed:", e)
+            self._cleanup(p)
+            self._release(p)
+
+        # ── the GTK backend, when the shell cannot ──
+        def _gtk_call(self, p, method, args, done, iface=None, path=OBJ_PATH):
+            try:
+                obj = bus.get_object(GTK_NAME, path, introspect=False)
+                getattr(obj, method)(*args, dbus_interface=iface or p.iface, timeout=GTK_TIMEOUT,
+                                     reply_handler=(lambda *r: done(True, r)) if done else (lambda *r: None),
+                                     error_handler=(lambda e: done(False, e)) if done else (lambda e: None))
+            except Exception as e:
+                if done:
+                    done(False, e)
+
+        def _to_gtk(self, p, why):
+            log("GTK dialog for", p.method, "—", why)
+            self.fallbacks += 1
+            p.state = "gtk"
+
+            def done(ok, r):
+                if p.state != "gtk":
+                    return
+                if not ok:
+                    log("GTK backend failed:", r)
+                    self._finish(p, 2, {})
+                    return
+                code, res = r
+                p.state = "relaying"
+                try:
+                    p.reply(dbus.UInt32(int(code)), res)
+                except Exception as e:
+                    log("relay failed:", e)
+                p.state = "done"
+                self._cleanup(p)
+            self._gtk_call(p, p.method, p.args, done)
+
+        # ── the shell's answer ──
+        def answer(self, rid, payload):
+            p = self.current
+            if p is None or p.id != rid or p.state not in ("opening", "shown"):
+                return False
+            try:
+                ans = json.loads(payload)
+            except ValueError:
+                ans = {"ok": False}
+            if not isinstance(ans, dict) or not ans.get("ok"):
+                self._finish(p, 1, {})
+                return True
+            try:
+                results = build_results(p.req, p.raw_filters, ans)
+            except ValueError as e:
+                log("answer refused:", e)
+                return False                       # the picker stays open
+            if isinstance(ans.get("remember"), dict):
+                save_state(remember(load_state(), ans["remember"]))
+            self._finish(p, 0, to_dbus(results))
+            return True
+
+        def status(self):
+            cur = self.current
+            return {"ok": True, "mode": mode, "queued": len(self.queue), "fallbacks": self.fallbacks,
+                    "current": {"id": cur.id, "kind": cur.kind, "state": cur.state} if cur else None}
+
+    class Bridge(dbus.service.Object):
+        def __init__(self, portal):
+            dbus.service.Object.__init__(self, bus, PRIV_PATH)
+            self.portal = portal
+
+        @dbus.service.method(PRIV_IFACE, in_signature="ss", out_signature="b")
+        def Answer(self, rid, payload):
+            return self.portal.answer(str(rid), str(payload))
+
+        @dbus.service.method(PRIV_IFACE, in_signature="", out_signature="s")
+        def Status(self):
+            return json.dumps(self.portal.status())
+
+    portal = Portal()
+    Bridge(portal)
+    try:
+        name = dbus.service.BusName(BUS_NAME, bus, do_not_queue=True)  # noqa: F841 — holds the name
+    except dbus.exceptions.NameExistsException:
+        log("another ewe-portal already owns", BUS_NAME)
+        return 0
+    log("ready (mode %s)" % mode)
+    GLib.MainLoop().run()
+    return 0
+
+
+# ── CLI: status, test ───────────────────────────────────────────────────────
+
+def emit(obj):
+    print(json.dumps(obj))
+    return 0
+
+
+def plain(v):
+    """D-Bus values → JSON-able Python."""
+    import dbus
+    if isinstance(v, dbus.Array) and v.signature == "y":
+        return bytes_path(v)
+    if isinstance(v, (dbus.Array, dbus.Struct, list, tuple)):
+        return [plain(x) for x in v]
+    if isinstance(v, (dbus.Dictionary, dict)):
+        return {str(k): plain(x) for k, x in v.items()}
+    if isinstance(v, dbus.Boolean):
+        return bool(v)
+    if isinstance(v, (dbus.Byte, dbus.Int16, dbus.Int32, dbus.Int64, dbus.UInt16, dbus.UInt32, dbus.UInt64)):
+        return int(v)
+    if isinstance(v, dbus.Double):
+        return float(v)
+    return str(v)
+
+
+def cmd_status():
+    import subprocess
+    out = {"ok": True, "routing": routing(), "portal_file": portal_file()}
+    try:
+        import dbus
+        bus = dbus.SessionBus()
+        out["backend_running"] = bool(bus.name_has_owner(BUS_NAME))
+        out["backend_activatable"] = BUS_NAME in [str(n) for n in bus.list_activatable_names()]
+        if out["backend_running"]:
+            obj = bus.get_object(BUS_NAME, PRIV_PATH, introspect=False)
+            out["backend"] = json.loads(str(obj.Status(dbus_interface=PRIV_IFACE, timeout=3)))
+    except Exception as e:
+        out["bus_error"] = str(e)
+    try:
+        r = subprocess.run(qs_argv("filepicker", "ping", "status"), capture_output=True, text=True, timeout=5)
+        reply = (r.stdout or "").strip()
+        out["shell"] = reply in ("open", "idle", "unknown")
+        if not out["shell"]:
+            out["shell_reply"] = (reply or (r.stderr or "").strip())[:200]
+    except (OSError, subprocess.TimeoutExpired) as e:
+        out["shell"] = False
+        out["shell_reply"] = str(e)
+    return emit(out)
+
+
+def _parse_test(argv):
+    if not argv:
+        raise ValueError("test needs a kind: open · folder · save · saves · app")
+    o = {"kind": argv[0], "filters": [], "choices": [], "direct": False, "timeout": 300.0}
+    flags = {"--multiple": "multiple", "--direct": "direct"}
+    vals = {"--title": "title", "--accept": "accept", "--name": "name", "--folder": "folder",
+            "--file": "file", "--files": "files", "--uri": "uri", "--choices": "app_choices",
+            "--last": "last", "--timeout": "timeout"}
+    i = 1
+    while i < len(argv):
+        a = argv[i]
+        if a in flags:
+            o[flags[a]] = True
+            i += 1
+            continue
+        if i + 1 >= len(argv):
+            raise ValueError("%s needs a value" % a)
+        v = argv[i + 1]
+        i += 2
+        if a in ("--filter", "--mime"):
+            name, _, pats = v.partition(":")
+            t = 0 if a == "--filter" else 1
+            o["filters"].append((name, [(t, p) for p in pats.split(";") if p]))
+        elif a == "--choice":
+            parts = (v.split("|") + ["", "", "", ""])[:4]
+            opts = [tuple((x.split("=", 1) + [x])[:2]) for x in parts[2].split(",") if x]
+            o["choices"].append((parts[0], parts[1], opts, parts[3]))
+        elif a in vals:
+            o[vals[a]] = float(v) if a == "--timeout" else v
+        else:
+            raise ValueError("unknown option %s" % a)
+    if o["kind"] not in ("open", "folder", "save", "saves", "app"):
+        raise ValueError("unknown kind %r" % o["kind"])
+    return o
+
+
+def cmd_test(argv):
+    try:
+        o = _parse_test(argv)
+    except ValueError as e:
+        return emit({"ok": False, "error": str(e)})
+    try:
+        import dbus
+        from dbus.mainloop.glib import DBusGMainLoop
+        from gi.repository import GLib
+    except ImportError as e:
+        return emit({"ok": False, "error": "missing python deps: %s" % e})
+    DBusGMainLoop(set_as_default=True)
+    bus = dbus.SessionBus()
+    token = "ewetest" + uuid.uuid4().hex[:8]
+
+    def ay(p):
+        return dbus.Array(list(os.fsencode(p)) + [0], signature="y")
+    opts = {"handle_token": dbus.String(token)}
+    if o.get("multiple"):
+        opts["multiple"] = dbus.Boolean(True)
+    if o["kind"] == "folder":
+        opts["directory"] = dbus.Boolean(True)
+    if o.get("accept"):
+        opts["accept_label"] = dbus.String(o["accept"])
+    if o["filters"]:
+        opts["filters"] = dbus.Array(
+            [dbus.Struct((n, dbus.Array([dbus.Struct((dbus.UInt32(t), p), signature="us") for t, p in pats],
+                                        signature="(us)")), signature="sa(us)") for n, pats in o["filters"]],
+            signature="(sa(us))")
+    if o["choices"]:
+        opts["choices"] = dbus.Array(
+            [dbus.Struct((c[0], c[1], dbus.Array([dbus.Struct(x, signature="ss") for x in c[2]], signature="(ss)"),
+                          c[3]), signature="ssa(ss)s") for c in o["choices"]],
+            signature="(ssa(ss)s)")
+    if o.get("name"):
+        opts["current_name"] = dbus.String(o["name"])
+    if o.get("folder"):
+        opts["current_folder"] = ay(o["folder"])
+    if o.get("file"):
+        opts["current_file"] = ay(o["file"])
+    if o.get("files"):
+        opts["files"] = dbus.Array([ay(f) for f in o["files"].split(",") if f], signature="ay")
+    title = o.get("title") or {"open": "Open a file", "folder": "Choose a folder", "save": "Save as",
+                               "saves": "Save files", "app": ""}[o["kind"]]
+    method = {"open": "OpenFile", "folder": "OpenFile", "save": "SaveFile", "saves": "SaveFiles"}.get(o["kind"])
+
+    result = {}
+    loop = GLib.MainLoop()
+
+    def on_response(code, res, *_):
+        result["response"] = int(code)
+        result["results"] = plain(res)
+        loop.quit()
+
+    def on_error(e):
+        result["error"] = str(e)
+        loop.quit()
+
+    try:
+        if o["direct"]:
+            handle = dbus.ObjectPath("/org/freedesktop/portal/desktop/request/ewe_test/" + token)
+            obj = bus.get_object(BUS_NAME, OBJ_PATH, introspect=False)
+            kw = {"reply_handler": on_response, "error_handler": on_error, "timeout": o["timeout"]}
+            if o["kind"] == "app":
+                choices = dbus.Array([c for c in (o.get("app_choices") or "").split(",") if c], signature="s")
+                aopts = {"last_choice": dbus.String(o.get("last", "")), "uri": dbus.String(o.get("uri", ""))}
+                obj.ChooseApplication(handle, "", "", choices, dbus.Dictionary(aopts, signature="sv"),
+                                      dbus_interface=AC_IFACE, **kw)
+            else:
+                getattr(obj, method)(handle, "", "", title, dbus.Dictionary(opts, signature="sv"),
+                                     dbus_interface=FC_IFACE, **kw)
+        else:
+            sender = bus.get_unique_name()[1:].replace(".", "_")
+            path = "/org/freedesktop/portal/desktop/request/%s/%s" % (sender, token)
+            bus.add_signal_receiver(on_response, signal_name="Response",
+                                    dbus_interface="org.freedesktop.portal.Request", path=path)
+            desk = bus.get_object("org.freedesktop.portal.Desktop", "/org/freedesktop/portal/desktop")
+            if o["kind"] == "app":
+                if not o.get("uri"):
+                    return emit({"ok": False, "error": "app needs --uri (it goes through OpenURI with ask)"})
+                desk.OpenURI("", o["uri"], dbus.Dictionary({"handle_token": dbus.String(token),
+                                                             "ask": dbus.Boolean(True)}, signature="sv"),
+                             dbus_interface="org.freedesktop.portal.OpenURI")
+            else:
+                getattr(desk, method)("", title, dbus.Dictionary(opts, signature="sv"),
+                                      dbus_interface="org.freedesktop.portal.FileChooser")
+    except Exception as e:
+        return emit({"ok": False, "error": str(e)})
+
+    def give_up():
+        result.setdefault("error", "timed out")
+        loop.quit()
+        return False
+    GLib.timeout_add(int(o["timeout"] * 1000), give_up)
+    loop.run()
+    if "error" in result:
+        return emit({"ok": False, "error": result["error"]})
+    return emit({"ok": True, "response": result["response"], "results": result["results"]})
+
+
+def main(argv):
+    cmd = argv[1] if len(argv) > 1 else "status"
+    if cmd == "serve":
+        return serve()
+    if cmd == "status":
+        return cmd_status()
+    if cmd == "test":
+        return cmd_test(argv[2:])
+    return emit({"ok": False, "error": "unknown command %r (serve · status · test)" % cmd})
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main(sys.argv) or 0)
+    except KeyboardInterrupt:
+        sys.exit(0)

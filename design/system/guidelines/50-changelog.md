@@ -9,6 +9,11 @@ The system's version is the `version` field in `tokens.json`. The repositories s
 - Every version gets an entry here: what changed, and what an implementation has to do about it.
 - Renamed or removed tokens stay listed in Migration until no repository uses them.
 
+## Next version (draft)
+
+**Components (1 new):**
+- File picker: Open, Save as, Select folder and Open with for every app, through the desktop portal (RFC-011). No new tokens. Implementations add `FilePicker.qml` and `AppChooser.qml` and route the portal's FileChooser and AppChooser to ewe.
+
 ## Version 3
 
 **Components (15 new):**

@@ -31,6 +31,17 @@ restore "$HOME/.config/oh-my-posh"
 restore "$HOME/.config/mise"
 restore "$HOME/.config/ewe-shell"
 restore "$HOME/.config/fastfetch"
+restore "$HOME/.config/xdg-desktop-portal"
+
+# the file picker (RFC-011): files go back to the stock GTK dialog
+run systemctl --user stop ewe-portal.service 2>/dev/null || true
+for f in "$HOME/.config/systemd/user/ewe-portal.service" \
+         "$HOME/.local/share/xdg-desktop-portal/portals/ewe.portal" \
+         "$HOME/.local/share/dbus-1/services/org.freedesktop.impl.portal.desktop.ewe.service"; do
+    [ -e "$f" ] && { run rm -f "$f"; ok "removed $(basename "$f")"; }
+done
+[ -L "$HOME/.local/bin/ewe-portal" ] && run rm -f "$HOME/.local/bin/ewe-portal"
+run systemctl --user try-restart xdg-desktop-portal.service 2>/dev/null || true
 
 # the Zed mime-override we copied into the user apps dir
 if [ -e "$HOME/.local/share/applications/dev.zed.Zed.desktop" ]; then

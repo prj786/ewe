@@ -83,6 +83,9 @@ ShellRoot {
     DesktopWidgets {}
     Lock {}
     SharePicker {}
+    // every app's Open / Save / Choose folder (RFC-011): ewe-portal asks over IPC
+    FilePicker {}
+    AppChooser {}                 // and "Open with"
     Screensaver {}
     Osd {}
     Overview {}

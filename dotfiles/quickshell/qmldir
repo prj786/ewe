@@ -71,6 +71,8 @@ DesktopWidgets 1.0 DesktopWidgets.qml
 InvertedCorner 1.0 InvertedCorner.qml
 Lock 1.0 Lock.qml
 SharePicker 1.0 SharePicker.qml
+FilePicker 1.0 FilePicker.qml
+AppChooser 1.0 AppChooser.qml
 Osd 1.0 Osd.qml
 Overview 1.0 Overview.qml
 Settings 1.0 Settings.qml

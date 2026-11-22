@@ -364,6 +364,7 @@ This guide is for whoever updates the Ewe repositories to match this design syst
 | Auth.qml | Authentication prompt |
 | BtPairing.qml | Bluetooth pairing |
 | SharePicker.qml | Share picker |
+| FilePicker.qml, AppChooser.qml | File picker |
 | TrayMenu.qml | Menu |
 | Welcome.qml | Welcome, Wi-Fi picker, Step indicator |
 | DesktopWidgets.qml | Desktop widgets |
