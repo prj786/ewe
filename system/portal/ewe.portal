@@ -1,0 +1,7 @@
+# ewe's portal backend (RFC-011): files and "Open with" for every app.
+# Deployed per user to ~/.local/share/xdg-desktop-portal/portals/ by
+# lib/deploy.sh — xdg-desktop-portal reads that folder as well as /usr/share.
+# Routing: dotfiles/xdg-desktop-portal/hyprland-portals.conf.
+[portal]
+DBusName=org.freedesktop.impl.portal.desktop.ewe
+Interfaces=org.freedesktop.impl.portal.FileChooser;org.freedesktop.impl.portal.AppChooser;

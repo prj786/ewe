@@ -85,4 +85,37 @@ deploy_dotfiles() {
     fi
     run systemctl --user daemon-reload 2>/dev/null || true
     ok "installed hyprland-session.target + ewe.service (shell respawn) + ewe-remote-sshd.service"
+    deploy_portal
+}
+
+# The file picker (RFC-011). xdg-desktop-portal reads the user's routing
+# (~/.config/xdg-desktop-portal) and portal files (~/.local/share/
+# xdg-desktop-portal/portals) before the system's (checked on x-d-p 1.22), and
+# the session bus reads ~/.local/share/dbus-1/services — so the whole backend
+# deploys per user, without root, on both install paths (phase 50 and
+# ewe-setup both run deploy_dotfiles).
+deploy_portal() {
+    local was_ours=0 cfg="$HOME/.config/xdg-desktop-portal"
+    if [ -L "$cfg" ] && [ "$(readlink -f "$cfg")" = "$(readlink -f "$DOTREPO/dotfiles/xdg-desktop-portal")" ]; then
+        was_ours=1
+    fi
+    link_tree "$DOTREPO/dotfiles/xdg-desktop-portal" "$cfg"
+    run install -Dm644 "$DOTREPO/system/portal/ewe.portal" \
+        "$HOME/.local/share/xdg-desktop-portal/portals/ewe.portal"
+    run install -Dm644 "$DOTREPO/system/portal/org.freedesktop.impl.portal.desktop.ewe.service" \
+        "$HOME/.local/share/dbus-1/services/org.freedesktop.impl.portal.desktop.ewe.service"
+    run mkdir -p "$HOME/.local/bin"
+    run ln -sfn "$DOTREPO/bin/ewe-portal" "$HOME/.local/bin/ewe-portal"
+    run cp -f "$DOTREPO/systemd/ewe-portal.service" "$HOME/.config/systemd/user/"
+    run systemctl --user daemon-reload 2>/dev/null || true
+    # the bus picks up the new activation file; a running backend restarts on
+    # the new code (it is started again on the next file dialog)
+    run busctl --user call org.freedesktop.DBus /org/freedesktop/DBus org.freedesktop.DBus ReloadConfig 2>/dev/null || true
+    run systemctl --user try-restart ewe-portal.service 2>/dev/null || true
+    # the frontend reads its routing once, at start: restart it the first time
+    # only (a restart ends any screen share in progress)
+    if [ "$was_ours" = 0 ]; then
+        run systemctl --user try-restart xdg-desktop-portal.service 2>/dev/null || true
+    fi
+    ok "installed ewe-portal (the file picker for every app)"
 }

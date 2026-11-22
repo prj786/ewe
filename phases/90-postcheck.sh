@@ -36,6 +36,10 @@ phase_postcheck() {
     _check "portal: xdg-desktop-portal active"    systemctl --user is-active xdg-desktop-portal.service
     _check "portal: hyprland backend active"      systemctl --user is-active xdg-desktop-portal-hyprland.service
     _check "portal: gtk backend active"           systemctl --user is-active xdg-desktop-portal-gtk.service
+    # RFC-011: every app's Open/Save/Open with goes to ewe-portal (the shell
+    # draws it); routing.ewe is what xdg-desktop-portal will actually use
+    _check "portal: files and Open with go to ewe" sh -c '"$0" status | grep -q "\"ewe\": true"' "$DOTREPO/bin/ewe-portal"
+    _check "portal: ewe file picker can start"    sh -c '"$0" status | grep -q "\"backend_activatable\": true"' "$DOTREPO/bin/ewe-portal"
     _check "audio: a default sink exists"         sh -c 'wpctl status 2>/dev/null | grep -qi sink'
     _check "audio: SOF + UCM firmware present"     sh -c 'pacman -Qq sof-firmware && pacman -Qq alsa-ucm-conf'
     _check "network: NetworkManager active"       systemctl is-active NetworkManager.service

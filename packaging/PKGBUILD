@@ -119,4 +119,7 @@ package() {
     # Files' "Open in Terminal" (the dconf default, system/dconf/ewe.d/10-terminal):
     # kitty on the workspace you are on, whatever a Window Rule says (0.43.1)
     install -Dm755 system/bin/ewe-terminal-here "$pkgdir/usr/bin/ewe-terminal-here"
+    # the file picker's backend (RFC-011) — on PATH for `ewe-portal status`;
+    # the user unit runs the ~/.local/bin link deploy_dotfiles makes
+    install -Dm755 bin/ewe-portal "$pkgdir/usr/bin/ewe-portal"
 }
