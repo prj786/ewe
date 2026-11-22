@@ -655,6 +655,7 @@ Scope {
             'echo "portal=$(systemctl --user is-active xdg-desktop-portal 2>/dev/null)";' +
             'echo "portal_hypr=$(systemctl --user is-active xdg-desktop-portal-hyprland 2>/dev/null)";' +
             'echo "portal_gtk=$(systemctl --user is-active xdg-desktop-portal-gtk 2>/dev/null)";' +
+            'echo "files=$(ewe-portal status 2>/dev/null | grep -q \"ewe.: true\" && echo ewe || echo gtk)";' +
             'echo "handoff=$(busctl --user introspect org.freedesktop.portal.Desktop /org/freedesktop/portal/desktop org.freedesktop.portal.OpenURI >/dev/null 2>&1 && echo ok || echo fail)";' +
             'echo "browser=$(xdg-settings get default-web-browser 2>/dev/null)";' +
             'echo "gpu=$(lspci -k 2>/dev/null | grep -A3 -iE \"VGA|Display|3D\" | grep -i \"driver in use\" | head -1 | sed \"s/.*use: //\")";' +
@@ -1779,6 +1780,7 @@ Scope {
                         KV { k: "xdg-desktop-portal"; v: root.diag.portal || "?"; dot: root.diag.portal === "active" ? "ok" : "bad" }
                         KV { k: "Portal: Hyprland"; v: root.diag.portal_hypr || "?"; dot: root.diag.portal_hypr === "active" ? "ok" : "bad" }
                         KV { k: "Portal: GTK"; v: root.diag.portal_gtk || "?"; dot: root.diag.portal_gtk === "active" ? "ok" : "bad" }
+                        KV { k: "Open and Save windows"; v: root.diag.files === "ewe" ? "ewe" : "GTK"; dot: root.diag.files === "ewe" ? "ok" : "bad" }
                         KV { k: "Opening links in apps (OpenURI)"; v: root.diag.handoff === "ok" ? "Working" : "Unavailable"; dot: root.diag.handoff === "ok" ? "ok" : "bad" }
                         KV { k: "Default browser"; v: root.appNameForId(root.diag.browser) }
                     }

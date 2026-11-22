@@ -778,7 +778,10 @@ hl.window_rule({
     float = true,
 })
 -- portal file choosers (GTK portal opens them as plain toplevels): floating;
--- Hyprland places them over the app that asked (xdg-foreign)
+-- Hyprland places them over the app that asked (xdg-foreign). Since RFC-011
+-- this is only the FALLBACK: ewe-portal sends Open/Save to the shell's own
+-- picker (an overlay layer, never under the app) and hands a request to the
+-- GTK dialog only when the shell can't answer.
 hl.window_rule({
     name   = "portal-file-chooser",
     match  = { class = "xdg-desktop-portal-gtk" },
