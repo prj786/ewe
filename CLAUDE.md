@@ -592,6 +592,21 @@ written. Called live by Settings → Theme, at shell startup, and by phase 60.
   kdeconnect, gnome-network-displays, ewe-cast, qt5-wayland, the JetBrains Nerd
   font and the old apps are not dependencies any more (Komble installs
   base-devel before the first AUR build; plugins `require` their packages).
+- **The phone is two processes (0.49.2, decision 76)** — the bar glyph and the
+  Quick settings *Mobile* page are the `ewe.phone` plugin (layer surfaces stay
+  in the shell); the window with everything else — messages with the
+  contacts' names, the address book, the phone's player, files, a remote,
+  pairing — is **ewe Mobile** (`prj786/ewe-mobile`, private for now; Tauri +
+  Svelte over `kdeconnectd`, package `ewe-mobile`, NOT a dependency and not
+  in `[ewe]` yet). The plugin's page shows an "Open ewe Mobile" button only
+  where `Shell.entryForClass("ewe-mobile")` finds the app, and runs
+  `ewe-mobile --page messages|phone` (public page ids). ewe.phone 1.1.0 also
+  fixed the bridge: KDE Connect's conversations interface is on the DEVICE
+  object (there is no `/conversations` child) and a message is a STRUCT in a
+  variant — the Messages tab had never worked against a real phone.
+  **`sshfs` is in `packages/common.list`** (owner: "make sshfs installed by
+  default"): KDE Connect mounts the phone's storage with it and lists it only
+  as optional, so "Browse its files" failed on every machine.
 - **Toolkit theming env is exported in `dotfiles/hypr/start-hyprland.sh` before
   `exec Hyprland`**, not via `hl.env()` in `hyprland.lua` — `hl.env` propagation to
   on-demand-launched apps is unreliable.

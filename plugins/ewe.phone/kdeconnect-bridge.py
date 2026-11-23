@@ -10,9 +10,11 @@ as a Process and speaks newline-delimited JSON:
   stdout → events  {"event": "...", ...}   (state pushes, signal relays)
   stdin  ← commands {"cmd": "...", ...}    (pair, dismiss, send message, …)
 
-Interfaces verified against kdeconnect 26.04.x source (device / battery /
-notifications / conversations). Every reply is one JSON line; the bridge never
-crashes on a bad device — errors surface as {"event":"error", ...}.
+Interfaces verified against a running kdeconnectd 26.08 with a paired phone
+(device / battery / notifications / conversations — 1.1.0: conversations are
+on the device object, and a message is a struct, not a dict). Every reply is
+one JSON line; the bridge never crashes on a bad device — errors surface as
+{"event":"error", ...}.
 
 EWE_PHONE_NO_DAEMON=1 stops the bridge from starting kdeconnectd itself (the
 nested test harness runs the shell on a private session bus: a daemon it
@@ -286,13 +288,26 @@ class Bridge:
 
     # ── SMS / conversations ──────────────────────────────────────────────────
     def norm_message(self, m):
+        """One message as the QML side wants it. The daemon sends a STRUCT in
+        a variant — (event, body, [(address,)…], date, type, read, thread id,
+        uid, sub id, [(part id, mime, base64 thumbnail, unique id)…]) —
+        which dbus-python hands over as a sequence; a dict with the same
+        names is taken too (older builds, the tests)."""
         m = plain(m)
+        if isinstance(m, (list, tuple)):
+            if len(m) < 9:
+                return None
+            m = {"event": m[0], "body": m[1], "addresses": m[2], "date": m[3], "type": m[4],
+                 "read": m[5], "thread_id": m[6], "u_id": m[7],
+                 "attachments": m[9] if len(m) > 9 else []}
         if not isinstance(m, dict):
             return None
         addrs = []
         for a in (m.get("addresses") or []):
             if isinstance(a, dict) and a.get("address"):
                 addrs.append(str(a["address"]))
+            elif isinstance(a, (list, tuple)) and a and isinstance(a[0], str) and a[0]:
+                addrs.append(a[0])          # the struct (address,)
             elif isinstance(a, str):
                 addrs.append(a)
         return {
@@ -309,7 +324,9 @@ class Bridge:
         }
 
     def conv_iface(self, dev_id):
-        o = self.obj(self.dev_path(dev_id) + "/conversations")
+        # the conversations interface lives on the DEVICE object: there is no
+        # /conversations child (kdeconnect 26.08, `busctl --user introspect`)
+        o = self.obj(self.dev_path(dev_id))
         return dbus.Interface(o, CONV_IFACE)
 
     def on_message(self, msg, path=""):
@@ -372,7 +389,14 @@ class Bridge:
         elif cmd == "replyNotif":
             self.plugin(dev, "notifications", NOTIF_IFACE).sendReply(c["replyId"], c["text"])
         elif cmd == "requestConversations":
-            self.conv_iface(dev).requestAllConversationThreads()
+            conv = self.conv_iface(dev)
+            # what the daemon already holds first: asked a second time it only
+            # says "loaded" per thread and sends no message again
+            for msg in conv.activeConversations():
+                m = self.norm_message(msg)
+                if m:
+                    emit({"event": "message", "deviceId": dev, "msg": m})
+            conv.requestAllConversationThreads()
         elif cmd == "requestConversation":
             self.conv_iface(dev).requestConversation(
                 dbus.Int64(int(c["threadId"])), dbus.Int32(int(c.get("start", 0))), dbus.Int32(int(c.get("end", 30))))
@@ -380,7 +404,9 @@ class Bridge:
             self.conv_iface(dev).replyToConversation(
                 dbus.Int64(int(c["threadId"])), c["text"], dbus.Array([], signature="v"))
         elif cmd == "sendToAddress":
-            addr = dbus.Dictionary({"address": dbus.String(c["address"])}, signature="sv")
+            # a recipient is the struct (address,) in a variant — the daemon
+            # reads it with qdbus_cast<ConversationAddress>, which a dict is not
+            addr = dbus.Struct((dbus.String(c["address"]),), signature="s", variant_level=1)
             self.conv_iface(dev).sendWithoutConversation(
                 dbus.Array([addr], signature="v"), c["text"], dbus.Array([], signature="v"))
         elif cmd == "ring":
