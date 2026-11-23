@@ -800,6 +800,21 @@ hl.window_rule({
     size   = { 880, 620 },
 })
 
+-- Installing an app from its card (eep): a click on a card that is not
+-- installed yet opens ewe Files' small Install window (`ewe-files-app
+-- --install=<card>`, sent by `eep open --ask`) — the app's icon and name over
+-- an Install button. A card over what you were doing, not a tile. The title
+-- is the one the window OPENS with (ewe-apps: INSTALL_TITLE; it names the app
+-- a moment later) and the size is INSTALL_SIZE. Without `size` it floats at
+-- the size of the whole screen (GTK takes the first size Hyprland offers).
+hl.window_rule({
+    name   = "eep-install",
+    match  = { class = "^ewe-files-app$", title = "^Install an app$" },
+    float  = true,
+    center = true,
+    size   = { 400, 380 },
+})
+
 -- The gnome-keyring / gcr password prompt: a compact floating card, not a
 -- full-width sheet (it looked terrible mid-sign-in, 2026-09-02). Since
 -- 2026-09-03 it is genuinely rare — phase 30 masks the gnome-keyring socket

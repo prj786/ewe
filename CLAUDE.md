@@ -436,7 +436,13 @@ entry marked `X-Eep-Hides=<id>` into `~/.local/share/applications`; file
 types keep opening with it); restoring the card shows it again. The
 launcher's file search leaves `~/Applications/*.eep` out (the app is
 already a result); a card elsewhere opens through `application/x-eep` →
-`eep open`. The contract is `eep/docs/CARD.md`.
+`eep open --ask`: an installed app starts, any other card goes to ewe
+Files' small Install window (`ewe-files-app --install=<card>` — icon and
+name over an Install button, which moves the card into `~/Applications`;
+eep says how far the install is). hyprland.lua's `eep-install` rule floats
+that window, centred, 400×380 — it matches the title the window OPENS with
+(`Install an app`, ewe-apps `INSTALL_TITLE`); change one, change both. The
+contract is `eep/docs/CARD.md`.
 
 Two first-party apps live in their own repos and are installed by phase 20 from
 prebuilt GitHub releases: **Komble** (`prj786/komble-arch` — THE software
