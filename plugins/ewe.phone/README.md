@@ -14,6 +14,12 @@ for unread phone notifications.
     ewe-plugin install ewe.phone
     qs ipc call quicksettings tab mobile     # the page (the key the shell always used)
 
+With [ewe Mobile](https://github.com/prj786/ewe-mobile) installed, the page's
+head has a button that opens it — the window with the rest: contacts, the
+phone's player, files, a keyboard to type on the phone with. The page stays
+the short version; the bar glyph and the page are this plugin's either way
+(a window cannot be a layer surface).
+
 Needs `kdeconnect` (the `kdeconnectd` daemon — started by the plugin when it
 is installed and not running, since Hyprland processes no XDG autostart) and
 `python-dbus` + `python-gobject` for the bridge; all three are ewe

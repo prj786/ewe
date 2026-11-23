@@ -19,7 +19,7 @@ for f in $FILES; do
     [ -r "design/$f" ] || { echo "missing design/$f"; exit 1; }
 done
 
-for app in ewe-settings ewe-sync komble-arch; do
+for app in ewe-settings ewe-sync komble-arch ewe-mobile; do
     for f in $FILES; do
         src="design/$f"; copy="$ROOT/$app/src/$f"
         if [ ! -r "$copy" ]; then

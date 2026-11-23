@@ -16,6 +16,9 @@ gnome-keyring
 libsecret               # secret-tool — Google refresh token lives in the keyring
 # kdeconnect: NOT here since 0.44 — the Phone plugin (ewe.phone) `requires` it and Komble
 # installs it with the plugin; it pulled ~165 MB of KDE Frameworks into every install.
+sshfs                   # a remote folder as a local one: KDE Connect mounts the phone's storage with it
+                        # (ewe Mobile → Files → Open; optional for kdeconnect, so it was simply missing —
+                        # owner, 2026-11-23: "make sshfs installed by default"). 90 KB; fuse3 and openssh are here already
 accountsservice         # user icon store (greeter avatar; Settings writes it via busctl)
 plocate                 # launcher file search (Super+D); phase 30 enables the updatedb timer
 python-dbus             # logind-bridge.py, bt-agent.py and the phone add-on's kdeconnect-bridge.py (D-Bus side)

@@ -99,6 +99,18 @@ m = b.Bridge.norm_message(None, dbus.Dictionary({
 assert m == {"threadId": 7, "body": "hi", "date": 1700000000000, "type": 1, "read": 0,
              "addresses": ["+4912345", "+4967890"], "uid": 99, "multitarget": True,
              "hasAttachments": False, "event": 1}, m
+# … and the shape kdeconnectd really sends (26.08): a STRUCT in a variant —
+# (event, body, [(address,)…], date, type, read, thread id, uid, sub id,
+# [(part id, mime, base64 thumbnail, unique id)…]); dbus-python hands a
+# Struct over as a tuple
+wire = (dbus.Int32(1), dbus.String("hi"), dbus.Array([(dbus.String("+4912345"),), (dbus.String("+4967890"),)]),
+        dbus.Int64(1700000000000), dbus.Int32(1), dbus.Int32(0), dbus.Int64(7), dbus.Int32(99), dbus.Int64(1),
+        dbus.Array([(dbus.Int64(3), dbus.String("image/jpeg"), dbus.String("/9j/"), dbus.String("PART_3"))]))
+m = b.Bridge.norm_message(None, wire)
+assert m == {"threadId": 7, "body": "hi", "date": 1700000000000, "type": 1, "read": 0,
+             "addresses": ["+4912345", "+4967890"], "uid": 99, "multitarget": True,
+             "hasAttachments": True, "event": 1}, m
+assert b.Bridge.norm_message(None, (dbus.Int32(1), dbus.String("too short"))) is None
 assert b.Bridge.norm_message(None, dbus.String("garbage")) is None
 # a message with no thread id defaults to -1 (QML drops it)
 assert b.Bridge.norm_message(None, {})["threadId"] == -1

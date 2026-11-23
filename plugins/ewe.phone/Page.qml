@@ -1,4 +1,5 @@
 import QtQuick
+import Quickshell
 import qs
 
 // ewe.phone — the Mobile page of Quick settings (quickPage.key "mobile", the
@@ -26,10 +27,23 @@ Column {
 
     spacing: Theme.spaceS
 
+    // ewe Mobile, the window: this page is the short version — contacts, the
+    // phone's player, files and a keyboard to type with are there. Offered
+    // only where the app is installed (asked each time the page opens: the
+    // shell's answer follows the installed apps). `page` is one of the app's
+    // public page ids; a running window is told the page and brought forward.
+    property bool appThere: false
+    function openApp(page) {
+        Shell.closeQuickSettings()
+        Quickshell.execDetached(["ewe-mobile", "--page", String(page)])
+        Shell.focusApp(["ewe-mobile"])
+    }
+
     // setTab("mobile") used to reset the view and refresh; the list on screen
     // marks everything seen
     onPanelOpenChanged: {
         if (!panelOpen) return
+        root.appThere = Shell.entryForClass("ewe-mobile") !== null
         root.mobileView = "notifs"
         Phone.refresh()
         Phone.markAllSeen()
@@ -58,7 +72,13 @@ Column {
             }
             TextMono { anchors.verticalCenter: parent.verticalCenter; text: Phone.connected ? Phone.device.batteryCharge + "%" : "" }
         }
-        QsIconButton { anchors.verticalCenter: parent.verticalCenter; ic: Theme.icRefresh; onGo: Phone.refresh() }
+        QsIconButton { anchors.verticalCenter: parent.verticalCenter; ic: Theme.icRefresh; tip: "Look again"; onGo: Phone.refresh() }
+        QsIconButton {
+            visible: root.appThere
+            anchors.verticalCenter: parent.verticalCenter
+            ic: Theme.icExternal; tip: "Open ewe Mobile"
+            onGo: root.openApp(root.mobileView === "msgs" ? "messages" : "phone")
+        }
     }
 
     // — the bridge itself cannot run (python-dbus / python-gobject missing) —
