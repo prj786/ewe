@@ -57,7 +57,7 @@ Column {
 
     QsPageHead {
         title: Phone.connected ? Phone.device.name : "Mobile"
-        note: Phone.connected ? "" : "KDE Connect"
+        note: Phone.connected ? "" : "ewe Mobile"
         // the connected phone's battery
         Row {
             visible: Phone.connected && Phone.device.batteryCharge >= 0
@@ -88,14 +88,14 @@ Column {
     // — not installed —
     QsEmpty {
         visible: Phone.bridgeUp && !Phone.installed
-        ic: Theme.icPhone; title: "KDE Connect isn’t installed"
-        desc: "Install it with sudo pacman -S kdeconnect, then install the app on your phone. Both need the same Wi-Fi network."
+        ic: Theme.icPhone; title: "The phone connection isn’t installed"
+        desc: "Install the kdeconnect package (it only runs the connection, it has no window): sudo pacman -S kdeconnect. Then install ewe Mobile on your phone. Both need the same Wi-Fi network."
     }
     // — installed, daemon down —
     Row {
         visible: Phone.installed && !Phone.daemonRunning
         width: parent.width; spacing: Theme.spaceS
-        TextBody { anchors.verticalCenter: parent.verticalCenter; width: parent.width - kdStart.width - parent.spacing; text: "KDE Connect isn’t running."; color: Theme.textSecondary }
+        TextBody { anchors.verticalCenter: parent.verticalCenter; width: parent.width - kdStart.width - parent.spacing; text: "The phone connection isn’t running."; color: Theme.textSecondary }
         QsButton { id: kdStart; anchors.verticalCenter: parent.verticalCenter; variant: "primary"; label: "Start"; onGo: Phone.refresh() }
     }
 
@@ -134,7 +134,7 @@ Column {
         QsEmpty {
             visible: Phone.devices.length === 0
             ic: Theme.icPhone; title: "No phones found"
-            desc: "Open KDE Connect on your phone. Both devices need the same network."
+            desc: "Open ewe Mobile on your phone. Both devices need the same network."
         }
         ListWell {
             flush: true
@@ -163,7 +163,7 @@ Column {
     // — paired but out of reach —
     QsNote {
         visible: Phone.device !== null && Phone.device.isPaired && !Phone.device.isReachable
-        text: "“" + (Phone.device ? Phone.device.name : "") + "” is offline. Put it on the same network with KDE Connect open, then refresh."
+        text: "“" + (Phone.device ? Phone.device.name : "") + "” is offline. Put it on the same network with ewe Mobile open, then refresh."
     }
 
     // — connected: notifications ⇄ messages, and ring —

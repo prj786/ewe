@@ -3,8 +3,16 @@
 *Status: **accepted** 2026-11-26 — the owner took all nine proposed answers
 the same day (§9). Built and released that day: the Remote page fix (ewe
 Mobile 0.1.1-beta, §3.1) and step A1, the phone in ewe Files (ewe-apps
-0.5.0-beta, §4). Not started: the half hour with the phone in §7, which
-comes before A2–A4, and the APK (Track B), which is a session of its own.*
+0.5.0-beta, §4). **The same evening, the rest as one wave** (ewe 0.50.0-beta,
+ewe.phone 1.2.0, ewe Mobile 0.2.0-beta, eep 0.4.1-beta, the Android app on
+`ewe-connector-android` main): the §7 probes; A2–A4 (adb link, Screen in
+scrcpy's window, Apps — open here or on the phone); B1–B3 (the fork, the ewe
+face in Compose, the apps list with icons through `remotecommands`); plus
+what the owner added that day — phone notifications as ewe cards (the app's
+icon, an accent outline, a phone chip, inline reply), no KDE Connect window
+anywhere, the phone in the dock, its apps in the launcher. The build plan
+and its contracts: `ewe-mobile/docs/ECOSYSTEM.md`. Still open: B4 (not
+needed), B5 (the release key), A3 step 2 (the screen inside the window).*
 **Repos it touches:** `ewe-mobile` (new pages), `ewe-apps` (ewe Files),
 a new `ewe-mobile-android` (the APK), `ewe` (package lists), `ewe-repo`.
 **Number:** 009 is Remote, 010 eep, 011 the file picker; this is 012.

@@ -837,6 +837,19 @@ hl.window_rule({
     size   = { 560, 200 },
 })
 
+-- ewe Mobile's mirrored phone screen (scrcpy, SDL_APP_ID=ewe-mobile-screen):
+-- a floating, centred window at a phone's shape (about 9:20), 80% of the
+-- screen's height. The phone's apps (class ewe-mobile-app-<package>) are
+-- ordinary windows and tile like any app, so there is no rule for them.
+-- scrcpy resizes the window to the phone's own aspect afterwards.
+hl.window_rule({
+    name   = "ewe-mobile-screen",
+    match  = { class = "^ewe-mobile-screen$" },
+    float  = true,
+    center = true,
+    size   = { "monitor_h*0.36", "monitor_h*0.8" },
+})
+
 -- Window card: only FLOATING windows carry shadow-float; tiled ones sit flat
 -- in their gaps, their border saying which is focused.
 hl.window_rule({

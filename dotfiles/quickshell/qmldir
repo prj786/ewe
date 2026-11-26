@@ -53,6 +53,8 @@ QsButton 1.0 QsButton.qml
 QsIconButton 1.0 QsIconButton.qml
 QsField 1.0 QsField.qml
 QsFieldInput 1.0 QsFieldInput.qml
+NoteReply 1.0 NoteReply.qml
+PhoneChip 1.0 PhoneChip.qml
 QsSegmented 1.0 QsSegmented.qml
 QsSwitchRow 1.0 QsSwitchRow.qml
 QsPageHead 1.0 QsPageHead.qml

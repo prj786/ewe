@@ -18,7 +18,7 @@ Scope {
     // the host injects pluginDir right after createObject(); start the bridge
     // from it. Should the injection never come (an older host), the singleton
     // resolves the script from its own directory a moment later.
-    onPluginDirChanged: if (pluginDir !== "") Phone.start(pluginDir)
+    onPluginDirChanged: if (pluginDir !== "") { Phone.start(pluginDir); svc.applyHide() }
     Timer { interval: 1500; running: true; onTriggered: Phone.start("") }
 
     // autostart.sh's `run_once kdeconnectd kdeconnectd`: nothing when the
@@ -38,6 +38,24 @@ Scope {
             'pgrep -x kdeconnectd >/dev/null 2>&1 && exit 0; ' +
             'setsid "$exe" >/dev/null 2>&1 </dev/null & exit 0']
         onExited: function (code) { if (code !== 0) Log.warn("ewe.phone", "kdeconnectd start helper exited", code) }
+    }
+
+    // C6, no KDE Connect window anywhere: `hide_kdeconnect` (default on) takes
+    // KDE Connect's launcher entries out of the launcher (hide_kdeconnect.py:
+    // eep's hide, else NoDisplay copies marked X-Ewe-Phone-Hides); off puts
+    // them back. Idempotent, so it simply runs at start and on every change.
+    readonly property bool hideKde: !(svc.settings && svc.settings.hide_kdeconnect === false)
+    onHideKdeChanged: svc.applyHide()
+    function applyHide() {
+        if (svc.pluginDir === "") return
+        hider.command = ["python3", String(svc.pluginDir).replace(/^file:\/\//, "").replace(/\/$/, "") + "/hide_kdeconnect.py",
+                         svc.hideKde ? "hide" : "show"]
+        hider.running = false
+        hider.running = true
+    }
+    Process {
+        id: hider
+        stdout: StdioCollector { onStreamFinished: if (this.text.indexOf('"ok": false') >= 0) Log.warn("ewe.phone", "hide_kdeconnect:", this.text.trim()) }
     }
 
     Connections {

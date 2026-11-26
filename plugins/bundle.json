@@ -61,8 +61,8 @@
       "repo": "https://github.com/prj786/ewe-plugin-phone",
       "default": false,
       "migrate": true,
-      "commit": "b494f335aa31d7d120a9fc877c60be05356bbfe5",
-      "version": "1.1.0"
+      "commit": "8533299eea5a38f21ab2ba3c9af1a23e02113c09",
+      "version": "1.2.0"
     },
     "ewe.places": {
       "repo": "https://github.com/prj786/ewe-plugin-places",

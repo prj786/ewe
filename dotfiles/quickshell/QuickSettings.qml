@@ -344,7 +344,7 @@ Scope {
         var vals = (Globals.server ? Globals.server.trackedNotifications.values : []) || []
         var by = {}, order = [], last = {}, out = []
         for (var i = 0; i < vals.length; i++) {
-            var k = String(vals[i].appName || "Notification")
+            var k = Globals.noteGroupKey(vals[i])
             if (!by[k]) { by[k] = []; order.push(k) }
             by[k].push(vals[i])
             last[k] = i
@@ -352,7 +352,7 @@ Scope {
         order.sort(function (a, b) { return last[b] - last[a] })
         for (var j = 0; j < order.length; j++) {
             var items = by[order[j]]
-            out.push({ app: order[j], items: items, latest: items[items.length - 1] })
+            out.push({ app: order[j], name: Globals.noteAppName(items[items.length - 1]), items: items, latest: items[items.length - 1] })
         }
         return out
     }
@@ -388,7 +388,8 @@ Scope {
     // Focus the window a notification came from (same matching Notifications.qml
     // uses for toasts), fire its default action, close the panel.
     function noteFocus(n) {
-        Globals.openNotification(n)
+        // a phone card may open this panel's Mobile page: it stays open then
+        if (Globals.openNotification(n) === "page") return
         Globals.quickSettingsOpen = false
     }
     function noteIcon(n) {
@@ -838,6 +839,8 @@ Scope {
                     readonly property bool open: !nGroup.inline && nGroup.count > 1 && root.nExpanded === nGroup.group.app
                     readonly property bool stacked: nGroup.count > 1 && !nGroup.open
                     readonly property var latest: nGroup.group.latest
+                    // from the phone (ewe Mobile): the accent outline, the phone chip
+                    readonly property var phone: Globals.phoneNote(nGroup.latest)
                     readonly property bool critical: !!nGroup.latest && nGroup.latest.urgency === NotificationUrgency.Critical
                     // the open card lists the newest first
                     readonly property var newestFirst: nGroup.group.items.slice().reverse()
@@ -873,7 +876,7 @@ Scope {
                         radius: Theme.radiusRounded
                         color: nCardMa.containsMouse ? Theme.surfaceHover : Theme.surfaceOverlay
                         Behavior on color { ColorAnimation { duration: Theme.durFast; easing.type: Theme.easeFast } }
-                        border.color: nGroup.critical ? Theme.danger : Theme.borderSubtle
+                        border.color: nGroup.critical ? Theme.danger : nGroup.phone ? Theme.accent : Theme.borderSubtle
                         border.width: Theme.borderWidth1
                         // card click — declared FIRST so the inner rows' and the
                         // close buttons' MouseAreas (later children) win over it
@@ -909,11 +912,18 @@ Scope {
                                         radius: Theme.radiusSlight
                                         color: Theme.surfaceHover
                                         clip: true
+                                        Glyph {
+                                            visible: !!nGroup.phone && nGroup.phone.icon === ""
+                                            anchors.centerIn: parent
+                                            text: Theme.icPhone; font.pixelSize: Theme.iconSm
+                                        }
                                         Image {
                                             anchors.fill: parent
                                             sourceSize.width: 2 * Theme.iconMd; sourceSize.height: 2 * Theme.iconMd
                                             mipmap: true
-                                            source: (nGroup.latest && nGroup.latest.appIcon && nGroup.latest.appIcon != "")
+                                            fillMode: nGroup.phone ? Image.PreserveAspectCrop : Image.PreserveAspectFit
+                                            source: nGroup.phone ? nGroup.phone.icon
+                                                  : (nGroup.latest && nGroup.latest.appIcon && nGroup.latest.appIcon != "")
                                                     ? Quickshell.iconPath(nGroup.latest.appIcon, "dialog-information")
                                                     : Quickshell.iconPath("dialog-information")
                                         }
@@ -922,7 +932,7 @@ Scope {
                                         id: nApp
                                         anchors.verticalCenter: parent.verticalCenter
                                         width: Math.min(implicitWidth, parent.width - Theme.iconMd - nWhen.width - 2 * parent.spacing - (nChev.visible ? nChev.width + parent.spacing : 0))
-                                        text: nGroup.group.app
+                                        text: nGroup.group.name
                                         color: Theme.textSecondary
                                         font.weight: Theme.fontWeightMedium
                                     }
@@ -930,6 +940,12 @@ Scope {
                                         id: nWhen
                                         anchors.verticalCenter: parent.verticalCenter
                                         text: nGroup.latest ? "· " + root.noteTime(nGroup.latest) : ""
+                                    }
+                                    PhoneChip {
+                                        visible: !!nGroup.phone
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        name: nGroup.phone ? nGroup.phone.phone : ""
+                                        maxWidth: Math.max(0, parent.width - nApp.width - nWhen.width - Theme.iconMd - 3 * parent.spacing - (nChev.visible ? nChev.width + parent.spacing : 0))
                                     }
                                     Glyph {
                                         id: nChev
@@ -982,7 +998,7 @@ Scope {
                                 }
                                 Rectangle {
                                     id: nMedia
-                                    visible: !!nGroup.latest && !!nGroup.latest.image && nGroup.latest.image != ""
+                                    visible: !nGroup.phone && !!nGroup.latest && !!nGroup.latest.image && nGroup.latest.image != ""
                                     width: Theme.icon3xl; height: Theme.icon3xl
                                     radius: Theme.radiusPrimary
                                     color: Theme.surfaceHover
@@ -997,6 +1013,7 @@ Scope {
                             }
                             // the newest one's actions, under it
                             NoteActions { visible: !nGroup.open && acts.length > 0; note: nGroup.latest }
+                            NoteReply { visible: !nGroup.open && !!nGroup.latest && !!nGroup.latest.hasInlineReply; note: nGroup.latest }
 
                             // open: every notification of the app, newest first, divided
                             Repeater {
@@ -1030,6 +1047,7 @@ Scope {
                                             textFormat: Text.PlainText
                                         }
                                         NoteActions { note: nItem.modelData }
+                                        NoteReply { visible: !!nItem.modelData.hasInlineReply; note: nItem.modelData }
                                     }
                                     QsIconButton {
                                         id: iClose
@@ -1049,7 +1067,7 @@ Scope {
                         visible: nGroup.stacked
                         anchors.top: nCard.bottom; anchors.topMargin: 2 * Theme.spaceXs + Theme.spaceS
                         anchors.left: parent.left; anchors.leftMargin: Theme.spaceS
-                        text: (nGroup.count - 1) + " more from " + nGroup.group.app
+                        text: (nGroup.count - 1) + " more from " + nGroup.group.name
                     }
                 }
 

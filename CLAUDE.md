@@ -607,6 +607,15 @@ written. Called live by Settings → Theme, at shell startup, and by phase 60.
   **`sshfs` is in `packages/common.list`** (owner: "make sshfs installed by
   default"): KDE Connect mounts the phone's storage with it and lists it only
   as optional, so "Browse its files" failed on every machine.
+  **0.50 (ewe.phone 1.2.0, the "one ecosystem" wave, RFC-012 +
+  `ewe-mobile/docs/ECOSYSTEM.md`):** the plugin adds a `dock-item` (the
+  phone's apps with their icons — open here as a window or on the phone —
+  and its folders into ewe Files), reads the apps list ewe Mobile for Android
+  publishes through `remotecommands` into the shared cache
+  `~/.cache/ewe-mobile/<device>/`, and hides every KDE Connect launcher entry
+  (`hide_kdeconnect`, default on, reversible). ewe Mobile 0.2.0-beta opens a
+  phone app as a window (scrcpy, class `ewe-mobile-app-<package>`) and the
+  mirrored screen (`ewe-mobile-screen`, floated by hyprland.lua).
 - **Toolkit theming env is exported in `dotfiles/hypr/start-hyprland.sh` before
   `exec Hyprland`**, not via `hl.env()` in `hyprland.lua` — `hl.env` propagation to
   on-demand-launched apps is unreliable.
@@ -673,6 +682,19 @@ written. Called live by Settings → Theme, at shell startup, and by phase 60.
   (`Globals.focusToplevel`); `binds.hide_special_on_workspace_change`.
   A notification click with no window and no default action launches the
   sender's desktop-entry hint (`Globals.openNotification`).
+  **Phone notifications** (KDE Connect, contract C5 of ewe-mobile's
+  ECOSYSTEM.md): `Globals.phoneNote(n)` says whether one is the phone's
+  (`x-kdeconnect-source-device` / `x-kde-origin-name` hints, or the daemon's
+  desktop entry / app name "KDE Connect") and gives app ("ewe Mobile" when
+  none, never "KDE Connect"), phone name, group key. The card (banners and
+  Quick settings alike) gets an accent outline, the app icon as header tile
+  and a `PhoneChip` (no picture of its own → ewe Mobile's entry icon, else the
+  phone glyph, never `appIcon`: Quickshell's `image` falls back to
+  `image://icon/<appIcon>`, so `Globals.hasPicture` tells them apart); a click runs `ewe-mobile --page notifications`, else the
+  Mobile page, else dismisses. The server advertises `x-kde-display-appname`
+  and `inlineReplySupported`; `NoteReply` is the inline reply field (banner
+  countdown pauses while it has focus). The nest's minimal Hyprland config
+  does not load `hyprland.lua`: test window rules with `HS_EXTRA_LUA`.
 - **Cursor env (0.43):** the session exports `XCURSOR_THEME=default`
   (`~/.icons/default/index.theme`, which colorscheme.sh points at the
   chosen Mocu) so apps started after Settings → Cursor follow it; the
