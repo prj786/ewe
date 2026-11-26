@@ -43,6 +43,22 @@ QtObject {
     }
     readonly property bool connected: device !== null && device.isPaired && device.isReachable
 
+    readonly property bool anyPaired: {
+        for (var i = 0; i < devices.length; i++) if (devices[i].isPaired) return true
+        return false
+    }
+
+    // ── the phone's apps (C1/C2) and storage, per device ────────────────────
+    // appsByDevice[id] = { ewe, cached, loading, updated, apps: [{package,name,sys,icon}] }
+    // storageByDevice[id] = { state: idle|mounting|mounted|error, folders, message, error }
+    property var appsByDevice: ({})
+    property var storageByDevice: ({})
+    property bool eweMobileInstalled: false     // `ewe-mobile` on PATH (the bridge looked)
+    property bool eweFilesInstalled: false      // `ewe-files-app` on PATH
+    property string openNote: ""                // why the last open / mirror failed, in words
+    readonly property var deviceApps: { var m = appsByDevice; return device && m[device.id] ? m[device.id] : null }
+    readonly property var deviceStorage: { var m = storageByDevice; return device && m[device.id] ? m[device.id] : null }
+
     // ── pairing UX ──────────────────────────────────────────────────────────
     property string pairingId: ""        // device we asked to pair (waiting for the phone)
     property string pairError: ""
@@ -102,7 +118,7 @@ QtObject {
             kc.daemonRunning = false
             if (kc.bridgeFailed) return                  // told us why; retrying is pointless
             if (kc._restarts >= 5) {
-                kc.bridgeError = "KDE Connect bridge keeps exiting — run with HS_LOG=info for the reason."
+                kc.bridgeError = "The phone bridge keeps exiting — run with HS_LOG=info for the reason."
                 Log.error("ewe.phone", "bridge exited", kc._restarts, "times — giving up")
                 return
             }
@@ -165,7 +181,7 @@ QtObject {
         // reporting reached nobody
         case "fatal":
             kc.bridgeFailed = true
-            kc.bridgeError = e.error || "KDE Connect bridge unavailable"
+            kc.bridgeError = e.error || "The phone bridge is unavailable"
             Log.error("ewe.phone", "bridge fatal:", kc.bridgeError)
             break
         case "error":
@@ -173,6 +189,27 @@ QtObject {
             break
         case "daemon":
             kc.daemonRunning = !!e.running
+            break
+        case "tools":
+            kc.eweMobileInstalled = !!e.eweMobile
+            kc.eweFilesInstalled = !!e.eweFiles
+            break
+        case "apps": {
+            var am = Object.assign({}, kc.appsByDevice)
+            am[e.deviceId] = { ewe: !!e.ewe, cached: !!e.cached, loading: !!e.loading, updated: e.updated || 0, apps: e.apps || [] }
+            kc.appsByDevice = am
+            break
+        }
+        case "storage": {
+            var sm = Object.assign({}, kc.storageByDevice)
+            sm[e.deviceId] = { state: e.state, folders: e.folders || [], message: e.message || "", error: e.error || "", mount: e.mount || "" }
+            kc.storageByDevice = sm
+            break
+        }
+        case "openApp":
+        case "mirror":
+            kc.openNote = e.ok ? "" : (e.message || "That did not open. Try again.")
+            if (!e.ok) Shell.toast(kc.openNote, "danger")
             break
         case "devices":
             kc.devices = e.list || []
@@ -222,6 +259,29 @@ QtObject {
     function ring() { if (kc.device) kc.send({ cmd: "ring", deviceId: kc.device.id }) }
     function shareText(t) { if (kc.device) kc.send({ cmd: "shareText", deviceId: kc.device.id, text: t }) }
     function shareUrl(u) { if (kc.device) kc.send({ cmd: "shareUrl", deviceId: kc.device.id, url: u }) }
+
+    // ── apps and files (the dock popup) ─────────────────────────────────────
+    // where: "auto" (here when adb is connected, else the phone — ewe Mobile
+    // decides), "here" (its own window on this computer) or "phone"
+    function openApp(pkg, where) {
+        if (!kc.device) return
+        kc.openNote = ""
+        kc.send({ cmd: "openApp", deviceId: kc.device.id, package: pkg, where: where || "auto" })
+    }
+    function refreshApps() { if (kc.device) kc.send({ cmd: "refreshApps", deviceId: kc.device.id }) }
+    function mirror() { if (kc.device) { kc.openNote = ""; kc.send({ cmd: "mirror", deviceId: kc.device.id }) } }
+    function mountStorage() { if (kc.device) kc.send({ cmd: "mount", deviceId: kc.device.id }) }
+    function queryStorage() { if (kc.device) kc.send({ cmd: "storage", deviceId: kc.device.id }) }
+    // a folder of the phone, in ewe Files (xdg-open where ewe Files is not installed)
+    function openFolder(path) {
+        Quickshell.execDetached(["sh", "-c",
+            'if command -v ewe-files-app >/dev/null 2>&1; then exec ewe-files-app "$1"; else exec xdg-open "$1"; fi',
+            "ewe-phone", String(path)])
+    }
+    function openEweMobile(page) {
+        Quickshell.execDetached(["ewe-mobile", "--page", String(page || "phone")])
+        Shell.focusApp(["ewe-mobile"])
+    }
 
     // notifications arrive per-device — refetch when the active device flips
     property string _lastDevId: ""

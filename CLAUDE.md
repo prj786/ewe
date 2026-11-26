@@ -607,6 +607,15 @@ written. Called live by Settings → Theme, at shell startup, and by phase 60.
   **`sshfs` is in `packages/common.list`** (owner: "make sshfs installed by
   default"): KDE Connect mounts the phone's storage with it and lists it only
   as optional, so "Browse its files" failed on every machine.
+  **0.50 (ewe.phone 1.2.0, the "one ecosystem" wave, RFC-012 +
+  `ewe-mobile/docs/ECOSYSTEM.md`):** the plugin adds a `dock-item` (the
+  phone's apps with their icons — open here as a window or on the phone —
+  and its folders into ewe Files), reads the apps list ewe Mobile for Android
+  publishes through `remotecommands` into the shared cache
+  `~/.cache/ewe-mobile/<device>/`, and hides every KDE Connect launcher entry
+  (`hide_kdeconnect`, default on, reversible). ewe Mobile 0.2.0-beta opens a
+  phone app as a window (scrcpy, class `ewe-mobile-app-<package>`) and the
+  mirrored screen (`ewe-mobile-screen`, floated by hyprland.lua).
 - **Toolkit theming env is exported in `dotfiles/hypr/start-hyprland.sh` before
   `exec Hyprland`**, not via `hl.env()` in `hyprland.lua` — `hl.env` propagation to
   on-demand-launched apps is unreliable.
