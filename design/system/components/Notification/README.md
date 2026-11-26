@@ -23,7 +23,14 @@ A notification tells people about something that happened outside what they're l
 | Default | as above |
 | Critical | 1px `danger` border, and the title in `danger` with a `triangle-alert` icon |
 | Progress | a Progress bar instead of actions, updated in place |
+| From your phone | 1px `accent` outline instead of `border-subtle`. The header icon is the phone app's icon (rounded, cropped), then the app's name, the time and a phone chip: the `smartphone` glyph and the phone's name in `caption` `text-muted`. No picture on the right. Groups are keyed by phone and app. A reply field (a Text field md and a send Icon button) appears when the sender offers one |
 | Grouped | when an app sends more than one, the newest shows on top of two 4px layers, with "N more from App" below |
+
+## From your phone
+Phone notifications (KDE Connect through ewe Mobile) look like any other notification, marked as the phone's: the accent outline and the phone chip. They never say "KDE Connect": the app name is the phone app's, or "ewe Mobile" for pairing, calls and files. Clicking one opens ewe Mobile's notifications page, or the Mobile page of Quick settings, or just dismisses it.
+
+## Inline reply
+Any notification that offers a reply shows a reply field in the card. Enter or the send button sends it; the banner's timer pauses while the field has focus, and the app's own dialog never opens.
 
 ## Toast
 - `surface-overlay`, 1px `border-subtle`, `rounded` radius, `shadow-float`, at least 40px tall (`control-xl`).
@@ -45,4 +52,4 @@ A notification tells people about something that happened outside what they're l
 - Timers pause while a banner has keyboard focus.
 
 ## What a build provides
-`app` (name, icon) · `time` · `title` · `body` · `media` · `progress` · `actions` · `urgency` (low, normal, critical) · `group` · `onClose` · `onClick`.
+`app` (name, icon) · `time` · `title` · `body` · `media` · `progress` · `actions` · `urgency` (low, normal, critical) · `group` · `phone` (name) · `reply` · `onClose` · `onClick`.

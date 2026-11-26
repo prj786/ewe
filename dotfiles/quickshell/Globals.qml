@@ -220,6 +220,48 @@ QtObject {
         if (!best) return false
         return g.focusToplevel(best)
     }
+    // ── Phone notifications (KDE Connect → ewe Mobile) ────────────────────
+    // kdeconnectd posts each phone notification through the ordinary server
+    // (contract C5). It is the phone's when it carries the phone's name
+    // (`x-kdeconnect-source-device` / `x-kde-origin-name`), or comes from the
+    // daemon's desktop entry / the app name "KDE Connect" (pairing, calls,
+    // files). Returns null for any other notification, else
+    //   app    the phone app's name (`x-kde-display-appname`), else "ewe Mobile"
+    //          — a phone card never says "KDE Connect"
+    //   phone  the phone's name for the chip ("Phone" when the daemon sent none)
+    //   key    what a group is keyed by: phone + app
+    //   icon   the notification's own picture (the phone app's icon), "" if none
+    function phoneNote(n) {
+        if (!n) return null
+        var h = {}
+        try { h = n.hints || {} } catch (e) {}
+        var dev = String(h["x-kdeconnect-source-device"] || "")
+        var origin = String(h["x-kde-origin-name"] || "")
+        var de = String(n.desktopEntry || "")
+        var from = dev !== "" || origin !== "" || de === "org.kde.kdeconnect.daemon" || String(n.appName || "") === "KDE Connect"
+        if (!from) return null
+        var app = String(h["x-kde-display-appname"] || "")
+        var phone = origin !== "" ? origin : dev !== "" ? dev : "Phone"
+        return { app: app !== "" ? app : "ewe Mobile", phone: phone, key: phone + "\u001f" + (app !== "" ? app : "ewe Mobile"),
+                 icon: n.image ? String(n.image) : "" }
+    }
+    // What a group of notifications is called, and what it is keyed by
+    function noteAppName(n) { var p = g.phoneNote(n); return p ? p.app : String(n.appName || "Notification") }
+    function noteGroupKey(n) { var p = g.phoneNote(n); return p ? p.key : String(n.appName || "Notification") }
+    // A click on a phone card: ewe Mobile's notifications page when that app is
+    // installed, else the Mobile page of Quick settings when the ewe.phone
+    // add-on is, else nothing (the caller dismisses). Returns "app", "page" or "".
+    function openPhoneNotification() {
+        if (g.entryForClass("ewe-mobile")) {
+            Quickshell.execDetached(["ewe-mobile", "--page", "notifications"])
+            return "app"
+        }
+        var ps = PluginHost.quickPages || []
+        for (var i = 0; i < ps.length; i++)
+            if (ps[i].key === "mobile") { g.openQuickSettingsTab("mobile"); return "page" }
+        return ""
+    }
+
     // ── A click on a notification (banner or Quick settings list) ─────────
     // Goes to the most recent window of the app, wherever it is, then fires
     // the app's "default" action (opens the message/thread) — after the
@@ -229,7 +271,8 @@ QtObject {
     // the click used to do nothing. Only the sender's own desktop-entry hint
     // is trusted — a fuzzy match on the app NAME could start something else.
     function openNotification(n) {
-        if (!n) return
+        if (!n) return ""
+        if (g.phoneNote(n)) return g.openPhoneNotification()
         var had = g.focusAppWindow([n.desktopEntry, n.appName])
         var acted = false
         try {

@@ -673,6 +673,17 @@ written. Called live by Settings → Theme, at shell startup, and by phase 60.
   (`Globals.focusToplevel`); `binds.hide_special_on_workspace_change`.
   A notification click with no window and no default action launches the
   sender's desktop-entry hint (`Globals.openNotification`).
+  **Phone notifications** (KDE Connect, contract C5 of ewe-mobile's
+  ECOSYSTEM.md): `Globals.phoneNote(n)` says whether one is the phone's
+  (`x-kdeconnect-source-device` / `x-kde-origin-name` hints, or the daemon's
+  desktop entry / app name "KDE Connect") and gives app ("ewe Mobile" when
+  none, never "KDE Connect"), phone name, group key. The card (banners and
+  Quick settings alike) gets an accent outline, the app icon as header tile
+  and a `PhoneChip`; a click runs `ewe-mobile --page notifications`, else the
+  Mobile page, else dismisses. The server advertises `x-kde-display-appname`
+  and `inlineReplySupported`; `NoteReply` is the inline reply field (banner
+  countdown pauses while it has focus). The nest's minimal Hyprland config
+  does not load `hyprland.lua`: test window rules with `HS_EXTRA_LUA`.
 - **Cursor env (0.43):** the session exports `XCURSOR_THEME=default`
   (`~/.icons/default/index.theme`, which colorscheme.sh points at the
   chosen Mocu) so apps started after Settings → Cursor follow it; the

@@ -29,7 +29,11 @@ Scope {
     id: root
 
     property var popups: []
-    property var groups: []   // [{ app, items:[n…], latest:n }] derived from popups
+    property var groups: []   // [{ app (key), name, items:[n…], latest:n }] derived from popups
+    readonly property bool anyReply: {
+        for (var i = 0; i < root.groups.length; i++) if (root.groups[i].latest.hasInlineReply) return true
+        return false
+    }
     // arrival times, keyed by notification id — the protocol carries none, and
     // the header's time needs one
     property var arrived: ({})
@@ -83,8 +87,8 @@ Scope {
     function rebuild() {
         var by = {}, order = []
         for (var i = 0; i < root.popups.length; i++) {
-            var n = root.popups[i], k = String(n.appName || "Notification")
-            if (!by[k]) { by[k] = { app: k, items: [] }; order.push(k) }
+            var n = root.popups[i], k = Globals.noteGroupKey(n)
+            if (!by[k]) { by[k] = { app: k, name: Globals.noteAppName(n), items: [] }; order.push(k) }
             by[k].items.push(n)
         }
         var gs = []
@@ -101,6 +105,11 @@ Scope {
         keepOnReload: false
         bodySupported: true
         bodyMarkupSupported: true
+        // a phone's notification carries the sender as its title and the phone
+        // app's name apart (kdeconnectd checks for this hint), and a reply is
+        // typed in the card, never in KDE Connect's own dialog
+        extraHints: ["x-kde-display-appname"]
+        inlineReplySupported: true
         imageSupported: true
         actionsSupported: true
         Component.onCompleted: Globals.server = server
@@ -125,6 +134,8 @@ Scope {
         WlrLayershell.namespace: "quickshell:notifications"
         WlrLayershell.layer: WlrLayer.Overlay
         anchors { top: true; right: true; left: true; bottom: true }
+        // a reply field needs the keyboard: a click on it takes it, nothing else does
+        WlrLayershell.keyboardFocus: root.anyReply ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
 
         // Only the banner column grabs pointer input; the rest is click-through.
         mask: Region { item: toastColumn }
@@ -153,6 +164,8 @@ Scope {
                     id: groupItem
                     required property var modelData
                     readonly property var latest: modelData.latest
+                    // from the phone (ewe Mobile): the accent outline, the phone chip
+                    readonly property var phone: Globals.phoneNote(latest)
                     readonly property int count: modelData.items.length
                     readonly property bool critical: latest.urgency === NotificationUrgency.Critical
                     width: Theme.panelSm
@@ -183,7 +196,7 @@ Scope {
                     Timer {
                         id: expire
                         property double startedAt: 0
-                        readonly property bool live: !groupItem.stays && !cardHover.hovered
+                        readonly property bool live: !groupItem.stays && !cardHover.hovered && !replyField.focused
                         readonly property var nid: groupItem.latest ? groupItem.latest.id : -1
                         function left() {
                             return root.leftMs[expire.nid] !== undefined ? root.leftMs[expire.nid] : root.totalFor(groupItem.latest)
@@ -237,7 +250,7 @@ Scope {
                         height: col.implicitHeight + Theme.spaceS + Theme.spaceS + Theme.spaceXs
                         radius: Theme.radiusRounded
                         color: Theme.surfaceRaised
-                        border.color: groupItem.critical ? Theme.danger : Theme.borderSubtle
+                        border.color: groupItem.critical ? Theme.danger : groupItem.phone ? Theme.accent : Theme.borderSubtle
                         border.width: Theme.borderWidth1
                         layer.enabled: true
                         layer.effect: Elevation {}
@@ -273,8 +286,10 @@ Scope {
                                             anchors.fill: parent
                                             sourceSize.width: 2 * Theme.iconMd; sourceSize.height: 2 * Theme.iconMd
                                             mipmap: true
+                                            fillMode: groupItem.phone ? Image.PreserveAspectCrop : Image.PreserveAspectFit
                                             source: {
                                                 var n = groupItem.latest
+                                                if (groupItem.phone && groupItem.phone.icon !== "") return groupItem.phone.icon
                                                 if (n.appIcon && n.appIcon != "") return Quickshell.iconPath(n.appIcon, "dialog-information")
                                                 return Quickshell.iconPath("dialog-information")
                                             }
@@ -282,7 +297,7 @@ Scope {
                                     }
                                     Text {
                                         anchors.verticalCenter: parent.verticalCenter
-                                        text: groupItem.latest.appName || "Notification"
+                                        text: groupItem.modelData.name || "Notification"
                                         color: Theme.textSecondary
                                         font.family: Theme.type.caption.family
                                         font.pixelSize: Theme.type.caption.size
@@ -296,6 +311,12 @@ Scope {
                                         color: Theme.textMuted
                                         font.family: Theme.type.caption.family
                                         font.pixelSize: Theme.type.caption.size
+                                    }
+                                    PhoneChip {
+                                        visible: !!groupItem.phone
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        name: groupItem.phone ? groupItem.phone.phone : ""
+                                        maxWidth: head.width - Theme.iconMd - Theme.icon3xl - Theme.icon3xl
                                     }
                                     Badge {
                                         anchors.verticalCenter: parent.verticalCenter
@@ -371,7 +392,7 @@ Scope {
                                 }
                                 Rectangle {
                                     id: media
-                                    visible: img.source != ""
+                                    visible: !groupItem.phone && img.source != ""
                                     width: Theme.icon3xl; height: Theme.icon3xl
                                     radius: Theme.radiusPrimary
                                     color: Theme.surfaceHover
@@ -408,6 +429,14 @@ Scope {
                                     }
                                 }
                             }
+
+                            // ── inline reply, for any notification that offers it ──
+                            NoteReply {
+                                id: replyField
+                                visible: !!groupItem.latest.hasInlineReply
+                                note: groupItem.latest
+                                onSent: root.removeGroup(groupItem.modelData)
+                            }
                         }
                         MouseArea {
                             id: cardMa
@@ -432,7 +461,7 @@ Scope {
                         visible: groupItem.count > 1
                         anchors.top: card.bottom; anchors.topMargin: Theme.spaceS + Theme.spaceXs
                         anchors.horizontalCenter: parent.horizontalCenter
-                        text: (groupItem.count - 1) + " more from " + (groupItem.latest.appName || "this app")
+                        text: (groupItem.count - 1) + " more from " + (groupItem.modelData.name || "this app")
                         color: Theme.textMuted
                         font.family: Theme.type.caption.family
                         font.pixelSize: Theme.type.caption.size
