@@ -3,10 +3,14 @@
 *Status: **accepted** 2026-11-26 — the owner took all nine proposed answers
 the same day (§9). Built and released that day: the Remote page fix (ewe
 Mobile 0.1.1-beta, §3.1) and step A1, the phone in ewe Files (ewe-apps
-0.5.0-beta, §4). Not started: the half hour with the phone in §7, which
-comes before A2–A4, and the APK (Track B), which is a session of its own.*
+0.5.0-beta, §4). Later that day, with the phone: the §7 probes (results in
+§7 — Track A goes ahead as written), step B1 (the fork builds, installs
+beside the stock app and pairs; `ewe-connector-android` PR #1, not merged)
+and the B3 spike (the `remotecommands` door works both ways against the
+stock daemon). Not started: A2–A4, B3 itself, B2.*
 **Repos it touches:** `ewe-mobile` (new pages), `ewe-apps` (ewe Files),
-a new `ewe-mobile-android` (the APK), `ewe` (package lists), `ewe-repo`.
+a new `ewe-connector-android` (the APK; `ewe-mobile-android` until the
+owner named it on 2026-11-26), `ewe` (package lists), `ewe-repo`.
 **Number:** 009 is Remote, 010 eep, 011 the file picker; this is 012.
 
 ---
@@ -114,7 +118,9 @@ installed from outside the Play Store:
 - **Restricted settings.** Accessibility, notification access, "display over
   other apps" and the SMS permissions are greyed out for an APK that came
   from a browser, until the person opens App info → ⋮ → "Allow restricted
-  settings". Installs over `adb` are believed to be outside this (unverified).
+  settings". An install over `adb` is outside it: on the owner's Pixel
+  (Android 17) notification access for an adb-installed app switched on
+  with no block (§7, 2026-11-26).
 - **Local network** is its own permission from Android 17 for apps that
   target it (`ACCESS_LOCAL_NETWORK`); without it the link just times out.
 - **Starting an app from the background** needs a reason Android accepts: an
@@ -152,10 +158,12 @@ installed from outside the Play Store:
   and found by mDNS afterwards. On Android 11–16 it switches itself off when
   Wi-Fi drops, on another access point of the same network, and after a
   reboot. **Android 17 brings it back by itself on a network marked trusted**
-  ("adb Wi-Fi 2.0", needs adb 37 — Arch has it).
+  ("adb Wi-Fi 2.0", needs adb 37 — Arch has it). Seen on the owner's Pixel:
+  back after a reboot before the first unlock (§7, row 4).
 - It is developer mode: a paired computer can do anything the shell user
-  can. Some banking apps refuse to run while it is on (said widely, not
-  confirmed in a primary source).
+  can. Some banking apps refuse to run while it is on. On the owner's phone
+  two of three do — and they object to Developer options itself, not only to
+  debugging (§7, row 5).
 - scrcpy's window **cannot be put inside another app's window**. A client of
   our own on scrcpy's server is proven (Tango, QtScrcpy, a Tauri one called
   Another), but the protocol between them is internal and changes with every
@@ -270,7 +278,8 @@ unverified on Android 17 — §7, probe 6).
 ### B1. A fork, kept close to upstream (S–M)
 
 - Fork `kdeconnect-android` (1.37.3; Kotlin; licence "GPL-2.0-only OR
-  GPL-3.0-only OR KDE-accepted"). New repo `ewe-mobile-android`,
+  GPL-3.0-only OR KDE-accepted"). New repo `ewe-connector-android` (the
+  owner's name for it, 2026-11-26; `ewe-mobile-android` when accepted),
   **GPL-3.0-only**, as `ewe-apps` already is. The desktop app stays MIT: two
   programs that talk over a socket are not one work.
 - Upstream moves fast (586 commits in 2026). So its protocol and plugin code
@@ -368,14 +377,44 @@ pair, and see. Each row decides something.
 Rows 1–3 pass: Track A as written. Row 3 fails: Apps lists and opens on the
 phone only, until scrcpy catches up with Android 17.
 
+### What the phone said (2026-11-26)
+
+Run with the owner on the Pixel 10 Pro XL (Android 17, `CP3A.261005.005`),
+scrcpy 5.0.1, adb 37.0.0, the stock KDE Connect 1.37.3 and our fork beside it.
+
+| # | Result |
+|---|---|
+| 1 | Pairs with the six-digit code; adb then finds the phone by mDNS and connects by itself. scrcpy runs on Hyprland; the owner: "works, noticeable lag". The round trip to the phone over Wi-Fi measured 5–410 ms (averages 45–139 ms), so the lag is the network, not scrcpy. Hyprland tiles the new window small; scrcpy warns that Hyprland lacks `xdg_toplevel_icon_v1` |
+| 2 | 93 apps (40 system, 53 installed), each with its label and package — in **12.5 s** a call. The Apps page caches the list, or takes it from B3 |
+| 3 | **Works.** Calculator, Keep (about 10 s to appear) and the BOG bank (login screen included) each drew in a window of their own; none came out black. The display belongs to `com.android.shell`. The launcher bug (#7048) was not met: `--start-app` starts the app directly, and none was already open on the phone |
+| 4 | A five-second Wi-Fi blip left adb's session standing. Wireless debugging off and on: adb came back by itself on a new port, no new code. **After a reboot, Wireless debugging was back before the first unlock**; both KDE Connect links were back 8 s after it. B4 is not needed for this |
+| 5 | BOG opens with debugging on. **TBC Bank and Liberty refuse whenever Developer options is on** — Wireless debugging on or off |
+| 6 | **Works**, and survives a reboot; the service binds at once, and `remoteState` turns true at the app's next reconnect (its plugins load when a link is made). **Force-stopping the app switches the service off again** — Android does that — so nothing may force-stop KDE Connect to make it reload |
+| 7 | Through our fork's device: mounted in 0.46 s, copied at about 0.85 MB/s. About a minute after the phone went to doze the link died and the copy failed (`Input/output error`); the mount stayed as a dead `fuse.sshfs` until the daemon noticed the device was gone (one to two minutes — `isReachable` lags the same way) and removed it; `unmount` over D-Bus in that window did nothing. Waking the phone brought both links back in 3 s |
+
+**What it decides.** Rows 1–3 pass, so Track A goes ahead as written; the
+Apps list wants a cache. B4 is not needed for reboots. The Files row treats
+`Input/output error` as "the phone left" and does not trust `isReachable`
+for a minute or two after a drop. Q2's price now has a number: with
+Developer options on, two of the owner's three banks will not open.
+
+Seen beside the probes, not settled: with both KDE Connect apps on the
+phone, the fork's link dropped three times at a doze or network change
+while the stock app's held. The cause is open
+(`ewe-connector-android/docs/PLAN.md`).
+
 ## 8. Order of work
 
-0. The probes (§7).
+0. The probes (§7). **Done** 2026-11-26.
 1. **A1** — the phone in ewe Files. Independent of everything else.
    **Done** (ewe-apps 0.5.0-beta), ahead of the probes it does not need.
 2. **A2 + A3 step 1 + A4** — the link, the screen in scrcpy's window, the
    apps as windows. One wave in `ewe-mobile`.
-3. **B1** — the fork builds, pairs, installs from ewe Mobile.
+3. **B1** — the fork builds, pairs, installs from ewe Mobile. **Built**
+   2026-11-26 (`ewe-connector-android` PR #1): installs beside the stock app
+   over adb and pairs; installing *from ewe Mobile* waits for A2. The B3
+   spike ran with it: the `remotecommands` door works both ways against the
+   stock daemon.
 4. **B3** — apps and icons from the phone.
 5. **B2** — the ewe face, screen by screen.
 6. **A3 step 2**, **B4** — only if living with the above asks for them.
@@ -384,7 +423,9 @@ phone only, until scrcpy catches up with Android 17.
 
 The owner took every proposed answer on 2026-11-26. They stand as written.
 
-1. **Fork or clean room?** — Fork, GPL-3.0-only, in `ewe-mobile-android`.
+1. **Fork or clean room?** — Fork, GPL-3.0-only, in `ewe-mobile-android`
+   (the repo became `ewe-connector-android` on 2026-11-26, the owner's name;
+   the app is still "ewe Mobile", `io.github.prj786.ewemobile`).
 2. **Is developer mode on the phone an acceptable price for Screen and
    Apps?** — Yes, opt-in, with the cost said on the page before it is asked.
 3. **Screen in scrcpy's own window first?** — Yes. Inside ewe Mobile's
@@ -438,8 +479,12 @@ Read directly on 2026-11-26 unless marked.
   (WebCodecs on, WebRTC off) · <https://bugs.webkit.org/show_bug.cgi?id=274711>
 - **Waydroid:** <https://docs.waydro.id/> · <https://wiki.archlinux.org/title/Waydroid>
 
-**Unverified, and it matters:** that `adb install` escapes restricted
-settings; that the accessibility service can be switched on over adb on
-Android 17; that banking apps refuse to run with debugging on; the device
-cap of limited distribution; what `--start-app` does with an app already
-open; the RemoteDesktop portal gap on Hyprland. §7 settles most of them.
+**Settled by §7 on 2026-11-26:** an `adb install` escapes restricted
+settings (notification access, on the owner's phone); the accessibility
+service can be switched on over adb on Android 17; two of the owner's three
+banking apps refuse while Developer options is on; `--start-app` opens apps
+on a virtual display on Android 17.
+
+**Still unverified, and it matters:** the device cap of limited
+distribution; what `--start-app` does with an app already open; the
+RemoteDesktop portal gap on Hyprland.
