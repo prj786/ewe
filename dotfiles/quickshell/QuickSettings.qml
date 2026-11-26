@@ -912,12 +912,17 @@ Scope {
                                         radius: Theme.radiusSlight
                                         color: Theme.surfaceHover
                                         clip: true
+                                        Glyph {
+                                            visible: !!nGroup.phone && nGroup.phone.icon === ""
+                                            anchors.centerIn: parent
+                                            text: Theme.icPhone; font.pixelSize: Theme.iconSm
+                                        }
                                         Image {
                                             anchors.fill: parent
                                             sourceSize.width: 2 * Theme.iconMd; sourceSize.height: 2 * Theme.iconMd
                                             mipmap: true
                                             fillMode: nGroup.phone ? Image.PreserveAspectCrop : Image.PreserveAspectFit
-                                            source: nGroup.phone && nGroup.phone.icon !== "" ? nGroup.phone.icon
+                                            source: nGroup.phone ? nGroup.phone.icon
                                                   : (nGroup.latest && nGroup.latest.appIcon && nGroup.latest.appIcon != "")
                                                     ? Quickshell.iconPath(nGroup.latest.appIcon, "dialog-information")
                                                     : Quickshell.iconPath("dialog-information")

@@ -230,7 +230,12 @@ QtObject {
     //          — a phone card never says "KDE Connect"
     //   phone  the phone's name for the chip ("Phone" when the daemon sent none)
     //   key    what a group is keyed by: phone + app
-    //   icon   the notification's own picture (the phone app's icon), "" if none
+    //   icon   the notification's own picture (the phone app's icon), else ewe
+    //          Mobile's icon, else "" (the tile shows the phone glyph). Never
+    //          the notification's appIcon: for the daemon's own ones (pairing,
+    //          calls, files) that is KDE Connect's logo. (A near-black
+    //          single-colour glyph from an old phone build is not tinted:
+    //          QML cannot read pixels cheaply.)
     function phoneNote(n) {
         if (!n) return null
         var h = {}
@@ -243,7 +248,19 @@ QtObject {
         var app = String(h["x-kde-display-appname"] || "")
         var phone = origin !== "" ? origin : dev !== "" ? dev : "Phone"
         return { app: app !== "" ? app : "ewe Mobile", phone: phone, key: phone + "\u001f" + (app !== "" ? app : "ewe Mobile"),
-                 icon: n.image ? String(n.image) : "" }
+                 icon: g.hasPicture(n) ? String(n.image) : g.phoneAppIcon() }
+    }
+    // Quickshell hands the app's THEME icon back as `image` ("image://icon/kdeconnect")
+    // when the notification has no picture of its own; that is no picture.
+    function hasPicture(n) {
+        var i = n && n.image ? String(n.image) : ""
+        return i !== "" && i.indexOf("image://icon/") !== 0
+    }
+    function phoneAppIcon() {
+        var e = g.entryForClass("ewe-mobile")
+        if (!e || !e.icon) return ""
+        // C4's entries carry an absolute icon path: a file, not a theme name
+        return String(e.icon).charAt(0) === "/" ? "file://" + e.icon : Quickshell.iconPath(e.icon, true)
     }
     // What a group of notifications is called, and what it is keyed by
     function noteAppName(n) { var p = g.phoneNote(n); return p ? p.app : String(n.appName || "Notification") }

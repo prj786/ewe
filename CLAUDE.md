@@ -679,7 +679,9 @@ written. Called live by Settings → Theme, at shell startup, and by phase 60.
   desktop entry / app name "KDE Connect") and gives app ("ewe Mobile" when
   none, never "KDE Connect"), phone name, group key. The card (banners and
   Quick settings alike) gets an accent outline, the app icon as header tile
-  and a `PhoneChip`; a click runs `ewe-mobile --page notifications`, else the
+  and a `PhoneChip` (no picture of its own → ewe Mobile's entry icon, else the
+  phone glyph, never `appIcon`: Quickshell's `image` falls back to
+  `image://icon/<appIcon>`, so `Globals.hasPicture` tells them apart); a click runs `ewe-mobile --page notifications`, else the
   Mobile page, else dismisses. The server advertises `x-kde-display-appname`
   and `inlineReplySupported`; `NoteReply` is the inline reply field (banner
   countdown pauses while it has focus). The nest's minimal Hyprland config

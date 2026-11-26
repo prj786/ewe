@@ -282,6 +282,11 @@ Scope {
                                         radius: Theme.radiusSlight
                                         color: Theme.surfaceHover
                                         clip: true
+                                        Glyph {
+                                            visible: !!groupItem.phone && groupItem.phone.icon === ""
+                                            anchors.centerIn: parent
+                                            text: Theme.icPhone; font.pixelSize: Theme.iconSm
+                                        }
                                         Image {
                                             anchors.fill: parent
                                             sourceSize.width: 2 * Theme.iconMd; sourceSize.height: 2 * Theme.iconMd
@@ -289,7 +294,7 @@ Scope {
                                             fillMode: groupItem.phone ? Image.PreserveAspectCrop : Image.PreserveAspectFit
                                             source: {
                                                 var n = groupItem.latest
-                                                if (groupItem.phone && groupItem.phone.icon !== "") return groupItem.phone.icon
+                                                if (groupItem.phone) return groupItem.phone.icon
                                                 if (n.appIcon && n.appIcon != "") return Quickshell.iconPath(n.appIcon, "dialog-information")
                                                 return Quickshell.iconPath("dialog-information")
                                             }
