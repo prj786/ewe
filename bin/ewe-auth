@@ -86,6 +86,31 @@ MAIL_FULL_SCOPES = (MAIL_SCOPE_FULL, "https://mail.google.com/")
 # mount (ewe-drive setup passes --with-drive); appdata alone stays the
 # default for the one-file sync
 DRIVE_SCOPE = "https://www.googleapis.com/auth/drive"
+# Drive is set up on this machine when ewe-drive wrote its remote. A sign-in
+# then keeps asking for Drive and hands the new token to ewe-drive (0.51.1):
+# signing in again from ewe Sync used to drop the Drive scope and leave the
+# mount on the previous token — "Google Drive does not work after I
+# reconnected".
+DRIVE_CONF = os.path.join(CFG_DIR, "ewe", "rclone-drive.conf")
+
+
+def drive_set_up():
+    return os.path.isfile(DRIVE_CONF)
+
+
+def drive_follow(*verb):
+    """Start ewe-drive (the sibling of this script, else PATH) on its own:
+    the sign-in answers at once and Drive remounts behind it (a mount can
+    take seconds). Its output never mixes with our one JSON line."""
+    if os.environ.get("EWE_AUTH_NO_DRIVE"):
+        return
+    here = os.path.join(os.path.dirname(os.path.realpath(__file__)), "ewe-drive")
+    exe = here if os.access(here, os.X_OK) else "ewe-drive"
+    try:
+        subprocess.Popen([exe, *verb], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                         stderr=subprocess.DEVNULL, start_new_session=True)
+    except OSError:
+        pass
 
 KEYRING_ARGS = ["service", "ewe", "account", "google"]
 OLD_KEYRING_ARGS = ["service", "hypr-shell", "account", "google"]
@@ -503,7 +528,7 @@ def cmd_login(argv=()):
                                           and "--base-only" not in argv)
     mail_scope = MAIL_SCOPE_FULL if which in ("ewe", "legacy", "env") else MAIL_SCOPE
     scopes = BASE_SCOPES + (" " + mail_scope if with_mail else "")
-    if "--with-drive" in argv:
+    if "--with-drive" in argv or drive_set_up():
         scopes += " " + DRIVE_SCOPE
     # Keyring check WITHOUT a prompt (busctl, never secret-tool): the old
     # probe stored a dummy secret up front, which on a machine with no login
@@ -626,11 +651,17 @@ def cmd_login(argv=()):
     exp = int(time.time()) + int(tok.get("expires_in", 3600))
     write_json(TOKEN_CACHE, {"access_token": tok["access_token"],
                              "expires_at": exp, "client_id": cid}, mode=0o600)
+    # the Drive folder follows this sign-in (new token, maybe a new client)
+    if drive_set_up():
+        drive_follow("refresh")
     out({"ok": True, "profile": profile, "access_token": tok["access_token"],
          "expires_at": exp, "consent_url": auth, "keyring": keyring_hint})
 
 
 def cmd_logout():
+    # the token is about to be revoked: a Drive mount on it would only fail
+    if drive_set_up():
+        drive_follow("unmount")
     rt = keyring_get()
     if rt:
         try:

@@ -130,7 +130,7 @@ click, you can script — and debug by running the same command yourself.
 | [`ewe-conf`](bin/ewe-conf) | the one file: `get` · `set` · `dump` · `import` · `apply` · `push` · `pull` |
 | [`ewe-plugin`](bin/ewe-plugin) | shell plugins: `add <git-url>` · `list` · `enable` · `disable` · `update` · `remove` · `validate` |
 | [`ewe-auth`](bin/ewe-auth) | one Google identity for every ewe app: `status` · `login` · `token` · `logout` |
-| [`ewe-drive`](bin/ewe-drive) | your Drive as a folder: `setup` · `mount` · `unmount` · `status` |
+| [`ewe-drive`](bin/ewe-drive) | your Drive as a folder: `setup` · `mount` · `refresh` (follow a new sign-in) · `unmount` · `status` |
 | `ewe-setup` | per-user deployment of the installed payload |
 | `ewe-share-picker` | the portal's screen-share picker, backed by the shell |
 

@@ -11,8 +11,17 @@
 #   ewe-drive setup      one-time: consent (adds the Drive scope), write the
 #                        rclone remote, bookmark, mount
 #   ewe-drive mount      mount if configured (autostart calls this)
+#   ewe-drive refresh    rewrite the remote from the CURRENT sign-in and
+#                        remount (ewe-auth login runs it)
 #   ewe-drive unmount    unmount
-#   ewe-drive status     {configured, mounted} JSON
+#   ewe-drive status     {configured, mounted, drive_scope} JSON
+#
+# The remote is a COPY of the sign-in (client + refresh token). Until
+# 0.51.1 it was written once, by `setup`, and never again: a new OAuth
+# client, or signing in again from ewe Sync, left Drive on a deleted client
+# and a dead token — Google answered `deleted_client` and the folder stayed
+# empty. Now every `mount` and `refresh` rewrites it from the keyring and the
+# client ewe-auth uses, so Drive follows the sign-in.
 #
 # The rclone config lives in its own file (~/.config/ewe/rclone-drive.conf)
 # so a user's own ~/.config/rclone is never touched.
@@ -36,29 +45,15 @@ ewe_auth() {
 
 mounted() { mountpoint -q "$MOUNT" 2>/dev/null; }
 
-case "${1:-status}" in
+# the refresh token of the current sign-in (empty when signed out)
+current_rt() {
+    if [ -n "${EWE_DRIVE_TEST_RT:-}" ]; then printf '%s' "$EWE_DRIVE_TEST_RT"; return; fi
+    timeout 10 secret-tool lookup service ewe account google 2>/dev/null || true
+}
 
-setup)
-    # --offline (tests/CI) skips both the consent and the mount — rclone
-    # itself is only needed for the real mount
-    if [ "${2:-}" != "--offline" ]; then
-        command -v rclone >/dev/null 2>&1 || die "rclone is not installed (pacman -S rclone fuse3)"
-    fi
-    # 1 · make sure the signed-in identity carries the Drive scope
-    #     (--have-scope: the caller's login already requested it — the shell
-    #      signs in with --with-drive, so no second browser consent here)
-    if [ "${2:-}" != "--offline" ] && [ "${2:-}" != "--have-scope" ]; then
-        say "Google will ask once to allow Drive access…"
-        r="$(ewe_auth login --with-drive)"
-        echo "$r" | grep -q '"ok": true' || die "sign-in failed: $r"
-    fi
-    # 2 · the rclone remote: our client, the broker's refresh token. The
-    # expiry is set in the past so rclone refreshes on first use — Google
-    # happily serves many access tokens from one refresh token.
-    rt="$(secret-tool lookup service ewe account google 2>/dev/null || true)"
-    [ -n "${EWE_DRIVE_TEST_RT:-}" ] && rt="$EWE_DRIVE_TEST_RT"
-    [ -n "$rt" ] || die "no refresh token in the keyring — sign in first"
-    read -r cid csec < <(python3 - <<'PY'
+# the OAuth client ewe-auth uses: "<id> <secret>" (empty when none)
+current_client() {
+    python3 - <<'PY'
 import json, os
 cfg = os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
 for p in (os.environ.get("EWE_GOOGLE_CLIENT_FILE", ""),
@@ -74,12 +69,32 @@ for p in (os.environ.get("EWE_GOOGLE_CLIENT_FILE", ""),
     except (OSError, ValueError):
         continue
 PY
-    )
-    [ -n "${cid:-}" ] || die "no OAuth client configured"
+}
+
+# did the last sign-in grant full Drive? yes / no / unknown (auth.json
+# records the granted scopes since 0.51; an older sign-in says nothing)
+drive_scope() {
+    python3 - "$CFG/ewe/auth.json" <<'PY'
+import json, sys
+try:
+    sc = json.load(open(sys.argv[1])).get("scopes")
+except (OSError, ValueError, AttributeError):
+    sc = None
+print("unknown" if not isinstance(sc, list) else
+      ("yes" if "https://www.googleapis.com/auth/drive" in sc else "no"))
+PY
+}
+
+# write the rclone remote from this client + refresh token. The expiry is in
+# the past so rclone refreshes on first use — Google happily serves many
+# access tokens from one refresh token.
+write_conf() {
+    local rt="$1" cid="$2" csec="$3" tok tmp
     umask 077
     mkdir -p "$(dirname "$CONF")"
     tok="{\"access_token\":\"x\",\"token_type\":\"Bearer\",\"refresh_token\":\"$rt\",\"expiry\":\"2000-01-01T00:00:00Z\"}"
-    cat > "$CONF" <<EOF
+    tmp="$CONF.tmp.$$"
+    cat > "$tmp" <<EOF
 # written by ewe-drive — do not edit; \`ewe-drive setup\` regenerates it
 [$REMOTE]
 type = drive
@@ -101,20 +116,38 @@ token = $tok
 type = combine
 upstreams = "My Drive=$REMOTE:" "Shared with me=$REMOTE-shared:"
 EOF
-    say "remote written"
-    # 3 · folder + Nemo sidebar bookmark (idempotent)
-    mkdir -p "$MOUNT"
-    mkdir -p "$(dirname "$BOOKMARKS")"
-    grep -q "Google%20Drive" "$BOOKMARKS" 2>/dev/null \
-        || printf 'file://%s/Google%%20Drive Google Drive\n' "$HOME" >> "$BOOKMARKS"
-    [ "${2:-}" = "--offline" ] && { say "offline setup done (no mount)"; exit 0; }
-    exec "$0" mount
-    ;;
+    mv -f "$tmp" "$CONF"
+}
 
-mount)
-    [ -r "$CONF" ] || exit 0                       # not set up — silent no-op
-    command -v rclone >/dev/null 2>&1 || exit 0
-    mounted && exit 0
+# bring an existing remote up to the current sign-in; returns 0 when it is
+# current (rewritten or already the same), 1 when there is no sign-in to copy
+sync_conf() {
+    local rt cid csec
+    rt="$(current_rt)"
+    read -r cid csec < <(current_client)
+    [ -n "$rt" ] && [ -n "${cid:-}" ] || return 1
+    # the same client and token: leave rclone's own refreshed access token be
+    if grep -qF "client_id = $cid" "$CONF" 2>/dev/null \
+       && grep -qF "\"refresh_token\":\"$rt\"" "$CONF" 2>/dev/null; then
+        return 0
+    fi
+    write_conf "$rt" "$cid" "${csec:-}"
+    say "remote follows the current sign-in"
+}
+
+# our rclone mounts: the ones started on THIS remote file (pids)
+our_rclones() { pgrep -u "$(id -u)" -f -- "rclone --config $CONF mount" 2>/dev/null || true; }
+
+# end our rclones and wait until they are gone (TERM: a pending upload stays
+# in rclone's cache and resumes at the next mount)
+end_rclones() {
+    local p
+    for p in $(our_rclones); do kill "$p" 2>/dev/null; done
+    for _ in $(seq 1 40); do [ -z "$(our_rclones)" ] && return 0; sleep 0.25; done
+    for p in $(our_rclones); do kill -9 "$p" 2>/dev/null; done
+}
+
+start_mount() {
     # a dead FUSE endpoint ("Transport endpoint is not connected", e.g. after
     # a killed rclone) blocks everything until lazily unmounted — it fails
     # even stat/-d, so probe with ls and heal on ANY failure (a plain missing
@@ -123,31 +156,112 @@ mount)
         fusermount3 -uz "$MOUNT" 2>/dev/null || fusermount -uz "$MOUNT" 2>/dev/null || true
     fi
     mkdir -p "$MOUNT"
+    # an rclone of ours that is alive with nothing mounted never came up:
+    # it must not sit beside the new one
+    mounted || end_rclones
     say "mounting Google Drive"
     # Background it ourselves and poll for readiness — rclone's own --daemon
     # never returned on this stack (the parent waits on a ready signal that
     # doesn't arrive; the identical foreground mount works). setsid detaches
     # it from the login session so a shell restart doesn't kill the mount.
-    ( setsid rclone --config "$CONF" mount "$REMOTE-all:" "$MOUNT" \
-        --vfs-cache-mode writes --dir-cache-time 1m \
-        --poll-interval 30s --drive-skip-gdocs=false \
-        >/dev/null 2>&1 & )
-    for _ in $(seq 1 40); do mounted && break; sleep 0.25; done
-    mounted && say "mounted at $MOUNT" \
-        || die "mount failed (see: rclone --config $CONF lsd $REMOTE:)"
+    # A mount normally answers in about a second. Now and then (0.51.1, seen
+    # right after a remount) rclone sat on a futex and never mounted, while
+    # the same command run again mounted at once (about 1 start in 8, also
+    # with the old rclone long gone): a good mount answers within ~1 s, so
+    # give each try 6 s, end a hung one and try again — three tries — instead
+    # of reporting a failure and leaving a hung rclone behind.
+    local attempt
+    for attempt in 1 2 3; do
+        ( setsid rclone --config "$CONF" mount "$REMOTE-all:" "$MOUNT" \
+            --vfs-cache-mode writes --dir-cache-time 1m \
+            --poll-interval 30s --drive-skip-gdocs=false \
+            >/dev/null 2>&1 & )
+        for _ in $(seq 1 24); do mounted && break; sleep 0.25; done
+        mounted && { say "mounted at $MOUNT"; return 0; }
+        end_rclones
+    done
+    if [ "$(drive_scope)" = no ]; then
+        die "mount failed: your last Google sign-in did not allow Drive — run: ewe-drive setup"
+    fi
+    die "mount failed (see: rclone --config $CONF lsd $REMOTE:)"
+}
+
+stop_mount() {
+    if mounted; then
+        fusermount3 -u "$MOUNT" 2>/dev/null || fusermount -u "$MOUNT" 2>/dev/null \
+            || fusermount3 -uz "$MOUNT" 2>/dev/null || fusermount -uz "$MOUNT" 2>/dev/null || true
+        for _ in $(seq 1 20); do mounted || break; sleep 0.25; done
+    fi
+    # wait until the old rclone has EXITED, not only unmounted: a new mount
+    # started while it was still shutting down is when rclone hung
+    end_rclones
+}
+
+case "${1:-status}" in
+
+setup)
+    # --offline (tests/CI) skips both the consent and the mount — rclone
+    # itself is only needed for the real mount
+    if [ "${2:-}" != "--offline" ]; then
+        command -v rclone >/dev/null 2>&1 || die "rclone is not installed (pacman -S rclone fuse3)"
+    fi
+    # 1 · make sure the signed-in identity carries the Drive scope
+    #     (--have-scope: the caller's login already requested it — the shell
+    #      signs in with --with-drive, so no second browser consent here)
+    if [ "${2:-}" != "--offline" ] && [ "${2:-}" != "--have-scope" ]; then
+        say "Google will ask once to allow Drive access…"
+        # (EWE_AUTH_NO_DRIVE: this setup mounts by itself below)
+        r="$(EWE_AUTH_NO_DRIVE=1 ewe_auth login --with-drive)"
+        echo "$r" | grep -q '"ok": true' || die "sign-in failed: $r"
+    fi
+    # 2 · the rclone remote: our client, the broker's refresh token
+    rt="$(current_rt)"
+    [ -n "$rt" ] || die "no refresh token in the keyring — sign in first"
+    read -r cid csec < <(current_client)
+    [ -n "${cid:-}" ] || die "no OAuth client configured"
+    write_conf "$rt" "$cid" "${csec:-}"
+    say "remote written"
+    # 3 · folder + Nemo sidebar bookmark (idempotent)
+    mkdir -p "$MOUNT"
+    mkdir -p "$(dirname "$BOOKMARKS")"
+    grep -q "Google%20Drive" "$BOOKMARKS" 2>/dev/null \
+        || printf 'file://%s/Google%%20Drive Google Drive\n' "$HOME" >> "$BOOKMARKS"
+    [ "${2:-}" = "--offline" ] && { say "offline setup done (no mount)"; exit 0; }
+    # a mount still running holds the OLD credentials in memory: start over
+    stop_mount
+    start_mount
+    ;;
+
+mount)
+    [ -r "$CONF" ] || exit 0                       # not set up — silent no-op
+    command -v rclone >/dev/null 2>&1 || exit 0
+    mounted && exit 0
+    sync_conf || true            # signed out / keyring locked: try the copy we have
+    start_mount
+    ;;
+
+refresh)
+    # after a sign-in (ewe-auth login runs this): the remote follows it, and
+    # a running mount restarts on it — rclone keeps its token in memory
+    [ -r "$CONF" ] || exit 0                       # Drive not set up — nothing to follow
+    sync_conf || die "no Google sign-in to follow — sign in first"
+    [ "${2:-}" = "--offline" ] && exit 0
+    command -v rclone >/dev/null 2>&1 || exit 0
+    stop_mount
+    start_mount
     ;;
 
 unmount)
     mounted || exit 0
-    fusermount3 -u "$MOUNT" 2>/dev/null || fusermount -u "$MOUNT" 2>/dev/null
+    stop_mount
     say "unmounted"
     ;;
 
 status)
-    printf '{"configured": %s, "mounted": %s}\n' \
+    printf '{"configured": %s, "mounted": %s, "drive_scope": "%s"}\n' \
         "$([ -r "$CONF" ] && echo true || echo false)" \
-        "$(mounted && echo true || echo false)"
+        "$(mounted && echo true || echo false)" "$(drive_scope)"
     ;;
 
-*) die "usage: ewe-drive setup|mount|unmount|status" ;;
+*) die "usage: ewe-drive setup|mount|refresh|unmount|status" ;;
 esac

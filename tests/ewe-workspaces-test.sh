@@ -235,6 +235,28 @@ op("termlater", 2, "kitty", { "ewe-ws-3*" })
 check(#follows == nmoves + 1 and W[3] and W[3].windows[#W[3].windows] == "termlater" and focusedWin == nil,
       "the here is spent: the next kitty follows its rule again, quietly")
 
+-- 0.51.1 — a workspace being torn down comes back with id = nil
+-- (HL.Workspace.id is integer|nil): the workspace.created timer threw
+-- "attempt to compare number with nil" on every switch
+reset({ { "eDP-1", 1 }, { "DP-1", 11 } }, { { 1, "eDP-1", { "a" } }, { 11, "DP-1" } })
+ws.setup()
+local real_get = _G.hl.get_workspaces
+_G.hl.get_workspaces = function()
+  local out = real_get()
+  out[#out + 1] = { id = nil, special = false, windows = 0, monitor = out[1].monitor }
+  return out
+end
+local okn, errn = pcall(function()
+  for _, ev in ipairs({ "normalize", "cycle", "sync", "new" }) do
+    if ev == "cycle" then ws.cycle(1)
+    elseif ev == "sync" then _G.ewe_workspaces_mode = "shared"; ws.sync({ id = nil, special = false, monitor = { name = "eDP-1" } }); _G.ewe_workspaces_mode = nil
+    elseif ev == "new" then ws.new_workspace()
+    else _G.hl.timer = function(fn) fn() end; ws.place({ address = "x", monitor = { name = "eDP-1" }, workspace = { id = nil } }) end
+  end
+end)
+check(okn, "a workspace with no id (being destroyed) is skipped, never compared" .. (okn and "" or (": " .. tostring(errn))))
+_G.hl.get_workspaces = real_get
+
 os.exit(FAILED and 1 or 0)
 EOF
 "$LUA" "$S/fake.lua" || fail=1

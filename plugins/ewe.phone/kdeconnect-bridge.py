@@ -27,6 +27,7 @@ import shutil
 import subprocess
 import sys
 import threading
+import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import phone_apps   # C1 parse + C2 cache — pure stdlib, shared with the tests
@@ -88,6 +89,49 @@ def plain(v):
     return v if isinstance(v, (str, int, float, bool)) or v is None else str(v)
 
 
+# ── calling a sleeping phone back (1.2.1) ────────────────────────────────────
+# KDE Connect drops a phone's link when the phone dozes, then waits for the
+# PHONE to announce itself again — and an Android phone that wakes up on the
+# same Wi-Fi often does not, so it stayed "not connected" (its files, its
+# apps, its messages) until someone pressed Refresh. While a paired phone is
+# away the bridge calls it back: the daemon re-announces this computer
+# (`forceOnNetworkChange`), every CALLBACK_FAST_S for the first minutes, then
+# every CALLBACK_SLOW_S. The phone's last address goes into the daemon's
+# `customDevices`, so the announcement also goes straight to the phone —
+# Wi-Fi power saving drops broadcasts long before it drops a packet sent to
+# you. Only the entry the bridge added is ever replaced; the user's own stay.
+CALLBACK_FAST_S = 20
+CALLBACK_FAST_FOR_S = 300
+CALLBACK_SLOW_S = 90
+
+
+def callback_due(away_since, last_call, now):
+    """Is it time to call an away phone back? away_since None = none away."""
+    if away_since is None:
+        return False
+    gap = CALLBACK_FAST_S if now - away_since < CALLBACK_FAST_FOR_S else CALLBACK_SLOW_S
+    return last_call is None or now - last_call >= gap
+
+
+def address_ok(a):
+    """An IPv4/IPv6 literal the daemon reported — nothing else goes in its config."""
+    import ipaddress
+    try:
+        ipaddress.ip_address(str(a))
+        return True
+    except ValueError:
+        return False
+
+
+def merge_custom(current, ours_before, ours_now):
+    """customDevices with the bridge's entry for a phone moved from
+    ours_before to ours_now; every other entry kept, in order, no duplicate."""
+    out = [a for a in current if not (ours_before and a == ours_before and a != ours_now)]
+    if ours_now and ours_now not in out:
+        out.append(ours_now)
+    return out
+
+
 # the folders the dock's Files tab offers: key, label, candidates under the phone's shared storage
 FOLDERS = [
     ("camera", "Camera", ["DCIM/Camera"]),
@@ -141,6 +185,9 @@ class Bridge:
         self.apps_key = {}    # id -> what the last `apps` event was built from
         self.apps_sent = {}   # id -> that event's JSON (never twice the same)
         self.was_paired = set()
+        self.away_since = None   # since when a paired phone has been away
+        self.last_call = None    # when it was last called back
+        self.addresses = {}      # id -> its last address while in reach
 
         # global (no-path-filter) subscriptions: one receiver per signal kind,
         # the device id comes out of the object path — no per-device churn
@@ -256,6 +303,9 @@ class Bridge:
             "plugins": p.get("supportedPlugins", []),
             "batteryCharge": -1, "isCharging": False,
         }
+        addrs = [a for a in (p.get("reachableAddresses") or []) if address_ok(a)]
+        if d["isReachable"] and d["isPaired"] and addrs:
+            self.addresses[dev_id] = addrs[0]
         b = self.get_props(self.dev_path(dev_id) + "/battery", BATT_IFACE)
         if b is not None:
             d["batteryCharge"] = int(b.get("charge", -1))
@@ -705,6 +755,55 @@ class Bridge:
         elif cmd == "shareUrl":
             self.plugin(dev, "share", "org.kde.kdeconnect.device.share").shareUrl(c["url"])
 
+    # ── calling a sleeping phone back ────────────────────────────────────────
+    def callback_tick(self):
+        now = time.monotonic()
+        away = [i for i, d in self.devices.items() if d.get("isPaired") and not d.get("isReachable")]
+        if not away or not self.daemon_up:
+            self.away_since = self.last_call = None
+            return True
+        if self.away_since is None:
+            self.away_since = now
+        if callback_due(self.away_since, self.last_call, now):
+            self.last_call = now
+            for dev_id in away:
+                self.remember_address(dev_id)
+            try:
+                dbus.Interface(self.obj(DAEMON_PATH), DAEMON_IFACE).forceOnNetworkChange()
+            except dbus.DBusException:
+                pass
+        return True
+
+    def remember_address(self, dev_id):
+        """The phone's last address in the daemon's customDevices (see above)."""
+        addr = self.addresses.get(dev_id)
+        if not addr:
+            return
+        state = os.path.join(phone_apps.cache_base(), "callback-addresses.json")
+        try:
+            with open(state) as f:
+                ours = json.load(f)
+            ours = ours if isinstance(ours, dict) else {}
+        except (OSError, ValueError):
+            ours = {}
+        try:
+            props = dbus.Interface(self.obj(DAEMON_PATH), PROPS)
+            current = [str(a) for a in props.Get(DAEMON_IFACE, "customDevices")]
+            want = merge_custom(current, ours.get(dev_id), addr)
+            if want != current:
+                props.Set(DAEMON_IFACE, "customDevices", dbus.Array(want, signature="s"))
+        except dbus.DBusException:
+            return
+        if ours.get(dev_id) != addr:
+            ours[dev_id] = addr
+            try:
+                os.makedirs(os.path.dirname(state), exist_ok=True)
+                with open(state + ".tmp", "w") as f:
+                    json.dump(ours, f)
+                os.replace(state + ".tmp", state)
+            except OSError:
+                pass
+
     # ── main ─────────────────────────────────────────────────────────────────
     def run(self):
         inst = self.installed()
@@ -716,6 +815,7 @@ class Bridge:
             self.refresh_devices()
             if self.daemon_up:
                 emit({"event": "daemon", "running": True})
+            GLib.timeout_add(5000, self.callback_tick)
         self.loop.run()
 
 

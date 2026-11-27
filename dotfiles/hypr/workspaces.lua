@@ -39,10 +39,19 @@ end
 function M.block_of(id) return math.floor((id - 1) / SPAN) end
 function M.number(id) return ((id - 1) % SPAN) + 1 end
 local function id_for(block, n) return block * SPAN + n end
+-- a workspace's id, or nil: Hyprland hands out a workspace that is being
+-- torn down (an empty one you just left) with `id = nil` (HL.Workspace.id
+-- is `integer|nil`), and `nil >= 1` threw "attempt to compare number with
+-- nil" from the workspace.created timer on every switch (0.51.1)
+local function wsid(w)
+    local id = w and w.id
+    return type(id) == "number" and id or nil
+end
+M.wsid = wsid
 
 local function displays()
     local list = hl.get_monitors() or {}
-    table.sort(list, function(a, b) return a.id < b.id end)
+    table.sort(list, function(a, b) return (a.id or 0) < (b.id or 0) end)
     return list
 end
 
@@ -57,9 +66,9 @@ local function assign()
     -- a display keeps the block its current workspace belongs to, when free
     -- (after a reload, after the first start)
     for _, m in ipairs(list) do
-        local ws = m.active_workspace
-        if slots[m.name] == nil and ws and ws.id >= 1 and not used[M.block_of(ws.id)] then
-            slots[m.name] = M.block_of(ws.id)
+        local id = wsid(m.active_workspace)
+        if slots[m.name] == nil and id and id >= 1 and not used[M.block_of(id)] then
+            slots[m.name] = M.block_of(id)
             used[slots[m.name]] = true
         end
     end
@@ -94,7 +103,7 @@ local function show(list)
     end
     if here then hl.dispatch(hl.dsp.focus({ monitor = here.name })) end
     if win and here and win.monitor and win.monitor.name == here.name and win.workspace
-       and here.active_workspace and win.workspace.id == here.active_workspace.id then
+       and wsid(win.workspace) and wsid(win.workspace) == wsid(here.active_workspace) then
         hl.dispatch(hl.dsp.focus({ window = "address:" .. win.address }))
     end
     if cursor then hl.dispatch(hl.dsp.cursor.move({ x = cursor.x, y = cursor.y })) end
@@ -111,15 +120,15 @@ end
 local function normalize(fresh)
     local moves, switch = {}, {}
     for _, w in ipairs(hl.get_workspaces() or {}) do
-        if w.id >= 1 and not w.special and w.monitor and slots[w.monitor.name] ~= nil then
+        local id = wsid(w)
+        if id and id >= 1 and not w.special and w.monitor and slots[w.monitor.name] ~= nil then
             local k = slots[w.monitor.name]
-            if M.block_of(w.id) ~= k then
-                local target = id_for(k, (fresh and (w.windows or 0) == 0) and 1 or M.number(w.id))
-                for _, win in ipairs(hl.get_workspace_windows(w.id) or {}) do
+            if M.block_of(id) ~= k then
+                local target = id_for(k, (fresh and (w.windows or 0) == 0) and 1 or M.number(id))
+                for _, win in ipairs(hl.get_workspace_windows(id) or {}) do
                     moves[#moves + 1] = { address = win.address, id = target }
                 end
-                local active = w.monitor.active_workspace
-                if active and active.id == w.id then
+                if wsid(w.monitor.active_workspace) == id then
                     switch[#switch + 1] = { display = w.monitor, id = target }
                 end
             end
@@ -134,13 +143,14 @@ end
 -- shared mode: every other display follows the workspace number `ws` shows
 function M.sync(ws)
     if syncing or M.mode() ~= "shared" then return end
-    if not ws or ws.special or ws.id < 1 or not ws.monitor then return end
-    local n = M.number(ws.id)
+    local id = wsid(ws)
+    if not id or ws.special or id < 1 or not ws.monitor then return end
+    local n = M.number(id)
     local list = {}
     for _, m in ipairs(displays()) do
         if m.name ~= ws.monitor.name then
             local target = id_for(block(m), n)
-            if not (m.active_workspace and m.active_workspace.id == target) then
+            if wsid(m.active_workspace) ~= target then
                 list[#list + 1] = { display = m, id = target }
             end
         end
@@ -153,8 +163,9 @@ local function numbers(m)
     local seen, out = {}, {}
     local shared = M.mode() == "shared"
     for _, w in ipairs(hl.get_workspaces() or {}) do
-        if w.id >= 1 and not w.special and w.monitor and (shared or w.monitor.name == m.name) then
-            local n = M.number(w.id)
+        local id = wsid(w)
+        if id and id >= 1 and not w.special and w.monitor and (shared or w.monitor.name == m.name) then
+            local n = M.number(id)
             if not seen[n] then seen[n] = true; out[#out + 1] = n end
         end
     end
@@ -183,10 +194,11 @@ end
 -- on this display (shared: on any display), round the ends
 function M.cycle(step)
     local m = hl.get_active_monitor()
-    if not m or not m.active_workspace then return end
+    local active = m and wsid(m.active_workspace)
+    if not active then return end
     local list = numbers(m)
     if #list == 0 then return end
-    local cur, at = M.number(m.active_workspace.id), 1
+    local cur, at = M.number(active), 1
     for i, n in ipairs(list) do if n == cur then at = i end end
     local next = list[((at - 1 + step) % #list) + 1]
     hl.dispatch(hl.dsp.focus({ workspace = id_for(block(m), next) }))
@@ -298,7 +310,7 @@ local function shown_everywhere(win)
     return false
 end
 function M.place(win)
-    if not win or not win.monitor or not win.workspace or win.workspace.special then return end
+    if not win or not win.monitor or not wsid(win.workspace) or win.workspace.special then return end
     if shown_everywhere(win) then return end
     local asked = take_launch(win)
     -- "open it here": no rule moves it; it opens where you are, focused
@@ -317,7 +329,7 @@ function M.place(win)
     local target = id_for(k, n)
     if tagged then
         local here = hl.get_active_workspace()
-        if asked or (here and here.id == target) then focus_on_open[win.address] = true end
+        if asked or wsid(here) == target then focus_on_open[win.address] = true end
     end
     if win.workspace.id == target then return end
     hl.dispatch(hl.dsp.window.move({ workspace = target, window = "address:" .. win.address, follow = not tagged }))

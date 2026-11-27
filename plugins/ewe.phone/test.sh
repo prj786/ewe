@@ -118,6 +118,32 @@ print("PURE-OK")
 PY
 check "plain / id_from_path / norm_message" "grep -q PURE-OK '$SB/pure.out'" || cat "$SB/pure.out"
 
+# 2b. calling a sleeping phone back (1.2.1) ────────────────────────────────────
+python3 - <<'PY' > "$SB/callback.out" 2>&1 || true
+import importlib.util
+spec = importlib.util.spec_from_file_location("bridge", "kdeconnect-bridge.py")
+b = importlib.util.module_from_spec(spec); spec.loader.exec_module(b)
+due = b.callback_due
+F, FOR, S = b.CALLBACK_FAST_S, b.CALLBACK_FAST_FOR_S, b.CALLBACK_SLOW_S
+assert not due(None, None, 100), "nothing away: never"
+assert due(100, None, 100), "the moment it leaves: call at once"
+assert not due(100, 100, 100 + F - 1) and due(100, 100, 100 + F), "fast while it just left"
+t = 100 + FOR + 1
+assert not due(100, t - F, t) and due(100, t - S, t), "slow after the first minutes"
+# customDevices: the user's own entries stay, ours moves, nothing twice
+m = b.merge_custom
+assert m([], None, "192.168.1.200") == ["192.168.1.200"]
+assert m(["10.0.0.5"], None, "192.168.1.200") == ["10.0.0.5", "192.168.1.200"]
+assert m(["10.0.0.5", "192.168.1.200"], "192.168.1.200", "192.168.1.201") == ["10.0.0.5", "192.168.1.201"]
+assert m(["192.168.1.200"], "192.168.1.200", "192.168.1.200") == ["192.168.1.200"]
+assert m(["192.168.1.200"], None, "192.168.1.200") == ["192.168.1.200"]
+# only an address literal goes into the daemon's config
+assert b.address_ok("192.168.1.200") and b.address_ok("fe80::1")
+assert not b.address_ok("phone.local") and not b.address_ok("1.2.3.4; rm -rf") and not b.address_ok("")
+print("CALLBACK-OK")
+PY
+check "call-back: timing, customDevices merge, address check" "grep -q CALLBACK-OK '$SB/callback.out'" || cat "$SB/callback.out"
+
 # 3. NDJSON framing: hello, a refresh with no daemon, a failing command, junk ─
 # (always under EWE_PHONE_NO_DAEMON: without it the bridge's fallback would
 # Popen the REAL /usr/bin/kdeconnectd on a box that has it installed)
@@ -153,7 +179,7 @@ import json, re, os
 m = json.load(open("manifest.json"))
 assert m["id"] == "ewe.phone" and m["apiVersion"] == 3 and m["schemaVersion"] == 1
 assert set(m["kinds"]) == {"service", "quick-page", "bar-status", "dock-item", "panel"}
-assert m["version"] == "1.2.0" and m["dockItem"]["action"] == "ewe.phone.toggle" and m["entryPoints"]["panel"] == "Popup.qml"
+assert m["version"] == "1.2.1" and m["dockItem"]["action"] == "ewe.phone.toggle" and m["entryPoints"]["panel"] == "Popup.qml"
 hk = [x for x in m["settings"] if x["key"] == "hide_kdeconnect"][0]
 assert hk["type"] == "bool" and hk["default"] is True
 assert m["quickPage"]["key"] == "mobile", "legacy key `mobile` keeps `quicksettings tab mobile` working"

@@ -2,6 +2,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Wayland
 import Quickshell.Io
+import Quickshell.Hyprland
 import qs
 
 // ewe.screenshot — Preview: captured shots pile into a bottom-right STACK
@@ -20,6 +21,15 @@ Scope {
 
     property var paths: []
     property bool shown: false
+    // the display you shot on (1.1.2): with no `screen` a layer surface goes
+    // to the FIRST output — on a laptop with an external display the stack
+    // appeared on the laptop's screen while you worked on the other one
+    property var shotScreen: null
+    function focusedScreen() {
+        var fm = Hyprland.focusedMonitor, ss = Quickshell.screens
+        if (fm) for (var i = 0; i < ss.length; i++) if (ss[i].name === fm.name) return ss[i]
+        return ss.length > 0 ? ss[0] : null
+    }
     readonly property int n: paths.length
     readonly property int peeks: Math.min(Math.max(n - 1, 0), 2)   // 0..2 cards behind
 
@@ -34,6 +44,7 @@ Scope {
         // (not show/hide — those collide with `qs ipc`'s own subcommands)
         function shoot(mode: string): void { root.shoot(mode) }
         function pop(p: string): void {
+            root.shotScreen = root.focusedScreen()
             var a = root.paths.slice(); a.push(p); root.paths = a
             root.shown = true
             hideTimer.restart()        // any new shot resets the whole stack's 5s
@@ -51,6 +62,7 @@ Scope {
     PanelWindow {
         id: win
         visible: (root.shown || root.held) && root.n > 0
+        screen: root.shotScreen
         color: "transparent"
         exclusiveZone: 0
         WlrLayershell.namespace: "quickshell:ewe.screenshot"

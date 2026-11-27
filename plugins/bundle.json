@@ -61,8 +61,8 @@
       "repo": "https://github.com/prj786/ewe-plugin-phone",
       "default": false,
       "migrate": true,
-      "commit": "8533299eea5a38f21ab2ba3c9af1a23e02113c09",
-      "version": "1.2.0"
+      "commit": "7818b65fb1cdd523b9c461c6be9a4700a544236a",
+      "version": "1.2.1"
     },
     "ewe.places": {
       "repo": "https://github.com/prj786/ewe-plugin-places",
@@ -80,8 +80,8 @@
     },
     "ewe.screenshot": {
       "repo": "https://github.com/prj786/ewe-plugin-screenshot",
-      "commit": "ad0d8e692f4d50ee91aafe4fc05a6a5ef28837c2",
-      "version": "1.1.1",
+      "commit": "074679353758e88a3d1526033a9c48a0b79d07fd",
+      "version": "1.1.2",
       "default": false,
       "migrate": true
     },
