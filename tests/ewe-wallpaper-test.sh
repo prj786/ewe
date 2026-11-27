@@ -1,24 +1,31 @@
 #!/usr/bin/env bash
-# A wallpaper that is not on this computer never leaves a flat colour
-# (2026-11-27).
+# The first desktop has a wallpaper, and a wallpaper that is not on this
+# computer never leaves a flat colour (2026-11-27).
 #
-#   dotfiles/hypr/scripts/wallpaper.sh — nothing configured, a `*` path
+#   1. dotfiles/hypr/scripts/wallpaper.sh — nothing configured, a `*` path
 #      from another computer's home, a dead per-display path, a display with
 #      no line of its own, a video without mpvpaper: each ends on a picture
 #      (the user's default where there is one, else the wallpaper ewe ships),
 #      never on `swaybg -c`. A valid choice is never replaced.
+#   2. packaging/ewe-setup — a fresh account gets hypr/generated/
+#      wallpapers.conf naming the shipped wallpaper, through ewe-conf and as
+#      ONE key (no full import); a file that exists is left alone; a missing
+#      file is written back from an ewe.conf that names a wallpaper; an
+#      account deployed earlier is not written to (its picture is part 1).
 #
-# HERMETIC ON PURPOSE. wallpaper.sh runs `pkill -x swaybg|mpvpaper` — on a
-# desktop that is somebody's own session that would reach the real thing. So
-# the script runs under `env -i` with a PATH that holds ONLY a short list of
-# plain tools (symlinks) and the fakes below: a tool that is not listed does
-# not exist. Nothing outside the sandbox is read or signalled; no bus, no
-# compositor.
+# HERMETIC ON PURPOSE. wallpaper.sh runs `pkill -x swaybg|mpvpaper`, and
+# ewe-setup runs colorscheme.sh (`pkill -USR1 kitty`, gsettings) and
+# `systemctl --user` — on a desktop that is somebody's own session those
+# would reach the real thing. So every script here runs under `env -i` with a
+# PATH that holds ONLY a short list of plain tools (symlinks) and the fakes
+# below: a tool that is not listed does not exist. Nothing outside the
+# sandbox is read or signalled; no bus, no compositor.
 # shellcheck disable=SC2015,SC2016  # `check && ok || no` reads as a table here
 #                                     (ok/no never fail); the fakes' bodies are
 #                                     sh source, meant to stay unexpanded
 set -u
 cd "$(dirname "$0")/.." || exit 1
+REPO=$PWD
 fail=0
 ok() { echo "ok    $*"; }
 no() { echo "FAIL  $*"; fail=1; }
@@ -28,6 +35,7 @@ for t in python3 readlink awk; do
 done
 
 bash -n dotfiles/hypr/scripts/wallpaper.sh && ok "wallpaper.sh parses" || no "wallpaper.sh does not parse"
+bash -n packaging/ewe-setup && ok "ewe-setup parses" || no "ewe-setup does not parse"
 
 SB=$(mktemp -d); trap 'rm -rf "$SB"' EXIT
 mkdir -p "$SB/bin" "$SB/run"
@@ -181,6 +189,96 @@ else
     wp --reapply
     flat && ok "nothing to fall back to: the solid background, as before" || no "broken install: $(cat "$LOG")"
     mv "$SHIPPED.away" "$SHIPPED"
+fi
+
+# ── part 2: ewe-setup on a fresh account ─────────────────────────────────────
+# The payload, as packaging/PKGBUILD lays it out under /usr/share/ewe.
+PAY="$SB/payload"; mkdir -p "$PAY"
+cp -a dotfiles systemd system packages phases lib templates docs bin plugins \
+      install.sh update.sh uninstall.sh VERSION VERSIONS README.md LICENSE "$PAY/"
+H2="$SB/home2"; mkdir -p "$H2"
+tools   # none of the wallpaper backends: ewe-setup must not need them
+setup() {
+    env -i HOME="$H2" PATH="$SB/bin" XDG_RUNTIME_DIR="$SB/run" FAKE_LOG="$LOG" \
+        EWE_PAYLOAD="$PAY" bash "$REPO/packaging/ewe-setup" > "$SB/setup.out" 2>&1
+}
+EWECONF2="$H2/.config/ewe/ewe.conf"
+CONF2="$H2/.config/hypr/generated/wallpapers.conf"
+# the read-only payload's copy: the same path on every packaged machine
+WANT2="$PAY/system/branding/wallpapers/ewe-dark.png"
+
+: > "$LOG"
+setup && ok "ewe-setup runs on a fresh home" || no "ewe-setup failed: $(tail -5 "$SB/setup.out")"
+if [ -r "$CONF2" ]; then
+    line="$(grep '^\*=' "$CONF2")"
+    [ "$line" = "*=$WANT2" ] && [ -r "${line#\*=}" ] \
+        && ok "a fresh account has wallpapers.conf naming the shipped wallpaper (the payload's path)" \
+        || no "wallpapers.conf says: $(cat "$CONF2")"
+else
+    no "a fresh account has no hypr/generated/wallpapers.conf: $(tail -5 "$SB/setup.out")"
+fi
+grep -q 'wallpaper could not be saved' "$SB/setup.out" && no "ewe-setup warned about the wallpaper" || ok "…without a warning"
+# through ewe-conf (the one writer), and only that one key: a fresh machine
+# must not hand its defaults for everything else to the account it syncs with
+grep -q '^\[desktop\.wallpapers\]' "$EWECONF2" 2>/dev/null \
+    && ok "…and ewe.conf holds the choice ([desktop.wallpapers])" || no "ewe.conf has no [desktop.wallpapers]: $(cat "$EWECONF2" 2>/dev/null)"
+n="$(grep -c '^\[desktop\.' "$EWECONF2" 2>/dev/null)"
+[ "$n" = 1 ] && ok "…as the only desktop key written (no full import)" || no "ewe.conf has $n [desktop.*] tables: $(grep '^\[' "$EWECONF2")"
+
+# what the session then does with it (the deployed script, the deployed file)
+tools awww awww-daemon swaybg mpvpaper
+: > "$LOG"
+env -i HOME="$H2" PATH="$SB/bin" XDG_RUNTIME_DIR="$SB/run" FAKE_LOG="$LOG" FAKE_MONITORS="DP-1" \
+    bash "$H2/.config/hypr/scripts/wallpaper.sh" >/dev/null 2>&1
+"$(command -v sleep)" 0.2
+called "awww img $WANT2 -o DP-1 --resize crop" && ! flat \
+    && ok "the first login draws it" || no "the first login: $(cat "$LOG")"
+
+# a file that exists is the user's: a later sync leaves it — and ewe.conf — alone
+tools
+printf 'mode=fit\n*=%s\n' "$H2/Pictures/chosen.png" > "$CONF2"
+cp "$CONF2" "$SB/chosen.conf"; cp "$EWECONF2" "$SB/before.conf"
+setup
+cmp -s "$CONF2" "$SB/chosen.conf" && cmp -s "$EWECONF2" "$SB/before.conf" \
+    && ok "an existing wallpapers.conf survives a sync untouched, ewe.conf too" \
+    || no "a sync rewrote something: $(cat "$CONF2"; diff "$SB/before.conf" "$EWECONF2")"
+
+# ewe.conf names a wallpaper and the file is gone: written back from ewe.conf
+rm -f "$CONF2"
+setup
+[ "$(grep '^\*=' "$CONF2" 2>/dev/null)" = "*=$WANT2" ] && cmp -s "$EWECONF2" "$SB/before.conf" \
+    && ok "a missing file is written back from ewe.conf" || no "not written back: $(cat "$CONF2" 2>/dev/null)"
+
+# an account deployed before this (no file, no wallpaper in ewe.conf), at a
+# later sync: ewe.conf is NOT written to — the picture comes from
+# wallpaper.sh's fallback (part 1), with no change to what the account syncs
+python3 - "$EWECONF2" <<'PYEOF'
+import re, sys
+p = sys.argv[1]
+s = open(p).read()
+s = re.sub(r"(?ms)^# per-output wallpaper map[^\n]*\n\[desktop\.wallpapers\]\n.*?\n\n", "", s)
+assert "[desktop.wallpapers]" not in s, s
+open(p, "w").write(s)
+PYEOF
+cp "$EWECONF2" "$SB/old.conf"; rm -f "$CONF2"
+setup
+[ ! -e "$CONF2" ] && cmp -s "$EWECONF2" "$SB/old.conf" \
+    && ok "an account deployed earlier is not written to at a later sync" \
+    || no "a later sync wrote: $(cat "$CONF2" 2>/dev/null; diff "$SB/old.conf" "$EWECONF2")"
+tools awww awww-daemon swaybg mpvpaper
+: > "$LOG"
+env -i HOME="$H2" PATH="$SB/bin" XDG_RUNTIME_DIR="$SB/run" FAKE_LOG="$LOG" FAKE_MONITORS="DP-1" \
+    bash "$H2/.config/hypr/scripts/wallpaper.sh" >/dev/null 2>&1
+"$(command -v sleep)" 0.2
+called "awww img $H2/.local/share/ewe/system/branding/wallpapers/ewe-dark.png -o DP-1 --resize crop" && ! flat \
+    && ok "…and its desktop still gets the shipped wallpaper (the script's own fallback)" \
+    || no "…its desktop: $(cat "$LOG")"
+
+# nothing a test may not touch was reached for
+if grep -qE '^(systemctl|gsettings|busctl|dbus-send|qs) ' "$LOG" 2>/dev/null; then
+    no "a session tool was reachable through the sandbox PATH: $(cat "$LOG")"
+else
+    ok "the sandbox PATH held (no session tool was reachable)"
 fi
 
 [ "$fail" = 0 ] && echo "all good" || echo "FAILED"
