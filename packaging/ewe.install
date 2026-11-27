@@ -30,14 +30,25 @@ _ewe_ikev1_accept() {
 # greeter QML was the pre-v3 file with no tokens beside it (2026-10-04).
 #
 # So: refresh them here — as root, non-interactively — ONLY where they already
-# exist (= phase 30 installed them on this machine), from the payload. Same
-# three files, same sources as phase 30: keep the two in step. Fonts, greetd's
-# config.toml and PAM are deliberately NOT touched: those are the user's to
-# re-run install.sh for (they change rarely and config.toml may carry edits).
+# exist (= phase 30, or the ISO's ewe-install, put a greeter on this machine),
+# from the payload. Same files, same sources as phase 30: keep the two in
+# step. greetd's config.toml and PAM are deliberately NOT touched: those are
+# the user's to re-run install.sh for (they change rarely and config.toml may
+# carry edits).
+#
+# The greeter's type goes with it (2026-11-27): Geist + Geist Mono system-wide
+# and the Geist -> Noto Sans Georgian fallback — the `greeter` user reads no
+# dotfiles, so without /usr/share/fonts/ewe the login screen is drawn in a
+# fallback face. A machine installed from the ISO never ran phase 30 and had
+# neither these nor the tokens (a black-and-white login screen, 2026-11-22);
+# a machine that ran phase 30 before Geist shipped lacks them too. Fonts are
+# not anybody's configuration: installed, or refreshed when the payload's copy
+# differs, wherever the greeter is.
 _ewe_refresh_greeter() {
     _p=/usr/share/ewe
     _g=/etc/xdg/quickshell/ewe-greeter
     _n=0
+    _what="wrapper, QML, Ewe Dark tokens"
     if [ -f /usr/local/bin/ewe-greeter ] && [ -r "$_p/system/greeter/ewe-greeter" ]; then
         install -m 755 "$_p/system/greeter/ewe-greeter" /usr/local/bin/ewe-greeter && _n=$((_n + 1))
     fi
@@ -60,8 +71,21 @@ _ewe_refresh_greeter() {
                 echo ":: ewe: could not rebuild the greeter's theme tokens — run: bash /usr/share/ewe/install.sh --no-packages"
             fi
         fi
+        # its fonts — phase 30's files and places (/usr/share/fonts/ewe,
+        # /etc/fonts/conf.d/60-ewe-geist.conf); the cache only when one moved
+        _fn=0
+        for _w in "$_p"/dotfiles/quickshell/fonts/geist/*.woff2 \
+                  "$_p/dotfiles/quickshell/fonts/geist/GEIST-LICENSE"; do
+            _ewe_put "$_w" "/usr/share/fonts/ewe/${_w##*/}" 644 && _fn=$((_fn + 1))
+        done
+        _ewe_put "$_p/system/fontconfig/60-ewe-geist.conf" /etc/fonts/conf.d/60-ewe-geist.conf 644 && _fn=$((_fn + 1))
+        if [ "$_fn" -gt 0 ]; then
+            command -v fc-cache >/dev/null 2>&1 && fc-cache -f /usr/share/fonts/ewe >/dev/null 2>&1
+            _n=$((_n + _fn))
+            _what="$_what, Geist"
+        fi
     fi
-    [ "$_n" -gt 0 ] && echo ":: ewe: refreshed the greeter from the payload ($_n file(s): wrapper, QML, Ewe Dark tokens)"
+    [ "$_n" -gt 0 ] && echo ":: ewe: refreshed the greeter from the payload ($_n file(s): $_what)"
     return 0
 }
 
