@@ -32,7 +32,12 @@ class H(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
             return
-        body = json.dumps({"access_token": f"AT-{n}", "expires_in": 3600}).encode()
+        resp = {"access_token": f"AT-{n}", "expires_in": 3600}
+        try:  # the test sets the scope the "server" reports back
+            resp["scope"] = open(sb + "/scope").read().strip()
+        except OSError:
+            pass
+        body = json.dumps(resp).encode()
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
@@ -68,6 +73,27 @@ printf '{"client_id":"ewe-id","email":"t@t"}' > "$SB/cfg/ewe/auth.json"
 t1="$(./bin/ewe-auth token)"; t2="$(./bin/ewe-auth token)"
 [ "$t1" = "AT-1" ] && [ "$t2" = "AT-1" ] && echo "ok  token refresh + runtime cache" || fail "token ($t1/$t2)"
 
+# 4b · status: scopes + mail level. Old auth.json (no scopes) → read.
+st() { ./bin/ewe-auth status | python3 -c "import json,sys;d=json.load(sys.stdin);print($1)"; }
+[ "$(st 'd["mail"], d["scopes"]')" = "read []" ] \
+    && echo "ok  status: signed in, scopes unknown → mail read" || fail "status unknown scopes ($(st 'd["mail"], d["scopes"]'))"
+# a token response that carries a scope is recorded in auth.json
+echo "openid email https://www.googleapis.com/auth/gmail.readonly" > "$SB/scope"
+rm -f "$SB/run/ewe-auth-token.json"; ./bin/ewe-auth refresh >/dev/null
+[ "$(st 'd["mail"]')" = "read" ] && [ "$(st '"gmail.readonly" in " ".join(d["scopes"])')" = "True" ] \
+    && echo "ok  refresh records scopes; readonly → mail read" || fail "readonly scope"
+echo "openid email https://www.googleapis.com/auth/gmail.modify" > "$SB/scope"
+rm -f "$SB/run/ewe-auth-token.json"; ./bin/ewe-auth refresh >/dev/null
+[ "$(st 'd["mail"]')" = "full" ] && echo "ok  gmail.modify → mail full" || fail "modify scope ($(st 'd["mail"]'))"
+echo "openid email" > "$SB/scope"
+rm -f "$SB/run/ewe-auth-token.json"; ./bin/ewe-auth refresh >/dev/null
+[ "$(st 'd["mail"]')" = "none" ] && echo "ok  no mail scope granted → mail none" || fail "no mail scope"
+grep -q refresh "$SB/cfg/ewe/auth.json" && fail "auth.json must hold no token"
+rm -f "$SB/scope"
+# the scopes a login asks for per client kind (no browser: read the source)
+grep -q '^MAIL_SCOPE_FULL = ".*gmail.modify"' bin/ewe-auth && grep -q '^MAIL_SCOPE = ".*gmail.readonly"' bin/ewe-auth \
+    && echo "ok  personal clients ask gmail.modify, the shipped client keeps readonly" || fail scope-constants
+
 # 5 · client swap → signed-out with reason
 printf '{"client_id":"other-id","client_secret":"s"}' > "$SB/cfg/ewe/oauth-client.json"
 r="$(./bin/ewe-auth refresh | python3 -c 'import json,sys;d=json.load(sys.stdin);print(d.get("reason",""))')"
@@ -81,6 +107,10 @@ printf '{"client_id":"dead-id","email":"t@t"}' > "$SB/cfg/ewe/auth.json"
 r="$(./bin/ewe-auth refresh | python3 -c 'import json,sys;d=json.load(sys.stdin);print(d.get("error",""), d.get("reason",""))')"
 [ "$r" = "signed-out deleted_client" ] && echo "ok  deleted client → signed-out with reason" || fail "deleted client ($r)"
 [ ! -e "$SB/keyring" ] && echo "ok  deleted client cleared the refresh token" || fail dead-clear
+
+# 5c · signed out → mail none, no scopes
+[ "$(st 'd["signed_in"], d["mail"], d["scopes"]')" = "False none []" ] \
+    && echo "ok  signed out → mail none" || fail "signed-out status ($(st 'd["signed_in"], d["mail"], d["scopes"]'))"
 
 # 6 · logout is quiet and clean when already signed out
 [ "$(./bin/ewe-auth logout | python3 -c 'import json,sys;print(json.load(sys.stdin)["ok"])')" = "True" ] \

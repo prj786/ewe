@@ -13,19 +13,21 @@ for mail that was already there).
     ewe-plugin install ewe.mail
     qs ipc call quicksettings tab mail       # the page (the key the shell always used)
 
-Two sources, one inbox — IMAP wins when both are set up:
+Since 2.0 the one source is **ewe Mail** (`ewe-mail`, preinstalled with ewe):
+the plugin runs `ewe-mail-app --inbox` and shows what it answers — every
+account, Gmail and any other mailbox, in one inbox. A click on a row or on a
+new-mail notification opens that message in ewe Mail; the page's button is
+**Open ewe Mail**. The plugin no longer polls Gmail or IMAP itself: one
+engine and one cache (ewe Mail's), one Gmail poller, and no token or
+password anywhere near the shell.
 
-- **any IMAP account** — added in ewe Sync → Mail (the core `ewe-mail` tool
-  keeps the account in `ewe.conf` and the password in the keyring; this
-  plugin only runs `ewe-mail status` and `ewe-mail unseen`).
-- **Gmail** — through your own Google client connected in ewe Sync (ewe ships
-  no Google client). The plugin asks the core broker `ewe-auth token` for a
-  short-lived access token; the refresh token never leaves the keyring and
-  no token is ever written to disk. Read-only scope; the Gmail History API
-  tells new arrivals from old unread mail.
+Accounts are added in ewe Sync: **Google** for Gmail (your own Google client
+file; ewe ships none) and **Mail** for any other mailbox. "Reconnect Google"
+opens ewe Sync's Google page when Gmail can only read.
 
-Polls every 2 minutes (5 on battery), when Quick settings opens with a stale
-inbox, and after a suspend (`Shell.resumed`).
+Looks every 2 minutes (5 on battery), when Quick settings opens with a
+stale inbox, when ewe.conf or the Google sign-in changes, and after a
+suspend (`Shell.resumed`).
 
 ## Settings
 
@@ -52,16 +54,15 @@ own `qs ipc call ewe.mail <verb>`, same verbs:
 
 | file | what it is |
 |---|---|
-| `Inbox.qml` | the model (a directory singleton the entry points share): IMAP + Gmail, one shape |
+| `Inbox.qml` | the model (a directory singleton the entry points share): what `ewe-mail-app --inbox` says |
 | `Service.qml` | the two IPC targets, the resume hook |
 | `Page.qml` | the Inbox page (`quickPage.key` `mail`) |
 | `Status.qml` | the pill envelope + count (`bar-status`) |
 
 State (ids, flags, counts, the latest rows — nothing secret, Rule 2):
-`~/.config/quickshell/mail-state.json` (IMAP) and
-`~/.config/quickshell/google-mail.json` (the Gmail History cursor and
-notified-set) — the paths the shell used before this was a plugin, so an
-upgrade re-notifies nothing.
+`~/.config/quickshell/mail-state.json`, the path the shell used before this
+was a plugin. 2.0's first look marks what is already there as seen, so an
+upgrade notifies nothing.
 
 `./test.sh` — the manifest's compat contract, both IPC targets with the four
-verbs, the `status` field set, no secrets persisted, Rule 8.
+verbs, the `status` field set, ewe Mail as the one source, no secrets, Rule 8.

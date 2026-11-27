@@ -1,23 +1,44 @@
 #!/usr/bin/env python3
-"""ewe-mail — the Control Center mail badge from any IMAP account (RFC-005).
+"""ewe-mail — mail accounts for the desktop: any number of IMAP/SMTP mailboxes.
 
 Mail is not tied to the ewe account: the mailbox your Nextcloud provider gives
-you, a self-hosted server, anything that speaks IMAP. Gmail keeps working
-through the optional Google client (ewe-auth); this tool is for everyone
-else. Every command prints one JSON object and exits 0:
-  login <host> <user> [--port N] [--starttls]   password on stdin (one line);
-                        tests the login, keeps the password in the keyring
-                        (service ewe-mail host <host> user <user>), records
-                        the account (never the password) in ewe.conf
-                        [accounts.mail] -> {ok, host, user, port}
-  status                {configured, host, user, port, keyring, keyring_state}
-  unseen [--limit N]    {ok, unread, list:[{id, from, subject, date, unread}],
-                        fetched_at} — the badge and the latest unseen mail
-  logout                keyring entry + [accounts.mail] removed
+you, a self-hosted server, anything that speaks IMAP/SMTP. Gmail works through
+the optional Google client (ewe-auth); this tool is for everyone else. ewe Sync
+adds and removes accounts; ewe Mail and the shell plugin read them. Every
+command prints one JSON object and exits 0:
+  accounts              {ok, accounts:[{id, email, name, host, port, starttls,
+                        user, smtp_host, smtp_port, smtp_security, smtp_user,
+                        keyring}]}  — id is "imap:" + the address, lowercase
+  login <host> <user> [--port N] [--starttls] [--email E] [--name N]
+        [--smtp-host H] [--smtp-port N] [--smtp-security tls|starttls]
+        [--smtp-user U]
+                        password on stdin line 1 (line 2, optional: a different
+                        SMTP password). Tests IMAP and SMTP (EHLO + AUTH, no
+                        mail sent), keeps the passwords in the keyring (service
+                        ewe-mail host <host> user <user>), records the account
+                        (never a password) in ewe.conf [[accounts.mail]]. Adds,
+                        or replaces the account with the same id
+                        -> {ok, account, host, user, port, starttls}
+                        When no --smtp-host is given the servers are guessed,
+                        and a SMTP test that fails does not stop the login
+                        (reading mail works) — see "smtp" in the answer.
+  logout [<id>]         removes that account (keyring + record). No id: the only
+                        account; with several {ok:false, error:"which"}
+  set <id> name <text>  the From name
+  status                {configured, host, user, port, starttls, keyring, count}
+                        — the first account, as ever, + how many there are
+  unseen [--limit N] [--account ID | --all]
+                        {ok, unread, list:[{id, from, subject, date, unread}],
+                        fetched_at}; --all sums every account and merges the
+                        rows newest first, each with "account", and adds
+                        accounts:[{id, unread, error?}]
+  autoconfig <email>    {ok, source: builtin|ispdb|domain|guess, imap:{host,
+                        port, security}, smtp:{…}, user: email|local, note}
 Errors are {"ok":false,"error":<code>,"message":…}: not-configured,
-auth-failed, network, keyring-*.
-Plain (non-TLS) IMAP is refused except for the loopback mock the test suite
-runs (EWE_MAIL_INSECURE=1). Never prompts; never opens anything.
+auth-failed, smtp-auth-failed, network, smtp-network, which, not-found,
+keyring-*. Plain (non-TLS) IMAP/SMTP is refused except for the loopback mocks
+the test suite runs (EWE_MAIL_INSECURE=1). Never prompts; never opens anything.
+A single [accounts.mail] table (what ewe wrote before) reads as one account.
 """
 import email.header
 import email.parser
@@ -27,16 +48,23 @@ import json
 import os
 import re
 import socket
+import smtplib
 import ssl
 import subprocess
 import sys
 import time
+import urllib.error
+import urllib.request
+import xml.etree.ElementTree as ET
+from concurrent.futures import ThreadPoolExecutor
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 EWE_CONF = os.path.join(HERE, "ewe-conf")
 FAKE_KEYRING = os.environ.get("EWE_MAIL_FAKE_KEYRING")   # tests only
 KEYRING_TIMEOUT = 10
 IMAP_TIMEOUT = 20
+SMTP_TIMEOUT = 20
+AUTOCONFIG_BUDGET = 10        # seconds, all lookups together
 
 
 def out(obj):
@@ -48,7 +76,7 @@ def fail(code, message, **extra):
     out({"ok": False, "error": code, "message": message, **extra})
 
 
-# ── the account record: ewe.conf [accounts.mail] (host/user/port — no secret)
+# ── the account records: ewe.conf [[accounts.mail]] (no secret) ──────────────
 
 def conf(*args):
     try:
@@ -58,19 +86,82 @@ def conf(*args):
     return r.returncode, r.stdout.strip()
 
 
-def account():
+def raw_accounts():
+    """The records as stored: a list, whether ewe.conf holds a list or the
+    old single table. Records without a host and a user are skipped."""
     rc, text = conf("get", "accounts.mail")
     if rc != 0 or not text:
-        return None
+        return []
     try:
         j = json.loads(text)
     except ValueError:
+        return []
+    if isinstance(j, dict):
+        j = [j]
+    if not isinstance(j, list):
+        return []
+    return [r for r in j if isinstance(r, dict) and r.get("host") and r.get("user")]
+
+
+def save_accounts(recs):
+    if recs:
+        rc, _ = conf("set", "--no-hooks", "accounts.mail", json.dumps(recs))
+    else:
+        rc, _ = conf("unset", "accounts.mail")
+    return rc == 0
+
+
+def acc_email(rec):
+    e = str(rec.get("email") or "").strip().lower()
+    if e:
+        return e
+    u = str(rec.get("user") or "").strip().lower()
+    return u if "@" in u else ""
+
+
+def acc_id(rec):
+    # an account recorded without an address (older ewe) is keyed user@host
+    return "imap:" + (acc_email(rec) or "%s@%s" % (str(rec["user"]).lower(), str(rec["host"]).lower()))
+
+
+def view(rec, probe=True):
+    """A stored record -> the public shape, defaults filled in (no network)."""
+    host, user = rec["host"], rec["user"]
+    sec = rec.get("smtp_security")
+    sport = rec.get("smtp_port")
+    shost = rec.get("smtp_host")
+    if not shost:
+        g = guess_smtp(host)
+        shost = g["host"]
+        sec = sec or g["security"]
+        sport = sport or g["port"]
+    if sec not in ("tls", "starttls"):
+        sec = "starttls" if sport == 587 else "tls"
+    sport = int(sport or (587 if sec == "starttls" else 465))
+    return {"id": acc_id(rec), "email": acc_email(rec), "name": str(rec.get("name") or ""),
+            "host": host, "port": int(rec.get("port") or 993), "starttls": bool(rec.get("starttls")),
+            "user": user, "smtp_host": shost, "smtp_port": sport, "smtp_security": sec,
+            "smtp_user": rec.get("smtp_user") or user,
+            "keyring": probe and keyring_get(host, user) != ""}
+
+
+def account():
+    """The first account, in the shape the older code read (compat)."""
+    recs = raw_accounts()
+    if not recs:
         return None
-    if not isinstance(j, dict) or not j.get("host") or not j.get("user"):
-        return None
+    j = dict(recs[0])
     j.setdefault("port", 993)
     j.setdefault("starttls", False)
     return j
+
+
+def find(recs, ident):
+    ident = ident.strip().lower()
+    for r in recs:
+        if acc_id(r) in (ident, "imap:" + ident):
+            return r
+    return None
 
 
 # ── keyring (Secret Service via secret-tool; the account is the key) ─────────
@@ -226,25 +317,247 @@ def fetch_unseen(m, limit):
     return unread, rows
 
 
+# ── SMTP (tested at login; ewe Mail sends) ───────────────────────────────────
+
+def smtp_check(host, port, security, user, password):
+    """EHLO + AUTH, nothing sent. Raises PermissionError (rejected) or
+    ConnectionError (could not talk to the server)."""
+    socket.setdefaulttimeout(SMTP_TIMEOUT)
+    try:
+        if _insecure_ok(host):                       # the loopback mock only
+            s = smtplib.SMTP(host, port, local_hostname="localhost", timeout=SMTP_TIMEOUT)
+        elif security == "tls":
+            s = smtplib.SMTP_SSL(host, port, local_hostname="localhost", timeout=SMTP_TIMEOUT,
+                                 context=ssl.create_default_context())
+        else:
+            s = smtplib.SMTP(host, port, local_hostname="localhost", timeout=SMTP_TIMEOUT)
+            s.ehlo()
+            s.starttls(context=ssl.create_default_context())
+    except (OSError, ssl.SSLError, smtplib.SMTPException) as e:
+        raise ConnectionError(str(e))
+    try:
+        s.ehlo()
+        s.login(user, password)
+    except smtplib.SMTPAuthenticationError as e:
+        raise PermissionError(str(e))
+    except smtplib.SMTPNotSupportedError as e:
+        raise PermissionError("the server does not offer a sign-in (%s)" % e)
+    except (OSError, ssl.SSLError, smtplib.SMTPException) as e:
+        raise ConnectionError(str(e))
+    finally:
+        try:
+            s.quit()
+        except Exception:
+            pass
+
+
+def guess_smtp(host):
+    h = host.lower()
+    if h == "localhost" or re.fullmatch(r"[0-9.]+|[0-9a-f:]+", h):
+        return {"host": host, "port": 465, "security": "tls"}
+    if h.startswith("imap."):
+        h = h[5:]
+    return {"host": "smtp." + h, "port": 465, "security": "tls"}
+
+
+# ── autoconfig: the servers for an address ───────────────────────────────────
+# (host, port, security) pairs; `user` is what the sign-in name is made of.
+
+def _b(imap, smtp, user="email", note=""):
+    return {"imap": {"host": imap[0], "port": imap[1], "security": imap[2]},
+            "smtp": {"host": smtp[0], "port": smtp[1], "security": smtp[2]},
+            "user": user, "note": note}
+
+
+_GMAIL = _b(("imap.gmail.com", 993, "tls"), ("smtp.gmail.com", 465, "tls"),
+            note="Gmail needs an app password, not your usual one. Connecting Google is easier.")
+_OUTLOOK = _b(("outlook.office365.com", 993, "tls"), ("smtp.office365.com", 587, "starttls"),
+              note="Outlook may need an app password, and some accounts no longer allow a password at all.")
+_YAHOO = _b(("imap.mail.yahoo.com", 993, "tls"), ("smtp.mail.yahoo.com", 465, "tls"),
+            note="Yahoo needs an app password, not your usual one.")
+_ICLOUD = _b(("imap.mail.me.com", 993, "tls"), ("smtp.mail.me.com", 587, "starttls"), user="local",
+             note="iCloud needs an app-specific password, made at appleid.apple.com.")
+_FASTMAIL = _b(("imap.fastmail.com", 993, "tls"), ("smtp.fastmail.com", 465, "tls"))
+_GMX_NET = _b(("imap.gmx.net", 993, "tls"), ("mail.gmx.net", 587, "starttls"))
+_GMX_COM = _b(("imap.gmx.com", 993, "tls"), ("mail.gmx.com", 587, "starttls"))
+_MAILRU = _b(("imap.mail.ru", 993, "tls"), ("smtp.mail.ru", 465, "tls"))
+_YANDEX = _b(("imap.yandex.com", 993, "tls"), ("smtp.yandex.com", 465, "tls"))
+_ZOHO = _b(("imap.zoho.com", 993, "tls"), ("smtp.zoho.com", 465, "tls"))
+# Proton has no server to reach: its mail comes through Proton Bridge, which
+# this cannot set up — no servers, only the note.
+_PROTON = _b(("", 0, "tls"), ("", 0, "tls"),
+             note="Proton Mail has no mail server of its own. It needs Proton Bridge, which ewe can’t use yet.")
+
+BUILTIN = {}
+for _d, _v in (
+        (("gmail.com", "googlemail.com"), _GMAIL),
+        (("outlook.com", "hotmail.com", "live.com", "msn.com", "outlook.de", "hotmail.co.uk",
+          "office365.com"), _OUTLOOK),
+        (("yahoo.com", "ymail.com", "rocketmail.com", "yahoo.co.uk"), _YAHOO),
+        (("icloud.com", "me.com", "mac.com"), _ICLOUD),
+        (("fastmail.com", "fastmail.fm"), _FASTMAIL),
+        (("gmx.net", "gmx.de", "gmx.at", "gmx.ch"), _GMX_NET),
+        (("gmx.com",), _GMX_COM),
+        (("mail.ru", "inbox.ru", "list.ru", "bk.ru"), _MAILRU),
+        (("yandex.com", "yandex.ru", "ya.ru"), _YANDEX),
+        (("zoho.com", "zohomail.com"), _ZOHO),
+        (("proton.me", "protonmail.com", "pm.me"), _PROTON)):
+    for _x in _d:
+        BUILTIN[_x] = _v
+
+
+def _fetch(url, deadline):
+    left = deadline - time.time()
+    if left <= 0.5:
+        return None
+    try:
+        with urllib.request.urlopen(url, timeout=min(left, 6)) as r:
+            if r.status != 200:
+                return None
+            data = r.read(262145)
+    except (OSError, ValueError, urllib.error.URLError):
+        return None
+    return data if len(data) <= 262144 else None
+
+
+def _parse_config(data, email_addr):
+    """Mozilla's config-v1.1 XML -> {imap, smtp, user} or None."""
+    if b"<!ENTITY" in data or b"<!entity" in data:
+        return None
+    try:
+        root = ET.fromstring(data)
+    except ET.ParseError:
+        return None
+    local, _, domain = email_addr.partition("@")
+
+    def pick(kind):
+        for el in root.iter(kind + "Server"):
+            if el.get("type") != ("imap" if kind == "incoming" else "smtp"):
+                continue
+            host = (el.findtext("hostname") or "").strip().replace("%EMAILDOMAIN%", domain)
+            sock = (el.findtext("socketType") or "").strip().upper()
+            try:
+                port = int((el.findtext("port") or "").strip())
+            except ValueError:
+                continue
+            sec = {"SSL": "tls", "STARTTLS": "starttls"}.get(sock)
+            if host and sec and 0 < port < 65536:
+                un = (el.findtext("username") or "").strip()
+                return {"host": host, "port": port, "security": sec}, ("local" if un == "%EMAILLOCALPART%" else "email")
+        return None, "email"
+
+    imap, user = pick("incoming")
+    smtp, _ = pick("outgoing")
+    if not imap or not smtp:
+        return None
+    return {"imap": imap, "smtp": smtp, "user": user, "note": ""}
+
+
+def autoconfig(email_addr):
+    local, _, domain = email_addr.strip().lower().rpartition("@")
+    if not local or not domain or "." not in domain or not re.fullmatch(r"[a-z0-9.-]+", domain):
+        return {"ok": False, "error": "bad-email", "message": "That does not look like an email address."}
+    b = BUILTIN.get(domain)
+    if b:
+        return {"ok": True, "source": "builtin", **json.loads(json.dumps(b))}
+    deadline = time.time() + AUTOCONFIG_BUDGET
+    ispdb = os.environ.get("EWE_MAIL_ISPDB", "https://autoconfig.thunderbird.net/v1.1/").rstrip("/") + "/"
+    dom_url = os.environ.get("EWE_MAIL_AUTOCONFIG_URL", "https://autoconfig.{domain}/mail/config-v1.1.xml")
+    for source, url in (("ispdb", ispdb + domain), ("domain", dom_url.replace("{domain}", domain))):
+        data = _fetch(url, deadline)
+        got = _parse_config(data, "%s@%s" % (local, domain)) if data else None
+        if got:
+            return {"ok": True, "source": source, **got}
+    return {"ok": True, "source": "guess",
+            "imap": {"host": "imap." + domain, "port": 993, "security": "tls"},
+            "smtp": {"host": "smtp." + domain, "port": 465, "security": "tls"},
+            "user": "email", "note": ""}
+
+
 # ── commands ────────────────────────────────────────────────────────────────
 
-def cmd_login(argv):
-    host = argv[0] if argv else ""
-    user = argv[1] if len(argv) > 1 else ""
-    port, starttls = 993, False
-    i = 2
+def _opts(argv, with_value, flags=()):
+    """-> (positionals, {--opt: value}, {flags seen}). Unknown options skipped."""
+    pos, opts, seen = [], {}, set()
+    i = 0
     while i < len(argv):
-        if argv[i] == "--port" and i + 1 < len(argv):
-            port = int(argv[i + 1])
+        a = argv[i]
+        if a in with_value and i + 1 < len(argv):
+            opts[a] = argv[i + 1]
             i += 1
-        elif argv[i] == "--starttls":
-            starttls = True
+        elif a in flags:
+            seen.add(a)
+        elif not a.startswith("--"):
+            pos.append(a)
         i += 1
+    return pos, opts, seen
+
+
+def _int(v, what):
+    try:
+        n = int(v)
+    except (TypeError, ValueError):
+        fail("usage", "%s must be a number." % what)
+    if not 0 < n < 65536:
+        fail("usage", "%s must be between 1 and 65535." % what)
+    return n
+
+
+def _ok_name(v):
+    return len(v) <= 200 and not any(c in v for c in "\r\n\x00")
+
+
+def _unused_keys(recs, gone):
+    """Keyring keys of the removed records no remaining record shares."""
+    keep = set()
+    for r in recs:
+        v = view(r, False)
+        keep.add((v["host"], v["user"]))
+        keep.add((v["smtp_host"], v["smtp_user"]))
+    return [k for k in gone if k not in keep]
+
+
+def cmd_accounts():
+    out({"ok": True, "accounts": [view(r) for r in raw_accounts()]})
+
+
+def cmd_login(argv):
+    pos, o, fl = _opts(argv, ("--port", "--email", "--name", "--smtp-host", "--smtp-port",
+                              "--smtp-security", "--smtp-user"), ("--starttls",))
+    host = pos[0] if pos else ""
+    user = pos[1] if len(pos) > 1 else ""
     if not host or not user:
-        fail("usage", "ewe-mail login <host> <user> [--port N] [--starttls]  (password on stdin)")
+        fail("usage", "ewe-mail login <host> <user> [--port N] [--starttls] [--email E] [--name N] "
+             "[--smtp-host H] [--smtp-port N] [--smtp-security tls|starttls] [--smtp-user U]  (password on stdin)")
+    port = _int(o["--port"], "The port") if "--port" in o else 993
+    starttls = "--starttls" in fl
+    email_addr = (o.get("--email") or (user if "@" in user else "")).strip().lower()
+    name = o.get("--name", "").strip()
+    if not _ok_name(name) or not _ok_name(email_addr):
+        fail("usage", "The name and address must be one plain line.")
     password = sys.stdin.readline().rstrip("\r\n")
     if not password:
         fail("no-password", "The password must be given on stdin (one line).")
+    smtp_pw_line = sys.stdin.readline().rstrip("\r\n")
+
+    # the outgoing server: what was asked, else autoconfig's, else a guess
+    explicit_smtp = "--smtp-host" in o
+    if explicit_smtp:
+        sec = o.get("--smtp-security")
+        sport = _int(o["--smtp-port"], "The SMTP port") if "--smtp-port" in o else None
+        if sec not in (None, "tls", "starttls"):
+            fail("usage", "--smtp-security must be tls or starttls.")
+        if not sec:
+            sec = "starttls" if sport == 587 else "tls"
+        smtp = {"host": o["--smtp-host"], "port": sport or (587 if sec == "starttls" else 465), "security": sec}
+    else:
+        smtp = guess_smtp(host)
+        if email_addr:
+            ac = autoconfig(email_addr)
+            if ac.get("ok") and ac["imap"]["host"].lower() == host.lower() and ac["smtp"]["host"]:
+                smtp = dict(ac["smtp"])
+    smtp_user = (o.get("--smtp-user") or user).strip()
+
     acc = {"host": host, "user": user, "port": port, "starttls": starttls}
     try:
         m = connect(acc, password)
@@ -253,62 +566,183 @@ def cmd_login(argv):
         fail("auth-failed", "The server rejected the login: %s" % e)
     except ConnectionError as e:
         fail("network", "Could not reach %s:%s — %s" % (host, port, e))
+
+    same_key = (smtp["host"], smtp_user) == (host, user)
+    smtp_pw = password if (same_key or not smtp_pw_line) else smtp_pw_line
+    smtp_result = {"ok": True}
+    try:
+        smtp_check(smtp["host"], smtp["port"], smtp["security"], smtp_user, smtp_pw)
+    except PermissionError as e:
+        smtp_result = {"ok": False, "error": "smtp-auth-failed",
+                       "message": "The outgoing server (%s) rejected the login: %s" % (smtp["host"], e)}
+    except ConnectionError as e:
+        smtp_result = {"ok": False, "error": "smtp-network",
+                       "message": "Could not reach the outgoing server %s:%s — %s" % (smtp["host"], smtp["port"], e)}
+    if not smtp_result["ok"] and explicit_smtp:
+        fail(smtp_result["error"], smtp_result["message"])
+
     ok, code, msg = keyring_store(host, user, password)
     if not ok:
         fail(code, msg)
-    rc, _ = conf("set", "--no-hooks", "accounts.mail", json.dumps(acc))
-    if rc != 0:
+    if not same_key and smtp_pw_line:
+        ok, code, msg = keyring_store(smtp["host"], smtp_user, smtp_pw_line)
+        if not ok:
+            fail(code, msg)
+
+    rec = {"email": email_addr, "name": name, "host": host, "port": port, "starttls": starttls,
+           "user": user, "smtp_host": smtp["host"], "smtp_port": smtp["port"],
+           "smtp_security": smtp["security"]}
+    if smtp_user != user:
+        rec["smtp_user"] = smtp_user
+    recs = raw_accounts()
+    new_id = acc_id(rec)
+    old = [r for r in recs if acc_id(r) == new_id]
+    if old and not name and old[0].get("name"):
+        rec["name"] = old[0]["name"]                 # a re-login keeps the name
+    others = [r for r in recs if acc_id(r) != new_id]
+    if not save_accounts(others + [rec] if not old else [rec if acc_id(r) == new_id else r for r in recs]):
         fail("conf-write-failed", "ewe-conf could not record the account.")
-    out({"ok": True, "host": host, "user": user, "port": port, "starttls": starttls})
+    for k in _unused_keys(others + [rec], [(view(r, False)["host"], view(r, False)["user"]) for r in old] +
+                          [(view(r, False)["smtp_host"], view(r, False)["smtp_user"]) for r in old]):
+        keyring_clear(*k)
+    res = {"ok": True, "account": view(rec), "host": host, "user": user, "port": port, "starttls": starttls}
+    if not smtp_result["ok"]:
+        res["smtp"] = smtp_result
+    out(res)
+
+
+def cmd_logout(argv):
+    recs = raw_accounts()
+    if not recs:
+        out({"ok": True})
+    if argv:
+        target = find(recs, argv[0])
+        if not target:
+            fail("not-found", "There is no mail account %s." % argv[0])
+    elif len(recs) == 1:
+        target = recs[0]
+    else:
+        fail("which", "There are %d mail accounts — say which to remove." % len(recs),
+             accounts=[acc_id(r) for r in recs])
+    rest = [r for r in recs if r is not target]
+    v = view(target, False)
+    if not save_accounts(rest):
+        fail("conf-write-failed", "ewe-conf could not remove the account.")
+    for k in _unused_keys(rest, [(v["host"], v["user"]), (v["smtp_host"], v["smtp_user"])]):
+        keyring_clear(*k)
+    out({"ok": True})
+
+
+def cmd_set(argv):
+    if len(argv) < 2 or argv[1] != "name":
+        fail("usage", "ewe-mail set <id> name <text>")
+    value = " ".join(argv[2:]).strip()
+    if not _ok_name(value):
+        fail("usage", "The name must be one plain line.")
+    recs = raw_accounts()
+    target = find(recs, argv[0])
+    if not target:
+        fail("not-found", "There is no mail account %s." % argv[0])
+    target["name"] = value
+    if not save_accounts(recs):
+        fail("conf-write-failed", "ewe-conf could not record the name.")
+    out({"ok": True})
 
 
 def cmd_status():
+    recs = raw_accounts()
     acc = account()
     if not acc:
-        out({"ok": True, "configured": False})
+        out({"ok": True, "configured": False, "count": 0})
     has = keyring_get(acc["host"], acc["user"]) != ""
     out({"ok": True, "configured": True, "host": acc["host"], "user": acc["user"],
-         "port": acc.get("port", 993), "starttls": bool(acc.get("starttls")), "keyring": has})
+         "port": acc.get("port", 993), "starttls": bool(acc.get("starttls")), "keyring": has,
+         "count": len(recs)})
 
 
-def cmd_unseen(argv):
-    limit = 5
-    i = 0
-    while i < len(argv):
-        if argv[i] == "--limit" and i + 1 < len(argv):
-            limit = max(1, min(50, int(argv[i + 1])))
-            i += 1
-        i += 1
-    acc = account()
-    if not acc:
-        fail("not-configured", "No mail account — add one in ewe Sync → Mail.")
+def unseen_one(acc, limit):
+    """-> (unread, rows) or raises (code, message) as a tuple in a RuntimeError."""
     password = keyring_get(acc["host"], acc["user"])
     if not password:
-        fail("no-password", "The mail password is not in the keyring — sign in to the mail account again.")
+        raise RuntimeError(("no-password", "The mail password is not in the keyring — sign in to the mail account again."))
     try:
         m = connect(acc, password)
         try:
-            unread, rows = fetch_unseen(m, limit)
+            return fetch_unseen(m, limit)
         finally:
             try:
                 m.logout()
             except Exception:
                 pass
     except PermissionError as e:
-        fail("auth-failed", "The server rejected the login: %s" % e)
+        raise RuntimeError(("auth-failed", "The server rejected the login: %s" % e))
     except ConnectionError as e:
-        fail("network", "Could not reach %s — %s" % (acc["host"], e))
+        raise RuntimeError(("network", "Could not reach %s — %s" % (acc["host"], e)))
     except imaplib.IMAP4.error as e:
-        fail("imap", "IMAP error: %s" % e)
-    out({"ok": True, "unread": unread, "list": rows, "host": acc["host"], "user": acc["user"], "fetched_at": time.time()})
+        raise RuntimeError(("imap", "IMAP error: %s" % e))
 
 
-def cmd_logout():
-    acc = account()
-    if acc:
-        keyring_clear(acc["host"], acc["user"])
-        conf("unset", "accounts.mail")
-    out({"ok": True})
+def cmd_unseen(argv):
+    limit = 5
+    which, every = None, False
+    i = 0
+    while i < len(argv):
+        if argv[i] == "--limit" and i + 1 < len(argv):
+            try:
+                limit = max(1, min(50, int(argv[i + 1])))
+            except ValueError:
+                pass
+            i += 1
+        elif argv[i] == "--account" and i + 1 < len(argv):
+            which = argv[i + 1]
+            i += 1
+        elif argv[i] == "--all":
+            every = True
+        i += 1
+    recs = raw_accounts()
+    if not recs:
+        fail("not-configured", "No mail account — add one in ewe Sync → Mail.")
+    if every:
+        def one(r):
+            try:
+                return unseen_one(r, limit), None
+            except RuntimeError as e:
+                return None, e.args[0]
+        with ThreadPoolExecutor(max_workers=min(4, len(recs))) as ex:
+            results = list(ex.map(one, recs))
+        total, rows, summary = 0, [], []
+        for r, (got, err) in zip(recs, results):
+            aid = acc_id(r)
+            if err:
+                summary.append({"id": aid, "unread": 0, "error": err[0], "message": err[1]})
+                continue
+            unread, rs = got
+            total += unread
+            summary.append({"id": aid, "unread": unread})
+            rows += [{**x, "account": aid} for x in rs]
+        if all("error" in x for x in summary):
+            fail(summary[0]["error"], summary[0]["message"], accounts=summary)
+        rows.sort(key=lambda x: x["date"], reverse=True)
+        out({"ok": True, "unread": total, "list": rows[:limit], "accounts": summary,
+             "fetched_at": time.time()})
+    if which:
+        acc = find(recs, which)
+        if not acc:
+            fail("not-found", "There is no mail account %s." % which)
+    else:
+        acc = account()
+    try:
+        unread, rows = unseen_one(acc, limit)
+    except RuntimeError as e:
+        fail(*e.args[0])
+    out({"ok": True, "unread": unread, "list": rows, "host": acc["host"], "user": acc["user"],
+         "account": acc_id(acc), "fetched_at": time.time()})
+
+
+def cmd_autoconfig(argv):
+    if not argv:
+        fail("usage", "ewe-mail autoconfig <email>")
+    out(autoconfig(argv[0]))
 
 
 if __name__ == "__main__":
@@ -320,7 +754,13 @@ if __name__ == "__main__":
         elif cmd == "unseen":
             cmd_unseen(argv[1:])
         elif cmd == "logout":
-            cmd_logout()
+            cmd_logout(argv[1:])
+        elif cmd == "accounts":
+            cmd_accounts()
+        elif cmd == "set":
+            cmd_set(argv[1:])
+        elif cmd == "autoconfig":
+            cmd_autoconfig(argv[1:])
         else:
             cmd_status()
     except SystemExit:

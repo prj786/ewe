@@ -22,7 +22,7 @@ Column {
 
     spacing: Theme.spaceS
     // setTab("mail") used to fetch when an account is there
-    onPanelOpenChanged: if (panelOpen && Inbox.available) Inbox.fetch()
+    onPanelOpenChanged: if (panelOpen && Date.now() - Inbox.lastFetch > 30 * 1000) Inbox.fetch()
 
     QsPageHead {
         title: Inbox.available ? "Inbox" : "Mail"
@@ -52,7 +52,7 @@ Column {
                 line: modelData.subject
                 time: root.fmtMsgTime(modelData.date)
                 unread: modelData.unread
-                onClicked: Inbox.open(modelData.id)
+                onClicked: Inbox.openRow(modelData)
             }
         }
     }

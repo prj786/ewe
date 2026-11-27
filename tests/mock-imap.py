@@ -2,17 +2,19 @@
 """A loopback IMAP impersonator for ewe-mail's test — plain TCP (the tool
 allows that only for 127.0.0.1 with EWE_MAIL_INSECURE=1), one client at a
 time, just the verbs imaplib sends for the badge:
-  CAPABILITY · LOGIN (user `tester`, password `mail-pass`) · STATUS INBOX
+  CAPABILITY · LOGIN (user `tester`, password `mail-pass`; a second mailbox:
+  `ann@example.org`, password `ann-pass`) · STATUS INBOX
   (UNSEEN) · SELECT/EXAMINE INBOX · UID SEARCH UNSEEN · UID FETCH … BODY.PEEK
   [HEADER.FIELDS (FROM SUBJECT DATE)] · LOGOUT
-Three messages, two unseen (UIDs 101 and 103). Usage: mock-imap.py <port>
+tester: three messages, two unseen (UIDs 101 and 103); ann: two messages, one
+unseen (UID 201, newer than all of tester's). Usage: mock-imap.py <port>
 """
 import socket
 import sys
 
 PORT = int(sys.argv[1])
-USER, PW = "tester", "mail-pass"
-MSGS = {
+USERS = {"tester": "mail-pass", "ann@example.org": "ann-pass"}
+MSGS_TESTER = {
     101: (b"From: =?utf-8?q?Nino_Bera=C3=B0?= <nino@example.org>\r\nSubject: Lunch on Friday?\r\n"
           b"Date: Wed, 02 Sep 2026 10:15:00 +0400\r\n\r\n"),
     102: (b"From: Newsletter <news@example.org>\r\nSubject: Seen already\r\n"
@@ -20,7 +22,15 @@ MSGS = {
     103: (b"From: ops@example.org\r\nSubject: =?UTF-8?B?U2VydmVyIOKAlCBhbGwgZ29vZA==?=\r\n"
           b"Date: Wed, 02 Sep 2026 12:30:00 +0400\r\n\r\n"),
 }
-UNSEEN = [101, 103]
+BOX = {
+    "tester": (MSGS_TESTER, [101, 103]),
+    "ann@example.org": ({
+        200: (b"From: Bob <bob@example.org>\r\nSubject: Old and read\r\n"
+              b"Date: Mon, 31 Aug 2026 09:00:00 +0400\r\n\r\n"),
+        201: (b"From: Carol <carol@example.org>\r\nSubject: Second inbox\r\n"
+              b"Date: Thu, 03 Sep 2026 08:00:00 +0400\r\n\r\n"),
+    }, [201]),
+}
 
 
 def serve(conn):
@@ -31,6 +41,7 @@ def serve(conn):
 
     send(b"* OK mock IMAP ready")
     authed = False
+    MSGS, UNSEEN = {}, []
     while True:
         raw = f.readline()
         if not raw:
@@ -47,8 +58,9 @@ def serve(conn):
         elif cmd == b"LOGIN":
             u, _, p = rest.partition(b" ")
             u, p = u.strip(b'"'), p.strip(b'"')
-            if u == USER.encode() and p == PW.encode():
+            if u.decode() in USERS and USERS[u.decode()].encode() == p:
                 authed = True
+                MSGS, UNSEEN = BOX[u.decode()]
                 send(tag + b" OK LOGIN completed")
             else:
                 send(tag + b" NO [AUTHENTICATIONFAILED] Invalid credentials")

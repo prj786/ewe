@@ -96,6 +96,9 @@ phase_userconfig() {
         # (shared-mime-info tags type-2 AppImages as vnd.appimage, type-1 as
         # x-iso9660-appimage; x-appimage covers older tag variants).
         _mime komble.desktop           application/vnd.appimage application/x-iso9660-appimage application/x-appimage
+        # ewe Mail (0.51) writes the mail a mailto: link starts — unless you chose
+        # another mail app (Settings → Default apps → Mail)
+        _mime io.github.prj786.ewe-mail.desktop x-scheme-handler/mailto
         local apps_stamp="${XDG_STATE_HOME:-$HOME/.local/state}/ewe/default-apps-0.44.done"
         if [ ! -e "$apps_stamp" ] && [ -r /usr/share/applications/ewe-files-app.desktop ]; then
             _mime_take nemo.desktop ewe-files-app.desktop inode/directory

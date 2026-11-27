@@ -127,6 +127,29 @@ GTK apps are still themed through adw-gtk3; Nemo's actions and the dconf
 defaults (`system/nemo-actions/`, `system/dconf/ewe.d/`) remain for anyone who
 keeps Nemo installed.
 
+## ewe Mail (0.51)
+
+**ewe Mail** (repo `prj786/ewe-mail`, package `ewe-mail`, binary
+`ewe-mail-app` — `/usr/bin/ewe-mail` is the account tool below it) is your
+mail: **Gmail** and **any other mailbox**, as many as you like, in one inbox.
+Read conversations, reply, reply all, forward, write with attachments and a
+signature, archive, delete, star, search; new mail shows while the window is
+open, a sent message waits five seconds for Undo. It is a dependency of `ewe`
+and the default **mailto:** handler (seeded once; ewe Settings → Default apps
+→ Mail changes it). Pictures in HTML mail stay blocked until you allow them,
+per message or per sender.
+
+Accounts are **ewe Sync's**: **Google** for Gmail (your own client file, see
+below — ewe Mail needs the `gmail.modify` permission: after upgrading from
+0.50, Disconnect and Connect once there, or Gmail stays read-only), **Mail**
+for any other mailbox (the address and the password; the servers are found
+for you, and both incoming and outgoing are tested before anything is kept).
+The **Mail plugin** (`ewe.mail`, an add-on) shows what ewe Mail sees — the
+envelope and count in the bar, the Inbox page, a notification per new
+message that opens it in ewe Mail — through `ewe-mail-app --inbox`. Nothing
+of ewe Mail stays running after its window closes. Its cache is
+`~/.cache/ewe-mail/mail.sqlite`; its settings are `[mail]` in ewe.conf.
+
 **Appearance** (a scheme + an accent: Ewe Dark by default; light mode is the
 built-in Ewe Light, an imported light scheme or *From wallpaper (light)*) is
 applied by `dotfiles/quickshell/scripts/colorscheme.sh` and changed live in
@@ -234,15 +257,16 @@ and unlocks it with your login password — but a machine carrying an older
 ## Google (optional)
 
 Google is an extra, not the account: Google **Calendar** in the Control
-Center, **Google Drive** as `~/Google Drive`, and **Gmail** for the Mail
-plugin. ewe ships **no Google client** — to use
+Center, **Google Drive** as `~/Google Drive`, and **Gmail** in ewe Mail (and
+so in the Mail plugin). ewe ships **no Google client** — to use
 it, create your own OAuth client of type *Desktop app* (Gmail + Drive APIs)
 and save it as `~/.config/ewe/oauth-client.json`
 ([GOOGLE-CLIENT.md](GOOGLE-CLIENT.md)); **ewe Sync → Google** says whether
 the file parses and connects the account. A personal client needs no Google verification — the
-consent screen shows a warning you click through once. Settings sync never
-uses Google; an IMAP mail account, when set up, takes precedence over Gmail
-in the Mail plugin.
+consent screen shows a warning you click through once. A personal client asks
+for `gmail.modify` (read, label, archive, send — never a permanent delete) so
+ewe Mail can answer and organise; `ewe-auth status` says `mail: read` until
+you connect again. Settings sync never uses Google.
 
 ## VPN
 

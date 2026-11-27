@@ -40,8 +40,8 @@
       "repo": "https://github.com/prj786/ewe-plugin-mail",
       "default": false,
       "migrate": true,
-      "commit": "e1e7d5b3e5f00f845a980b1c9b2b7acaec56f982",
-      "version": "1.2.0"
+      "commit": "abcbb6d7ac9b26ee500518a20b86737defe2be7d",
+      "version": "2.0.0"
     },
     "ewe.media": {
       "repo": "https://github.com/prj786/ewe-plugin-media",
