@@ -281,6 +281,44 @@ on b sync --no-hooks >/dev/null
 [ "$(get b plugins.enabled)" = "<unset>" ] || fail "plugins.enabled rode along with plugins.settings"
 ok "the shared key of a mixed table travels, its per-machine neighbours do not"
 
+# 8d · a wallpaper is a path, and the picture stays on the computer it was
+# chosen on. A path that does not exist HERE never takes the place of one
+# that does: the file this machine shows (generated/wallpapers.conf) keeps
+# its picture, while the document takes the account's value — written back,
+# B's picture would go up and replace A's on A. (2026-11-26, the owner's
+# desktop: another computer's /home/<other user>/… path arrived by sync and
+# left a flat grey background.)
+mkdir -p "$WORK/pics"; : > "$WORK/pics/b-own.png"; : > "$WORK/pics/both.png"
+BGEN="$WORK/b/config/hypr/generated/wallpapers.conf"
+GONE="/home/somebody-else/Pictures/a-wall.webm"
+on b set --no-hooks desktop.wallpapers "{\"mode\": \"fill\", \"mute\": true, \"default\": \"$WORK/pics/b-own.png\", \"outputs\": {\"eDP-1\": \"$WORK/pics/b-own.png\"}}" >/dev/null
+grep -qx "\*=$WORK/pics/b-own.png" "$BGEN" || fail "B's own wallpaper was not generated: $(cat "$BGEN")"
+on b sync --no-hooks >/dev/null; on a sync --no-hooks >/dev/null
+on a set --no-hooks desktop.wallpapers.default "$GONE" >/dev/null
+on a set --no-hooks desktop.wallpapers.outputs "{\"eDP-1\": \"$GONE\"}" >/dev/null
+on a sync --no-hooks >/dev/null
+before=$(etag)
+r=$(on b sync --no-hooks)
+[ "$(get b desktop.wallpapers.default)" = "$GONE" ] || fail "B's document should take the account's wallpaper path: $r"
+grep -qx "\*=$WORK/pics/b-own.png" "$BGEN" || fail "a path that does not exist on B replaced B's wallpaper: $(cat "$BGEN")"
+[ "$before" = "$(etag)" ] || fail "B wrote its own wallpaper back to the account"
+ok "merge: another computer's wallpaper path does not replace a picture that exists here, and nothing is written back"
+
+on b pull >/dev/null; on b apply --no-hooks        # a restore: the account's bytes, A's per-output map included
+[ "$(get b desktop.wallpapers.default)" = "$GONE" ] || fail "the restore did not bring the account's document"
+grep -qx "\*=$WORK/pics/b-own.png" "$BGEN" || fail "restore: a dead default replaced B's wallpaper: $(cat "$BGEN")"
+grep -qx "eDP-1=$WORK/pics/b-own.png" "$BGEN" || fail "restore: a dead per-output path replaced B's: $(cat "$BGEN")"
+ok "pull + apply: the same for the default and for each output"
+
+on a set --no-hooks desktop.wallpapers.default "$WORK/pics/both.png" >/dev/null
+on a sync --no-hooks >/dev/null; on b sync --no-hooks >/dev/null
+grep -qx "\*=$WORK/pics/both.png" "$BGEN" || fail "a wallpaper that does exist here did not arrive: $(cat "$BGEN")"
+ok "a path that exists here replaces it as before"
+
+on c set --no-hooks desktop.wallpapers "{\"mode\": \"fill\", \"mute\": true, \"default\": \"$GONE\", \"outputs\": {}}" >/dev/null
+grep -qx "\*=$GONE" "$WORK/c/config/hypr/generated/wallpapers.conf" || fail "with nothing to keep, the path should be written as it is"
+ok "with no picture to keep, the path is written as it is (it shows once the file is there)"
+
 # 9 · the log
 [ -s "$WORK/a/state/ewe/sync.log" ] || fail "no sync.log"
 tail -1 "$WORK/a/state/ewe/sync.log" | python3 -c 'import json,sys; j=json.loads(sys.stdin.read()); assert j["verb"]=="sync" and j["ok"] and j["at"].endswith("Z"), j' \

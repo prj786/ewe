@@ -322,6 +322,15 @@ One block per app: `name`, `class` (matched case-insensitively), `workspace`
 · `[desktop.wallpapers.outputs]` per-output overrides. Images, GIFs, and
 videos are all valid paths.
 
+The file carries the **path**; the picture stays on the computer it was
+chosen on. `default` is shared, so another computer's choice arrives here by
+sync or a restore — and when that path does not exist on this computer,
+`apply` leaves it out of what this computer shows: the slot in
+`generated/wallpapers.conf` keeps the picture it has. The document itself
+still takes the account's value (written back, this computer's picture would
+replace the other one's over there). With no picture to keep, the path is
+generated as it is and shows once the file is there.
+
 ### `[desktop.input]`
 
 Keyboard and pointer, whole: `kb_layout`/`kb_variant` (comma-joined parallel
