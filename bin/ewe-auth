@@ -7,7 +7,8 @@ future apps stop doing their own OAuth and ask this broker instead.
 
 Subcommands (every one prints a single JSON object and exits 0 — callers
 never hang on it; `token` prints the bare token unless --json):
-  status   -> {configured, client, keyring, signed_in, profile}
+  status   -> {configured, client, keyring, signed_in, scopes, mail, profile}
+              (mail: none | read | full — gmail.modify / mail.google.com = full)
   login    -> browser consent -> refresh token into the keyring
   token    -> a valid access token (runtime-cached; refreshes under flock)
   refresh  -> like token, but always JSON and never the runtime cache's copy
@@ -72,10 +73,15 @@ USERINFO_URL = "https://openidconnect.googleapis.com/v1/userinfo"
 # Mail is an OPT-IN extra consent (login --with-mail) that personal clients
 # and test-listed accounts can grant; the shell already degrades cleanly
 # when the token lacks it (mailState "scope").
+# Personal clients (ewe, legacy, env) ask for gmail.modify instead (read,
+# label, archive, trash, send — no permanent delete): ewe Mail needs it.
 BASE_SCOPES = ("openid email profile "
                "https://www.googleapis.com/auth/calendar.readonly "
                "https://www.googleapis.com/auth/drive.appdata")
 MAIL_SCOPE = "https://www.googleapis.com/auth/gmail.readonly"
+MAIL_SCOPE_FULL = "https://www.googleapis.com/auth/gmail.modify"
+# scopes that let ewe Mail send and organise (status: mail = "full")
+MAIL_FULL_SCOPES = (MAIL_SCOPE_FULL, "https://mail.google.com/")
 # full Drive is ALSO restricted-tier: needed only for the ~/Google Drive
 # mount (ewe-drive setup passes --with-drive); appdata alone stays the
 # default for the one-file sync
@@ -367,19 +373,58 @@ def do_refresh(cid, csec):
     exp = int(time.time()) + int(tok.get("expires_in", 3600))
     write_json(TOKEN_CACHE, {"access_token": tok["access_token"],
                              "expires_at": exp, "client_id": cid}, mode=0o600)
+    record_scopes(tok.get("scope"))
     return tok["access_token"], exp
+
+
+def granted_scopes():
+    """The scopes Google granted, recorded in auth.json (non-secret), or None
+    when unknown (an auth.json from before they were recorded)."""
+    meta = read_json(AUTH_META)
+    sc = meta.get("scopes") if isinstance(meta, dict) else None
+    return [x for x in sc if isinstance(x, str)] if isinstance(sc, list) else None
+
+
+def mail_level(signed_in, scopes):
+    """none | read | full — what Gmail access the token has."""
+    if not signed_in:
+        return "none"
+    if scopes is None:
+        return "read"
+    if any(x in MAIL_FULL_SCOPES for x in scopes):
+        return "full"
+    if MAIL_SCOPE in scopes:
+        return "read"
+    return "none"
+
+
+def record_scopes(scope_value):
+    """Refresh `scopes` in auth.json from a token response's `scope` string."""
+    if not isinstance(scope_value, str) or not scope_value.strip():
+        return
+    meta = read_json(AUTH_META)
+    if not isinstance(meta, dict):
+        return
+    scopes = scope_value.split()
+    if meta.get("scopes") != scopes:
+        meta["scopes"] = scopes
+        write_json(AUTH_META, meta)
 
 
 def cmd_status():
     cid, _, which = read_client()
     probe = keyring_probe()
+    signed_in = bool(keyring_get()) and not client_changed(cid)
+    scopes = granted_scopes()
     out({"configured": bool(cid), "client": which,
          # truthful now: a Secret Service answered on the bus (the old check
          # only proved the secret-tool BINARY existed)
          "keyring": probe["state"] != "unavailable",
          "keyring_state": probe["state"],
          "keyring_locked": probe["state"] == "locked",
-         "signed_in": bool(keyring_get()) and not client_changed(cid),
+         "signed_in": signed_in,
+         "scopes": scopes or [],
+         "mail": mail_level(signed_in, scopes),
          "profile": read_json(PROFILE_CACHE)})
 
 
@@ -456,7 +501,8 @@ def cmd_login(argv=()):
     # consent screen); the shipped project client keeps mail opt-in
     with_mail = "--with-mail" in argv or (which in ("ewe", "legacy", "env")
                                           and "--base-only" not in argv)
-    scopes = BASE_SCOPES + (" " + MAIL_SCOPE if with_mail else "")
+    mail_scope = MAIL_SCOPE_FULL if which in ("ewe", "legacy", "env") else MAIL_SCOPE
+    scopes = BASE_SCOPES + (" " + mail_scope if with_mail else "")
     if "--with-drive" in argv:
         scopes += " " + DRIVE_SCOPE
     # Keyring check WITHOUT a prompt (busctl, never secret-tool): the old
@@ -574,7 +620,9 @@ def cmd_login(argv=()):
     profile = fetch_userinfo(tok["access_token"])
     write_json(PROFILE_CACHE, profile)
     write_json(AUTH_META, {"client_id": cid, "client": which,
-                           "email": profile.get("email", "")})
+                           "email": profile.get("email", ""),
+                           # what Google granted (it may be less than asked)
+                           "scopes": (tok.get("scope") or scopes).split()})
     exp = int(time.time()) + int(tok.get("expires_in", 3600))
     write_json(TOKEN_CACHE, {"access_token": tok["access_token"],
                              "expires_at": exp, "client_id": cid}, mode=0o600)
