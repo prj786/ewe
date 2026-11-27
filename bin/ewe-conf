@@ -22,8 +22,11 @@ artifact of `ewe-conf apply`.
     ewe-conf push [--force]           upload the file to the account (RFC-005:
                                       [sync].provider = nextcloud | google)
     ewe-conf pull [--out PATH]        download it — then `apply` to make it live
-    ewe-conf sync [--settle]          pull + merge key by key + push (0.33); --settle
-                                      waits out the push throttle first (after a write)
+    ewe-conf sync [--settle] [--join] pull + merge key by key + push (0.33); --settle
+                                      waits out the push throttle first (after a write).
+                                      A machine that never synced is refused while the
+                                      account holds a file (remote-exists): pull, push
+                                      --force, or --join to merge the two
     ewe-conf sync-status              the remote copy + this machine's sync record
 
 Python stdlib only: tomllib reads, the constrained emitter below writes (our
@@ -65,8 +68,22 @@ HEADER = """\
 _BARE = re.compile(r"^[A-Za-z0-9_-]+$")
 
 
+def _string(s):
+    """A TOML basic string. JSON's escapes are TOML's, with two exceptions:
+    a character beyond U+FFFF, which JSON writes as a surrogate pair
+    (\\ud83d\\udcda) and TOML refuses — there it is \\U0001F4DA — and DEL
+    (U+007F), which JSON leaves raw and TOML forbids. Up to 0.50.1-beta an
+    emoji in ANY value failed the write, and one already in the file (valid
+    TOML when typed by hand) failed every write after it."""
+    if s.isascii() and "\x7f" not in s:
+        return json.dumps(s)
+    return '"' + "".join("\\U%08X" % ord(c) if ord(c) > 0xFFFF
+                         else "\\u007f" if c == "\x7f"
+                         else json.dumps(c)[1:-1] for c in s) + '"'
+
+
 def _key(k):
-    return k if _BARE.match(k) else json.dumps(k)
+    return k if _BARE.match(k) else _string(k)
 
 
 def _scalar(v):
@@ -75,12 +92,30 @@ def _scalar(v):
     if isinstance(v, (int, float)):
         return repr(v)
     if isinstance(v, str):
-        return json.dumps(v)
+        return _string(v)
     if isinstance(v, list):
         return "[" + ", ".join(_scalar(x) for x in v) + "]"
     if isinstance(v, dict):
         return "{" + ", ".join(f"{_key(k)} = {_scalar(x)}" for k, x in v.items()) + "}"
     raise TypeError(f"unsupported value: {type(v).__name__}")
+
+
+def _unwritable(v):
+    """Why `v` cannot go into the file, or None. TOML has no null, and half a
+    surrogate pair is not a character — both used to end in a traceback from
+    save() instead of an answer."""
+    if v is None:
+        return "null has no place in ewe.conf (unset the key instead)"
+    if isinstance(v, str):
+        return "not text: half a surrogate pair" if any(0xD800 <= ord(c) <= 0xDFFF for c in v) else None
+    if isinstance(v, dict):
+        v = list(v) + list(v.values())
+    if isinstance(v, (list, tuple)):
+        for x in v:
+            why = _unwritable(x)
+            if why:
+                return why
+    return None
 
 
 # Section comments — regenerated on every write, so the file explains itself.
@@ -202,15 +237,50 @@ def _normalize_manifest(doc):
         pass
 
 
+_URL_USER = re.compile(r"^(https?://)[^/?#\s]*@", re.I)
+_URL_PASSWORD = re.compile(r"^([a-z][a-z0-9+.-]*://[^/?#@:\s]*):[^/?#\s]*@", re.I)
+
+
+def _no_credentials(url):
+    """A URL as the file may keep it. http(s): the whole user part goes — a
+    name alone is how a token is passed (https://<token>@host/…). Any other
+    scheme keeps its user (ssh://git@host needs it) and loses the password."""
+    if not isinstance(url, str):
+        return url
+    return _URL_PASSWORD.sub(r"\1@", _URL_USER.sub(r"\1", url))
+
+
+def _strip_url_credentials(doc):
+    """Every write: no credential rides in a URL the file keeps (rule 2 — it
+    goes to the account). plugins.sources is the address `ewe-plugin add`
+    was given, a scheme's `source` the one `ewe-theme scheme import`
+    fetched; both were written as typed, token and all. Here, not in those
+    tools: this is the one writer, so a copy that arrives from an older
+    machine is cleaned by the next write too."""
+    try:
+        src = doc["plugins"]["sources"]
+        for k in src:
+            src[k] = _no_credentials(src[k])
+    except (KeyError, TypeError):
+        pass
+    try:
+        for rec in doc["desktop"]["theme"]["schemes"]:
+            if isinstance(rec, dict) and "source" in rec:
+                rec["source"] = _no_credentials(rec["source"])
+    except (KeyError, TypeError):
+        pass
+
+
 def save(doc):
     doc["schema"] = SCHEMA
     _normalize_manifest(doc)
+    _strip_url_credentials(doc)
     os.makedirs(EWE_DIR, exist_ok=True)
     text = emit(doc)
     tomllib.loads(text)  # never persist something we cannot read back
     fd, tmp = tempfile.mkstemp(dir=EWE_DIR, prefix=".ewe.conf.")
     try:
-        with os.fdopen(fd, "w") as f:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:   # the section notes are not ASCII; TOML is UTF-8
             f.write(text)
         os.replace(tmp, CONF)
     except BaseException:
@@ -596,7 +666,7 @@ def do_apply(doc, only=None, hooks=True):
         if node and last in node:
             # trailing extra \n matches the shell's heredoc atomicWrite
             _wtext(os.path.join(HYPR_GEN, "wallpapers.conf"),
-                   gen_wallpapers_conf(node[last]) + "\n")
+                   gen_wallpapers_conf(_wallpapers_here(node[last])) + "\n")
     # user.lua depends on layout AND theme/animations/tiling — any of them
     # changing regenerates it. ALWAYS (2026-09-02 metal hotfix): a pulled
     # file without [desktop.layout] used to leave a stale user.lua behind,
@@ -869,6 +939,39 @@ def gen_windowrules_lua(rules):
             s += f"    {mode} = true,\n"
         s += "})\n"
     return s
+
+
+def _wallpapers_here(w):
+    """`[desktop.wallpapers]` as THIS machine shows it. ewe.conf carries a
+    wallpaper as a path and the picture stays on the computer it was chosen
+    on, so a path that does not exist here — another computer's choice,
+    arriving by sync, a pull or a restore — never takes the place of one that
+    does: that slot keeps what generated/wallpapers.conf shows now. With
+    nothing to keep, the path is written as it is (the picture may be on its
+    way in a synced folder; wallpaper.sh skips what it cannot read).
+    Here and not in the merge: the DOCUMENT must stay what the account says.
+    Written back into it, this machine's picture would go up with the next
+    push and take the place of the other computer's — on that computer."""
+    if not isinstance(w, dict):
+        return w
+    try:
+        with open(os.path.join(HYPR_GEN, "wallpapers.conf")) as f:
+            cur = parse_wallpapers_conf(f.read())
+    except OSError:
+        return w
+
+    def here(p):
+        return isinstance(p, str) and p != "" and os.access(p, os.R_OK)
+
+    def kept(new, old):
+        return old if (new and not here(new) and here(old)) else new
+
+    out = dict(w)
+    if w.get("default"):
+        out["default"] = kept(w["default"], cur.get("default"))
+    if isinstance(w.get("outputs"), dict):
+        out["outputs"] = {o: kept(p, cur["outputs"].get(o)) for o, p in w["outputs"].items()}
+    return out
 
 
 def gen_wallpapers_conf(w):
@@ -2159,10 +2262,55 @@ def merge3(base, mine, theirs, prefer, path=()):
 
 
 def _shared(doc, path=()):
-    """the document without its LOCAL_ONLY paths — what two machines share"""
+    """the document without its LOCAL_ONLY paths — what two machines share.
+    A table that held nothing else goes with them: `[plugins]` with only this
+    machine's enabled/sources and no `[plugins]` at all are the same to the
+    other machine (left in as {}, the two traded uploads for good)."""
     if not isinstance(doc, dict):
         return doc
-    return {k: _shared(v, path + (k,)) for k, v in doc.items() if path + (k,) not in LOCAL_ONLY}
+    out = {}
+    for k, v in doc.items():
+        if path + (k,) in LOCAL_ONLY:
+            continue
+        w = _shared(v, path + (k,))
+        if isinstance(v, dict) and v and not w:
+            continue
+        out[k] = w
+    return out
+
+
+def _merge_shared(base, mine, theirs, prefer):
+    """merge3 over what two machines SHARE, then this machine's own
+    LOCAL_ONLY values put back where they were. merge3 alone guards a
+    LOCAL_ONLY path only when it reaches that exact path — and it never does
+    when one side lacks the parent table: a machine with no [plugins] took
+    the other's whole table (its enabled list, sources, widgets), and a
+    machine whose [plugins] held only its own keys lost the table when the
+    account's copy had none. Nothing per-machine goes in, so none comes out."""
+    out = merge3(None if base is None else _shared(base), _shared(mine), _shared(theirs), prefer)
+    if not isinstance(out, dict):
+        out = {}
+
+    def own(doc, path=()):
+        for k, v in doc.items():
+            if path + (k,) in LOCAL_ONLY:
+                node = out
+                for p in path:
+                    if not isinstance(node.get(p), dict):
+                        node[p] = {}
+                    node = node[p]
+                node[k] = v
+            elif isinstance(v, dict):
+                own(v, path + (k,))
+
+    def ordered(d, like):                 # this file's key order stays: diffs are honest
+        if not (isinstance(d, dict) and isinstance(like, dict)):
+            return d
+        return {**{k: ordered(d[k], like[k]) for k in like if k in d},
+                **{k: v for k, v in d.items() if k not in like}}
+
+    own(mine)
+    return ordered(out, mine)
 
 
 def _base_write(raw):
@@ -2210,7 +2358,7 @@ def _changed_paths(a, b, path=()):
     return [] if a == b else [".".join(path)]
 
 
-def _sync_once(cfg, be, hooks):
+def _sync_once(cfg, be, hooks, join=False):
     remote, err = be["find"]()
     if err:
         return {"ok": False, "error": err, "provider": cfg["provider"]}
@@ -2224,6 +2372,21 @@ def _sync_once(cfg, be, hooks):
             return {"ok": False, "error": "no-local-file", "provider": cfg["provider"]}
         return dict(_push_content(cfg, be, local, rec, None), action="pushed")
     known = rec.get("provider", "google") == cfg["provider"] and bool(rec.get("id"))
+    if not known and not join:
+        # This machine never synced and the account already holds a file:
+        # whose settings win is the user's answer, never a sync's. Signing in
+        # sets sync.enabled, and the sync that followed 2 s later merged the
+        # account in and pushed this machine's app list over the backup's —
+        # before the restore question was even on screen (2026-11-27). The
+        # answers: `pull` (bring everything back), `push --force` (keep this
+        # computer's), `sync --join` (merge the two). `_resolve` still adopts
+        # the one remote that is no question: this machine's own first
+        # upload whose reply was lost.
+        verdict, rec = _resolve(rec, remote, cfg, False, be)
+        if verdict:
+            return {"ok": False, "error": verdict, "remote": remote, "provider": cfg["provider"],
+                    "remote_is_this_machine": _is_this_machine(remote), "never_synced": True}
+        known = True
     if known and _guard(rec, remote, cfg, False) is None:
         # the account still holds what this machine last synced; `local_sha`
         # is this file as it was then, when only LOCAL_ONLY keys set the two
@@ -2254,7 +2417,7 @@ def _sync_once(cfg, be, hooks):
         except OSError:
             cur = b""
         mine = tomllib.loads(cur.decode()) if cur else {"schema": SCHEMA}
-        merged = merge3(base, mine, theirs, prefer)
+        merged = _merge_shared(base, mine, theirs, prefer)
         changed = _changed_paths(mine, merged)
         backup = ""
         if changed:
@@ -2280,9 +2443,11 @@ def _sync_once(cfg, be, hooks):
     return out
 
 
-def do_sync(hooks=True):
+def do_sync(hooks=True, join=False):
     """pull + merge + push, one at a time per machine (SYNC_LOCK). A push that
-    races another machine's save (412) starts over from the new remote."""
+    races another machine's save (412) starts over from the new remote.
+    `join`: a machine that never synced merges into an account that already
+    holds a file (`sync --join`); without it that is refused, remote-exists."""
     _adopt_network()
     cfg = sync_cfg()
     be, err = _backend(cfg)
@@ -2292,8 +2457,8 @@ def do_sync(hooks=True):
     with open(SYNC_LOCK, "w") as lk:
         fcntl.flock(lk, fcntl.LOCK_EX)
         for _ in range(3):
-            res = _sync_once(cfg, be, hooks)
-            if res.get("error") not in ("remote-newer", "remote-exists"):
+            res = _sync_once(cfg, be, hooks, join)
+            if res.get("never_synced") or res.get("error") not in ("remote-newer", "remote-exists"):
                 break
     return res
 
@@ -2592,6 +2757,8 @@ def main(argv):
         print(json.dumps(v) if isinstance(v, (dict, list, bool)) else v)
     elif cmd == "set" and len(argv) == 3:
         ok, val = validate(argv[1], parse_value(argv[2]))
+        if ok and _unwritable(val):
+            ok, val = False, _unwritable(val)
         if not ok:
             print(json.dumps({"error": "bad-value", "key": argv[1], "message": val}), file=sys.stderr)
             return 1
@@ -2615,6 +2782,9 @@ def main(argv):
         # legacy adapter: a full user-theme.json object from a Settings UI —
         # the jk→conf mapping stays HERE so no caller ever duplicates it
         ut = json.loads(argv[2])
+        if _unwritable(ut):
+            print(json.dumps({"error": "bad-value", "key": "user-theme", "message": _unwritable(ut)}), file=sys.stderr)
+            return 1
         with locked():
             doc = load()
             for ck, jk, dflt in THEME_MAP:
@@ -2630,7 +2800,7 @@ def main(argv):
         if "--settle" in argv:
             print(json.dumps(settle_sync(hooks=hooks)))
         else:
-            print(json.dumps(_sync_log("sync", do_sync(hooks=hooks))))
+            print(json.dumps(_sync_log("sync", do_sync(hooks=hooks, join="--join" in argv))))
     elif cmd == "push":
         print(json.dumps(_sync_log("push", do_push(quiet="--quiet" in argv, force="--force" in argv))))
     elif cmd == "pull":

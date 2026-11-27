@@ -47,7 +47,7 @@ ewe-conf apply [--only <domain>]   regenerate artifacts + poke the shell + reloa
 ewe-conf path                      print the canonical file path
 ewe-conf push [--force]            upload the file to your account (see Sync)
 ewe-conf pull [--out <path>]       download it — run `apply` afterwards
-ewe-conf sync [--settle]           pull + merge key by key + push (see Sync)
+ewe-conf sync [--settle] [--join]  pull + merge key by key + push (see Sync)
 ewe-conf sync-status               the remote copy, and this machine's sync record
 ```
 
@@ -89,7 +89,12 @@ record is the whole conflict rule:
 - a machine that has **never** synced may push only into an empty remote.
   If a backup already exists it gets `remote-exists`: restore first (the
   Welcome flow offers exactly that), or `--force`. This is what keeps a
-  fresh install from erasing the backup it was about to restore.
+  fresh install from erasing the backup it was about to restore. `sync`
+  answers the same, including the sync that follows a write: up to
+  0.50.1-beta, signing in (which sets `[sync].enabled`) was followed 2 s later by
+  a sync that merged the account into the new machine and uploaded the new
+  machine's app list over the backup's, before the restore question was on
+  screen.
 
 The record also keeps the `sha256` of the bytes last pushed or pulled, and
 `pending` — the hashes of uploads in flight. A remote that moved but holds
@@ -130,9 +135,12 @@ sync):
 - a key only one side changed takes that change — added, edited or deleted;
 - a key both sides changed takes the value from the newer file (this file's
   mtime against the remote's `saved_at`);
-- a machine with no common copy yet — a fresh install, or one that synced
-  with another provider before — takes the account's value on a conflict
-  and keeps every key only it has;
+- a machine with no sync record — a fresh install, or one that synced
+  with another provider before — is refused (`remote-exists`) while the
+  account holds a file: whose settings win is your answer, not a sync's.
+  `pull` brings everything back, `push --force` keeps this computer's, and
+  `sync --join` merges the two: the account's value on a conflict, every
+  key only this machine has kept;
 - **this machine's own** paths never come from the account: `[sync]`'s
   `enabled` / `provider` / `server` / `user` / `folder` / `browser` (but
   `sync.folders` — the folders you sync — is shared, so every computer you
@@ -314,6 +322,15 @@ One block per app: `name`, `class` (matched case-insensitively), `workspace`
 · `[desktop.wallpapers.outputs]` per-output overrides. Images, GIFs, and
 videos are all valid paths.
 
+The file carries the **path**; the picture stays on the computer it was
+chosen on. `default` is shared, so another computer's choice arrives here by
+sync or a restore — and when that path does not exist on this computer,
+`apply` leaves it out of what this computer shows: the slot in
+`generated/wallpapers.conf` keeps the picture it has. The document itself
+still takes the account's value (written back, this computer's picture would
+replace the other one's over there). With no picture to keep, the path is
+generated as it is and shows once the file is there.
+
 ### `[desktop.input]`
 
 Keyboard and pointer, whole: `kb_layout`/`kb_variant` (comma-joined parallel
@@ -449,6 +466,22 @@ plugins' manifest keybinds; nothing else is regenerated.
 migration). `removed = ["ewe.clipboard"]` lists the bundled ones you took
 away with `ewe-plugin remove`, so a later ewe update does not bring them
 back (`ewe-plugin install <id>` or `seed --restore <id>` clears the entry).
+
+A source URL never keeps a credential: `https://user:token@host/…` is
+written as `https://host/…` (an `ssh://` URL keeps its user and loses the
+password), on every write — the file goes to the account. The clone on this
+computer keeps its own remote; another computer has to be given the
+credential again. The same holds for a colour scheme's `source`.
+
+After a restore from the account the file lists another computer's plugins.
+`ewe-plugin restore --bundled` copies the first-party ones back out of the
+payload (the desktop's restore and the installer's plugins step do this for
+you), on or off as the file says. It never clones: git-sourced plugins wait
+for `ewe-plugin restore` or Komble → Plugins. A first-party plugin whose
+declared packages are not installed is left out too and reported under
+`needs` — Komble's Install puts the packages in first. `ewe-plugin list
+--json` names the first-party ones still absent as `missingBundled`
+(`missing` is the git-sourced ones).
 
 ### `[plugins.widgets]` and `[plugins.settings]`
 

@@ -4,8 +4,11 @@
 # machine id) against tests/mock-nextcloud.py. No network, nothing real
 # touched. Checks:
 #   * no [sync].provider + a Nextcloud sign-in (cloud.json) → nextcloud
-#   * a machine joining the account takes the account's value on a conflict,
-#     keeps keys only it has, and never takes LOCAL_ONLY paths
+#   * a machine that never synced neither merges nor uploads while the
+#     account holds a file (remote-exists) — not from `sync`, not from the
+#     sync that follows a write; its own lost first upload is still adopted
+#   * a machine joining the account (`sync --join`) takes the account's value
+#     on a conflict, keeps keys only it has, and never takes LOCAL_ONLY paths
 #   * a key only one side changed takes that change, both ways
 #   * a deletion on one side carries over
 #   * the same key changed on both: the newer file wins
@@ -15,6 +18,14 @@
 set -eu
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 WORK="$(mktemp -d)"
+# Every sync first adopts this computer's VPN profiles into its file
+# (_adopt_network). The machines here are sandboxes: a stand-in nmcli with no
+# connections, so the host's own profiles never land in A's or B's file (on a
+# host with a VPN, test 2b read that as "a refused sync changed B's file").
+mkdir -p "$WORK/bin"
+printf '#!/bin/sh\nexit 0\n' > "$WORK/bin/nmcli"
+chmod +x "$WORK/bin/nmcli"
+export PATH="$WORK/bin:$PATH"
 trap 'kill $MOCK_NC 2>/dev/null || true; rm -rf "$WORK"' EXIT
 unset HYPRLAND_INSTANCE_SIGNATURE WAYLAND_DISPLAY   # never reload or poke the host's session
 export EWE_CONF_SSH_CONFIG="$WORK/ssh-config"   # never the real ~/.ssh/config
@@ -33,8 +44,15 @@ fail() { echo "FAIL  $*" >&2; exit 1; }
 ok()   { echo "ok  $*"; }
 jget() { python3 -c "import json,sys; print(json.load(sys.stdin)$2)" <<<"$1"; }
 etag() { curl -s -u "$NC_AUTH" -X PROPFIND -H 'Depth: 0' "$NC_DAV/ewe.conf" | grep -o '<d:getetag>[^<]*' ; }
+nc_fault() {   # nc_fault <switch> <file> — arm one of mock-nextcloud.py's fault switches
+    python3 - "$WORK/nc.json" "$1" "$2" <<'PY'
+import json, sys
+p, k, v = sys.argv[1:]
+s = json.load(open(p)); s[k] = v; json.dump(s, open(p, "w"))
+PY
+}
 
-for m in a b; do
+for m in a b c; do
     mkdir -p "$WORK/$m/config/ewe" "$WORK/$m/state" "$WORK/$m/run"
     echo "machine-$m-0123456789" > "$WORK/$m/machine-id"
     # signed in to the ewe account, and NO [sync].provider in the file
@@ -105,8 +123,50 @@ r=$(on a sync --no-hooks)
 [ "$(get a sync.provider)" = "nextcloud" ] || fail "A did not record its provider"
 ok "the first machine pushes and records provider = nextcloud"
 
-# 3 · B joins: account wins the conflict, B keeps what only it has + its own devices
+# 2b · B never synced and the account holds A's file: whose settings win is
+# the user's answer (restore, keep this computer's, or join) — no sync gives
+# it for them. 2026-11-27: signing in sets sync.enabled, and the sync that
+# followed 2 s later merged the account into the new machine and pushed the
+# new machine's app list over the backup's, before the restore offer showed.
+before=$(etag); bconf=$(cat "$WORK/b/config/ewe/ewe.conf")
 r=$(on b sync --no-hooks)
+[ "$(jget "$r" "['ok']")" = "False" ] && [ "$(jget "$r" "['error']")" = "remote-exists" ] || fail "a never-synced machine's sync must be refused: $r"
+[ "$(jget "$r" "['remote']['appProperties']['machine']")" = "$(uname -n)" ] || fail "remote-exists should name who saved the backup: $r"
+[ "$(cat "$WORK/b/config/ewe/ewe.conf")" = "$bconf" ] || fail "a refused sync changed B's file"
+[ "$before" = "$(etag)" ] || fail "a refused sync uploaded"
+on b set --no-hooks sync.enabled true >/dev/null          # what signing in does; a sync follows by itself
+refused() { local n; n=$(grep -c remote-exists "$WORK/b/state/ewe/sync.log" 2>/dev/null || true); echo "${n:-0}"; }
+for _ in $(seq 1 40); do
+    [ "$(refused)" -ge 2 ] && break
+    sleep 0.5
+done
+[ "$(refused)" -ge 2 ] || fail "the sync after a write never ran, or was not refused: $(cat "$WORK/b/state/ewe/sync.log")"
+[ "$(get b desktop.theme.accent)" = "#0000ff" ] || fail "the sync after a write merged the account into B: $(get b desktop.theme.accent)"
+[ "$(get b desktop.layout.gaps_in)" = "<unset>" ] || fail "the sync after a write brought A's keys to B"
+[ "$before" = "$(etag)" ] || fail "the sync after a write uploaded B's file over the backup"
+curl -s -u "$NC_AUTH" "$NC_DAV/ewe.conf" | grep -q 'a-only' || fail "the backup's app list is gone from the account"
+r=$(on b sync-status)
+[ "$(jget "$r" "['conflict']")" = "remote-exists" ] && [ "$(jget "$r" "['local_synced_at']")" = "" ] \
+    || fail "B must still read as never synced with a backup waiting (the restore offer keys on it): $r"
+on b set --no-hooks sync.enabled false >/dev/null
+ok "a machine that never synced neither merges nor uploads while the account holds a file (remote-exists)"
+
+# 2c · …but its OWN first upload whose reply was lost is no question: the
+# account then holds a file this machine has no record of, with the bytes it
+# sent. (its own folder in the account, so the account is empty for it)
+printf 'schema = 1\n\n[desktop.theme]\naccent = "#c0ffee"\n\n[sync]\nenabled = false\nfolder = "lost"\n' > "$WORK/c/config/ewe/ewe.conf"
+nc_fault drop_reply ewe.conf
+r=$(on c sync --no-hooks)
+[ "$(jget "$r" "['ok']")" = "False" ] || fail "a dropped reply must fail this sync: $r"
+curl -sf -u "$NC_AUTH" "$NC/remote.php/dav/files/tester/lost/ewe.conf" | grep -q 'c0ffee' || fail "the mock did not store C's upload"
+r=$(on c sync --no-hooks)
+[ "$(jget "$r" "['ok']")" = "True" ] || fail "C's own interrupted first upload read as someone else's backup: $r"
+r=$(on c sync-status)
+[ "$(jget "$r" "['conflict']")" = "None" ] && [ "$(jget "$r" "['local_synced_at']")" != "" ] || fail "C not in step after adopting its own upload: $r"
+ok "a first upload whose reply was lost is adopted as this machine's own"
+
+# 3 · B joins (the explicit merge): account wins the conflict, B keeps what only it has + its own devices
+r=$(on b sync --join --no-hooks)
 [ "$(jget "$r" "['ok']")" = "True" ] || fail "B join: $r"
 [ "$(get b desktop.theme.accent)" = "#ff0000" ] || fail "B should take the account's accent: $(get b desktop.theme.accent)"
 [ "$(get b desktop.layout.gaps_in)" = "5" ] || fail "B should gain gaps_in"
@@ -182,6 +242,90 @@ on b sync --no-hooks >/dev/null
 on a sync --no-hooks >/dev/null
 [ "$(get a sync.folders)" = "[]" ] || fail "A kept a folder pair B removed: $(get a sync.folders)"
 ok "[[sync.folders]] travels between machines; enabled/browser stay on each machine"
+
+# 8c · a per-machine key never arrives — also when this machine has no such
+# table at all. merge3 guards a LOCAL_ONLY path only when it reaches it, and
+# it never did when the parent was absent on one side: B (no [plugins]) took
+# A's whole table — its enabled list, sources, widgets.
+on a set --no-hooks plugins.enabled '["ewe.dock"]' >/dev/null
+on a set --no-hooks plugins.sources '{"ewe.dock": "bundled"}' >/dev/null
+on a set --no-hooks plugins.widgets '{"ewe.sysmon": {"x": 1, "y": 2}}' >/dev/null
+on a set --no-hooks desktop.displays '{"version": 1, "lastKey": "A-PANEL", "profiles": {}}' >/dev/null
+on a set --no-hooks desktop.layout.gaps_in 11 >/dev/null       # something shared, so A uploads
+on a sync --no-hooks >/dev/null
+r=$(on b sync --no-hooks)
+[ "$(get b desktop.layout.gaps_in)" = "11" ] || fail "B did not get A's shared change: $r"
+[ "$(get b plugins.enabled)" = "<unset>" ] || fail "A's plugins.enabled landed on B, which has no [plugins]: $(get b plugins.enabled)"
+[ "$(get b plugins)" = "<unset>" ] || fail "B grew a [plugins] table out of A's per-machine keys: $(get b plugins)"
+[ "$(get b desktop.displays.version)" = "1" ] || fail "B did not get the shared part of desktop.displays"
+[ "$(get b desktop.displays.lastKey)" = "<unset>" ] || fail "A's desktop.displays.lastKey landed on B: $(get b desktop.displays.lastKey)"
+ok "per-machine keys stay behind when the other machine has no such table"
+
+# …and the other way: B uploads a file with no [plugins]; A's table — which
+# holds only A's own keys, exactly as the last agreed copy — must survive it
+on b set --no-hooks desktop.layout.gaps_out 30 >/dev/null
+on b sync --no-hooks >/dev/null
+curl -s -u "$NC_AUTH" "$NC_DAV/ewe.conf" | grep -q '^\[plugins' && fail "B's upload carries a [plugins] table it never had"
+r=$(on a sync --no-hooks)
+[ "$(get a desktop.layout.gaps_out)" = "30" ] || fail "A did not get B's shared change: $r"
+[ "$(get a plugins.enabled)" = '["ewe.dock"]' ] || fail "A lost its plugin list to a copy that has none: $(get a plugins.enabled)"
+on a get plugins.widgets | grep -q '"ewe.sysmon"' || fail "A lost its widget placement"
+[ "$(get a desktop.displays.lastKey)" = "A-PANEL" ] || fail "A lost its lastKey"
+ok "a table of only this machine's keys survives a copy that has no such table"
+
+# in step again, with a table on one side and none on the other: no uploads
+for _ in 1 2; do on a sync --no-hooks >/dev/null; on b sync --no-hooks >/dev/null; done
+before=$(etag)
+ra=$(on a sync --no-hooks); rb=$(on b sync --no-hooks)
+[ "$(jget "$ra" "['action']")" = "none" ] && [ "$(jget "$rb" "['action']")" = "none" ] || fail "not in step: $ra / $rb"
+[ "$before" = "$(etag)" ] || fail "a per-machine table on one side only made the machines trade uploads"
+ok "in step: a per-machine table on one side only causes no upload"
+
+# a shared key in that same table still travels, alone
+on a set --no-hooks 'plugins.settings."ewe.dock"' '{"autohide": true}' >/dev/null
+on a sync --no-hooks >/dev/null
+on b sync --no-hooks >/dev/null
+[ "$(get b 'plugins.settings."ewe.dock".autohide')" = "true" ] || fail "B did not get A's plugin settings"
+[ "$(get b plugins.enabled)" = "<unset>" ] || fail "plugins.enabled rode along with plugins.settings"
+ok "the shared key of a mixed table travels, its per-machine neighbours do not"
+
+# 8d · a wallpaper is a path, and the picture stays on the computer it was
+# chosen on. A path that does not exist HERE never takes the place of one
+# that does: the file this machine shows (generated/wallpapers.conf) keeps
+# its picture, while the document takes the account's value — written back,
+# B's picture would go up and replace A's on A. (2026-11-26, the owner's
+# desktop: another computer's /home/<other user>/… path arrived by sync and
+# left a flat grey background.)
+mkdir -p "$WORK/pics"; : > "$WORK/pics/b-own.png"; : > "$WORK/pics/both.png"
+BGEN="$WORK/b/config/hypr/generated/wallpapers.conf"
+GONE="/home/somebody-else/Pictures/a-wall.webm"
+on b set --no-hooks desktop.wallpapers "{\"mode\": \"fill\", \"mute\": true, \"default\": \"$WORK/pics/b-own.png\", \"outputs\": {\"eDP-1\": \"$WORK/pics/b-own.png\"}}" >/dev/null
+grep -qx "\*=$WORK/pics/b-own.png" "$BGEN" || fail "B's own wallpaper was not generated: $(cat "$BGEN")"
+on b sync --no-hooks >/dev/null; on a sync --no-hooks >/dev/null
+on a set --no-hooks desktop.wallpapers.default "$GONE" >/dev/null
+on a set --no-hooks desktop.wallpapers.outputs "{\"eDP-1\": \"$GONE\"}" >/dev/null
+on a sync --no-hooks >/dev/null
+before=$(etag)
+r=$(on b sync --no-hooks)
+[ "$(get b desktop.wallpapers.default)" = "$GONE" ] || fail "B's document should take the account's wallpaper path: $r"
+grep -qx "\*=$WORK/pics/b-own.png" "$BGEN" || fail "a path that does not exist on B replaced B's wallpaper: $(cat "$BGEN")"
+[ "$before" = "$(etag)" ] || fail "B wrote its own wallpaper back to the account"
+ok "merge: another computer's wallpaper path does not replace a picture that exists here, and nothing is written back"
+
+on b pull >/dev/null; on b apply --no-hooks        # a restore: the account's bytes, A's per-output map included
+[ "$(get b desktop.wallpapers.default)" = "$GONE" ] || fail "the restore did not bring the account's document"
+grep -qx "\*=$WORK/pics/b-own.png" "$BGEN" || fail "restore: a dead default replaced B's wallpaper: $(cat "$BGEN")"
+grep -qx "eDP-1=$WORK/pics/b-own.png" "$BGEN" || fail "restore: a dead per-output path replaced B's: $(cat "$BGEN")"
+ok "pull + apply: the same for the default and for each output"
+
+on a set --no-hooks desktop.wallpapers.default "$WORK/pics/both.png" >/dev/null
+on a sync --no-hooks >/dev/null; on b sync --no-hooks >/dev/null
+grep -qx "\*=$WORK/pics/both.png" "$BGEN" || fail "a wallpaper that does exist here did not arrive: $(cat "$BGEN")"
+ok "a path that exists here replaces it as before"
+
+on c set --no-hooks desktop.wallpapers "{\"mode\": \"fill\", \"mute\": true, \"default\": \"$GONE\", \"outputs\": {}}" >/dev/null
+grep -qx "\*=$GONE" "$WORK/c/config/hypr/generated/wallpapers.conf" || fail "with nothing to keep, the path should be written as it is"
+ok "with no picture to keep, the path is written as it is (it shows once the file is there)"
 
 # 9 · the log
 [ -s "$WORK/a/state/ewe/sync.log" ] || fail "no sync.log"
