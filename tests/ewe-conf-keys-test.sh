@@ -93,4 +93,23 @@ bin/ewe-conf absorb user-theme '{"accent": null}' 2>"$S/err" && no "absorb took 
   grep -q '"bad-value"' "$S/err" && ! grep -q Traceback "$S/err" && ok "absorb refuses a null the same way" || no "absorb: $(tail -1 "$S/err")"
 }
 [ "$(cat "$CONF")" = "$before" ] && ok "refused values changed nothing" || no "a refused value changed the file"
+
+# rule 2 — no credential rides in a URL the file keeps (it goes to the
+# account). plugins.sources is the address `ewe-plugin add` was given, a
+# scheme's `source` the one `ewe-theme scheme import` fetched: both used to
+# be written as typed, token and all.
+bin/ewe-conf set plugins.sources '{"acme.a": "https://user:s3cret@example.org/a.git", "acme.b": "https://ghp_tokenAsUser@github.com/x/b.git", "acme.c": "ssh://git:pw0rd@example.org/c.git", "acme.d": "ssh://git@example.org:2222/d.git", "acme.e": "git@github.com:x/e.git", "acme.f": "https://example.org:8443/p@th/f.git", "ewe.dock": "bundled", "acme.g": "local"}' \
+  || no "setting plugins.sources failed"
+same "$(bin/ewe-conf get plugins.sources)" '{"acme.a": "https://example.org/a.git", "acme.b": "https://github.com/x/b.git", "acme.c": "ssh://git@example.org/c.git", "acme.d": "ssh://git@example.org:2222/d.git", "acme.e": "git@github.com:x/e.git", "acme.f": "https://example.org:8443/p@th/f.git", "ewe.dock": "bundled", "acme.g": "local"}' \
+  && ok "plugins.sources: http(s) loses its user part, ssh keeps the user and loses the password, the rest is untouched" \
+  || no "plugins.sources: $(bin/ewe-conf get plugins.sources)"
+bin/ewe-conf set --no-hooks desktop.theme.schemes '[{"name": "X", "slug": "x", "source": "https://me:t0ken@example.org/x.yaml"}, {"name": "Y", "slug": "y", "source": "/home/u/y.yaml"}]' \
+  || no "setting desktop.theme.schemes failed"
+same "$(bin/ewe-conf get desktop.theme.schemes)" '[{"name": "X", "slug": "x", "source": "https://example.org/x.yaml"}, {"name": "Y", "slug": "y", "source": "/home/u/y.yaml"}]' \
+  && ok "a scheme's source URL the same; a path stays" || no "schemes: $(bin/ewe-conf get desktop.theme.schemes)"
+grep -q -E 's3cret|ghp_tokenAsUser|pw0rd|t0ken' "$CONF" && no "a credential is in the file" || ok "no credential in the file"
+sed -i 's|"https://example.org/a.git"|"https://old:le4k@example.org/a.git"|' "$CONF"     # as it arrives from an older machine
+grep -q 'le4k' "$CONF" || no "(test) the old-style line was not planted"
+bin/ewe-conf set desktop.layout.gaps_in 8 && ! grep -q 'le4k' "$CONF" \
+  && ok "one that arrived in the file is gone with the next write" || no "an old credential survived a write"
 exit $fail

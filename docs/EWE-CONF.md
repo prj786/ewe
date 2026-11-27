@@ -467,6 +467,12 @@ migration). `removed = ["ewe.clipboard"]` lists the bundled ones you took
 away with `ewe-plugin remove`, so a later ewe update does not bring them
 back (`ewe-plugin install <id>` or `seed --restore <id>` clears the entry).
 
+A source URL never keeps a credential: `https://user:token@host/…` is
+written as `https://host/…` (an `ssh://` URL keeps its user and loses the
+password), on every write — the file goes to the account. The clone on this
+computer keeps its own remote; another computer has to be given the
+credential again. The same holds for a colour scheme's `source`.
+
 After a restore from the account the file lists another computer's plugins.
 `ewe-plugin restore --bundled` copies the first-party ones back out of the
 payload (the desktop's restore and the installer's plugins step do this for

@@ -237,9 +237,44 @@ def _normalize_manifest(doc):
         pass
 
 
+_URL_USER = re.compile(r"^(https?://)[^/?#\s]*@", re.I)
+_URL_PASSWORD = re.compile(r"^([a-z][a-z0-9+.-]*://[^/?#@:\s]*):[^/?#\s]*@", re.I)
+
+
+def _no_credentials(url):
+    """A URL as the file may keep it. http(s): the whole user part goes — a
+    name alone is how a token is passed (https://<token>@host/…). Any other
+    scheme keeps its user (ssh://git@host needs it) and loses the password."""
+    if not isinstance(url, str):
+        return url
+    return _URL_PASSWORD.sub(r"\1@", _URL_USER.sub(r"\1", url))
+
+
+def _strip_url_credentials(doc):
+    """Every write: no credential rides in a URL the file keeps (rule 2 — it
+    goes to the account). plugins.sources is the address `ewe-plugin add`
+    was given, a scheme's `source` the one `ewe-theme scheme import`
+    fetched; both were written as typed, token and all. Here, not in those
+    tools: this is the one writer, so a copy that arrives from an older
+    machine is cleaned by the next write too."""
+    try:
+        src = doc["plugins"]["sources"]
+        for k in src:
+            src[k] = _no_credentials(src[k])
+    except (KeyError, TypeError):
+        pass
+    try:
+        for rec in doc["desktop"]["theme"]["schemes"]:
+            if isinstance(rec, dict) and "source" in rec:
+                rec["source"] = _no_credentials(rec["source"])
+    except (KeyError, TypeError):
+        pass
+
+
 def save(doc):
     doc["schema"] = SCHEMA
     _normalize_manifest(doc)
+    _strip_url_credentials(doc)
     os.makedirs(EWE_DIR, exist_ok=True)
     text = emit(doc)
     tomllib.loads(text)  # never persist something we cannot read back
