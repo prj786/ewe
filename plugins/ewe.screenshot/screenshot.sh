@@ -60,9 +60,19 @@ esac
 
 # Show the draggable thumbnail preview (Quickshell), bottom-right. This IS the
 # feedback now — no notify-send (its full-screen toast overlay would block the
-# preview's pointer input). If Quickshell isn't running, fall back to a notify.
-if [ -r "$file" ] && command -v qs >/dev/null 2>&1 && pgrep -x qs >/dev/null 2>&1; then
-    qs ipc call ewe.screenshot pop "$file" >/dev/null 2>&1
-elif command -v notify-send >/dev/null 2>&1 && [ -r "$file" ]; then
+# preview's pointer input). If the shell does not answer, fall back to a notify.
+#
+# Ask the shell itself, never `pgrep -x qs` (1.1.2): Quickshell restarts
+# itself after a crash as /usr/bin/quickshell, so the process is no longer
+# called `qs` and every shot after a crash showed nothing at all. `qs ipc
+# call` fails with no shell running, and prints "Target not found." (exit 0)
+# when the shell runs without this plugin's panel.
+[ -r "$file" ] || exit 0
+shown=0
+if command -v qs >/dev/null 2>&1; then
+    out="$(qs ipc call ewe.screenshot pop "$file" 2>&1)" \
+        && case "$out" in *"not found"*|*"No running"*) ;; *) shown=1 ;; esac
+fi
+if [ "$shown" = 0 ] && command -v notify-send >/dev/null 2>&1; then
     notify-send -i "$file" "Screenshot saved" "$(basename "$file") — also on clipboard"
 fi

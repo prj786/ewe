@@ -656,7 +656,10 @@ written. Called live by Settings → Theme, at shell startup, and by phase 60.
   two "3"s): window rules carry a `+ewe-ws-N` tag that `M.place` resolves on
   `window.open_early`, and `workspace.created` re-homes any stray id.
   Never start an `hl.timer` from `config.reloaded`: it also fires while the
-  config is first parsed (`Hyprland --verify-config` segfaulted). Test:
+  config is first parsed (`Hyprland --verify-config` segfaulted). A
+  workspace's `id` can be NIL (`HL.Workspace.id` is `integer|nil`: one being
+  torn down) — read it through `wsid()`, never compare `w.id` directly (0.51.1:
+  "attempt to compare number with nil" from the `workspace.created` timer). Test:
   `tests/ewe-workspaces-test.sh`; a second display in the nested harness is
   `hyprctl output create headless`.
 - **Who may move you (0.43, 2026-11-19 polish pass):** a window that a

@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "ewe.phone",
   "name": "Phone",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "apiVersion": 3,
   "description": "Your phone in ewe: a dock button with its apps (real icons, open here or on the phone) and its files, pairing, battery, notifications and SMS on the Mobile page, a phone glyph in the bar. No KDE Connect window anywhere.",
   "homepage": "https://github.com/prj786/ewe-plugin-phone",
