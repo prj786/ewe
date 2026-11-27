@@ -68,8 +68,22 @@ HEADER = """\
 _BARE = re.compile(r"^[A-Za-z0-9_-]+$")
 
 
+def _string(s):
+    """A TOML basic string. JSON's escapes are TOML's, with two exceptions:
+    a character beyond U+FFFF, which JSON writes as a surrogate pair
+    (\\ud83d\\udcda) and TOML refuses — there it is \\U0001F4DA — and DEL
+    (U+007F), which JSON leaves raw and TOML forbids. Up to 0.50.1-beta an
+    emoji in ANY value failed the write, and one already in the file (valid
+    TOML when typed by hand) failed every write after it."""
+    if s.isascii() and "\x7f" not in s:
+        return json.dumps(s)
+    return '"' + "".join("\\U%08X" % ord(c) if ord(c) > 0xFFFF
+                         else "\\u007f" if c == "\x7f"
+                         else json.dumps(c)[1:-1] for c in s) + '"'
+
+
 def _key(k):
-    return k if _BARE.match(k) else json.dumps(k)
+    return k if _BARE.match(k) else _string(k)
 
 
 def _scalar(v):
@@ -78,12 +92,30 @@ def _scalar(v):
     if isinstance(v, (int, float)):
         return repr(v)
     if isinstance(v, str):
-        return json.dumps(v)
+        return _string(v)
     if isinstance(v, list):
         return "[" + ", ".join(_scalar(x) for x in v) + "]"
     if isinstance(v, dict):
         return "{" + ", ".join(f"{_key(k)} = {_scalar(x)}" for k, x in v.items()) + "}"
     raise TypeError(f"unsupported value: {type(v).__name__}")
+
+
+def _unwritable(v):
+    """Why `v` cannot go into the file, or None. TOML has no null, and half a
+    surrogate pair is not a character — both used to end in a traceback from
+    save() instead of an answer."""
+    if v is None:
+        return "null has no place in ewe.conf (unset the key instead)"
+    if isinstance(v, str):
+        return "not text: half a surrogate pair" if any(0xD800 <= ord(c) <= 0xDFFF for c in v) else None
+    if isinstance(v, dict):
+        v = list(v) + list(v.values())
+    if isinstance(v, (list, tuple)):
+        for x in v:
+            why = _unwritable(x)
+            if why:
+                return why
+    return None
 
 
 # Section comments — regenerated on every write, so the file explains itself.
@@ -213,7 +245,7 @@ def save(doc):
     tomllib.loads(text)  # never persist something we cannot read back
     fd, tmp = tempfile.mkstemp(dir=EWE_DIR, prefix=".ewe.conf.")
     try:
-        with os.fdopen(fd, "w") as f:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:   # the section notes are not ASCII; TOML is UTF-8
             f.write(text)
         os.replace(tmp, CONF)
     except BaseException:
@@ -2657,6 +2689,8 @@ def main(argv):
         print(json.dumps(v) if isinstance(v, (dict, list, bool)) else v)
     elif cmd == "set" and len(argv) == 3:
         ok, val = validate(argv[1], parse_value(argv[2]))
+        if ok and _unwritable(val):
+            ok, val = False, _unwritable(val)
         if not ok:
             print(json.dumps({"error": "bad-value", "key": argv[1], "message": val}), file=sys.stderr)
             return 1
@@ -2680,6 +2714,9 @@ def main(argv):
         # legacy adapter: a full user-theme.json object from a Settings UI —
         # the jk→conf mapping stays HERE so no caller ever duplicates it
         ut = json.loads(argv[2])
+        if _unwritable(ut):
+            print(json.dumps({"error": "bad-value", "key": "user-theme", "message": _unwritable(ut)}), file=sys.stderr)
+            return 1
         with locked():
             doc = load()
             for ck, jk, dflt in THEME_MAP:
