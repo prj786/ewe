@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "id": "ewe.mail",
   "name": "Mail",
-  "version": "1.2.0",
+  "version": "2.0.0",
   "apiVersion": 3,
-  "description": "Unread mail from your IMAP account or Gmail: an Inbox page in Quick settings, an envelope with the count in the bar, and a notification for new mail.",
+  "description": "Unread mail from every account in ewe Mail (Gmail and any other mailbox): an Inbox page in Quick settings, an envelope with the count in the bar, and a notification for new mail that opens it in ewe Mail.",
   "homepage": "https://github.com/prj786/ewe-plugin-mail",
   "author": "prj786",
   "icon": "icMail",
@@ -33,12 +33,11 @@
   ],
   "requires": {
     "packages": [
-      "python"
+      "ewe-mail"
     ],
     "commands": [
-      "python3",
-      "notify-send",
-      "xdg-open"
+      "ewe-mail-app",
+      "notify-send"
     ]
   },
   "settings": [
@@ -47,7 +46,7 @@
       "type": "bool",
       "default": true,
       "label": "Notifications for new mail",
-      "description": "A notification for each new message while you are signed in. The bell on the Inbox page in Quick settings flips the same switch."
+      "description": "A notification for each new message while you are signed in; a click opens it in ewe Mail. The bell on the Inbox page in Quick settings flips the same switch."
     }
   ]
 }

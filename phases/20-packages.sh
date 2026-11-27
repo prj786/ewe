@@ -80,7 +80,7 @@ phase_packages() {
         [ "${DEV:-0}" = "1" ] && printf '%s   dev:%s    %s\n' "$C_DIM" "$C_0" "${dev[*]}"
         [ "${GAMING:-0}" = "1" ] && printf '%s   gaming:%s %s\n' "$C_DIM" "$C_0" "${game[*]}"
         printf '%s   source:%s Reversal-icon-theme (all variants), mocu-xcursor → /usr/share/icons\n' "$C_DIM" "$C_0"
-        printf '%s   releases:%s komble-arch (the software manager), ewe-settings (ewe Settings), ewe-sync (ewe Sync, the account app), ewe-cast (ewe Cast, the casting daemon), eep (apps, one card each) — prebuilt GitHub release, source-build fallback\n' "$C_DIM" "$C_0"
+        printf '%s   releases:%s komble-arch (the software manager), ewe-settings (ewe Settings), ewe-sync (ewe Sync, the account app), ewe-cast (ewe Cast, the casting daemon), ewe-mail (ewe Mail), eep (apps, one card each) — prebuilt GitHub release, source-build fallback\n' "$C_DIM" "$C_0"
         printf '%s   patched:%s %s — official packages rebuilt with not-yet-released upstream fixes (packages/patched/*, self-retiring)\n' "$C_DIM" "$C_0" "$(ls "$DOTREPO/packages/patched" 2>/dev/null | tr '\n' ' ')"
         return 0
     fi
@@ -169,6 +169,10 @@ phase_packages() {
     # document defaults (Nemo, mpv, Zathura and imv left the lists). Tauri, like
     # the apps above; a dependency of the ewe PACKAGE; this covers get.sh.
     install_release_pkg ewe-apps prj786/ewe-apps https://github.com/prj786/ewe-apps.git
+    # ewe Mail (0.51) — your mail: Gmail and any other account, the mailto:
+    # handler, the Mail plugin's one source. Tauri like the apps above; a
+    # dependency of the ewe PACKAGE; this covers get.sh.
+    install_release_pkg ewe-mail prj786/ewe-mail https://github.com/prj786/ewe-mail.git
     # eep — the app manager (RFC-010, 0.49): every app is a card in
     # ~/Applications — eep's own (from the Nix binary cache) and every app
     # already on the machine. A dependency of the ewe PACKAGE (it pulls

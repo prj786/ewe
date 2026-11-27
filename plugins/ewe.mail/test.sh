@@ -41,7 +41,7 @@ print("IPC-OK")
 PY
 check "IpcHandler ewe.mail + mail: refresh fetch setNotify status" "grep -q IPC-OK '$SB/ipc.chk'" || cat "$SB/ipc.chk"
 
-# 3. the status reply — the field set the shell's Mail.qml returned, in order ─
+# 3. the status reply — the field set the shell's Mail.qml returned, in order (kept in 2.0) ─
 python3 - <<'PY' > "$SB/status.chk" 2>&1 || true
 import re
 s = open("Inbox.qml").read()
@@ -53,21 +53,24 @@ print("STATUS-OK")
 PY
 check "status JSON has the shell's 13 fields in the shell's order" "grep -q STATUS-OK '$SB/status.chk'" || cat "$SB/status.chk"
 
-# 4. Rule 2: no secret ever persisted ─────────────────────────────────────────
+# 4. Rule 2 + one source: ewe Mail answers, the plugin holds no secret ────────
 python3 - <<'PY' > "$SB/secret.chk" 2>&1 || true
 import re
 s = open("Inbox.qml").read()
 writes = re.findall(r'_atomicWrite\([^,]+,\s*ml\.(\w+),\s*JSON\.stringify\(\{(.*?)\}\)\)', s, re.S)
-assert len(writes) == 2, writes
+assert len(writes) == 1, writes
 for path, fields in writes:
     assert not re.search(r'token|password|secret', fields, re.I), (path, fields)
-assert "_accessToken" in s and "access_token" in s        # the token exists in memory…
-assert not re.search(r'JSON\.stringify\([^)]*_accessToken', s)   # …and is never serialised
-assert '"token", "--json"' in s                           # the broker, not a refresh token of our own
+code = "\n".join(l for l in s.splitlines() if not l.strip().startswith("//"))
+# 2.0: the one source is ewe Mail — no Gmail API, no broker, no IMAP CLI here
+assert "ewe-mail-app --inbox" in code
+for gone in ("ewe-auth", "gmail.googleapis.com", "access_token", '"unseen"', "XMLHttpRequest"):
+    assert gone not in code, gone
 print("SECRET-OK")
 PY
-check "state files hold no token/password; token only via ewe-auth" "grep -q SECRET-OK '$SB/secret.chk'" || cat "$SB/secret.chk"
-check "legacy state paths kept (mail-state.json, google-mail.json)" "grep -q 'quickshell/mail-state.json' Inbox.qml && grep -q 'quickshell/google-mail.json' Inbox.qml"
+check "one source (ewe-mail-app --inbox); no token, broker or Gmail API in the plugin" "grep -q SECRET-OK '$SB/secret.chk'" || cat "$SB/secret.chk"
+check "the pre-plugin state path kept (mail-state.json)" "grep -q 'quickshell/mail-state.json' Inbox.qml"
+check "rows and notifications open ewe Mail at the message" "grep -q '\"ewe-mail-app\", \"--open\"' Inbox.qml && grep -q 'exec ewe-mail-app --open' Inbox.qml"
 
 # 5. Rule 8 — Theme tokens only ───────────────────────────────────────────────
 check "no raw hex colours in QML" "! grep -nE '#[0-9a-fA-F]{3,8}\\b' *.qml"
