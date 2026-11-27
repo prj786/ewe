@@ -43,6 +43,8 @@ enabled, so read it first. Enabling and disabling restart the shell
                                        moved to <id>.bak.<stamp> instead
     validate <path>                    check a manifest + its entry points (exit 1 on problems)
     restore [--yes]                    clone every plugin ewe.conf knows that is not here
+    restore --bundled [--no-restart]   only the first-party ones, copied from the payload —
+                                       after a restore from the account; never a clone (JSON)
     install <id> [--no-restart]        a first-party plugin from the payload: copy, source
                                        bundled, enable (JSON)
     migrate [--no-restart] [--fresh]   one-time: install the plugins that replace features an
@@ -872,6 +874,17 @@ def missing_ids(plugins):
     return [p["id"] for p in plugins if not p["installed"] and p["source"] and p["source"] not in ("local", "bundled")]
 
 
+def missing_bundled(plugins):
+    """The first-party plugins ewe.conf lists that are not on this machine and
+    that the payload ships — what a restore from the account leaves behind
+    (source bundled, or enabled with no source at all: an older file).
+    `missing_ids` never counted them, so a restored desktop came back without
+    its dock and nothing said so."""
+    payload_ids = {pid for pid, _, _, problems in payload_plugins() if not problems}
+    return [p["id"] for p in plugins if not p["installed"]
+            and (p["source"] == "bundled" or (p["enabled"] and not p["source"])) and p["id"] in payload_ids]
+
+
 # ── the payload: plugins/<id>/ + plugins/bundle.json ──────────────────────────
 
 def bundle_meta(src_dir=None):
@@ -1287,7 +1300,45 @@ def fetch(src, expect_id=None):
     return m, dest
 
 
+def restore_bundled(args):
+    """ewe-plugin restore --bundled [--no-restart] — after a restore from the
+    account (this ewe.conf was another computer's): the first-party plugins it
+    lists, copied out of the payload, which is what the installer's plugins
+    step does. One JSON object, nothing asked:
+      installed  ids copied in now (on or off as the file says)
+      enabled    those of them that are on — the shell loads them at its next start
+      needs      [{id, packages}] left out: their declared packages are not
+                 installed here. Komble → Plugins → Install puts the packages
+                 in first; a plugin that is already installed has no such button
+      failed     ids the payload copy refused (a linked working copy, …)
+      missing    the git-sourced ones (as `list --json`): cloning stays a
+                 question — `ewe-plugin restore`, Komble → Plugins
+      restart    an enabled plugin was installed and the shell did not restart
+    Never a git clone, never a package install, never plugin code run."""
+    installed, needs, failed = [], [], []
+    for pid in missing_bundled(scan()):
+        _, m, _ = payload_find(pid)
+        pk = check_requires(_requires(m or {}))["packages"]
+        if pk:
+            needs.append({"id": pid, "packages": pk})
+            continue
+        try:
+            install_from_payload(pid, enable=False)
+            installed.append(pid)
+        except SystemExit:               # die(): this one stays missing, the others go on
+            failed.append(pid)
+    on = [pid for pid in installed if pid in conf_state()[0]]
+    restarted = False
+    if installed:                        # the keybinds are written either way
+        restarted = restart_shell(bool(on) and "--no-restart" not in args, quiet=True)
+    print(json.dumps({"ok": True, "installed": installed, "enabled": on, "needs": needs,
+                      "failed": failed, "missing": missing_ids(scan()),
+                      "restart": bool(on) and not restarted, "restarted": restarted}))
+
+
 def cmd_restore(args):
+    if "--bundled" in args:
+        return restore_bundled(args)
     yes = "--yes" in args
     plugins = scan()
     todo = missing_ids(plugins)
@@ -1295,9 +1346,7 @@ def cmd_restore(args):
     # add-ons this ewe.conf had (source bundled, or enabled and in the
     # payload) come from the payload, not from git — the synced-file case
     # on a second machine, and the Welcome flow's restore step
-    payload_ids = {pid for pid, _, _, problems in payload_plugins() if not problems}
-    bundled = [p["id"] for p in plugins if not p["installed"]
-               and (p["source"] == "bundled" or (p["enabled"] and not p["source"])) and p["id"] in payload_ids]
+    bundled = missing_bundled(plugins)
     got_bundled = []
     for pid in bundled:
         m, dest = install_from_payload(pid, enable=False)
@@ -1337,6 +1386,9 @@ def cmd_list(args):
         print(json.dumps({"ok": True, "apiVersion": API_VERSION, "apiVersions": list(API_VERSIONS),
                           "dir": PLUGINS_DIR, "payload": PAYLOAD_PLUGINS,
                           "plugins": plugins, "missing": missing_ids(plugins),
+                          # first-party ones ewe.conf lists and this machine
+                          # lacks (`restore --bundled` copies them in)
+                          "missingBundled": missing_bundled(plugins),
                           # the add-ons catalogue (Komble, Welcome) and the
                           # bundled ids the user removed — offered back from there
                           "available": available_list(plugins),

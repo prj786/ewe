@@ -458,6 +458,16 @@ migration). `removed = ["ewe.clipboard"]` lists the bundled ones you took
 away with `ewe-plugin remove`, so a later ewe update does not bring them
 back (`ewe-plugin install <id>` or `seed --restore <id>` clears the entry).
 
+After a restore from the account the file lists another computer's plugins.
+`ewe-plugin restore --bundled` copies the first-party ones back out of the
+payload (the desktop's restore and the installer's plugins step do this for
+you), on or off as the file says. It never clones: git-sourced plugins wait
+for `ewe-plugin restore` or Komble → Plugins. A first-party plugin whose
+declared packages are not installed is left out too and reported under
+`needs` — Komble's Install puts the packages in first. `ewe-plugin list
+--json` names the first-party ones still absent as `missingBundled`
+(`missing` is the git-sourced ones).
+
 ### `[plugins.widgets]` and `[plugins.settings]`
 
 Per plugin, keyed by id (quoted — ids carry a dot). `widgets."acme.clock" =
