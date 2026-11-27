@@ -9,6 +9,8 @@
 #     mute=1|0                         # video audio (default 1 = muted)
 #     *=/path/to/default.{png,gif,mp4,…}   # outputs without their own line
 #     DP-1=/path/to/that-monitor.…         # per-output override
+# No file, no `*` line, or a path that is not on this computer: the wallpaper
+# ewe ships (system/branding/wallpapers/ewe-dark.png) — never a flat colour.
 #
 # Backend by file type — chosen automatically:
 #     video (mp4/webm/mkv/mov/avi/m4v) → mpvpaper          (required for video)
@@ -58,9 +60,15 @@ if [ -r "$CONF" ]; then
     done < "$CONF"
 fi
 
-# drop images that no longer exist so a dead path can't black out the desktop
-[ -n "$DEFAULT" ] && [ ! -r "$DEFAULT" ] && DEFAULT=""
-for o in "${!PER[@]}"; do [ -r "${PER[$o]}" ] || unset 'PER[$o]'; done
+# Drop the files that are not on THIS computer, so a dead path can't blank the
+# desktop. It happens without anyone deleting anything: ewe.conf syncs, and a
+# wallpaper picked on another computer names a file in that one's home
+# (/home/<someone else>/Downloads/…). MISSING keeps them for the note below.
+MISSING=()
+if [ -n "$DEFAULT" ] && [ ! -r "$DEFAULT" ]; then MISSING+=("$DEFAULT"); DEFAULT=""; fi
+for o in "${!PER[@]}"; do
+    [ -r "${PER[$o]}" ] || { MISSING+=("${PER[$o]}"); unset 'PER[$o]'; }
+done
 
 # legacy single-image fallback when nothing (valid) is configured
 if [ -z "$DEFAULT" ] && [ "${#PER[@]}" -eq 0 ]; then
@@ -73,6 +81,24 @@ if [ -z "$DEFAULT" ] && [ "${#PER[@]}" -eq 0 ]; then
         if [ -n "$f" ] && [ -r "$f" ]; then DEFAULT="$f"; break; fi
     done
 fi
+
+# Still nothing for the displays without a picture of their own: the wallpaper
+# ewe ships. Never a flat colour while that file exists — a fresh account with
+# no wallpapers.conf yet, and a synced path that is not on this computer, both
+# came up grey before (2026-11-27). Looked for beside this script first (the
+# tree it runs from: ~/.config/hypr is a link into it), then where every kind
+# of install keeps the payload.
+SHIPPED=""
+_self="$(readlink -f "$0" 2>/dev/null || true)"
+for f in \
+    "${_self%/dotfiles/hypr/scripts/*}/system/branding/wallpapers/ewe-dark.png" \
+    "${EWE_HOME:-$HOME/.local/share/ewe}/system/branding/wallpapers/ewe-dark.png" \
+    /usr/share/ewe/system/branding/wallpapers/ewe-dark.png
+do
+    if [ -r "$f" ]; then SHIPPED="$f"; break; fi
+done
+unset _self
+[ -z "$DEFAULT" ] && DEFAULT="$SHIPPED"
 
 have() { command -v "$1" >/dev/null 2>&1; }
 SWWW="$(command -v swww || command -v awww || true)"
@@ -87,6 +113,17 @@ VIDBACK=""
 have mpvpaper && VIDBACK=mpvpaper
 
 if [ "$QUERY" -eq 1 ]; then echo "img=${IMGBACK:-none} video=${VIDBACK:-none}"; exit 0; fi
+
+# Say what happened to a picture that is not here (Settings shows this line).
+# The choice itself stays in ewe.conf — on the computer that has the file it
+# is still the wallpaper.
+if [ "${#MISSING[@]}" -gt 0 ]; then
+    if [ -n "$DEFAULT" ]; then
+        echo "note: ${MISSING[0]} is not on this computer — showing the default wallpaper instead"
+    else
+        echo "note: ${MISSING[0]} is not on this computer"
+    fi
+fi
 
 is_video() { case "${1##*.}" in mp4|webm|mkv|mov|avi|m4v|MP4|WEBM|MKV|MOV|AVI|M4V) return 0 ;; *) return 1 ;; esac }
 is_gif()   { case "${1##*.}" in gif|GIF) return 0 ;; *) return 1 ;; esac }
@@ -121,6 +158,8 @@ st=0
 if [ "${#VID[@]}" -gt 0 ] && [ -z "$VIDBACK" ]; then
     echo "error: a video wallpaper is set but mpvpaper is not installed — sudo pacman -S mpvpaper"
     st=1
+    # the displays that were to play it still get a picture
+    if [ -n "$SHIPPED" ]; then for o in "${!VID[@]}"; do IMG["$o"]="$SHIPPED"; done; fi
     VID=()
 fi
 if [ "$IMGBACK" = "swaybg" ]; then
@@ -129,7 +168,9 @@ if [ "$IMGBACK" = "swaybg" ]; then
     done
 fi
 
-# nothing to show → solid Gruvbox background so the root is never garbage
+# nothing to show → solid background so the root is never garbage. Only a
+# broken install gets here now (no shipped wallpaper to fall back to above),
+# or a video-only setup on a machine without mpvpaper.
 if [ "${#IMG[@]}" -eq 0 ] && [ "${#VID[@]}" -eq 0 ]; then
     if have swaybg; then
         if [ "$REAPPLY" -eq 1 ] || ! pgrep -x swaybg >/dev/null 2>&1; then
