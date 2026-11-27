@@ -4,8 +4,11 @@
 # machine id) against tests/mock-nextcloud.py. No network, nothing real
 # touched. Checks:
 #   * no [sync].provider + a Nextcloud sign-in (cloud.json) → nextcloud
-#   * a machine joining the account takes the account's value on a conflict,
-#     keeps keys only it has, and never takes LOCAL_ONLY paths
+#   * a machine that never synced neither merges nor uploads while the
+#     account holds a file (remote-exists) — not from `sync`, not from the
+#     sync that follows a write; its own lost first upload is still adopted
+#   * a machine joining the account (`sync --join`) takes the account's value
+#     on a conflict, keeps keys only it has, and never takes LOCAL_ONLY paths
 #   * a key only one side changed takes that change, both ways
 #   * a deletion on one side carries over
 #   * the same key changed on both: the newer file wins
@@ -33,8 +36,15 @@ fail() { echo "FAIL  $*" >&2; exit 1; }
 ok()   { echo "ok  $*"; }
 jget() { python3 -c "import json,sys; print(json.load(sys.stdin)$2)" <<<"$1"; }
 etag() { curl -s -u "$NC_AUTH" -X PROPFIND -H 'Depth: 0' "$NC_DAV/ewe.conf" | grep -o '<d:getetag>[^<]*' ; }
+nc_fault() {   # nc_fault <switch> <file> — arm one of mock-nextcloud.py's fault switches
+    python3 - "$WORK/nc.json" "$1" "$2" <<'PY'
+import json, sys
+p, k, v = sys.argv[1:]
+s = json.load(open(p)); s[k] = v; json.dump(s, open(p, "w"))
+PY
+}
 
-for m in a b; do
+for m in a b c; do
     mkdir -p "$WORK/$m/config/ewe" "$WORK/$m/state" "$WORK/$m/run"
     echo "machine-$m-0123456789" > "$WORK/$m/machine-id"
     # signed in to the ewe account, and NO [sync].provider in the file
@@ -105,8 +115,50 @@ r=$(on a sync --no-hooks)
 [ "$(get a sync.provider)" = "nextcloud" ] || fail "A did not record its provider"
 ok "the first machine pushes and records provider = nextcloud"
 
-# 3 · B joins: account wins the conflict, B keeps what only it has + its own devices
+# 2b · B never synced and the account holds A's file: whose settings win is
+# the user's answer (restore, keep this computer's, or join) — no sync gives
+# it for them. 2026-11-27: signing in sets sync.enabled, and the sync that
+# followed 2 s later merged the account into the new machine and pushed the
+# new machine's app list over the backup's, before the restore offer showed.
+before=$(etag); bconf=$(cat "$WORK/b/config/ewe/ewe.conf")
 r=$(on b sync --no-hooks)
+[ "$(jget "$r" "['ok']")" = "False" ] && [ "$(jget "$r" "['error']")" = "remote-exists" ] || fail "a never-synced machine's sync must be refused: $r"
+[ "$(jget "$r" "['remote']['appProperties']['machine']")" = "$(uname -n)" ] || fail "remote-exists should name who saved the backup: $r"
+[ "$(cat "$WORK/b/config/ewe/ewe.conf")" = "$bconf" ] || fail "a refused sync changed B's file"
+[ "$before" = "$(etag)" ] || fail "a refused sync uploaded"
+on b set --no-hooks sync.enabled true >/dev/null          # what signing in does; a sync follows by itself
+refused() { local n; n=$(grep -c remote-exists "$WORK/b/state/ewe/sync.log" 2>/dev/null || true); echo "${n:-0}"; }
+for _ in $(seq 1 40); do
+    [ "$(refused)" -ge 2 ] && break
+    sleep 0.5
+done
+[ "$(refused)" -ge 2 ] || fail "the sync after a write never ran, or was not refused: $(cat "$WORK/b/state/ewe/sync.log")"
+[ "$(get b desktop.theme.accent)" = "#0000ff" ] || fail "the sync after a write merged the account into B: $(get b desktop.theme.accent)"
+[ "$(get b desktop.layout.gaps_in)" = "<unset>" ] || fail "the sync after a write brought A's keys to B"
+[ "$before" = "$(etag)" ] || fail "the sync after a write uploaded B's file over the backup"
+curl -s -u "$NC_AUTH" "$NC_DAV/ewe.conf" | grep -q 'a-only' || fail "the backup's app list is gone from the account"
+r=$(on b sync-status)
+[ "$(jget "$r" "['conflict']")" = "remote-exists" ] && [ "$(jget "$r" "['local_synced_at']")" = "" ] \
+    || fail "B must still read as never synced with a backup waiting (the restore offer keys on it): $r"
+on b set --no-hooks sync.enabled false >/dev/null
+ok "a machine that never synced neither merges nor uploads while the account holds a file (remote-exists)"
+
+# 2c · …but its OWN first upload whose reply was lost is no question: the
+# account then holds a file this machine has no record of, with the bytes it
+# sent. (its own folder in the account, so the account is empty for it)
+printf 'schema = 1\n\n[desktop.theme]\naccent = "#c0ffee"\n\n[sync]\nenabled = false\nfolder = "lost"\n' > "$WORK/c/config/ewe/ewe.conf"
+nc_fault drop_reply ewe.conf
+r=$(on c sync --no-hooks)
+[ "$(jget "$r" "['ok']")" = "False" ] || fail "a dropped reply must fail this sync: $r"
+curl -sf -u "$NC_AUTH" "$NC/remote.php/dav/files/tester/lost/ewe.conf" | grep -q 'c0ffee' || fail "the mock did not store C's upload"
+r=$(on c sync --no-hooks)
+[ "$(jget "$r" "['ok']")" = "True" ] || fail "C's own interrupted first upload read as someone else's backup: $r"
+r=$(on c sync-status)
+[ "$(jget "$r" "['conflict']")" = "None" ] && [ "$(jget "$r" "['local_synced_at']")" != "" ] || fail "C not in step after adopting its own upload: $r"
+ok "a first upload whose reply was lost is adopted as this machine's own"
+
+# 3 · B joins (the explicit merge): account wins the conflict, B keeps what only it has + its own devices
+r=$(on b sync --join --no-hooks)
 [ "$(jget "$r" "['ok']")" = "True" ] || fail "B join: $r"
 [ "$(get b desktop.theme.accent)" = "#ff0000" ] || fail "B should take the account's accent: $(get b desktop.theme.accent)"
 [ "$(get b desktop.layout.gaps_in)" = "5" ] || fail "B should gain gaps_in"

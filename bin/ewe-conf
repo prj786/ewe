@@ -22,8 +22,11 @@ artifact of `ewe-conf apply`.
     ewe-conf push [--force]           upload the file to the account (RFC-005:
                                       [sync].provider = nextcloud | google)
     ewe-conf pull [--out PATH]        download it — then `apply` to make it live
-    ewe-conf sync [--settle]          pull + merge key by key + push (0.33); --settle
-                                      waits out the push throttle first (after a write)
+    ewe-conf sync [--settle] [--join] pull + merge key by key + push (0.33); --settle
+                                      waits out the push throttle first (after a write).
+                                      A machine that never synced is refused while the
+                                      account holds a file (remote-exists): pull, push
+                                      --force, or --join to merge the two
     ewe-conf sync-status              the remote copy + this machine's sync record
 
 Python stdlib only: tomllib reads, the constrained emitter below writes (our
@@ -2210,7 +2213,7 @@ def _changed_paths(a, b, path=()):
     return [] if a == b else [".".join(path)]
 
 
-def _sync_once(cfg, be, hooks):
+def _sync_once(cfg, be, hooks, join=False):
     remote, err = be["find"]()
     if err:
         return {"ok": False, "error": err, "provider": cfg["provider"]}
@@ -2224,6 +2227,21 @@ def _sync_once(cfg, be, hooks):
             return {"ok": False, "error": "no-local-file", "provider": cfg["provider"]}
         return dict(_push_content(cfg, be, local, rec, None), action="pushed")
     known = rec.get("provider", "google") == cfg["provider"] and bool(rec.get("id"))
+    if not known and not join:
+        # This machine never synced and the account already holds a file:
+        # whose settings win is the user's answer, never a sync's. Signing in
+        # sets sync.enabled, and the sync that followed 2 s later merged the
+        # account in and pushed this machine's app list over the backup's —
+        # before the restore question was even on screen (2026-11-27). The
+        # answers: `pull` (bring everything back), `push --force` (keep this
+        # computer's), `sync --join` (merge the two). `_resolve` still adopts
+        # the one remote that is no question: this machine's own first
+        # upload whose reply was lost.
+        verdict, rec = _resolve(rec, remote, cfg, False, be)
+        if verdict:
+            return {"ok": False, "error": verdict, "remote": remote, "provider": cfg["provider"],
+                    "remote_is_this_machine": _is_this_machine(remote), "never_synced": True}
+        known = True
     if known and _guard(rec, remote, cfg, False) is None:
         # the account still holds what this machine last synced; `local_sha`
         # is this file as it was then, when only LOCAL_ONLY keys set the two
@@ -2280,9 +2298,11 @@ def _sync_once(cfg, be, hooks):
     return out
 
 
-def do_sync(hooks=True):
+def do_sync(hooks=True, join=False):
     """pull + merge + push, one at a time per machine (SYNC_LOCK). A push that
-    races another machine's save (412) starts over from the new remote."""
+    races another machine's save (412) starts over from the new remote.
+    `join`: a machine that never synced merges into an account that already
+    holds a file (`sync --join`); without it that is refused, remote-exists."""
     _adopt_network()
     cfg = sync_cfg()
     be, err = _backend(cfg)
@@ -2292,8 +2312,8 @@ def do_sync(hooks=True):
     with open(SYNC_LOCK, "w") as lk:
         fcntl.flock(lk, fcntl.LOCK_EX)
         for _ in range(3):
-            res = _sync_once(cfg, be, hooks)
-            if res.get("error") not in ("remote-newer", "remote-exists"):
+            res = _sync_once(cfg, be, hooks, join)
+            if res.get("never_synced") or res.get("error") not in ("remote-newer", "remote-exists"):
                 break
     return res
 
@@ -2630,7 +2650,7 @@ def main(argv):
         if "--settle" in argv:
             print(json.dumps(settle_sync(hooks=hooks)))
         else:
-            print(json.dumps(_sync_log("sync", do_sync(hooks=hooks))))
+            print(json.dumps(_sync_log("sync", do_sync(hooks=hooks, join="--join" in argv))))
     elif cmd == "push":
         print(json.dumps(_sync_log("push", do_push(quiet="--quiet" in argv, force="--force" in argv))))
     elif cmd == "pull":
