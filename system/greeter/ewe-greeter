@@ -22,6 +22,8 @@
 #                               server-side decorations, so Qt would draw its
 #                               OWN titlebar (min/max/close) around the greeter
 #                               — "in a window"; no CSD = borderless/fullscreen
+#   XKB_DEFAULT_LAYOUT/VARIANT/OPTIONS  the keyboards the password is typed
+#                               with — see the block below
 # Runs the QML greeter, falling back to ReGreet if qs exits nonzero (a QML
 # error must never lock you out of login).
 export WLR_NO_HARDWARE_CURSORS=1
@@ -33,15 +35,46 @@ export XDG_CACHE_HOME="${XDG_CACHE_HOME:-/tmp/ewe-greeter}"
 export QT_QPA_PLATFORM=wayland
 export QT_WAYLAND_DISABLE_WINDOWDECORATION=1
 
+# The login screen types with the machine's keyboards: its X11 keymap, which
+# is localectl's (/etc/X11/xorg.conf.d/00-keyboard.conf — the ISO installer
+# writes it from its Keyboard screen, `localectl set-x11-keymap us,ge`
+# rewrites it). cage takes libxkbcommon's XKB_DEFAULT_*, and nothing set them:
+# the password was typed in US English whatever the desktop started with.
+# Read at every start, so a change needs only `systemctl restart greetd`.
+# The first layout is the one the screen starts on; with several, Super+Space
+# switches, as on the desktop. No file, or no layout in it: libxkbcommon's
+# default (US), as before. A value greetd's own environment already carries
+# is left alone.
+#
+# This block lives HERE since 2026-11-27. The ISO (ewe-os 0.17) spliced it
+# into the wrapper it generated at install time — and the first upgrade of the
+# ewe package replaces that wrapper with this file (packaging/ewe.install),
+# which had no such block: the login screen went back to US English.
+_kb=/etc/X11/xorg.conf.d/00-keyboard.conf
+if [ -z "${XKB_DEFAULT_LAYOUT:-}" ] && [ -r "$_kb" ]; then
+    _l=$(sed -n 's/^[[:space:]]*Option[[:space:]]*"XkbLayout"[[:space:]]*"\([^"]*\)".*/\1/p' "$_kb" | head -n 1)
+    _v=$(sed -n 's/^[[:space:]]*Option[[:space:]]*"XkbVariant"[[:space:]]*"\([^"]*\)".*/\1/p' "$_kb" | head -n 1)
+    if [ -n "$_l" ]; then
+        export XKB_DEFAULT_LAYOUT="$_l"
+        [ -n "$_v" ] && export XKB_DEFAULT_VARIANT="$_v"
+        case "$_l" in *,*) export XKB_DEFAULT_OPTIONS=grp:win_space_toggle ;; esac
+    fi
+fi
+unset _kb _l _v
+
 # greetd points the greeter's stdio at its VT (tty1), and cage runs wlroots at
 # INFO: every backend/EGL line lands on tty1 in bold blue — visible while the
 # greeter "loads" (before cage is DRM master) and again the instant cage exits
 # on login, until Hyprland takes the screen (the blue text of 2026-09-20). Wipe
 # the VT while stdout still is it, then keep the chatter in a file. A failed
 # open falls back to /dev/null: under `sh` a failed `exec >` ends the script,
-# and that would lock the login out.
+# and that would lock the login out. The probe runs in a SUBSHELL for the same
+# reason — `:` is a special builtin too, and a redirection that fails on one
+# ends a POSIX shell just the same (the plain `: >"$_log"` this replaces did
+# exactly that when the log could not be written: no cage, no login screen —
+# tests/ewe-greeter-test.sh, 2026-11-27).
 printf '\033[H\033[2J\033[3J'
 mkdir -p "$XDG_CACHE_HOME" 2>/dev/null
 _log="$XDG_CACHE_HOME/greeter.log"
-if : >"$_log" 2>/dev/null; then exec >"$_log" 2>&1; else exec >/dev/null 2>&1; fi
+if ( : >"$_log" ) 2>/dev/null; then exec >"$_log" 2>&1; else exec >/dev/null 2>&1; fi
 exec cage -s -- sh -c "qs -c ewe-greeter || regreet"
