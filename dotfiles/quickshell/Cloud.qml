@@ -104,6 +104,7 @@ QtObject {
                 remoteMachine: cl.cloudInfo ? String(cl.cloudInfo.device || "") : "",
                 remoteModified: cl.cloudInfo ? String(cl.cloudInfo.updatedAt || "") : "",
                 restoreSummary: cl.restoreSummary, restoreApps: cl.restoreApps, pendingRestore: cl.pendingRestore,
+                restorePlugins: cl.restorePlugins, restoredPlugins: cl.restoredPlugins,
                 filesMounted: cl.filesMounted, filesPath: cl.filesPath, loginName: cl.loginName,
                 calState: cl.calState, eventCount: cl.events.length
             })
@@ -307,7 +308,8 @@ QtObject {
     property var cloudInfo: null         // { device, updatedAt } of the copy in the account
     property string localSyncedAt: ""    // ewe-conf's own record: when THIS machine last synced
     property int restoreApps: 0          // apps the last restore left waiting in Komble
-    property int restorePlugins: 0       // plugins the pulled file knows that are not installed here
+    property int restorePlugins: 0       // the backup's plugins still waiting there: git ones, and first-party ones that need packages
+    property int restoredPlugins: 0      // first-party plugins the last restore copied in from the payload
     // "3 apps and 2 plugins are waiting" — one phrase for the toast and the Welcome card
     function restorePhrase() {
         var a = cl.restoreApps, p = cl.restorePlugins, parts = []
@@ -517,6 +519,7 @@ QtObject {
     property Connections _autoHook: Connections {
         target: Globals
         function onSettingsOpenChanged() { if (!Globals.settingsOpen && cl.autoPushAllowed()) cl._autoPushTimer.restart() }
+        function onWelcomeOpenChanged() { cl._pluginsRestart() }
     }
     // Komble and ewe-settings no longer poke the shell after a write: the one
     // file itself is the signal. Every change to ewe.conf — an install, a
@@ -550,6 +553,7 @@ QtObject {
         if (!cl.pendingRestore) return
         cl.pendingRestore = null
         cl.syncState = "syncing"
+        cl._restoreInWelcome = Globals.welcomeOpen
         _restoreProc.running = false; _restoreProc.running = true
     }
     property Process _restoreProc: Process {
@@ -573,8 +577,7 @@ QtObject {
                 cl.syncState = "idle"; cl.syncConflict = false
                 cl.restoreSummary = "Restored the machine file" + (j.machine ? " saved by “" + j.machine + "”" : "") + " from your account"
                     + (j.backup ? " (previous kept as " + String(j.backup).split("/").pop() + ")" : "") + "."
-                cl._manifestProc.running = false; cl._manifestProc.running = true
-                cl._pluginsProc.running = false; cl._pluginsProc.running = true
+                cl._afterRestore.running = false; cl._afterRestore.running = true
                 cl.checkCloud()
             }
         }
@@ -592,43 +595,85 @@ QtObject {
             Wallpaper.reapplied()
         }
     }
-    // after a restore: how many apps does the pulled file want back? ewe
-    // never installs anything — Komble's For-you pane does, when asked
-    property Process _manifestProc: Process {
-        command: [cl.eweConf, "get", "apps.installed"]
+    // After a restore, in this order (one process, so the notification below
+    // knows both): the backup's first-party plugins are copied in from the
+    // payload — what the installer's plugins step does —, then the apps the
+    // pulled file wants back are counted. ewe installs no package and clones
+    // nothing; Komble does, when asked.
+    //   Up to 0.50.1-beta a restored desktop came back without its dock: `missing`
+    //   (all that was counted) is the git-sourced plugins only, and nothing
+    //   was installed. Still waiting in Komble afterwards: git plugins
+    //   (cloning is a question) and first-party ones whose packages are not
+    //   installed here (Komble's Install puts those in first).
+    property Process _afterRestore: Process {
+        command: ["sh", "-c", '"$0" restore --bundled --no-restart 2>/dev/null; echo; "$1" get apps.installed 2>/dev/null',
+                  cl.ewePlugin, cl.eweConf]
         stdout: StdioCollector {
             onStreamFinished: {
-                var n = 0
-                try {
-                    var m = JSON.parse(this.text)
-                    if (m && typeof m === "object") {
-                        if (Array.isArray(m.packages)) n += m.packages.length
-                        if (Array.isArray(m.appimages)) n += m.appimages.length
+                var got = 0, wait = 0, first = "", n = 0
+                var ls = this.text.split("\n")
+                for (var i = 0; i < ls.length; i++) {
+                    var j = null
+                    try { j = JSON.parse(ls[i]) } catch (e) { continue }
+                    if (!j || typeof j !== "object") continue
+                    if (j.ok === true && Array.isArray(j.installed)) {          // ewe-plugin restore --bundled
+                        got = j.installed.length
+                        wait = (j.missing || []).length + (j.needs || []).length + (j.failed || []).length
+                        if (j.restart && Array.isArray(j.enabled) && j.enabled.length > 0) first = String(j.enabled[0])
+                    } else {                                                      // apps.installed
+                        if (Array.isArray(j.packages)) n += j.packages.length
+                        if (Array.isArray(j.appimages)) n += j.appimages.length
                     }
-                } catch (e) {}
-                cl.restoreApps = n
-                if (n === 0 && cl.restorePlugins === 0) { Log.info("cloud", "restore: the backup carries no app manifest — nothing for Komble"); return }
-                cl._appsNotify.running = false; cl._appsNotify.running = true
+                }
+                cl.restoreApps = n; cl.restorePlugins = wait; cl.restoredPlugins = got
+                cl._pluginsRestartId = first
+                cl._restoreNotify()
+                cl._pluginsRestart()
             }
         }
     }
-    // the same question for plugins: [plugins.sources] is the installed set of
-    // the machine that wrote the file; `missing` is what restore would fetch
-    property Process _pluginsProc: Process {
-        command: [cl.ewePlugin, "list", "--json"]
-        stdout: StdioCollector {
-            onStreamFinished: {
-                var n = 0
-                try { var j = JSON.parse(this.text); if (j && Array.isArray(j.missing)) n = j.missing.length } catch (e) {}
-                cl.restorePlugins = n
-            }
-        }
+    // Restored plugins load when the shell starts. Under the Welcome screen a
+    // restart would bring that screen back from its first step (its stamp is
+    // written at Finish), so there the restart waits for it to close;
+    // anywhere else the notification offers it — a restart drops that
+    // notification and an open Settings panel, so it is the user's click.
+    property string _pluginsRestartId: ""    // an enabled plugin the restore installed, "" = nothing to load
+    property bool _restoreInWelcome: false
+    function _pluginsRestart() {
+        if (cl._pluginsRestartId !== "" && cl._restoreInWelcome && !Globals.welcomeOpen) cl._pluginsRestartTimer.restart()
+    }
+    function _pluginsRestartNow() {
+        var id = cl._pluginsRestartId
+        cl._pluginsRestartId = ""
+        // the tool's own restart, as Welcome's Finish does it: `install` of an
+        // installed plugin is a no-op refresh plus the restart the crash guard expects
+        if (id !== "") Quickshell.execDetached([cl.ewePlugin, "install", id])
+    }
+    property Timer _pluginsRestartTimer: Timer { interval: 1500; onTriggered: cl._pluginsRestartNow() }   // Finish has written Welcome's stamp by then
+    function _restoreNotify() {
+        var waiting = cl.restoreApps + cl.restorePlugins > 0, got = cl.restoredPlugins
+        if (!waiting && got === 0) { Log.info("cloud", "restore: the backup carries no app manifest and no plugins — nothing for Komble"); return }
+        var plugs = got + (got === 1 ? " plugin" : " plugins")
+        var later = cl._pluginsRestartId !== "" && !cl._restoreInWelcome
+        var body = []
+        if (waiting) body.push("Your backup lists them under For you and Plugins — reinstalling is one click, never automatic.")
+        if (got > 0) body.push(plugs + " from your backup " + (got === 1 ? "is" : "are") + " installed"
+                               + (later ? " and " + (got === 1 ? "shows" : "show") + " after the desktop restarts." : "."))
+        var cmd = ["notify-send", "-a", waiting ? "Komble" : "ewe", "-i", waiting ? "system-software-install" : "cloud"]
+        if (waiting) cmd.push("-A", "open=Open Komble")
+        if (later) cmd.push("-A", "restart=Restart the desktop")
+        cmd.push(waiting ? cl.restorePhrase() : plugs + " restored", body.join(" "))
+        cl._appsNotify.command = cmd
+        cl._appsNotify.running = false; cl._appsNotify.running = true
     }
     property Process _appsNotify: Process {
-        command: ["notify-send", "-a", "Komble", "-i", "system-software-install", "-A", "open=Open Komble",
-                  cl.restorePhrase(),
-                  "Your backup lists them under For you and Plugins — reinstalling is one click, never automatic."]
-        stdout: StdioCollector { onStreamFinished: if (this.text.trim() === "open") Globals.openStore() }
+        stdout: StdioCollector {
+            onStreamFinished: {
+                var a = this.text.trim()
+                if (a === "open") Globals.openStore()
+                else if (a === "restart") cl._pluginsRestartNow()
+            }
+        }
     }
 
     // ══════════════════════════════════════════════════════════════════════════

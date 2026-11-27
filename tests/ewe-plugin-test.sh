@@ -344,5 +344,38 @@ $P add "$V3" --yes --enable --no-restart >/dev/null
 check "dev/add --no-restart: linked + copied + enabled, and systemctl never asked to restart" "[ -L '$SB/cfg/ewe/plugins/acme.clock' ] && [ -d '$SB/cfg/ewe/plugins/acme.v3demo' ] && ! grep -q restart '$SYSTEMCTL_LOG'"
 check "list --json: the v3 fixture's registries (tile span, page key, dock item, aliases none)" "$P list --json | jq 'p={x[\"id\"]:x for x in j[\"plugins\"]}[\"acme.v3demo\"]; assert p[\"quickTile\"][\"span\"]==2 and p[\"quickPage\"][\"key\"]==\"demo\" and p[\"dockItem\"][\"action\"]==\"acme.v3demo.toggle\" and p[\"barStatus\"] is not None and p[\"ipcAliases\"]==[], p'"
 
+# after a restore from the account: ewe.conf lists ANOTHER computer's plugins ---
+# (a second sandbox — a fresh machine with nothing installed — and a pacman
+# that knows no package, so "its packages are missing" does not depend on
+# the host). Before, `missing` was the git-sourced ones only: a restored
+# desktop came back without its dock, the count said 0, nothing installed.
+R="$SB/restored"; mkdir -p "$R/cfg/ewe" "$R/state" "$R/home"
+printf '#!/bin/sh\nexit 1\n' > "$SB/bin/pacman"; chmod +x "$SB/bin/pacman"
+cat > "$R/cfg/ewe/ewe.conf" <<'T'
+schema = 1
+
+[plugins]
+enabled = ["ewe.demo", "ewe.alias", "acme.git"]
+
+[plugins.sources]
+"ewe.demo" = "bundled"
+"ewe.dock" = "bundled"
+"ewe.alias" = "bundled"
+"acme.git" = "https://example.org/acme.git"
+T
+RP() { XDG_CONFIG_HOME="$R/cfg" XDG_STATE_HOME="$R/state" HOME="$R/home" "$P" "$@"; }
+: > "$SYSTEMCTL_LOG"
+j="$(RP list --json)"
+check "list --json: missingBundled = the first-party plugins the file lists and this machine lacks; missing stays the git ones" "echo '$j' | jq 'assert j[\"missingBundled\"]==[\"ewe.alias\",\"ewe.demo\",\"ewe.dock\"], j[\"missingBundled\"]; assert j[\"missing\"]==[\"acme.git\"], j[\"missing\"]'"
+r="$(RP restore --bundled --no-restart)"
+check "restore --bundled: copies them from the payload, never clones, one JSON object" "echo '$r' | jq 'assert j[\"ok\"] and j[\"installed\"]==[\"ewe.demo\",\"ewe.dock\"], j; assert j[\"enabled\"]==[\"ewe.demo\"], j; assert j[\"missing\"]==[\"acme.git\"] and j[\"failed\"]==[], j; assert j[\"restart\"] is True and j[\"restarted\"] is False, j' && [ -f '$R/cfg/ewe/plugins/ewe.demo/manifest.json' ] && [ -f '$R/cfg/ewe/plugins/ewe.dock/manifest.json' ] && [ ! -e '$R/cfg/ewe/plugins/acme.git' ]"
+check "restore --bundled: a plugin whose packages are not installed is left for Komble, which installs them first" "echo '$r' | jq 'assert j[\"needs\"]==[{\"id\":\"ewe.alias\",\"packages\":[\"ewe-test-no-such-package\"]}], j[\"needs\"]' && [ ! -e '$R/cfg/ewe/plugins/ewe.alias' ]"
+check "restore --bundled: on or off as the file says (the dock was off there), valid, keybinds written" "RP list --json | jq 'p={x[\"id\"]:x for x in j[\"plugins\"]}; assert p[\"ewe.demo\"][\"enabled\"] and p[\"ewe.demo\"][\"installed\"] and p[\"ewe.demo\"][\"valid\"], p[\"ewe.demo\"]; assert p[\"ewe.dock\"][\"installed\"] and not p[\"ewe.dock\"][\"enabled\"]; assert j[\"missingBundled\"]==[\"ewe.alias\"], j[\"missingBundled\"]' && grep -q 'ewe.demo toggle' '$R/cfg/hypr/generated/plugin-keybinds.lua'"
+check "restore --bundled --no-restart never asks systemctl to restart" "! grep -q restart '$SYSTEMCTL_LOG'"
+check "restore --bundled again: nothing left to copy, nothing to restart" "RP restore --bundled | jq 'assert j[\"installed\"]==[] and j[\"restart\"] is False and j[\"restarted\"] is False, j' && ! grep -q restart '$SYSTEMCTL_LOG'"
+rm -rf "$R/cfg/ewe/plugins/ewe.demo"
+check "restore --bundled without --no-restart: an enabled plugin came back, so the shell restarts once" "RP restore --bundled | jq 'assert j[\"installed\"]==[\"ewe.demo\"] and j[\"restarted\"] is True and j[\"restart\"] is False, j' && [ \"\$(grep -c 'restart ewe.service' '$SYSTEMCTL_LOG')\" = 1 ]"
+check "restore (the old verb) is unchanged for the file's git plugins: it still asks, and without --yes clones nothing" "! RP restore </dev/null >/dev/null 2>&1 && [ ! -e '$R/cfg/ewe/plugins/acme.git' ]"
+
 echo "ewe-plugin: $pass passed, $failn failed"
 [ "$failn" = 0 ]
