@@ -51,10 +51,14 @@ grep -q 'showHere: root.shown && (root.showOn === "all" || win.isPrimary)' Dock.
   && ok "display: one window per screen, shown by the setting" || bad "display: window visibility"
 grep -q 'publishedInset: root.shown ? root.clearance : 0' Dock.qml && grep -q 'shown: root.enabled && root.showOn !== "none"' Dock.qml \
   && ok "display none withdraws the inset" || bad "display none keeps the inset"
-# a reduced dock: no sheep, Overview, Komble, plugin items or Downloads
-[ "$(grep -c 'visible: !win.reduced' Dock.qml)" -ge 4 ] && grep -q 'model: win.reduced ? \[\] : (Shell.dockItems' Dock.qml \
+# a reduced dock: no sheep, Overview, Komble or Downloads — but the plugin
+# items (1.5.1: the owner works on the second display and had no Phone button)
+[ "$(grep -c 'visible: !win.reduced;' Dock.qml)" -ge 3 ] \
   && grep -q 'showDownloads: downloads.shown && !win.reduced' Dock.qml \
-  && ok "reduced dock: workspaces + minimized only" || bad "reduced dock shows the full dock's buttons"
+  && ok "reduced dock: no sheep, Overview, Komble or Downloads" || bad "reduced dock shows the full dock's own buttons"
+grep -q 'model: Shell.dockItems || \[\]' Dock.qml && ! grep -q 'model: win.reduced ? \[\] : (Shell.dockItems' Dock.qml \
+  && grep -q 'visible: !win.reduced || win.hasItems' Dock.qml \
+  && ok "plugin items on every dock, the separator only when a reduced dock has some" || bad "plugin items missing from the reduced dock"
 # each dock its own workspaces and minimized windows
 grep -q 'model: win.wsList' Dock.qml && grep -q 'model: win.minHere' Dock.qml && grep -q 'function wsListFor(' Dock.qml \
   && ok "per-display workspace boxes and minimized tiles" || bad "docks share one workspace/minimized list"

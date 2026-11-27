@@ -26,8 +26,8 @@
       "repo": "https://github.com/prj786/ewe-plugin-dock",
       "default": false,
       "migrate": true,
-      "commit": "42713e3c73de7d44e35726620805ce3f0d434230",
-      "version": "1.5.0"
+      "commit": "ef9bb9182972b7ef16efc0b2be96ad503eb05462",
+      "version": "1.5.1"
     },
     "ewe.insomnia": {
       "repo": "https://github.com/prj786/ewe-plugin-insomnia",

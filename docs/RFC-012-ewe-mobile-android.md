@@ -11,7 +11,11 @@ face in Compose, the apps list with icons through `remotecommands`); plus
 what the owner added that day — phone notifications as ewe cards (the app's
 icon, an accent outline, a phone chip, inline reply), no KDE Connect window
 anywhere, the phone in the dock, its apps in the launcher. The build plan
-and its contracts: `ewe-mobile/docs/ECOSYSTEM.md`. Still open: B4 (not
+and its contracts: `ewe-mobile/docs/ECOSYSTEM.md`. **2026-11-27** (ewe
+0.50.1-beta, ewe Mobile 0.2.1-beta, dock 1.5.1): an app opened here showed
+a black window while the phone slept (Android 17 keeps scrcpy's display in
+the phone's display group) — the phone is now woken and kept awake while
+the window is open; and the Phone button is on every display's dock. Still open: B4 (not
 needed), B5 (the release key), A3 step 2 (the screen inside the window).*
 **Repos it touches:** `ewe-mobile` (new pages), `ewe-apps` (ewe Files),
 a new `ewe-mobile-android` (the APK), `ewe` (package lists), `ewe-repo`.
