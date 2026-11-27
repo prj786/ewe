@@ -518,6 +518,41 @@ machine keeps its own local path override and pause in ewe Sync's state. The app
 the Google refresh token) lives in the keyring behind `ewe-cloud` /
 `ewe-auth`, never in this file.
 
+### `[[accounts.mail]]` — mail accounts
+
+One record per IMAP/SMTP mailbox, any number of them. ewe Sync's Mail page
+(through `ewe-mail login` / `logout`) is the only writer; ewe Mail and the
+`ewe.mail` plugin read it with `ewe-mail accounts`. A single
+`[accounts.mail]` table, as ewe wrote before ewe Mail, still reads as a list of
+one and becomes a list at the next write.
+
+```toml
+[[accounts.mail]]
+email = "me@example.org"        # the account id is "imap:" + this, lowercase
+name = "Me Myself"              # the From name (may be "")
+host = "imap.example.org"       # incoming
+port = 993
+starttls = false
+user = "me@example.org"
+smtp_host = "smtp.example.org"  # outgoing
+smtp_port = 465
+smtp_security = "tls"           # tls (implicit) | starttls
+smtp_user = "me@example.org"    # omitted = user
+```
+
+Passwords are never here: the keyring holds them (`service ewe-mail host
+<host> user <user>`; a separate SMTP password under the SMTP host and user).
+Gmail is not an account here — it is the Google sign-in in ewe Sync.
+`accounts` is a store-only domain: writing it applies nothing.
+
+### `[mail]` — ewe Mail's settings
+
+`remote_images` (`"ask"` | `"always"`, default `ask`) — whether HTML mail may
+load pictures from the web · `mark_read` (`"open"` | `"manual"`, default
+`open`) · `[mail.signatures]` — the signature text per sender address
+(`"me@example.org" = "—\nMe"`). Nothing secret. Store-only, like `accounts`:
+a mail setting never rebuilds the theme.
+
 ## SSH & VPN — the `[network]` domain
 
 "My SSH hosts and VPN setup are part of my machine — why don't they restore

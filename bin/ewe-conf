@@ -149,6 +149,9 @@ SECTION_NOTES = {
     "plugins.sources": "id → git URL, so a fresh machine can `ewe-plugin add` what this one has",
     "companion": "the desktop companion's brain (ewe-companiond, RFC-007): proactive, quiet hours, providers; API keys live in the keyring, never here",
     "safe": "ewe Safe, the password manager (ewe-safed, RFC-008): place = local | nextcloud | webdav | folder | sftp | dropbox | gdrive; location; webdav_url, webdav_user; lock_after_minutes, lock_on_screen_lock, lock_on_sleep; clipboard_clear_seconds; generator_length, generator_words; ssh_agent (ewe Safe answers ssh and git), ssh_confirm = once | first-use | every-time | never; unlock_at_login (unlock the safe at login), confirm_cards (ask for the password before filling a card) — both bools, default true. The safe itself and every password live elsewhere, never here",
+    "accounts": "accounts other apps own; the passwords are in the keyring, never here",
+    "accounts.mail": "mail accounts (ewe Sync adds them, ewe Mail and the mail plugin read them): email, name, host, port, starttls, user (incoming IMAP); smtp_host, smtp_port, smtp_security = tls | starttls, smtp_user (outgoing). A single [accounts.mail] table from older versions still reads as one account. Passwords live in the keyring",
+    "mail": "ewe Mail's settings: remote_images = ask | always; mark_read = open | manual; signatures = per-address text. Nothing secret",
     "remote": "Remote (RFC-009, ewe-remote): THIS computer only — sharing (bool: Share this computer), port (int, default 3933). Keys, the code and who may log in live in ~/.local/share/ewe/remote, never here",
 }
 
@@ -2862,6 +2865,10 @@ def _domain(dotted):
     # nothing (RFC-008)
     if parts[0] == "safe":
         return "safe"
+    # mail accounts (ewe-mail) and ewe Mail's settings: stored only — a mail
+    # setting must never rebuild the theme or reload Hyprland
+    if parts[0] in ("accounts", "mail"):
+        return parts[0]
     return None
 
 
