@@ -49,9 +49,10 @@ The `display` setting — **Show the dock on**, three buttons in Komble:
   main screen only. With several displays its workspace boxes are the ones
   of the display you are working on, and it lists every minimized window.
 - **All** — the whole dock on the main screen, and a small dock on every
-  other screen: that screen's own workspace boxes (with their windows) and
-  the windows minimized from that screen, nothing else — no sheep,
-  Overview, Komble, plugin buttons or Downloads. Each dock then shows its
+  other screen: the plugin buttons (Phone, Music, Places… — since 1.5.1;
+  their popups open on the screen you clicked), that screen's own workspace
+  boxes (with their windows) and the windows minimized from that screen —
+  no sheep, Overview, Komble or Downloads. Each dock then shows its
   own screen's workspaces, and a click on a minimized window brings it back
   to that dock's screen. A window minimized on a screen that has since been
   unplugged shows on the main screen's dock.

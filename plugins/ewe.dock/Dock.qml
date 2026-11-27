@@ -28,8 +28,10 @@ import qs
 // Which displays have one (1.5.0, setting `display`): `primary` (the
 // default, as before) — the whole dock on the main screen; `all` — the
 // whole dock on the main screen and, on every other display, a reduced one:
-// that display's own workspace boxes and the windows minimized from it,
-// nothing else (no sheep, Overview, Komble, plugin items or Downloads);
+// the plugin items (1.5.1: Phone, Music, Places… — the display you work on
+// needs them as much as the main one; each popup opens on the display it
+// was clicked on), that display's own workspace boxes and the windows
+// minimized from it — no sheep, Overview, Komble or Downloads;
 // `none` — no dock anywhere, and the bottom inset withdrawn.
 //
 // Its settings are its own (manifest `settings`, Komble → Plugins → Dock →
@@ -543,6 +545,13 @@ Scope {
         Component.onCompleted: win.minHere = win.minHereNow
         // Downloads belongs to the full dock only
         readonly property bool showDownloads: downloads.shown && !win.reduced
+        // some plugin item is on this dock (a reduced dock draws its
+        // separator only then — it has no buttons of its own before it)
+        readonly property bool hasItems: {
+            var l = Shell.dockItems || []
+            for (var i = 0; i < l.length; i++) if (Shell.dockItemShown(l[i].id)) return true
+            return false
+        }
         // Always-visible dock reserves its strip so windows tile/maximize ABOVE it
         // instead of sliding underneath; intelligent-hide keeps zero reserve so
         // windows get the full height and the dock overlays only when revealed.
@@ -745,10 +754,12 @@ Scope {
                 //    `qs ipc call <id> toggle`. Lit while the action's popup
                 //    reports itself open. A plugin hides its own item at
                 //    runtime through Shell.setDockItemShown (Music with no
-                //    player) — shown unless it says otherwise. The full dock
-                //    only. ──
+                //    player) — shown unless it says otherwise. On every dock
+                //    (1.5.1): a reduced one too, so the phone is on the
+                //    display you work on; the anchor carries this dock's
+                //    screen, so the popup opens there. ──
                 Repeater {
-                    model: win.reduced ? [] : (Shell.dockItems || [])
+                    model: Shell.dockItems || []
                     delegate: DockBtn {
                         id: pluginBtn
                         required property var modelData
@@ -767,8 +778,8 @@ Scope {
                 }
 
                 // spaceS shorter than the items beside it (Dock card #3);
-                // a reduced dock starts at its workspace boxes
-                Rectangle { visible: !win.reduced; anchors.verticalCenter: parent.verticalCenter; width: Theme.borderWidth1; height: win.cell - Theme.spaceS; color: Theme.dockOutline }
+                // a reduced dock without plugin items starts at its workspace boxes
+                Rectangle { visible: !win.reduced || win.hasItems; anchors.verticalCenter: parent.verticalCenter; width: Theme.borderWidth1; height: win.cell - Theme.spaceS; color: Theme.dockOutline }
 
                 // ── workspace boxes — this dock's (win.wsList) ──
                 Repeater {
