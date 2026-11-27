@@ -18,6 +18,14 @@
 set -eu
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 WORK="$(mktemp -d)"
+# Every sync first adopts this computer's VPN profiles into its file
+# (_adopt_network). The machines here are sandboxes: a stand-in nmcli with no
+# connections, so the host's own profiles never land in A's or B's file (on a
+# host with a VPN, test 2b read that as "a refused sync changed B's file").
+mkdir -p "$WORK/bin"
+printf '#!/bin/sh\nexit 0\n' > "$WORK/bin/nmcli"
+chmod +x "$WORK/bin/nmcli"
+export PATH="$WORK/bin:$PATH"
 trap 'kill $MOCK_NC 2>/dev/null || true; rm -rf "$WORK"' EXIT
 unset HYPRLAND_INSTANCE_SIGNATURE WAYLAND_DISPLAY   # never reload or poke the host's session
 export EWE_CONF_SSH_CONFIG="$WORK/ssh-config"   # never the real ~/.ssh/config
