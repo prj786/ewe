@@ -2162,10 +2162,55 @@ def merge3(base, mine, theirs, prefer, path=()):
 
 
 def _shared(doc, path=()):
-    """the document without its LOCAL_ONLY paths — what two machines share"""
+    """the document without its LOCAL_ONLY paths — what two machines share.
+    A table that held nothing else goes with them: `[plugins]` with only this
+    machine's enabled/sources and no `[plugins]` at all are the same to the
+    other machine (left in as {}, the two traded uploads for good)."""
     if not isinstance(doc, dict):
         return doc
-    return {k: _shared(v, path + (k,)) for k, v in doc.items() if path + (k,) not in LOCAL_ONLY}
+    out = {}
+    for k, v in doc.items():
+        if path + (k,) in LOCAL_ONLY:
+            continue
+        w = _shared(v, path + (k,))
+        if isinstance(v, dict) and v and not w:
+            continue
+        out[k] = w
+    return out
+
+
+def _merge_shared(base, mine, theirs, prefer):
+    """merge3 over what two machines SHARE, then this machine's own
+    LOCAL_ONLY values put back where they were. merge3 alone guards a
+    LOCAL_ONLY path only when it reaches that exact path — and it never does
+    when one side lacks the parent table: a machine with no [plugins] took
+    the other's whole table (its enabled list, sources, widgets), and a
+    machine whose [plugins] held only its own keys lost the table when the
+    account's copy had none. Nothing per-machine goes in, so none comes out."""
+    out = merge3(None if base is None else _shared(base), _shared(mine), _shared(theirs), prefer)
+    if not isinstance(out, dict):
+        out = {}
+
+    def own(doc, path=()):
+        for k, v in doc.items():
+            if path + (k,) in LOCAL_ONLY:
+                node = out
+                for p in path:
+                    if not isinstance(node.get(p), dict):
+                        node[p] = {}
+                    node = node[p]
+                node[k] = v
+            elif isinstance(v, dict):
+                own(v, path + (k,))
+
+    def ordered(d, like):                 # this file's key order stays: diffs are honest
+        if not (isinstance(d, dict) and isinstance(like, dict)):
+            return d
+        return {**{k: ordered(d[k], like[k]) for k in like if k in d},
+                **{k: v for k, v in d.items() if k not in like}}
+
+    own(mine)
+    return ordered(out, mine)
 
 
 def _base_write(raw):
@@ -2272,7 +2317,7 @@ def _sync_once(cfg, be, hooks, join=False):
         except OSError:
             cur = b""
         mine = tomllib.loads(cur.decode()) if cur else {"schema": SCHEMA}
-        merged = merge3(base, mine, theirs, prefer)
+        merged = _merge_shared(base, mine, theirs, prefer)
         changed = _changed_paths(mine, merged)
         backup = ""
         if changed:

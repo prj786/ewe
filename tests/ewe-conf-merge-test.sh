@@ -235,6 +235,52 @@ on a sync --no-hooks >/dev/null
 [ "$(get a sync.folders)" = "[]" ] || fail "A kept a folder pair B removed: $(get a sync.folders)"
 ok "[[sync.folders]] travels between machines; enabled/browser stay on each machine"
 
+# 8c · a per-machine key never arrives — also when this machine has no such
+# table at all. merge3 guards a LOCAL_ONLY path only when it reaches it, and
+# it never did when the parent was absent on one side: B (no [plugins]) took
+# A's whole table — its enabled list, sources, widgets.
+on a set --no-hooks plugins.enabled '["ewe.dock"]' >/dev/null
+on a set --no-hooks plugins.sources '{"ewe.dock": "bundled"}' >/dev/null
+on a set --no-hooks plugins.widgets '{"ewe.sysmon": {"x": 1, "y": 2}}' >/dev/null
+on a set --no-hooks desktop.displays '{"version": 1, "lastKey": "A-PANEL", "profiles": {}}' >/dev/null
+on a set --no-hooks desktop.layout.gaps_in 11 >/dev/null       # something shared, so A uploads
+on a sync --no-hooks >/dev/null
+r=$(on b sync --no-hooks)
+[ "$(get b desktop.layout.gaps_in)" = "11" ] || fail "B did not get A's shared change: $r"
+[ "$(get b plugins.enabled)" = "<unset>" ] || fail "A's plugins.enabled landed on B, which has no [plugins]: $(get b plugins.enabled)"
+[ "$(get b plugins)" = "<unset>" ] || fail "B grew a [plugins] table out of A's per-machine keys: $(get b plugins)"
+[ "$(get b desktop.displays.version)" = "1" ] || fail "B did not get the shared part of desktop.displays"
+[ "$(get b desktop.displays.lastKey)" = "<unset>" ] || fail "A's desktop.displays.lastKey landed on B: $(get b desktop.displays.lastKey)"
+ok "per-machine keys stay behind when the other machine has no such table"
+
+# …and the other way: B uploads a file with no [plugins]; A's table — which
+# holds only A's own keys, exactly as the last agreed copy — must survive it
+on b set --no-hooks desktop.layout.gaps_out 30 >/dev/null
+on b sync --no-hooks >/dev/null
+curl -s -u "$NC_AUTH" "$NC_DAV/ewe.conf" | grep -q '^\[plugins' && fail "B's upload carries a [plugins] table it never had"
+r=$(on a sync --no-hooks)
+[ "$(get a desktop.layout.gaps_out)" = "30" ] || fail "A did not get B's shared change: $r"
+[ "$(get a plugins.enabled)" = '["ewe.dock"]' ] || fail "A lost its plugin list to a copy that has none: $(get a plugins.enabled)"
+on a get plugins.widgets | grep -q '"ewe.sysmon"' || fail "A lost its widget placement"
+[ "$(get a desktop.displays.lastKey)" = "A-PANEL" ] || fail "A lost its lastKey"
+ok "a table of only this machine's keys survives a copy that has no such table"
+
+# in step again, with a table on one side and none on the other: no uploads
+for _ in 1 2; do on a sync --no-hooks >/dev/null; on b sync --no-hooks >/dev/null; done
+before=$(etag)
+ra=$(on a sync --no-hooks); rb=$(on b sync --no-hooks)
+[ "$(jget "$ra" "['action']")" = "none" ] && [ "$(jget "$rb" "['action']")" = "none" ] || fail "not in step: $ra / $rb"
+[ "$before" = "$(etag)" ] || fail "a per-machine table on one side only made the machines trade uploads"
+ok "in step: a per-machine table on one side only causes no upload"
+
+# a shared key in that same table still travels, alone
+on a set --no-hooks 'plugins.settings."ewe.dock"' '{"autohide": true}' >/dev/null
+on a sync --no-hooks >/dev/null
+on b sync --no-hooks >/dev/null
+[ "$(get b 'plugins.settings."ewe.dock".autohide')" = "true" ] || fail "B did not get A's plugin settings"
+[ "$(get b plugins.enabled)" = "<unset>" ] || fail "plugins.enabled rode along with plugins.settings"
+ok "the shared key of a mixed table travels, its per-machine neighbours do not"
+
 # 9 · the log
 [ -s "$WORK/a/state/ewe/sync.log" ] || fail "no sync.log"
 tail -1 "$WORK/a/state/ewe/sync.log" | python3 -c 'import json,sys; j=json.loads(sys.stdin.read()); assert j["verb"]=="sync" and j["ok"] and j["at"].endswith("Z"), j' \
