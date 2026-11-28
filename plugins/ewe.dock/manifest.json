@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "id": "ewe.dock",
   "name": "Dock",
-  "version": "1.5.1",
+  "version": "1.6.0",
   "apiVersion": 3,
-  "description": "A centred bottom dock: app launcher, Overview, Komble, one box per workspace with its windows, your minimized windows, downloads from ewe Browser, and the dock items other plugins provide. On the main screen, on every screen, or on none.",
+  "description": "A centred bottom dock: app launcher, Overview, Komble, one box per workspace with its windows, your minimized windows, downloads from ewe Browser, and the dock items other plugins provide. On the main screen, on every screen, or on none — or inside ewe's merged bar, like a Windows taskbar.",
   "homepage": "https://github.com/prj786/ewe-plugin-dock",
   "author": "prj786",
   "icon": "icApps",
@@ -21,7 +21,7 @@
       "type": "bool",
       "default": false,
       "label": "Intelligent auto-hide",
-      "description": "Slides away when a window needs the space; comes back when you point at the bottom edge.",
+      "description": "Slides away when a window needs the space; comes back when you point at the bottom edge. Not while the dock sits in the merged bar.",
       "legacy": "desktop.dock.autohide"
     },
     {
@@ -34,7 +34,7 @@
         "large"
       ],
       "label": "Icon size",
-      "description": "How big the dock buttons and workspace groups are: 40, 48 or 64 px.",
+      "description": "How big the dock buttons and workspace groups are: 40, 48 or 64 px. In the merged bar they follow the bar's size instead.",
       "legacy": "desktop.dock.icon_size"
     },
     {

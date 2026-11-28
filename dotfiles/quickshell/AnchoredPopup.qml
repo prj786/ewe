@@ -92,7 +92,8 @@ Scope {
             // under the bar — ExclusionMode.Ignore spans the whole output, so
             // y = 0 is the top of the SCREEN, not the bottom of the bar (a
             // Music card sat over the clock, 2026-10-04)
-            readonly property int topGap: (Globals.barVisible ? Theme.barHeight : 0) + Theme.spaceXs
+            // (no top bar while the bar is merged at the bottom — 0.52)
+            readonly property int topGap: (Globals.barVisible && !Globals.barMerged ? Theme.barHeight : 0) + Theme.spaceXs
             y: fromBottom ? Math.max(edgeGap, parent.height - height - (Shell.bottomInset + edgeGap)) : topGap
             width: Math.min(pop.implicitWidth, parent.width - 2 * edgeGap)
             height: Math.min(pop.implicitHeight, parent.height - Shell.bottomInset - topGap - edgeGap)

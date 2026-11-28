@@ -122,7 +122,7 @@ def _unwritable(v):
 SECTION_NOTES = {
     "desktop": "everything the Settings surfaces manage",
     "desktop.theme": "scheme + accent + look presets (corner/density/stroke) + bar_opacity; every token is derived by ewe-theme",
-    "desktop.bar": "the top bar: icon_size = small | normal | large (the bar is its icons plus padding: 36 / 40 / 48px); show = per-indicator visibility; collapse = fold the tray, plugin buttons and the tiling switch behind a chevron",
+    "desktop.bar": "the top bar: icon_size = small | normal | large (the bar is its icons plus padding: 36 / 40 / 48px); show = per-indicator visibility; collapse = fold the tray, plugin buttons and the tiling switch behind a chevron; layout = split | merged (one full-width bar at the bottom holding the dock)",
     "desktop.accessibility": "reduce_motion, reduce_transparency, increase_contrast (bools); text_scale = 100 | 115 | 130",
     "desktop.dock": "the bottom dock (autohide = intelligent hide)",
     "desktop.animations": "speed multiplies every duration; detail = per-leaf tuning",
@@ -407,6 +407,11 @@ THEME_MAP = [  # ewe.conf key ↔ user-theme.json key (with defaults)
     # the fold (0.45): tray icons, plugin bar widgets and the tiling switch sit
     # behind a chevron (Bar.qml); off by default, the bar unchanged
     ("desktop.bar.collapse", "barCollapse", False),
+    # the layout (0.52): split = the top bar and the dock apart (the
+    # default) | merged = ONE full-width bar at the bottom, like a Windows
+    # taskbar — the dock's buttons on its left, the status row and the clock
+    # on its right (Bar.qml hosts the dock plugin through Shell.barSlot)
+    ("desktop.bar.layout", "barLayout", "split"),
     # accessibility modes (design/system/components/AccessibilityModes):
     # role remaps applied by ewe-theme; reduce_transparency also turns the
     # compositor's blur and window opacity off in user.lua below
@@ -2605,6 +2610,7 @@ ENUMS = {
     "desktop.theme.density": ("compact", "comfortable", "roomy"),
     "desktop.theme.stroke": ("none", "thin", "thick"),
     "desktop.bar.icon_size": ("small", "normal", "large"),
+    "desktop.bar.layout": ("split", "merged"),
     "desktop.dock.icon_size": ("small", "medium", "large"),
     "desktop.accessibility.text_scale": (100, 115, 130),
     "desktop.workspaces.mode": ("separate", "shared"),

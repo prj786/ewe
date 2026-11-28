@@ -7,6 +7,12 @@ The bar runs along the top of every screen: the focused workspace and app on the
 - It slides down from above when the session starts. Super+Shift+B hides and shows it; Settings can turn it off.
 - Center is empty by default. A plugin placed there stays centered on the screen and hides itself if it would touch the left or right side.
 
+## Merged layout
+- Settings → Layout → Top bar → Bar and dock: **Merged** (`desktop.bar.layout = merged`, 0.52) puts one bar along the BOTTOM of every screen, edge to edge, like a Windows taskbar. Separate (the default) is the bar above and the dock below.
+- Left: the dock's buttons — apps, Overview, Komble, the plugins' items, a divider, the workspace boxes, the minimized windows, Downloads — at the dock's small cell (40px; 48px with large bar icons), `space-s` from the edge. The bar has no workspace chip or focused app while they are there; without a dock on that screen it keeps both.
+- Right: the same cluster as the top bar. The bar is the cell plus `space-xs` above and below (48 / 56px) on every screen, with its `border-width-1` rule along its top edge.
+- It slides up from below when the session starts and down out of view for the Overview. Quick settings, tray menus and plugin popups open `space-xs` above it; Super+Shift+B hides it and the dock comes back on its own until it shows again.
+
 ## Anatomy
 1. Strip: `bar-height` (40px), `surface-base`, a 1px `border-subtle` line below, 8px side padding. With transparency on, it is Glass (`glass-base` over a `blur-glass` blur).
 2. Workspace chip: the focused workspace number, 13px weight 600 `text-primary`, in a 32px `primary` chip with a 16px × 2px `accent` underline. Click opens the Overview.

@@ -42,6 +42,17 @@ import qs
 // own switch in Komble. Shell.dockPrefs is only the fallback for a shell
 // that hands no settings.
 //
+// The merged bar (1.6.0, ewe 0.52 — `desktop.bar.layout = merged`): the
+// shell's bar sits at the bottom, full width, like a Windows taskbar, and
+// hands each screen a slot (Shell.barSlot). This dock then parents its
+// buttons into that slot — sheep, Overview, Komble, the plugin items, the
+// workspace boxes, the minimized windows, Downloads — and shows no window
+// of its own; its cells take the bar's size (Shell.barMergedSize), its
+// popups open above the bar, auto-hide and icon size wait for the split
+// layout, and its inset is the bar's. `display` still says which screens'
+// bars carry it. On a shell without the API, or with the bar hidden, it is
+// the floating dock as before.
+//
 // What the shell gives it: its settings, Shell.pinnedApps / Shell.setPinned,
 // Shell.overviewOpen, Shell.activeCount, the dock-item registry
 // (Shell.dockItems) and Theme's dock roles and sizes (Theme.dockCellFor).
@@ -68,7 +79,12 @@ Scope {
     readonly property bool enabled: true      // off = the plugin switched off in Komble
     readonly property bool autohide: (root.settings && typeof root.settings.autohide === "boolean")
                                      ? root.settings.autohide : root.prefs.autohide === true
-    readonly property string iconSize: String((root.settings && root.settings.icon_size) || root.prefs.iconSize || "normal")
+    // the merged bar (1.6.0): the shell's bar is the taskbar and hosts us
+    readonly property bool mergeable: ("barMerged" in Shell) && typeof Shell.barSlot === "function"
+    readonly property bool merged: root.mergeable && Shell.barMerged === true
+    // merged, the cells follow the bar ("small", "normal" with large bar icons)
+    readonly property string iconSize: root.merged ? String(Shell.barMergedSize || "small")
+                                     : String((root.settings && root.settings.icon_size) || root.prefs.iconSize || "normal")
     // where the dock shows (1.5.0): "primary" (default) · "all" · "none" —
     // anything else reads as the default, so nothing migrates
     readonly property string showOn: {
@@ -95,8 +111,9 @@ Scope {
     //    the strip is a layer-shell exclusive zone (autohide off), which
     //    bottom-anchored surfaces read as Shell.bottomReserved. Withdrawn
     //    when this plugin goes. ─────────────────────────────────────────────
-    readonly property int publishedInset: root.shown ? root.clearance : 0
-    readonly property bool publishedReserved: root.shown && !root.autohide
+    // merged into the bar: the bar's strip is the inset, it publishes it
+    readonly property int publishedInset: (root.shown && !root.merged) ? root.clearance : 0
+    readonly property bool publishedReserved: root.shown && !root.autohide && !root.merged
     function publishInset() { Shell.setBottomInset(root.pluginId, root.publishedInset, root.publishedReserved) }
     onPublishedInsetChanged: root.publishInset()
     onPublishedReservedChanged: root.publishInset()
@@ -506,7 +523,17 @@ Scope {
         // minimized from it, nothing else.
         readonly property bool showHere: root.shown && (root.showOn === "all" || win.isPrimary)
         readonly property bool reduced: win.showHere && !win.isPrimary
-        visible: win.showHere
+        // the merged bar's slot on this screen (1.6.0): while there is one the
+        // buttons live in the bar and this window stays unmapped
+        readonly property Item slot: (root.merged && win.showHere) ? Shell.barSlot(win.modelData) : null
+        readonly property bool mergedHere: win.slot !== null
+        // the window our popups anchor to: the bar's while merged
+        readonly property var hostWin: (win.mergedHere && win.slot.barWindow) ? win.slot.barWindow : win
+        // on screen at all — here, or in the bar (captures need a scene)
+        readonly property bool onScreen: win.mergedHere || win.visible
+        // the ground the buttons sit on (a badge's ring takes it)
+        readonly property color ground: win.mergedHere ? Theme.barGround : Theme.dockGround
+        visible: win.showHere && !win.mergedHere
         color: "transparent"
 
         // the workspace this dock stands for: the focused one on the main
@@ -561,7 +588,7 @@ Scope {
         // refused to use until the dock was toggled off and on.
         // A reduced dock (another display, `display` all) reserves its strip
         // the same way.
-        exclusiveZone: (win.showHere && !root.autohide) ? win.dockH + Theme.windowGap : 0
+        exclusiveZone: (win.showHere && !root.autohide && !win.mergedHere) ? win.dockH + Theme.windowGap : 0
         // Always Top. The dock used to hop to Overlay so it drew above the
         // Overview; the Overview now owns the whole screen and the dock slides
         // out of view instead.
@@ -736,6 +763,17 @@ Scope {
                 Tooltip { text: db.a11yName }
             }
 
+            // the buttons, in the pill — or, merged (1.6.0), in the bar's
+            // slot: the slot sizes itself to this and centres it
+            Item {
+                id: content
+                parent: win.mergedHere ? win.slot : dock
+                implicitWidth: row.implicitWidth
+                implicitHeight: row.implicitHeight
+                width: implicitWidth; height: implicitHeight
+                x: win.mergedHere ? 0 : Math.round((dock.width - width) / 2)
+                y: win.mergedHere ? 0 : Math.round((dock.height - height) / 2)
+
             Row {
                 id: row
                 anchors.centerIn: parent
@@ -770,7 +808,7 @@ Scope {
                         anchors.verticalCenter: parent.verticalCenter
                         onGo: {
                             root.launcherOpen = false; root.closeStoreFallback()
-                            var a = Shell.anchorFor(pluginBtn, win)
+                            var a = Shell.anchorFor(pluginBtn, win.hostWin)
                             if (modelData.action === "" || !Shell.runAction(modelData.action, a))
                                 Quickshell.execDetached(["qs", "ipc", "call", modelData.id, "toggle"])
                         }
@@ -816,7 +854,7 @@ Scope {
                         // (spaceXxs in from the edge, ringed in the dock's ground)
                         Badge {
                             visible: wsBox.urgent
-                            dot: true; ring: true; ringColor: Theme.dockGround
+                            dot: true; ring: true; ringColor: win.ground
                             z: 1
                             x: parent.width - width - Theme.spaceXxs
                             y: Theme.spaceXxs
@@ -864,7 +902,7 @@ Scope {
                                     // the icon's corner, gone once it is focused
                                     Badge {
                                         visible: root.isUrgent(modelData)
-                                        dot: true; ring: true; ringColor: Theme.dockGround
+                                        dot: true; ring: true; ringColor: win.ground
                                         x: tileIcon.x + tileIcon.width - width + Theme.spaceXxs
                                         y: tileIcon.y - Theme.spaceXxs
                                     }
@@ -919,7 +957,7 @@ Scope {
                         // lists no tile at all and each window is listed by
                         // one dock only; thumbs is shared, keyed by address
                         function take() {
-                            if (!win.visible) return
+                            if (!win.onScreen) return
                             var aspect = mini.aspect
                             sc.grabToImage(function (g) { root.setThumb(mini.addr, g, aspect) }, Qt.size(2 * mini.tw, 2 * mini.th))
                         }
@@ -965,7 +1003,7 @@ Scope {
                                     id: sc
                                     anchors.fill: parent
                                     visible: !mini.shot && hasContent
-                                    captureSource: (win.visible && mini.capturing && mini.modelData.wayland) || null
+                                    captureSource: (win.onScreen && mini.capturing && mini.modelData.wayland) || null
                                     live: false
                                     onHasContentChanged: if (hasContent && mini.capturing) mini.take()
                                 }
@@ -1036,7 +1074,7 @@ Scope {
                     anchors.verticalCenter: parent.verticalCenter
                     onGo: {
                         root.launcherOpen = false; root.closeStoreFallback()
-                        downloads.toggleAt(Shell.anchorFor(dlBtn, win))
+                        downloads.toggleAt(Shell.anchorFor(dlBtn, win.hostWin))
                     }
                     Item {
                         id: ring
@@ -1084,6 +1122,7 @@ Scope {
                         }
                     }
                 }
+            }
             }
         }
     }
