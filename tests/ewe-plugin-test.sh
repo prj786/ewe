@@ -141,8 +141,8 @@ ln -s "$SB/acme.clock" "$SB/cfg/ewe/plugins/acme.clock"
 "$C" set --no-hooks plugins.enabled '["acme.clock"]' >/dev/null
 "$C" set --no-hooks plugins.sources '{"acme.clock":"local"}' >/dev/null
 j="$($P list --json)"
-check "list --json: widget defaults, settings defaults, linked flag" "echo '$j' | python3 -c 'import json,sys; p=json.load(sys.stdin)[\"plugins\"][0]; assert p[\"widget\"]==dict(x=48,y=64,output=\"\",layer=\"desktop\",visible=True,pinned=False,pin_level=\"top\",locked=False), p[\"widget\"]; assert p[\"bar\"]==dict(shown=True,toggle=True), p[\"bar\"]; assert p[\"settings\"]=={\"seconds\": False}; assert p[\"linked\"]'"
-check "list --json: apiVersions + the v3 fields are present (null/empty for a v2 plugin)" "echo '$j' | jq 'p=j[\"plugins\"][0]; assert j[\"apiVersion\"]==3 and j[\"apiVersions\"]==[2,3]; assert p[\"quickTile\"] is None and p[\"dockItem\"] is None and p[\"ipcAliases\"]==[] and p[\"requires\"]=={\"packages\":[],\"commands\":[]}'"
+check "list --json: widget defaults, settings defaults, linked flag" "printf '%s\n' \"\$j\" | python3 -c 'import json,sys; p=json.load(sys.stdin)[\"plugins\"][0]; assert p[\"widget\"]==dict(x=48,y=64,output=\"\",layer=\"desktop\",visible=True,pinned=False,pin_level=\"top\",locked=False), p[\"widget\"]; assert p[\"bar\"]==dict(shown=True,toggle=True), p[\"bar\"]; assert p[\"settings\"]=={\"seconds\": False}; assert p[\"linked\"]'"
+check "list --json: apiVersions + the v3 fields are present (null/empty for a v2 plugin)" "printf '%s\n' \"\$j\" | jq 'p=j[\"plugins\"][0]; assert j[\"apiVersion\"]==3 and j[\"apiVersions\"]==[2,3]; assert p[\"quickTile\"] is None and p[\"dockItem\"] is None and p[\"ipcAliases\"]==[] and p[\"requires\"]=={\"packages\":[],\"commands\":[]}'"
 $P place acme.clock --x 420 --y 300 --layer top >/dev/null
 $P set acme.clock seconds true >/dev/null
 check "place/set: whole tables keyed by the quoted dotted id" "grep -q '^\[plugins.widgets\]' '$SB/cfg/ewe/ewe.conf' && grep -q '\"acme.clock\" = {x = 420, y = 300, layer = \"top\", pin_level = \"top\"}' '$SB/cfg/ewe/ewe.conf' && grep -q '\"acme.clock\" = {seconds = true}' '$SB/cfg/ewe/ewe.conf'"
@@ -227,9 +227,9 @@ export EWE_PAYLOAD_PLUGINS="$SB/payload/plugins"
 
 # list --json: available + removed + missing -----------------------------------
 j="$($P list --json)"
-check "available: every payload add-on with its flags and state" "echo '$j' | jq 'a={x[\"id\"]:x for x in j[\"available\"]}; assert set(a)=={\"ewe.demo\",\"ewe.alias\",\"ewe.dock\"}, set(a); assert a[\"ewe.demo\"][\"default\"] and not a[\"ewe.demo\"][\"installed\"]; assert a[\"ewe.alias\"][\"migrate\"] and a[\"ewe.alias\"][\"icon\"]==\"icMusic\" and a[\"ewe.alias\"][\"category\"]==\"Media\" and a[\"ewe.alias\"][\"repo\"].endswith(\"ewe-plugin-alias\")'"
-check "available: missing packages/commands reported from requires" "echo '$j' | jq 'a={x[\"id\"]:x for x in j[\"available\"]}[\"ewe.alias\"]; assert a[\"missing\"][\"commands\"]==[\"ewe-test-no-such-command\"], a[\"missing\"]; assert a[\"missing\"][\"packages\"]==[\"ewe-test-no-such-package\"] or not __import__(\"shutil\").which(\"pacman\"), a[\"missing\"]'"
-check "removed: empty to start" "echo '$j' | jq 'assert j[\"removed\"]==[]'"
+check "available: every payload add-on with its flags and state" "printf '%s\n' \"\$j\" | jq 'a={x[\"id\"]:x for x in j[\"available\"]}; assert set(a)=={\"ewe.demo\",\"ewe.alias\",\"ewe.dock\"}, set(a); assert a[\"ewe.demo\"][\"default\"] and not a[\"ewe.demo\"][\"installed\"]; assert a[\"ewe.alias\"][\"migrate\"] and a[\"ewe.alias\"][\"icon\"]==\"icMusic\" and a[\"ewe.alias\"][\"category\"]==\"Media\" and a[\"ewe.alias\"][\"repo\"].endswith(\"ewe-plugin-alias\")'"
+check "available: missing packages/commands reported from requires" "printf '%s\n' \"\$j\" | jq 'a={x[\"id\"]:x for x in j[\"available\"]}[\"ewe.alias\"]; assert a[\"missing\"][\"commands\"]==[\"ewe-test-no-such-command\"], a[\"missing\"]; assert a[\"missing\"][\"packages\"]==[\"ewe-test-no-such-package\"] or not __import__(\"shutil\").which(\"pacman\"), a[\"missing\"]'"
+check "removed: empty to start" "printf '%s\n' \"\$j\" | jq 'assert j[\"removed\"]==[]'"
 
 # seed: only defaults are installed, add-ons are listed, keybinds follow -------
 r="$($P seed "$SB/payload/plugins" --no-restart)"
@@ -366,7 +366,7 @@ T
 RP() { XDG_CONFIG_HOME="$R/cfg" XDG_STATE_HOME="$R/state" HOME="$R/home" "$P" "$@"; }
 : > "$SYSTEMCTL_LOG"
 j="$(RP list --json)"
-check "list --json: missingBundled = the first-party plugins the file lists and this machine lacks; missing stays the git ones" "echo '$j' | jq 'assert j[\"missingBundled\"]==[\"ewe.alias\",\"ewe.demo\",\"ewe.dock\"], j[\"missingBundled\"]; assert j[\"missing\"]==[\"acme.git\"], j[\"missing\"]'"
+check "list --json: missingBundled = the first-party plugins the file lists and this machine lacks; missing stays the git ones" "printf '%s\n' \"\$j\" | jq 'assert j[\"missingBundled\"]==[\"ewe.alias\",\"ewe.demo\",\"ewe.dock\"], j[\"missingBundled\"]; assert j[\"missing\"]==[\"acme.git\"], j[\"missing\"]'"
 r="$(RP restore --bundled --no-restart)"
 check "restore --bundled: copies them from the payload, never clones, one JSON object" "echo '$r' | jq 'assert j[\"ok\"] and j[\"installed\"]==[\"ewe.demo\",\"ewe.dock\"], j; assert j[\"enabled\"]==[\"ewe.demo\"], j; assert j[\"missing\"]==[\"acme.git\"] and j[\"failed\"]==[], j; assert j[\"restart\"] is True and j[\"restarted\"] is False, j' && [ -f '$R/cfg/ewe/plugins/ewe.demo/manifest.json' ] && [ -f '$R/cfg/ewe/plugins/ewe.dock/manifest.json' ] && [ ! -e '$R/cfg/ewe/plugins/acme.git' ]"
 check "restore --bundled: a plugin whose packages are not installed is left for Komble, which installs them first" "echo '$r' | jq 'assert j[\"needs\"]==[{\"id\":\"ewe.alias\",\"packages\":[\"ewe-test-no-such-package\"]}], j[\"needs\"]' && [ ! -e '$R/cfg/ewe/plugins/ewe.alias' ]"
