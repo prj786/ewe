@@ -10,8 +10,22 @@ import Quickshell.Bluetooth
 
 // Bar — the topbar. One bar per monitor. All colours and fonts are
 // pulled from Theme.qml (the single source of truth), solid (no glass).
+//
+// The merged layout (0.52, `desktop.bar.layout = merged`, Settings → Layout
+// → Top bar): the same bar at the BOTTOM of the screen, full width, like a
+// Windows taskbar — the dock's buttons in a slot on its left (the dock
+// plugin parents them there, Shell.barSlot), the status row and the clock
+// on its right, Quick settings and the tray menus opening above it. Without
+// a dock (none installed, its `display` none, or not this screen) the left
+// keeps the workspace chip and the focused app. The bar reserves its strip
+// and publishes it as the bottom inset ("ewe.bar") like a dock does.
 Scope {
     id: bar
+
+    // the merged bar's strip, for the panels that open above it (Shell.bottomInset)
+    readonly property int mergedInset: Globals.barMerged ? Theme.barHeight + Theme.borderWidth1 : 0
+    onMergedInsetChanged: Shell.setBottomInset("ewe.bar", bar.mergedInset, true)
+    Component.onCompleted: Shell.setBottomInset("ewe.bar", bar.mergedInset, true)
 
     // bar visibility lives in Globals.barVisible so full-screen surfaces
     // (Overview) can reserve space for the bar only while it is shown
@@ -247,32 +261,31 @@ Scope {
             // report their height through Globals, and Theme.barHeight adds
             // the padding (owner's bar model — the bar follows its icons).
             implicitHeight: Theme.barHeight + Theme.borderWidth1
+            // the merged layout: at the bottom edge, full width (Globals.barLayout,
+            // not barMerged — a hidden bar keeps its edge)
+            readonly property bool atBottom: Globals.barLayout === "merged"
+            // which way is "out of view": up for the top bar, down for the merged one
+            readonly property int awaySign: win.atBottom ? 1 : -1
+            // the merged bar is never shorter than the dock's cells it holds,
+            // on EVERY screen (one height whether a dock is on this one or not)
+            readonly property int mergedCell: Globals.barMerged ? Theme.dockCellFor(Shell.barMergedSize) : 0
             Binding {
                 target: Globals; property: "barContentHeight"
-                value: Math.max(leftRow.implicitHeight, centerSlots.implicitHeight, rightRow.implicitHeight)
+                value: Math.max(leftRow.implicitHeight, centerSlots.implicitHeight, rightRow.implicitHeight, win.mergedCell)
                 when: win.modelData === Quickshell.screens[0]
             }
             exclusiveZone: Globals.barVisible ? Theme.barHeight : 0
-            mask: Region { x: 0; y: 0; width: win.width; height: Theme.barHeight }
+            mask: Region { x: 0; y: barStrip.y; width: win.width; height: Theme.barHeight }
             WlrLayershell.namespace: "quickshell:bar"
-            anchors { top: true; left: true; right: true }
+            anchors { top: !win.atBottom; bottom: win.atBottom; left: true; right: true }
 
             Rectangle {
                 id: barStrip
                 anchors { left: parent.left; right: parent.right }
+                // the rule sits on the strip's inner edge: below the top bar,
+                // above the merged one
+                y: win.atBottom ? Theme.borderWidth1 : 0
                 height: Theme.barHeight
-                // Entrance: slide down from behind the top edge once the shell
-                // is up (also plays for a bar spawned on hotplug). Reduce
-                // motion turns the slide into a plain fade at durFast.
-                // The tokens land a beat after the bar is built, so Reduce
-                // motion can turn on while the slide is already running:
-                // never STOP it (that parks the bar off-screen) — finish it.
-                NumberAnimation on y {
-                    readonly property bool rm: Theme.reduceMotion
-                    onRmChanged: if (rm) complete()
-                    from: -win.implicitHeight; to: 0
-                    duration: Theme.reduceMotion ? 0 : Theme.durSlow; easing.type: Theme.easeSlow
-                }
                 // Entrance fade + the Reduce-motion Overview fade. A BINDING,
                 // not a `NumberAnimation on opacity`: a value source owns the
                 // property and would leave no way to fade for the Overview.
@@ -288,16 +301,35 @@ Scope {
                 // entrance animation above. Reduce motion keeps the target at 0
                 // and the fade above does the work, so a reduceMotion flip
                 // mid-slide glides the bar home instead of parking it off-screen.
-                transform: Translate {
-                    y: (Globals.overviewCover && !Theme.reduceMotion) ? -win.implicitHeight : 0
-                    Behavior on y { NumberAnimation { duration: Theme.durBase; easing.type: Theme.ease } }
-                }
+                transform: [
+                    // Entrance: slide in from behind the bar's edge once the
+                    // shell is up (also plays for a bar spawned on hotplug).
+                    // Reduce motion turns the slide into a plain fade at
+                    // durFast. The tokens land a beat after the bar is built,
+                    // so Reduce motion can turn on while the slide is already
+                    // running: never STOP it (that parks the bar off-screen)
+                    // — finish it.
+                    Translate {
+                        NumberAnimation on y {
+                            readonly property bool rm: Theme.reduceMotion
+                            onRmChanged: if (rm) complete()
+                            from: win.awaySign * win.implicitHeight; to: 0
+                            duration: Theme.reduceMotion ? 0 : Theme.durSlow; easing.type: Theme.easeSlow
+                        }
+                    },
+                    Translate {
+                        y: (Globals.overviewCover && !Theme.reduceMotion) ? win.awaySign * win.implicitHeight : 0
+                        Behavior on y { NumberAnimation { duration: Theme.durBase; easing.type: Theme.ease } }
+                    }
+                ]
                 // surfaceBase, or surfaceBase at the bar opacity once it drops below 100
                 color: Theme.barGround
-                // the bar's edge: a borderWidth1 rule below it (Bar card #1),
-                // glassBorder inside Glass so it reads over any wallpaper
+                // the bar's edge: a borderWidth1 rule below it (Bar card #1) —
+                // above it on the merged bar —, glassBorder inside Glass so it
+                // reads over any wallpaper
                 Rectangle {
-                    anchors { left: parent.left; right: parent.right; top: parent.bottom }
+                    anchors { left: parent.left; right: parent.right }
+                    y: win.atBottom ? -height : parent.height
                     height: Theme.borderWidth1
                     color: Theme.barOutline
                 }
@@ -312,6 +344,28 @@ Scope {
                     anchors.verticalCenter: parent.verticalCenter
                     spacing: Theme.spaceS
 
+                    // ── the merged bar's dock slot (Shell.barSlot): the dock
+                    //    plugin parents its buttons here — the bar never
+                    //    builds them. As wide and tall as what it holds;
+                    //    while it holds something the chip and the focused
+                    //    app give way (the dock's workspace boxes say both). ──
+                    Item {
+                        id: dockSlot
+                        anchors.verticalCenter: parent.verticalCenter
+                        // the window the dock's popups anchor to (Shell.anchorFor)
+                        readonly property var barWindow: win
+                        readonly property Item held: dockSlot.children.length > 0 ? dockSlot.children[0] : null
+                        // never the held item's `visible`: that reads back the
+                        // EFFECTIVE visibility, which this slot's own decides
+                        readonly property bool filled: Globals.barMerged && dockSlot.held !== null
+                        visible: dockSlot.filled
+                        width: dockSlot.held ? dockSlot.held.implicitWidth : 0
+                        height: dockSlot.held ? dockSlot.held.implicitHeight : 0
+                        readonly property string screenName: String(win.modelData.name)
+                        Component.onCompleted: Shell._setBarSlot(dockSlot.screenName, dockSlot)
+                        Component.onDestruction: if (Shell._barSlots[dockSlot.screenName] === dockSlot) Shell._setBarSlot(dockSlot.screenName, null)
+                    }
+
                     // ── the workspace chip (design system: Workspace indicator)
                     // A barModule chip carrying the focused workspace's number
                     // with a spaceMd × borderWidth2 accent underline spaceXs
@@ -321,6 +375,7 @@ Scope {
                     BarModule {
                         id: wsChip
                         anchors.verticalCenter: parent.verticalCenter
+                        visible: !dockSlot.filled
                         active: Globals.overviewOpen
                         underline: true
                         // THIS screen's workspace, as its number on the screen
@@ -364,7 +419,7 @@ Scope {
                     Row {
                         anchors.verticalCenter: parent.verticalCenter
                         spacing: Theme.spaceS
-                        visible: bar.appName() !== ""
+                        visible: bar.appName() !== "" && !dockSlot.filled
                         Image {
                             anchors.verticalCenter: parent.verticalCenter
                             visible: bar.appIcon() !== ""

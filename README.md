@@ -101,6 +101,10 @@ Then reboot, pick **Ewe** at the greeter, and you're in —
   music) and ewe Viewer (PDFs, books, documents, pictures), in the ewe Browser
   look, plus kitty and Zed; defaults managed in one `mimeapps.list`.
 - **Komble + ewe Settings** — first-party software manager and settings app.
+- **Top bar and dock, or one bar** — the bar on top and the dock below, or,
+  in ewe Settings → Layout → Top bar, **Merged**: one full-width bar at the
+  bottom like a Windows taskbar — the dock's apps, workspaces and windows on
+  the left, status and clock on the right (`[desktop.bar] layout`).
 - **Plugins** — `ewe-plugin add <git-url>` drops third-party bar
   widgets, panels and services into the shell; ewe's own extras are
   **plugins that ship with ewe**, installed in one click from Komble → Plugins

@@ -30,7 +30,7 @@ QtObject {
     // Project version — the shell's runtime copy. Keep in sync with the repo-root
     // VERSION file (the canonical source used for git tags / releases). Semver, with
     // an -alpha/-beta pre-release suffix until the first stable cut.
-    readonly property string version: "0.51.1-beta"
+    readonly property string version: "0.52.0-beta"
 
     // ── event sounds (GNOME-style; the freedesktop sound theme, one toggle) ──
     // playSound("message-new-instant") etc — names are theme event ids from
@@ -636,6 +636,25 @@ QtObject {
     // whether they are out right now — per session, every screen's bar alike
     property bool barCollapse: false
     property bool barExtrasOpen: false
+    // the layout (0.52, `desktop.bar.layout`): "split" — the top bar and the
+    // dock apart, as always — or "merged": ONE full-width bar at the BOTTOM,
+    // like a Windows taskbar, the dock's buttons on its left (the dock plugin
+    // puts them in the bar's slot, Shell.barSlot) and the status row and the
+    // clock on its right. barMerged is whether that bar is on screen right
+    // now: hidden (Super+Shift+B, Top bar off) the dock stands on its own.
+    // Read once, synchronously, while Globals is built: the bars are made
+    // right after and must open on the right edge — _themeLoad (below, a
+    // process) lands a beat later and would move a bar already on screen.
+    property FileView _layoutPeek: FileView {
+        path: Quickshell.env("HOME") + "/.config/quickshell/user-theme.json"
+        blockLoading: true
+        printErrors: false
+    }
+    property string barLayout: {
+        try { return JSON.parse(g._layoutPeek.text()).barLayout === "merged" ? "merged" : "split" }
+        catch (e) { return "split" }
+    }
+    readonly property bool barMerged: barLayout === "merged" && barVisible
 
     // ── Screensaver (persisted in user-theme.json; hypridle owns the timing via
     // the generated hypridle.conf — see Settings.writeIdleConf) ────────────────
@@ -898,6 +917,8 @@ QtObject {
                     if (j && j.barIconSize) g.barIconSize = j.barIconSize
                     if (j && j.barShow && typeof j.barShow === "object") g.barShow = j.barShow
                     if (j && j.barCollapse !== undefined) g.barCollapse = j.barCollapse === true
+                    // anything but "merged" reads as the default
+                    if (j) g.barLayout = j.barLayout === "merged" ? "merged" : "split"
                     if (j && j.animationSpeed !== undefined) g.animationSpeed = j.animationSpeed
                     // a persisted "colorScheme" is ignored: the scheme's variant decides
                     if (j && j.avatarShape) g.avatarShape = j.avatarShape

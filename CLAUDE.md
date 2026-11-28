@@ -630,6 +630,24 @@ written. Called live by Settings → Theme, at shell startup, and by phase 60.
   module. The Bar card (`design/system/components/Bar/README.md`) is the spec.
   Do not "fix" any of this back.
 
+- **The merged bar (0.52, `[desktop.bar] layout = "split" | "merged"`)** —
+  merged = the SAME Bar.qml anchored to the bottom (anchors bound to
+  `Globals.barLayout`; live switching works), full width like a Windows
+  taskbar. The dock plugin is not rebuilt in the shell: each bar window
+  registers a `dockSlot` (`Shell._setBarSlot`), and Dock 1.6.0 binds its
+  content Item's `parent` to `Shell.barSlot(screen)` — one surface, no
+  overlapping layers — and unmaps its own window. The bar publishes its strip
+  as `Shell.setBottomInset("ewe.bar", …)`; `dockPresent` ignores that key but
+  counts a filled slot (else Places/Music's "auto" bar widgets doubled).
+  `Shell.anchorFor` answers a one-edge window by its edge. Top-bar
+  assumptions read `Globals.barMerged` (AnchoredPopup topGap, TrayMenu,
+  QuickSettings rises bottom-right, DesktopWidgets chips). Globals reads
+  `barLayout` SYNCHRONOUSLY once (`FileView` + blockLoading) so the bars open
+  on the right edge — the async `_themeLoad` would move a bar already on
+  screen. Never read a slot child's `visible` (effective visibility = the
+  slot's own → loop). Test: `HS_PREFS=<json>` seeds the sandbox's
+  user-theme.json (`{"barLayout":"merged"}`); `tests/ewe-conf-roundtrip.sh`.
+
 - **The terminal shell is zsh, started by kitty; the login shell stays bash
   (2026-09-21).** `dotfiles/shell/` (`ewe.zsh`, `ewe.bash`, `aliases.sh`,
   `shell-setup.sh`) is linked to `~/.config/ewe-shell`; `shell-setup.sh` is the

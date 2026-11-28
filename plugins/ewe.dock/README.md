@@ -5,7 +5,8 @@ fresh machine (ewe 0.25: plugins are opt-in). Upgraders who had the dock keep it
 `ewe-plugin migrate` installs it unless `[desktop.dock] enabled = false`.
 
 A small, centred dock at the bottom of the main screen (or of every screen,
-or of none — see *Which screens*):
+or of none — see *Which screens*), or — with ewe's merged bar — the left
+half of one full-width taskbar (see *In the merged bar*):
 
     [ apps ] [ overview ] [ komble ] [ music ] [ places ] … | [ 1: ▢ ▢ ] [ 2: empty ] | [▣] [▣] [ ◔ ]
 
@@ -75,6 +76,31 @@ It slides out of view while the Overview is open and comes back when the
 cards have gone; with auto-hide on it ducks when the current workspace has a
 tiled or fullscreen window and returns when the pointer reaches the bottom
 edge, while any dock popup is open, and for a moment after the pointer leaves.
+
+## In the merged bar (1.6.0, ewe 0.52)
+
+ewe Settings → Layout → Top bar → **Bar and dock: Merged**
+(`[desktop.bar] layout = "merged"`) makes the shell's bar ONE full-width bar
+at the bottom of every screen, like a Windows taskbar. The dock then lives
+inside it: the same buttons, in the same order, on the bar's left — the bar's
+status row and clock stay on its right.
+
+    [ apps ] [ overview ] [ komble ] [ music ] … | [ 1: ▢ ▢ ] [ 2: empty ] | [▣] [ ◔ ]        ⋯ tray · updates · US | ⚡ 🔊 Sat 28 Nov 17:50
+
+- It is one surface: the dock parents its buttons into the slot the bar
+  gives each screen (`Shell.barSlot(screen)`) and keeps its own window
+  unmapped — no second layer over the bar.
+- The cells take the bar's size, not **Icon size**: the small cell (40px,
+  a 48px bar), or the normal one (48px, a 56px bar) when the bar's icons
+  are large. **Auto-hide** waits for the separate layout too — the bar is
+  always there.
+- **Show the dock on** still decides which screens' bars carry it; a bar
+  without it keeps the workspace chip and the focused app.
+- Popups (the apps popup, Music, Places, Downloads, a tile's menu) open
+  above the bar. The bar publishes the bottom inset itself (`"ewe.bar"`),
+  so the dock publishes 0.
+- Hide the bar (Super+Shift+B) and the dock is back on its own until the
+  bar shows again. A shell without the API (before 0.52) never merges.
 
 ## Install
 

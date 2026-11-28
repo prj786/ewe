@@ -276,16 +276,18 @@ Scope {
             x: Math.max(Theme.windowGap,
                         Math.min(parent.width - width - Theme.windowGap,
                                  Globals.trayMenuAnchorX - width / 2))
-            // the card's spaceXs below the module it belongs to
-            y: Theme.barHeight + Theme.spaceXs
-            // fade plus a slideOffset drop from the bar, in at durBase and out
-            // at durFast — no overshoot
+            // the card's spaceXs below the module it belongs to — above it
+            // on the merged bar, which sits at the bottom (0.52)
+            y: Globals.barMerged ? win.height - height - Shell.bottomInset - Theme.spaceXs
+                                 : Theme.barHeight + Theme.spaceXs
+            // fade plus a slideOffset drop from the bar (a rise on the merged
+            // one), in at durBase and out at durFast — no overshoot
             opacity: Globals.trayMenuOpen ? 1 : 0
             Behavior on opacity {
                 NumberAnimation { duration: Globals.trayMenuOpen ? Theme.durBase : Theme.durFast; easing.type: Theme.ease }
             }
             transform: Translate {
-                y: (Globals.trayMenuOpen || Theme.reduceMotion) ? 0 : -Theme.slideOffset
+                y: (Globals.trayMenuOpen || Theme.reduceMotion) ? 0 : (Globals.barMerged ? Theme.slideOffset : -Theme.slideOffset)
                 Behavior on y { NumberAnimation { duration: Theme.durBase; easing.type: Theme.ease } }
             }
         }
@@ -312,9 +314,10 @@ Scope {
                 dir: modelData.dir < 0 ? (fitsLeft ? -1 : 1) : (fitsRight ? 1 : -1)
                 x: dir > 0 ? modelData.px + modelData.pw + Theme.spaceXs
                            : Math.max(Theme.windowGap, modelData.px - Theme.spaceXs - width)
-                // never over the bar, never past the bottom edge
-                y: Math.max(mainBox.y,
-                            Math.min(win.height - height - Theme.windowGap,
+                // never over the bar, never past the bottom edge (the merged
+                // bar's top edge: it is at the bottom)
+                y: Math.max(Globals.barMerged ? Theme.windowGap : mainBox.y,
+                            Math.min(win.height - height - (Globals.barMerged ? Shell.bottomInset + Theme.spaceXs : Theme.windowGap),
                                      modelData.ry - Theme.spaceXs - Theme.borderWidth1))
             }
         }

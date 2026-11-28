@@ -49,7 +49,7 @@ grep -q 'property var settings' Dock.qml && grep -q 'root.settings.autohide' Doc
 grep -q 'showHere: root.shown && (root.showOn === "all" || win.isPrimary)' Dock.qml \
   && grep -q 'reduced: win.showHere && !win.isPrimary' Dock.qml && grep -q 'visible: win.showHere' Dock.qml \
   && ok "display: one window per screen, shown by the setting" || bad "display: window visibility"
-grep -q 'publishedInset: root.shown ? root.clearance : 0' Dock.qml && grep -q 'shown: root.enabled && root.showOn !== "none"' Dock.qml \
+grep -q 'publishedInset: (root.shown && !root.merged) ? root.clearance : 0' Dock.qml && grep -q 'shown: root.enabled && root.showOn !== "none"' Dock.qml \
   && ok "display none withdraws the inset" || bad "display none keeps the inset"
 # a reduced dock: no sheep, Overview, Komble or Downloads — but the plugin
 # items (1.5.1: the owner works on the second display and had no Phone button)
@@ -88,11 +88,18 @@ grep -q '"special:minimized"' Dock.qml && grep -q '"special:pen"' Dock.qml && ok
 grep -q '/ewe-browser/downloads.json' Downloads.qml && ok "reads ewe-browser/downloads.json" || bad "downloads.json path"
 # a minimized window's tile captures ONE frame, shrinks it (grabToImage)
 # and drops the capture — no live capture sits in the dock
-grep -q 'captureSource: (win.visible && mini.capturing && mini.modelData.wayland)' Dock.qml && grep -q 'sc.grabToImage' Dock.qml \
+grep -q 'captureSource: (win.onScreen && mini.capturing && mini.modelData.wayland)' Dock.qml && grep -q 'sc.grabToImage' Dock.qml \
   && ok "minimized tiles: one frame, then the capture goes" || bad "minimized tiles keep a capture"
 # 1.3.1: only the dock on screen captures — a hidden (non-primary) dock's
-# grab has no scene and its capture was a GPU copy for nothing
-grep -q 'if (!win.visible) return' Dock.qml && ok "minimized tiles: only the dock on screen captures" || bad "hidden docks still capture"
+# grab has no scene and its capture was a GPU copy for nothing. 1.6.0: on
+# screen = its window, or the merged bar its buttons live in (onScreen)
+grep -q 'readonly property bool onScreen: win.mergedHere || win.visible' Dock.qml && grep -q 'if (!win.onScreen) return' Dock.qml && ok "minimized tiles: only the dock on screen captures" || bad "hidden docks still capture"
+# 1.6.0: the merged bar — the buttons' parent is the bar's slot while the
+# shell has one (Shell.barSlot), the window stays unmapped, the inset is 0
+grep -q 'parent: win.mergedHere ? win.slot : dock' Dock.qml && grep -q 'Shell.barSlot(win.modelData)' Dock.qml \
+  && grep -q 'visible: win.showHere && !win.mergedHere' Dock.qml \
+  && grep -q '(root.shown && !root.merged) ? root.clearance : 0' Dock.qml \
+  && ok "merged bar: buttons in the bar's slot, no window, no inset" || bad "merged bar contract"
 grep -q 'target: "launcher"' Dock.qml  && ok "IPC alias launcher"  || bad "IPC alias launcher"
 grep -q 'target: "ewe.dock"' Dock.qml  && ok "IPC target ewe.dock" || bad "IPC target ewe.dock"
 grep -q 'Shell.setBottomInset(root.pluginId, 0, false)' Dock.qml && ok "inset withdrawn on destruction" || bad "inset withdrawn on destruction"

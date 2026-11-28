@@ -434,7 +434,7 @@ Scope {
                                     anchors.left: parent.left
                                     readonly property int gap: Theme.spaceS + Theme.spaceXs
                                     readonly property bool below: slot.y - chips.height - chips.gap
-                                                                  < (Globals.barVisible ? Theme.barHeight : 0)
+                                                                  < (Globals.barVisible && !Globals.barMerged ? Theme.barHeight : 0)
                                     y: chips.below ? slot.height + chips.gap : -(chips.height + chips.gap)
                                     spacing: Theme.spaceXs
                                     onXChanged: win.rebuildMask()

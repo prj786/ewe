@@ -111,4 +111,17 @@ grep -q 'general = { layout = "monocle" }' "$SANDBOX/hypr/generated/user.lua" \
     && echo "ok  monocle layout → user.lua" || { echo "FAIL monocle layout not in user.lua"; exit 1; }
 ./bin/ewe-conf set --no-hooks desktop.layout.mode '"dwindle"' >/dev/null 2>&1
 grep -q 'layout = ' "$SANDBOX/hypr/generated/user.lua" && { echo "FAIL dwindle must emit no layout line"; exit 1; } || echo "ok  dwindle emits nothing"
+# the merged bar (0.52): desktop.bar.layout reaches the shell's prefs as
+# barLayout, ewe Settings' absorb path carries it back, and a value outside
+# split | merged is refused
+./bin/ewe-conf set --no-hooks desktop.bar.layout '"merged"' >/dev/null 2>&1
+python3 -c "import json; d=json.load(open('$SANDBOX/quickshell/user-theme.json')); assert d['barLayout']=='merged'" \
+    && echo "ok  bar layout → user-theme.json" || { echo "FAIL bar layout not in user-theme.json"; exit 1; }
+./bin/ewe-conf set --no-hooks desktop.bar.layout '"floating"' >/dev/null 2>&1 || true
+[ "$(./bin/ewe-conf get desktop.bar.layout)" = "merged" ] && echo "ok  an unknown bar layout is refused" \
+    || { echo "FAIL desktop.bar.layout took an unknown value"; exit 1; }
+UT="$(python3 -c "import json; d=json.load(open('$SANDBOX/quickshell/user-theme.json')); d['barLayout']='split'; print(json.dumps(d))")"
+./bin/ewe-conf absorb --no-hooks user-theme "$UT" >/dev/null 2>&1
+[ "$(./bin/ewe-conf get desktop.bar.layout)" = "split" ] && echo "ok  absorb carries the bar layout" \
+    || { echo "FAIL absorb dropped barLayout"; exit 1; }
 echo "ALL PASS"

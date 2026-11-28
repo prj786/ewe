@@ -30,6 +30,7 @@
 # and generates theme-tokens.json with THIS checkout's bin/ewe-theme:
 #   HS_SCHEME=ewe-light          # [desktop.theme] scheme (default ewe-dark)
 #   HS_CONF=<file>               # use this ewe.conf instead (HS_SCHEME ignored)
+#   HS_PREFS=<file>              # the sandbox's user-theme.json (shell prefs, e.g. {"barLayout":"merged"})
 #   HS_WALLPAPER=<file>          # seed generated/wallpapers.conf (Overview/lock backdrop)
 #   HS_DATA=<dir>                # merged into the sandbox ~/.local/share (test applications/*.desktop + icons/)
 #   HS_WELCOME=1                 # let the first-run Welcome screen appear
@@ -108,6 +109,11 @@ sandbox_prepare() {
     cp "$HS_CONF" "$SBHOME/.config/ewe/ewe.conf" || die "HS_CONF $HS_CONF unreadable"
   else
     printf '[desktop.theme]\nscheme = "%s"\n' "${HS_SCHEME:-ewe-dark}" > "$SBHOME/.config/ewe/ewe.conf"
+  fi
+  # HS_PREFS=<file>: the sandbox's user-theme.json (the shell's prefs —
+  # barLayout, barCollapse, dockIconSize …), e.g. {"barLayout": "merged"}
+  if [ -n "${HS_PREFS:-}" ]; then
+    cp "$HS_PREFS" "$SBHOME/.config/quickshell/user-theme.json" || die "HS_PREFS $HS_PREFS unreadable"
   fi
   # HS_WALLPAPER=<file>: seed the per-output wallpaper map so the Overview and
   # the lock screen have a real picture to paint (Wallpaper.qml reads this once

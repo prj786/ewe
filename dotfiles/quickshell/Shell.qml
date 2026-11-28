@@ -11,7 +11,8 @@ import Quickshell.Hyprland
 //
 //   read     overviewOpen · overviewCover · workspacesShared · workspaceNumber(id) · quickSettingsOpen · lowPower · onBattery · locked ·
 //            dnd · bottomInset · bottomReserved · dockPresent · dockPrefs ·
-//            pinnedApps · primaryScreenName · dockItems · activeCount
+//            pinnedApps · primaryScreenName · dockItems · activeCount ·
+//            barMerged · barMergedSize · barSlot(screen)
 //   call     toast() · openQuickSettings() · closeQuickSettings() ·
 //            openSettings() · openStore() · launch() · focusApp() ·
 //            entryForClass() · iconForClass() ·
@@ -73,12 +74,46 @@ QtObject {
         for (var k in sh._insets) if (sh._insets[k].reserved && (sh._insets[k].px || 0) > 0) return true
         return false
     }
-    readonly property bool dockPresent: sh.bottomInset > 0
+    // a DOCK's strip — the merged bar's own ("ewe.bar", 0.52) is no dock —
+    // or a dock living in the merged bar (a slot holding its buttons)
+    readonly property bool dockPresent: {
+        for (var k in sh._insets) if (k !== "ewe.bar" && (sh._insets[k].px || 0) > 0) return true
+        for (var n in sh._barSlots) if (sh._barSlots[n] && sh._barSlots[n].filled) return true
+        return false
+    }
     function setBottomInset(pluginId, px, reserved) {
         var m = Object.assign({}, sh._insets)
         if (!px || px <= 0) delete m[pluginId]
         else m[pluginId] = { px: Math.round(px), reserved: !!reserved }
         sh._insets = m
+    }
+
+    // The merged bar (0.52, additive, API 3): `desktop.bar.layout = merged`
+    // puts ONE full-width bar at the bottom of every screen, like a Windows
+    // taskbar — the status row and the clock on its right, and on its left a
+    // slot for the dock. `barMerged` is true while that bar is on screen
+    // (false when the layout is split or the bar is hidden: a dock then
+    // stands on its own). `barSlot(screen)` is the Item in that screen's bar
+    // where a dock plugin parents its buttons (null while not merged, or
+    // before the bar is built); the slot is as wide as what it holds and
+    // vertically centres it. Size the content's cells with
+    // Theme.dockCellFor(barMergedSize) — "small", or "normal" when the bar's
+    // icons are large — and the bar grows to fit it. The bar publishes its
+    // strip through setBottomInset("ewe.bar", …) like a dock, so popups,
+    // toasts and the OSD keep clear of it; a dock that merges publishes 0.
+    readonly property bool barMerged: Globals.barMerged
+    // (Theme.barLarge: the size the bar really draws — Text size 130 steps it up)
+    readonly property string barMergedSize: Theme.barLarge ? "normal" : "small"
+    property var _barSlots: ({})         // screen name -> Item (Bar.qml registers them)
+    function barSlot(screen) {
+        if (!Globals.barMerged || !screen) return null
+        return sh._barSlots[String(screen.name)] || null
+    }
+    function _setBarSlot(name, item) {
+        var m = Object.assign({}, sh._barSlots)
+        if (item) m[String(name)] = item
+        else delete m[String(name)]
+        sh._barSlots = m
     }
 
     // The pre-plugin-settings dock prefs (ewe.conf [desktop.dock] enabled /
@@ -215,12 +250,18 @@ QtObject {
     // widgets and bar-status glyphs get `barWindow`; a dock passes its
     // own); without it the focused monitor is assumed and the edge is
     // bottom.
+    // A window pinned to ONE edge (a bar, a dock) answers by that edge — the
+    // merged bar sits at the bottom with its items in its middle (0.52).
     function anchorFor(item, window) {
         if (!item) return null
         var p = item.mapToItem(null, item.width / 2, item.height / 2)
         var scr = (window && window.screen) ? window.screen : sh._focusedScreen()
         var h = window ? window.height : 0
-        return { screen: scr, x: p.x, y: p.y, edge: (h > 0 && p.y < h / 2) ? "top" : "bottom", item: item }
+        var a = (window && window.anchors) ? window.anchors : null
+        var edge = (a && a.bottom && !a.top) ? "bottom"
+                 : (a && a.top && !a.bottom) ? "top"
+                 : (h > 0 && p.y < h / 2) ? "top" : "bottom"
+        return { screen: scr, x: p.x, y: p.y, edge: edge, item: item }
     }
     function _focusedScreen() {
         var fm = Hyprland.focusedMonitor, ss = Quickshell.screens

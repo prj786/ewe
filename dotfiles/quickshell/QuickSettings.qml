@@ -718,9 +718,11 @@ Scope {
                 readonly property bool onHome: root.tab === "home"
                 // grows with Text size, so two tiles still fit side by side
                 width: Theme.grow(Theme.panelSm)
-                // the layer already sits below the bar's exclusive zone: spaceXs
-                // below it, windowGap in from the right edge
-                y: Theme.spaceXs
+                // the layer already sits clear of the bar's exclusive zone:
+                // spaceXs below it, windowGap in from the right edge — on the
+                // merged bar (0.52, at the bottom) spaceXs ABOVE it, so the
+                // panel rises from the clock like a taskbar's
+                y: Globals.barMerged ? win.height - height - Theme.spaceXs : Theme.spaceXs
                 x: win.width - width - Theme.windowGap
                 // the page's own height, up to 80% of the screen (a longer page
                 // scrolls inside); never shorter than a confirmation on top of it
